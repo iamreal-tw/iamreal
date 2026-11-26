@@ -46,6 +46,25 @@ describe("the privacy statement", () => {
     const foot = copyLines(block("home.md", "頁尾"));
     wantLines(page, [...want, ...foot]);
     assert.ok(squash(visibleText(page)).endsWith(squash(want[want.length - 1]!) + foot.map(squash).join("")), "nothing between the last line and the foot");
+    // The statement is a commitment: its text is privacy.md's and nothing else, not only in order.
+    const main = page.slice(page.indexOf("<main>"), page.indexOf("</main>"));
+    assert.equal(squash(visibleText(main)), squash(want.join("")), "the statement's text is exactly privacy.md's");
+  });
+
+  test("each section's paragraphs and points as privacy.md writes them: a paragraph of · lines is points of a list, any other a paragraph", async () => {
+    const { page } = await getPage(worker, "/privacy");
+    const main = page.slice(page.indexOf("<main>"), page.indexOf("</main>"));
+    const parts = main.split('<section class="part">');
+    assert.equal(parts.length, 14, "the opening, then thirteen sections");
+    for (const [i, part] of parts.entries()) {
+      const n = i + 1;
+      const paragraphs = lines(n).join("\n").split("\n\n").map((p) => p.split("\n"));
+      const points = paragraphs.filter((p) => p.every((l) => l.startsWith("· "))).flat().length;
+      // Section 1's first paragraph is the title, an <h1>.
+      const others = paragraphs.filter((p) => !p.every((l) => l.startsWith("· "))).length - (n === 1 ? 1 : 0);
+      assert.equal(part.match(/<li>/g)?.length ?? 0, points, `section ${n}: a point for each · line`);
+      assert.equal(part.match(/<p\b/g)?.length ?? 0, others, `section ${n}: a paragraph for each other paragraph`);
+    }
   });
 
   test("the title, and each section's heading as a heading of the page; the tab's title", async () => {
