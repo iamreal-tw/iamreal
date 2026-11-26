@@ -2619,14 +2619,23 @@ await tryStep("card proofs stopped: step 1 says so before a card is read; stoppe
     check(componentCount() === reads, "step 1, stopped: nothing asked of the component");
     await screenshot("paused-1-before");
 
-    // Stopped after step 1 said nothing: step 2 asks config again and stops under 連上島民證明的伺服器, before the PIN.
+    // Stopped after step 1 said nothing, before 下一步: 下一步 asks config again (the start, #32) and step 1 says so, before a card is read.
     await setPaused(false);
     await open();
     await page.waitFor(`[...document.querySelectorAll('main button')].some((b) => b.textContent === ${JSON.stringify(C.common.next)}) || null`, "step 1 not stopped: 下一步");
     check(!(await page.eval<boolean>(`!!document.querySelector('[data-paused]')`)), "step 1, taken: no sentence of a stop");
     await setPaused(true);
     await page.clickButton(C.common.next);
+    await page.waitFor(`document.querySelector('[data-paused]') || null`, "step 1 says card proofs are stopped, after 下一步", 15_000);
+    check((await page.eval<string>(`document.querySelector('[data-step]')?.dataset.step`)) === "before" && componentCount() === reads, "下一步 pressed, stopped by then: still step 1, nothing asked of the component");
+
+    // Stopped after the start: step 2 asks config again and stops under 連上島民證明的伺服器, before the PIN.
+    await setPaused(false);
+    await open();
+    await page.waitFor(`[...document.querySelectorAll('main button')].some((b) => b.textContent === ${JSON.stringify(C.common.next)}) || null`, "step 1 not stopped: 下一步");
+    await page.clickButton(C.common.next);
     await waitStep("read", "step 2");
+    await setPaused(true);
     const r = await readCard();
     check(!r.done && r.item === "server" && r.why.startsWith(C.stops.paused), `step 2, stopped on the way: under 連上島民證明的伺服器 "${r.why}" (${r.item})`);
     check((await buttonTexts()).includes(C.read.read_again), `step 2, stopped: 再讀一次卡片, as every stop of step 2 ${JSON.stringify(await buttonTexts())}`);
@@ -2661,6 +2670,149 @@ await tryStep("card proofs stopped: step 1 says so before a card is read; stoppe
   } finally {
     await setPaused(false);
   }
+});
+
+// Too many people (ADR-0026, #32) ---------------------------------------------------
+
+/**
+ * The next `n` requests the page sends to `pattern` answered here as the server answers too many people:
+ * `status`, `{"error":code}`, `Retry-After: 60`; the ones after go on to the Worker. `answered()` counts them.
+ */
+async function tooManyOn(pattern: string, status: 429 | 503, code: "rate_limited" | "busy", n = 1): Promise<{ undo: () => Promise<void>; answered: () => number }> {
+  let answered = 0;
+  const undo = await intercept(pattern, async (p) => {
+    if (answered < n) {
+      answered++;
+      await page.send("Fetch.fulfillRequest", {
+        requestId: p.requestId,
+        responseCode: status,
+        responseHeaders: [
+          { name: "Content-Type", value: "application/json" },
+          { name: "Cache-Control", value: "no-store" },
+          { name: "Retry-After", value: "60" },
+        ],
+        body: Buffer.from(JSON.stringify({ error: code })).toString("base64"),
+      });
+    } else await page.send("Fetch.continueRequest", { requestId: p.requestId });
+  });
+  return { undo, answered: () => answered };
+}
+
+const busyCards = { start: await makeCard({ serial: "0b90567890abcdef1234567890abcd01" }), records: await makeCard({ serial: "0b90567890abcdef1234567890abcd02" }), overloaded: await makeCard({ serial: "0b90567890abcdef1234567890abcd03" }) };
+
+await tryStep("too many people: the start turned away before a card is read; the reading's config turned away goes on; card state and challenge asked again with 再試一次, the card not read again", async () => {
+  component.card = busyCards.start.spec();
+  // The start: config?start answered busy (503), then rate limited (429). Step 1 says so above 下一步, which stays.
+  await open();
+  await page.waitFor(`[...document.querySelectorAll('main button')].some((b) => b.textContent === ${JSON.stringify(C.common.next)}) || null`, "step 1: 下一步");
+  const reads = componentCount();
+  for (const [status, code] of [[503, "busy"], [429, "rate_limited"]] as const) {
+    const start = await tooManyOn("*/api/v1/config?start*", status, code);
+    try {
+      await page.clickButton(C.common.next);
+      await page.waitFor(`document.querySelector('[data-busy]') || null`, `step 1: too many people (${status})`, 15_000);
+      check(start.answered() === 1, `step 1: 下一步 asked config with the mark of a start (${status})`);
+      check((await page.text("[data-busy]")) === C.before.busy, `step 1, ${status} ${code}: "${await page.text("[data-busy]")}"`);
+      check((await page.eval<string>(`document.querySelector('[data-step]')?.dataset.step`)) === "before" && (await buttonTexts()).includes(C.common.next), `step 1, ${status}: still step 1, 下一步 there to press again`);
+      check(componentCount() === reads, `step 1, ${status}: nothing asked of the component, no window of it opened`);
+      if (status === 503) await screenshot("busy-1-before");
+    } finally {
+      await start.undo();
+    }
+  }
+
+  // Let through; the config the reading asks (without the mark) rate limited: the card proof goes on with the start's.
+  const reading = await tooManyOn("*/api/v1/config", 429, "rate_limited", 5);
+  try {
+    await page.clickButton(C.common.next);
+    await waitStep("read", "step 2");
+    check(!(await page.eval<boolean>(`!!document.querySelector('[data-busy]')`)), "step 2: no sentence of too many people");
+    const r = await readCard();
+    check(reading.answered() >= 1, `step 2: the reading asked config without the mark, and was turned away (${reading.answered()})`);
+    check(r.done, `step 2: the card read, every item done, on the start's config (${r.item} ${r.why})`);
+  } finally {
+    await reading.undo();
+  }
+
+  // The card's state turned away as busy: 再試一次 under the PIN field asks it again, nothing signed again.
+  await page.clickButton(C.common.next);
+  await waitStep("pin", "step 3");
+  const state = await tooManyOn("*/api/v1/card-state", 503, "busy");
+  try {
+    const signs = componentCount("MakeSignature");
+    await confirmPin(PIN);
+    await page.waitFor(`document.querySelector('[data-retry]') || null`, "step 3: 再試一次", 30_000);
+    const m = await page.text("[data-message]");
+    check(m.startsWith(C.stops.too_many), `step 3, card state busy: "${m}"`);
+    check(componentCount("MakeSignature") === signs + 1 && (await pinGone()), "step 3, card state busy: the card signed once, the PIN is nowhere on the page");
+    await screenshot("busy-3-pin");
+    await page.clickButton(C.progress.retry);
+    await waitAccounts();
+    check(state.answered() === 1 && componentCount("MakeSignature") === signs + 1, "step 3, 再試一次: the card's state asked again, step 4, nothing signed again");
+  } finally {
+    await state.undo();
+  }
+
+  // The challenge rate limited: under 連上島民證明的伺服器, 回到上一步 and 再試一次; 再試一次 asks again, the card signs, no PIN typed.
+  await typeRows({ [THREADS]: "qin" });
+  await waitConfirm();
+  const challenge = await tooManyOn("*/api/v1/challenges", 429, "rate_limited");
+  try {
+    const signs = componentCount("MakeSignature");
+    const records = await recordCount();
+    await page.clickButton(C.confirm.button_declare);
+    const d = await waitDoneOrMessage();
+    check(!d.done && d.item === "server" && d.message.startsWith(C.stops.too_many), `step 5, challenge rate limited: under 連上島民證明的伺服器 "${d.message}" (${d.item})`);
+    check(JSON.stringify(await buttonTexts()) === JSON.stringify([C.progress.back, C.progress.retry]), `step 5, challenge rate limited: 回到上一步 and 再試一次 ${JSON.stringify(await buttonTexts())}`);
+    check(componentCount("MakeSignature") === signs, "step 5, challenge rate limited: no second signature");
+    await screenshot("busy-5-challenge");
+    await page.clickButton(C.progress.retry);
+    const ok = await waitDoneOrMessage();
+    check(ok.done && (await recordCount()) === records + 1 && componentCount("MakeSignature") === signs + 1, `step 5, 再試一次: a challenge, the second signature, one record more (${ok.message})`);
+  } finally {
+    await challenge.undo();
+  }
+});
+
+await tryStep("too many people at the submission: 再試一次 sends the same record again", async () => {
+  component.card = busyCards.records.spec();
+  await toAccounts();
+  await typeRows({ [THREADS]: "ren" });
+  await waitConfirm();
+  const records = await recordCount();
+  const submit = await tooManyOn("*/api/v1/records", 503, "busy");
+  try {
+    await page.clickButton(C.confirm.button_declare);
+    const d = await waitDoneOrMessage();
+    check(!d.done && d.item === "submit" && d.message.startsWith(C.stops.too_many), `the submission busy: under 送出 "${d.message}" (${d.item})`);
+    check(JSON.stringify(await buttonTexts()) === JSON.stringify([C.read.read_again, C.progress.retry]), `the submission busy: 再讀一次卡片 and 再試一次 ${JSON.stringify(await buttonTexts())}`);
+    const signs = componentCount("MakeSignature");
+    await page.clickButton(C.progress.retry);
+    const ok = await waitDoneOrMessage();
+    check(ok.done && (await recordCount()) === records + 1 && componentCount("MakeSignature") === signs, `再試一次: the same record, one record more, nothing signed again (${ok.message})`);
+  } finally {
+    await submit.undo();
+  }
+});
+
+await tryStep("the proof log overloaded (the Worker's own 503 busy): the screen of too many people; 再試一次 once it is not", async () => {
+  component.card = busyCards.overloaded.spec();
+  await toAccounts();
+  await typeRows({ [THREADS]: "sol" });
+  await waitConfirm();
+  const records = await recordCount();
+  await worker.overloadProofLog(true);
+  try {
+    await page.clickButton(C.confirm.button_declare);
+    const d = await waitDoneOrMessage();
+    check(!d.done && d.item === "server" && d.message.startsWith(C.stops.too_many) && refused("busy"), `overloaded: as when rate limited, under 連上島民證明的伺服器 "${d.message}" (${d.item})`);
+    check(JSON.stringify(await buttonTexts()) === JSON.stringify([C.progress.back, C.progress.retry]), `overloaded: 回到上一步 and 再試一次 ${JSON.stringify(await buttonTexts())}`);
+  } finally {
+    await worker.overloadProofLog(false);
+  }
+  await page.clickButton(C.progress.retry);
+  const ok = await waitDoneOrMessage();
+  check(ok.done && (await recordCount()) === records + 1, `no longer overloaded: 再試一次 makes the card proof (${ok.message})`);
 });
 
 // 6. Storage, connections, policy ---------------------------------------------
@@ -2727,12 +2879,13 @@ await tryStep("before the PIN: a CRL older than the one this browser used", () =
   check(workers > 0, `the requests of the workers were seen too (${workers})`);
   const csp = browser.logs.filter((l) => /Content Security Policy/i.test(l.text));
   check(csp.length === 0, `no Content-Security-Policy violation ${JSON.stringify(csp.slice(0, 3))}`);
-  // Four windows had no request: the silent component's, and the three opened for the second
-  // signature that the challenge of another day, the date that changed on step 5 and card proofs
-  // stopped on step 5 stopped (each closed unused). The blocked clicks opened none. A PIN the bridge does not send: its
+  // Six windows had no request: the silent component's, and the five opened for the second
+  // signature that the challenge of another day, the date that changed on step 5, card proofs
+  // stopped on step 5, and the challenge turned away as too many people (rate limited, then the
+  // proof log overloaded; #32) stopped (each closed unused). The blocked clicks opened none. A PIN the bridge does not send: its
   // window is closed unused (and may not have loaded).
   check(
-    popups.size === component.requests.length + 4 + unusedWindows && unusedWindows <= 3,
+    popups.size === component.requests.length + 6 + unusedWindows && unusedWindows <= 3,
     `one component window per request (${popups.size} windows, ${component.requests.length} requests, ${unusedWindows} closed unused for a PIN not sent)`,
   );
   check(component.requests.every((r) => r.func !== "MakeSignature" || (r.pin ?? "") !== ""), "no signing request without a PIN");
