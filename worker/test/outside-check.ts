@@ -32,6 +32,13 @@
 //   which are in the same bucket under their own prefix with the same 31
 //   days, as count-events/oldest.json. Off until #54 is deployed
 //   (`COUNT_EVENTS_CHECKED`), in the same way.
+// - the counts' totals are kept (#435): they are never deleted, so their
+//   earliest day stays the same. The back end writes the date of the earliest
+//   day's totals every hour, as count-totals/oldest.json, in the same form.
+//   It passes when `checked` is at most 2 hours old and `oldest` is the
+//   date of the test site's first day of totals (`COUNT_TOTALS_FIRST`): a
+//   later date is a rule that deleted it. Off until that first day's totals
+//   are there on the test site and the date is filled in.
 //
 // The proof log is published at midnight in Taiwan, and retried every
 // minute in the first hour (README.md, "每天公布"): until 01:00 in Taiwan
@@ -74,6 +81,14 @@ export const CONNECTION_LOG_FILE = "connection-log/oldest.json";
 export const COUNT_EVENTS_CHECKED = false;
 /** The file the back end writes every hour about the counts it keeps (#54), on the data domain. */
 export const COUNT_EVENTS_FILE = "count-events/oldest.json";
+/**
+ * The date of the test site's first day of the counts' totals (#435), or
+ * null while it is not checked: fill it in, in a pull request of its own,
+ * once count-totals/oldest.json on the test site has a date.
+ */
+export const COUNT_TOTALS_FIRST: string | null = null;
+/** The file the back end writes every hour about the counts' totals (#435), on the data domain. */
+export const COUNT_TOTALS_FILE = "count-totals/oldest.json";
 /** How long ago the back end may have looked last, in hours. */
 const CONNECTION_LOG_CHECKED_HOURS = 2;
 /** How old the oldest connection log, or the oldest file of counts, may be, in days (UTC): 31, a day for R2's lifecycle rule, a day of margin. */
@@ -94,7 +109,7 @@ const taiwanHour = (now: number): number => new Date(now + 8 * HOUR_MS).getUTCHo
  * each thing checked. `clearedOn` is the date the test log was last cleared
  * on (YYYY-MM-DD).
  */
-export async function checkFromOutside(parts: { site: Reader; data: Reader; now: number; clearedOn: string; connectionLog?: boolean; countEvents?: boolean }): Promise<CheckLine[]> {
+export async function checkFromOutside(parts: { site: Reader; data: Reader; now: number; clearedOn: string; connectionLog?: boolean; countEvents?: boolean; countTotalsFirst?: string | null }): Promise<CheckLine[]> {
   const lines: CheckLine[] = [];
   const check = async (what: string, problem: () => Promise<string | null>): Promise<void> => {
     let found: string | null;
@@ -177,25 +192,32 @@ export async function checkFromOutside(parts: { site: Reader; data: Reader; now:
     return justCleared ? null : `there is no ${cardStateFileKey(today)}`;
   });
 
+  /** A file the back end writes every hour about one prefix of the bucket that is not public, read: its time of checking in milliseconds and its oldest date, or what is wrong with it. */
+  const readOldest = async (file: string): Promise<{ at: number; oldest: string | null } | string> => {
+    const res = await parts.data(`/${file}`);
+    const text = await res.text();
+    if (res.status === 404) return "there is no file";
+    if (res.status !== 200) return `the status is ${res.status}`;
+    let found: unknown;
+    try {
+      found = JSON.parse(text);
+    } catch {
+      return "it is not JSON";
+    }
+    const { checked, oldest } = (typeof found === "object" && found !== null ? found : {}) as { checked?: unknown; oldest?: unknown };
+    // A time in UTC, as the back end writes it (toISOString): nothing Date.parse would read otherwise, such as a local time.
+    const at = typeof checked === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/.test(checked) ? Date.parse(checked) : Number.NaN;
+    if (Number.isNaN(at)) return "it has no time of checking in UTC";
+    if (oldest !== null && (typeof oldest !== "string" || parseDay(oldest) === null)) return "its oldest is neither a date nor null";
+    if (parts.now - at > CONNECTION_LOG_CHECKED_HOURS * HOUR_MS) return `the back end last looked ${Math.floor((parts.now - at) / HOUR_MS)} hours ago`;
+    return { at, oldest };
+  };
   /** The file the back end writes about what it keeps for 31 days under one prefix: it looked lately, and nothing there is older than it may be. */
   const nothingOverdue = (file: string, things: string, thing: string): Promise<void> =>
     check(`the data domain: ${file} says the back end looked in the last ${CONNECTION_LOG_CHECKED_HOURS} hours, and no ${things} older than ${CONNECTION_LOG_DAYS} days`, async () => {
-      const res = await parts.data(`/${file}`);
-      const text = await res.text();
-      if (res.status === 404) return "there is no file";
-      if (res.status !== 200) return `the status is ${res.status}`;
-      let found: unknown;
-      try {
-        found = JSON.parse(text);
-      } catch {
-        return "it is not JSON";
-      }
-      const { checked, oldest } = (typeof found === "object" && found !== null ? found : {}) as { checked?: unknown; oldest?: unknown };
-      // A time in UTC, as the back end writes it (toISOString): nothing Date.parse would read otherwise, such as a local time.
-      const at = typeof checked === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/.test(checked) ? Date.parse(checked) : Number.NaN;
-      if (Number.isNaN(at)) return "it has no time of checking in UTC";
-      if (oldest !== null && (typeof oldest !== "string" || parseDay(oldest) === null)) return "its oldest is neither a date nor null";
-      if (parts.now - at > CONNECTION_LOG_CHECKED_HOURS * HOUR_MS) return `the back end last looked ${Math.floor((parts.now - at) / HOUR_MS)} hours ago`;
+      const read = await readOldest(file);
+      if (typeof read === "string") return read;
+      const { oldest } = read;
       const todayUtc = Math.floor(parts.now / (24 * HOUR_MS));
       if (oldest !== null && todayUtc - parseDay(oldest)! > CONNECTION_LOG_DAYS) return `the oldest ${thing} is of ${oldest}`;
       return null;
@@ -204,6 +226,14 @@ export async function checkFromOutside(parts: { site: Reader; data: Reader; now:
   else lines.push({ ok: true, what: `not checked yet: ${CONNECTION_LOG_FILE}, the connection logs' age (#20)` });
   if (parts.countEvents ?? COUNT_EVENTS_CHECKED) await nothingOverdue(COUNT_EVENTS_FILE, "file of counts is", "file of counts");
   else lines.push({ ok: true, what: `not checked yet: ${COUNT_EVENTS_FILE}, the counts' age (#54)` });
+  const first = parts.countTotalsFirst === undefined ? COUNT_TOTALS_FIRST : parts.countTotalsFirst;
+  if (first !== null)
+    await check(`the data domain: ${COUNT_TOTALS_FILE} says the back end looked in the last ${CONNECTION_LOG_CHECKED_HOURS} hours, and the counts' totals still begin on ${first}`, async () => {
+      const read = await readOldest(COUNT_TOTALS_FILE);
+      if (typeof read === "string") return read;
+      return read.oldest === first ? null : `the earliest day of totals is ${read.oldest ?? "none"}`;
+    });
+  else lines.push({ ok: true, what: `not checked yet: ${COUNT_TOTALS_FILE}, the counts' totals are kept (#435)` });
   return lines;
 }
 

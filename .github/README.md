@@ -312,6 +312,7 @@ iamreal-verify -bb <bb> -crs <通用參數目錄> -proof-log test -data https://
 | 資料網域有今天的卡片狀態檔 `proof-log/card-state/<日期>.jsonl` | 同上，今天沒有公布 |
 | 資料網域的 `connection-log/oldest.json` 讀得懂，`checked` 在 2 小時內，`oldest` 是 `null` 或不早於今天（UTC）的 33 天前（#20；還沒打開，見下面） | 後台沒有在看連線紀錄，或有超過期限還沒刪的 |
 | 資料網域的 `count-events/oldest.json`，同一種讀法、同樣的門檻（#54；還沒打開） | 後台沒有在看計數的明細，或有超過期限還沒刪的 |
+| 資料網域的 `count-totals/oldest.json`，同一種讀法，`checked` 在 2 小時內，`oldest` 是測試網站第一天加總的日期（#435；還沒打開） | 後台沒有在看計數的加總，或最早一天的加總被刪了 |
 
 門檻和時間：
 
@@ -336,6 +337,8 @@ node --experimental-strip-types test/outside-check.ts
 - 33 天的來歷：31 天，加 R2 的生命週期規則最多晚一天刪，再留一天。
 - #20 合併、部署之前沒有這個檔，所以這一項由 `worker/test/outside-check.ts` 的 `CONNECTION_LOG_CHECKED` 關著，跑的時候印一行 `--  not checked yet`，不算過也不算不過。
 - 打開之後，檔不在就算失敗。#20 部署後過了一個整點、這個檔出現了，再開一個 PR 把它改成 `true`。
+
+**加總那一項（#435）也還沒打開。** 加總永久保存，最早一天不會變：後台每小時看 `count-totals/day/` 最早一天的日期，寫成 `count-totals/oldest.json`（同一種格式）；檢查比對的是 `worker/test/outside-check.ts` 的 `COUNT_TOTALS_FIRST`。現在是 `null`（關著）；測試網站有了第一天的加總、這個檔出現日期之後，開一個 PR 填上那一天。日期變晚就是到期規則刪了它。
 
 還沒做的：正式網站。有了之後加上同樣的檢查。
 
