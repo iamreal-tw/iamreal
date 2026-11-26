@@ -133,9 +133,9 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 | `tree.go` | 樹（circomlib 的稀疏 Merkle 樹，Poseidon2）、樹根、「不在樹裡」的證明 |
 | `issuers.go`、`MOICA2.cer`、`MOICA-G3.cer` | 兩把發證金鑰 |
 | `poseidon2/` | Poseidon2（`spec/scoped-id.md`）。`constants.go` 由 `spec/vectors/poseidon2-constants.json` 產生（`go generate ./crl/poseidon2`） |
-| `internal/crltest/` | 寫自製清冊的程式；`makecrl/` 寫一份內政部大小的自製清冊，用來量時間；`makelarge/` 寫下載上限 32 MiB 之內最壞的幾種檔，用來量讀一份的時間和記憶體（`worker/README.md`「清冊鏡像量到的」） |
+| `internal/crltest/` | 寫自製清冊的程式；`makecrl/` 寫一份內政部大小的自製清冊，用來量時間；`makelarge/` 寫下載上限 32 MiB 之內最壞的幾種檔，用來量讀一份的時間和記憶體（`worker/README.md`「清冊鏡像量到的」、`web/README.md`「讀清冊的記憶體」、`device-core/README.md`「讀清冊的記憶體」） |
 | `testdata/` | 自製的小清冊、測試發證金鑰的公鑰、`expected.json`（每份可不可用、原因代碼、樹根）。`worker/`、`web/`、`device-core/` 的測試讀同一份 |
-| `testdata/times/` | 時間用各種寫法寫的自製清冊，和 `expected.json`（每份在存檔索引裡的那一行，照規格「Times」）。最後九份（`oid-*`）是延伸欄位的 OID（規格「Object identifiers」）：`expected.json` 的格式只有這個目錄寫得出「不是 DER」，所以放在這裡。`worker/`、`web/`、`device-core/` 的測試讀同一份 |
+| `testdata/times/` | 時間用各種寫法寫的自製清冊，和 `expected.json`（每份在存檔索引裡的那一行，照規格「Times」）。最後十六份不是時間：九份（`oid-*`）是延伸欄位的 OID（規格「Object identifiers」），七份是元素後面多了東西：`expected.json` 的格式只有這個目錄寫得出「不是 DER」，所以放在這裡。`worker/`、`web/`、`device-core/` 的測試讀同一份 |
 
 ## 測試
 
@@ -149,6 +149,8 @@ go test ./crl/...
 - `testdata/` 的每份自製清冊：可不可用、原因代碼、樹根、清冊日期等，以及它在存檔索引裡的那一行。原因代碼的順序也各有清冊，規格那張表每相鄰的兩步都有一份兩個原因同時成立的（[#218](https://github.com/iamreal-tw/iamreal/issues/218)；第 1、2 步的那一份在 `testdata/times/`：時間的寫法先於演算法）：演算法先於簽章、簽章先於延伸欄位太多、延伸欄位太多先於重複、重複先於關鍵、關鍵延伸欄位先於差異清冊和分段清冊、差異清冊和分段清冊同時有時排在前面的那一個決定、差異清冊或分段清冊先於清冊編號、清冊編號先於逐筆的檢查、清冊的延伸欄位先於逐筆的、逐筆的檢查先於撞號；同一筆裡延伸欄位太多先於重複、重複先於關鍵、關鍵先於序號；第一個有問題的那一筆決定。上限各有剛好在上限和超過一個的清冊：清冊編號 20 和 21 個位元組，清冊和一筆的延伸欄位 16 和 17 個。
 - `testdata/times/` 的每份清冊：它在存檔索引裡的那一行。時間只收 RFC 5280 的兩種寫法（規格「Times」）：`Z` 結尾、有秒的 UTCTime（`YYMMDDHHMMSSZ`）和 GeneralizedTime（`YYYYMMDDHHMMSSZ`）；帶時差、沒有秒、有小數的，`thisUpdate`、`nextUpdate`、每一筆的 `revocationDate` 都一樣，整份是 `-not_usable_der`。也包括 `nextUpdate` 剛好是 `0001-01-01T00:00:00Z`（Go 的零值）時照樣寫出來。
 - `testdata/times/` 的九份 `oid-*`：清冊或一筆多一個延伸欄位，它的 OID 裡一個數字是 2^31−1 和 2^31（第一個數字、後面的數字、一筆的延伸欄位各一對），或數字不是最短寫法、沒寫完、OID 是空的（[#227](https://github.com/iamreal-tw/iamreal/issues/227)）。2^31−1 的三份讀得懂（`-not_usable_signature`），其餘是 `-not_usable_der`。這條界線原本是 Go 的 `cryptobyte` 的，現在寫在規格「Object identifiers」，四份實作都照它
+- `testdata/times/` 的 `extension-*`、`entry-then-null`、`entry-extensions-then-null`、`tbs-then-null` 七份：一個延伸欄位、一筆廢止、`tbsCertList` 裡比該有的多一個元素（或延伸欄位少了值），都是 `-not_usable_der`。逐個元素走、不先全部列出來的讀法（[#410](https://github.com/iamreal-tw/iamreal/issues/410)）也要認得多出來的東西
+- `testdata/` 的 `entry-negative-then-entry-critical`、`entry-critical-then-entry-negative`、`entry-duplicate-then-entry-seventeen`：多筆廢止各有不同的問題時，由排在前面的那一筆決定
 - 存檔索引：排序、每一種寫錯的行被拒絕（包括樹根不小於 `p`）、完整重算回報改過的樹根、多出來的檔案、少了的檔案、沒有索引、沒辦法切成行的索引、寫法不對和順序錯的行（附行號），每一個不同都回報，並照重建的索引回答；只信索引時照索引回答，索引不在或寫錯是錯誤。
 
 ### 重新產生自製清冊

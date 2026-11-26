@@ -53,8 +53,8 @@ const VK_SHA256 = {
 
 // The declaration code of spec/declaration-code.md: the version tag, the
 // scope string, one line platform:username per account in the order of the
-// list, and the challenge. Written here rather than taken from circuits/,
-// whose helper (tests/lib/declaration-code.mjs) computes an earlier draft.
+// list, and the challenge. Written here: circuits/ computes no declaration
+// code (its tests read the answers of spec/vectors/declaration-code.json).
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 function declarationCode({ scopeString, accounts, challenge }) {
   const lines = ["iamreal-declaration-v1", scopeString, ...accounts.map((a) => `${a.platform}:${a.username}`), challenge];

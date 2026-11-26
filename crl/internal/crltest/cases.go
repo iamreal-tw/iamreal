@@ -311,6 +311,19 @@ func Cases(key, other *rsa.PrivateKey) []Case {
 	c = base(r, Serial(hexBytes("3123456789abcdef0123456789abcdef")), Serial(hexBytes("b123456789abcdef0123456789abcdef")))
 	c.Entries[1].CriticalReason = true
 	add("entry-critical-and-same-low-127", "two serials that share their lowest 127 bits, the second entry with a critical reasonCode: the entries (check 10) come before the collision (check 11)", false, "not_usable_critical_extension", c)
+	// Entries in order: the first entry with anything wrong decides, whatever
+	// is wrong with a later one (#410: a reader may keep of the entries'
+	// extensions only what is wrong with the first).
+	c = base(r, []byte{0xff, 0x01}, Serial(hexBytes("06")))
+	c.Entries[1].CriticalReason = true
+	add("entry-negative-then-entry-critical", "a first entry with a negative serial, a second with a critical reasonCode: the first entry decides", false, "not_usable_serial", c)
+	c = base(r, Serial(hexBytes("05")), []byte{0xff, 0x01}, Serial(hexBytes("07")))
+	c.Entries[0].CriticalReason = true
+	add("entry-critical-then-entry-negative", "a first entry with a critical reasonCode, a second with a negative serial: the first entry decides", false, "not_usable_critical_extension", c)
+	c = base(r, Serial(hexBytes("05")), Serial(hexBytes("06")), Serial(hexBytes("07")))
+	c.Entries[1].Extensions = []Extension{reasonAgain}
+	c.Entries[2].Extensions = others(16)
+	add("entry-duplicate-then-entry-seventeen", "a second entry with its reasonCode twice, a third with 17 extensions: the earlier entry decides, though too many comes first within an entry", false, "not_usable_duplicate_extension", c)
 	add("negative-and-same-low-127", "two serials that share their lowest 127 bits, and a negative serial: the entries (check 10) come before the collision (check 11)", false, "not_usable_serial",
 		base(r, Serial(hexBytes("3123456789abcdef0123456789abcdef")), Serial(hexBytes("b123456789abcdef0123456789abcdef")), []byte{0xff, 0x01}))
 	return cases

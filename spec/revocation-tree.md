@@ -293,6 +293,7 @@ prints; a serial number in the tree has none.
 is or is not recognized.
 [`../crl/testdata/`](../crl/testdata): synthetic CRLs, with whether each is
 usable, its reason code and its root (`expected.json`). Its `times/`: CRLs
-whose times are spelled in many ways, and CRLs with an extension whose
-identifier is at and past each line of "Object identifiers", each with its
-line of the archive index (`times/expected.json`).
+whose times are spelled in many ways, CRLs with an extension whose
+identifier is at and past each line of "Object identifiers", and CRLs with
+an element that holds more than it has, each with its line of the archive
+index (`times/expected.json`).

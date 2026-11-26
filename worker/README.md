@@ -737,7 +737,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 **Cloudflare 上還沒確認的**：
 
 - 檔案存在時直接送、不跑 Worker。線上沒有 `GET /__test/seen` 這種入口，從外面分不出一個回應有沒有經過 Worker；本機的 workerd 上是不跑。
-- 真的瀏覽器打開 `https://test.iamreal.tw/proof`、從 `https` 的網域開內政部元件的視窗、用真卡片走完六步：等 [#71](https://github.com/iamreal-tw/iamreal/issues/71)。無頭的 Chrome 開到第一個畫面為止（不按「讀取卡片」，元件沒有收到請求）看過一次，2026-11-21，`web/test/e2e/smoke.ts`：頁面是跨來源隔離的、證明引擎啟動（3.5 秒）、畫面是第 1 步、`Document-Isolation-Policy` 和 `Cross-Origin-Opener-Policy` 對。它有三項不過：連到別的網域和 CSP 違規，都是上面那個被加進來的 script；`Content-Security-Policy` 那一項是 `smoke.ts` 比的是正式的證明紀錄的那一份（`connect-src` 是 `data.iamreal.tw`），測試網站的是 `test-data.iamreal.tw`，要改的是 `smoke.ts`（[#241](https://github.com/iamreal-tw/iamreal/issues/241)）。
+- 真的瀏覽器打開 `https://test.iamreal.tw/proof`、從 `https` 的網域開內政部元件的視窗、用真卡片走完六步：等 [#71](https://github.com/iamreal-tw/iamreal/issues/71)。無頭的 Chrome 開到第一個畫面為止（不按「讀取卡片」，元件沒有收到請求）看過一次，2026-11-21，`web/test/e2e/smoke.ts`：頁面是跨來源隔離的、證明引擎啟動（3.5 秒）、畫面是第 1 步、`Document-Isolation-Policy` 和 `Cross-Origin-Opener-Policy` 對。那時有三項不過：連到別的網域和 CSP 違規，都是上面那個被加進來的 script；`Content-Security-Policy` 那一項是 `smoke.ts` 比的是正式的證明紀錄的那一份。`smoke.ts` 改成照網址比該有的那一份之後（[#241](https://github.com/iamreal-tw/iamreal/issues/241)），2026-11-26 再跑一次，八項都過：`Content-Security-Policy` 是測試網站的（`connect-src` 是 `test-data.iamreal.tw`），沒有連到別的網域，沒有 CSP 違規。
 
 **加正式環境時**：`assets` 在最上層，每個環境共用同一個 `site/`，而 `_headers` 只有一份。正式的證明紀錄的 `_headers` 沒有 `X-Robots-Tag`，所以兩個環境不能用同一個目錄；部署前的檢查（`checkSiteFiles`）會擋下來。到時候給正式環境自己的目錄，或在上傳之前照環境寫出 `_headers`。
 
@@ -995,9 +995,9 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 
 [`test/crl-testdata.test.ts`](test/crl-testdata.test.ts)，在 `pnpm test` 裡。每一份清冊當成假的內政部的回應，經過本機 workerd 裡的整個 Worker，看儲存桶裡的索引。
 
-1. `crl/testdata/` 的 58 份自製清冊：每一份的可用不可用、原因代碼、樹根、編號、時間、清冊日期，和 `crl/testdata/expected.json`（Go、`web/`、`device-core/` 的測試讀的同一份）相同。包括清冊編號剛好 20 和 21 個位元組、清冊和一筆的延伸欄位剛好 16 和 17 個。
-2. `crl/testdata/times/` 的 68 份（最後九份不是時間，是延伸欄位的 OID：一個數字剛好是 2^31−1 和 2^31、不是最短寫法、沒寫完、空的，規格「Object identifiers」）：`thisUpdate`、`nextUpdate`、一筆的 `revocationDate` 用各種寫法（沒有秒的 UTCTime、帶時差、有小數、`Z` 後面還有字元、西元 0 年和 9999 年、不存在的日期……）。每一份在索引裡的那一行，和 `crl/testdata/times/expected.json` 寫的逐字相同；Go、`web/`、`device-core/` 的測試讀同一份。時間只收 RFC 5280 的兩種寫法（規格「Times」）：`Z` 結尾、有秒的 UTCTime 和 GeneralizedTime，其他寫法的檔是 `-not_usable_der`。線上的清冊每個時間都是 12 位數字加 `Z` 的 UTCTime。
-3. 把儲存桶裡的清冊檔寫到一個目錄，跑 Go 的 `iamreal-crl index`，印出來的索引和儲存桶裡的 `crl/index.jsonl` 逐位元組相同。除了上面 126 份，還有 3 個不是清冊的檔和 1 份測試金鑰簽的清冊。**這一項要有 `go`，沒有就跳過；前兩項不用。**
+1. `crl/testdata/` 的 61 份自製清冊：每一份的可用不可用、原因代碼、樹根、編號、時間、清冊日期，和 `crl/testdata/expected.json`（Go、`web/`、`device-core/` 的測試讀的同一份）相同。包括清冊編號剛好 20 和 21 個位元組、清冊和一筆的延伸欄位剛好 16 和 17 個。
+2. `crl/testdata/times/` 的 75 份（最後十六份不是時間：九份是延伸欄位的 OID，一個數字剛好是 2^31−1 和 2^31、不是最短寫法、沒寫完、空的，規格「Object identifiers」；七份是元素後面多了東西）：`thisUpdate`、`nextUpdate`、一筆的 `revocationDate` 用各種寫法（沒有秒的 UTCTime、帶時差、有小數、`Z` 後面還有字元、西元 0 年和 9999 年、不存在的日期……）。每一份在索引裡的那一行，和 `crl/testdata/times/expected.json` 寫的逐字相同；Go、`web/`、`device-core/` 的測試讀同一份。時間只收 RFC 5280 的兩種寫法（規格「Times」）：`Z` 結尾、有秒的 UTCTime 和 GeneralizedTime，其他寫法的檔是 `-not_usable_der`。線上的清冊每個時間都是 12 位數字加 `Z` 的 UTCTime。
+3. 把儲存桶裡的清冊檔寫到一個目錄，跑 Go 的 `iamreal-crl index`，印出來的索引和儲存桶裡的 `crl/index.jsonl` 逐位元組相同。除了上面 136 份，還有 3 個不是清冊的檔和 1 份測試金鑰簽的清冊。**這一項要有 `go`，沒有就跳過；前兩項不用。**
 
 2026-11-21 跑的結果（#120 之後，那時是 106 份）：三項都過，共 110 個檔，索引 110 行，沒有一行不同。
 
@@ -1054,6 +1054,10 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 | 發證者名稱約 33,553,000 個位元組 | 33,553,457 | 23 ms | 66.0 MiB | 32.1 MiB |
 | 一個延伸欄位的 OID 約 3,355 萬節 | 33,553,505 | 90 ms | 66.1 MiB | 32.1 MiB |
 | 16 個延伸欄位，其中 15 個的 OID 各約 224 萬節、只差最後一節 | 33,554,176 | 441 ms | 66.1 MiB | 32.2 MiB |
+| 一個清冊延伸欄位，OID 後面 16,776,000 個 NULL（2026-11-26 加量的四個檔，[#410](https://github.com/iamreal-tw/iamreal/issues/410)；不是 DER） | 33,552,489 | 1 ms | 32.5 MiB | 32.2 MiB |
+| 一筆廢止，日期後面 16,776,000 個 NULL（不是 DER） | 33,552,501 | 0 ms | 32.4 MiB | 32.1 MiB |
+| `tbsCertList` 最後面 16,776,000 個 NULL（不是 DER） | 33,552,471 | 2 ms | 37.1 MiB | 36.8 MiB |
+| 1,118,000 筆廢止，每筆一個延伸欄位 | 33,540,477 | 241 ms | 69.0 MiB | 32.1 MiB |
 | 對照：線上的 G2（2026-11-21 05 時，340,633 筆，可用） | 16,873,034 | 229 ms | 59.3 MiB | 16.2 MiB |
 
 - 小的檔「其中檔案本身」比檔案小：讀檔用到的是程序原本就有、還沒算進高點的記憶體。

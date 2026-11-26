@@ -108,6 +108,8 @@ Android 開它的是只給模擬器測試的建置（build type `fake`）和 JVM
 5. 電路輸入（`spec/circuit-inputs.md`）、見證、證明。電路解不出見證是 `IDC_ERR_INPUT`：前面都過了還解不出來，是電路自己的檢查不成立。
 6. 證明帶的公開輸入和核心自己算的那一份逐一比對（發證金鑰、樹根、`current_time`、匿名編號、場合字串、宣告碼），有一個不同就什麼都不回（`IDC_ERR_INTERNAL`）。
 
+**一個題目只算一次證明**（`spec/device-checks.md`「One proof for the card's signatures」，ADR-0016）。第 4 步的兩個簽章驗過之後，這個題目就用掉了，不管第 5、6 步有沒有做出證明：同一個 session 再呼叫一次是 `IDC_ERR_REFUSED`，`idc_session_check_challenge` 也不再收這個題目（`IDC_ERR_REFUSED`），重做前面哪一步都一樣。要再算一次就要新的題目，宣告碼跟著不同，卡片要重新簽章。簽章不對（第 4 步的 `IDC_ERR_INPUT`）什麼都沒有算，題目不算用掉。核心擋的是同一個 session 裡的第二次；app 另開一個 session 再拿同一組簽章來，核心認不出來，那要靠 app 的流程在失敗時停下、丟掉簽章（`ios/App/CardProofFlow.swift`、Android 的流程），和上面「關卡擋的是寫錯順序」同一個道理。送出沒有回應時，app 重送的是這個函式回過的那一份內容，不再呼叫它。
+
 證明的設定是固定的：零知識、Poseidon2，就是驗證紀錄時 `bb verify -t noir-recursive` 的那一組，呼叫的人和後台都選不了。證明 14,656 個位元組。
 
 **通用參數交給 Barretenberg 一次。** 行程裡第一次算證明時，核對過的兩個參數檔交給 Barretenberg，它留著用到行程結束；之後的證明仍然每次核對四個檔，但不再交一次。
@@ -250,6 +252,35 @@ cargo test --locked -p iamreal-device-checks
 ```
 IAMREAL_BB=<bb 的路徑> cargo test --locked --release -p iamreal-device-core --test proof
 ```
+
+### 讀清冊的記憶體
+
+清冊是 app 從資料網域下載的；驗過簽章之前，檔裡的位元組可以是路上任何人放的。所以 `checks/src/crl.rs` 的 `parse_crl` 讀到驗章為止，用的記憶體不隨元素裡放了多少東西而長，只隨檔案的大小長。鏡像最多存 32 MiB 的檔，下面量的是這個大小之內最壞的檔；這個上限是鏡像的，核心自己不看檔案多大（app 交什麼就讀什麼）（[#410](https://github.com/iamreal-tw/iamreal/issues/410)）：
+
+- 不先把一個元素裡的子元素列成 `Vec`，一個一個走。一個延伸欄位只看前兩三個子元素，後面還有東西就不是 DER
+- 每一筆廢止只留序號的切片（兩個字）。每一筆的延伸欄位讀完就丟，只記第一筆有問題的是哪一筆、什麼原因：各筆依序看，第一筆有問題的決定結果
+
+量法是 `checks/examples/crl_size.rs`，一個檔一個程序，記憶體高點用系統的 `time` 看（整個程序的，含檔案本身的 32 MiB）：
+
+```sh
+cargo build --release -p iamreal-device-checks --example crl_size
+for f in DIR/*.crl; do /usr/bin/time -l target/release/examples/crl_size "$f"; done   # macOS；Linux 用 /usr/bin/time -v
+```
+
+檔由 `go run ./crl/internal/crltest/makelarge -out DIR` 寫（在程式庫的根目錄），都在 32 MiB 之內，用沒有人信任的金鑰簽。2026-11-26，Apple Silicon，release 建置：
+
+| 檔 | 改之前的高點 | 現在的高點 |
+|---|---|---|
+| 一個清冊延伸欄位，OID 後面 16,776,000 個 NULL | 547.9 MiB | 33.8 MiB |
+| 1,118,000 筆廢止，每筆一個延伸欄位 | 249.9 MiB | 53.0 MiB |
+| 1,677,697 筆廢止，沒有延伸欄位 | 99.2 MiB | 61.5 MiB |
+| 1,765,000 筆廢止，序號沒有內容（一個檔裝得下的最多筆數） | 沒有量 | 62.8 MiB |
+| 對照：線上的 G2（2026-11-26 17 時，339,764 把鍵，可用，16.8 MB） | 沒有量 | 60.6 MiB |
+| 其餘九個檔（一筆或 `tbsCertList` 後面 1,677 萬個 NULL、305 萬個延伸欄位、很長的 OID、清冊編號、序號、發證者名稱） | 33.8 到 33.9 MiB | 33.8 MiB |
+
+- **32 MiB 之內現在最高是 62.8 MiB**：檔案 32 MiB，加上 177 萬筆的序號切片（每筆 16 個位元組，`Vec` 加倍的那一刻新舊兩份）
+- 簽章驗得過之後才配置每一筆的鍵和找重複用的集合：那時位元組是內政部簽的。這一段沒有改；上表只有線上的 G2 那一列走到這裡
+- 這是 `checks/` 自己的數字。app 裡還要加上 app 讀進來的那一份檔案和 `prover/` 之後建樹用的，沒有在手機上量過
 
 ### 測試讀什麼
 

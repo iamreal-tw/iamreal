@@ -3,7 +3,8 @@
 // test/workflows.test.ts can run it on the real files and on altered copies.
 //
 // What it is: a guard against slips and against plain changes to what
-// ADR-0029, ADR-0036 and CONTRIBUTING.md ("部署會執行到的東西") require: only
+// ADR-0029, ADR-0036, ADR-0025 (the daily re-verification holds no key of
+// the back end) and CONTRIBUTING.md ("部署會執行到的東西") require: only
 // the deploy job's upload step has the token, nothing before it in that job
 // runs code of the repository or of a package's install scripts; the keys
 // of the apps' uploads are only in the upload jobs, which build nothing
@@ -15,9 +16,9 @@
 // workflow's two jobs, the device-core and android jobs of checks.yml, the
 // jobs of cache.yml, the two jobs of upload-android.yml, the two jobs of
 // upload-ios.yml (only its upload job in the environment with the App Store
-// Connect key, and that key in its last step only), and the one job each of
-// checks-ios.yml and checks-circuits.yml, must be exactly the ones written
-// here.
+// Connect key, and that key in its last step only), the two jobs of
+// reverify.yml, and the one job each of checks-ios.yml and
+// checks-circuits.yml, must be exactly the ones written here.
 //
 // What it is not: a replacement for reading every line of a change to
 // these files, which CONTRIBUTING.md requires. It does not see:
@@ -29,6 +30,11 @@
 // - what the scripts upload-android.yml runs do (android-version.sh,
 //   android-sign.sh, play-upload.sh): test/upload-android.test.ts runs them,
 //   with curl replaced, and Google Play's own answers are seen only on GitHub;
+// - what reverify.yml runs: the repository's Go (the build of
+//   iamreal-verify) and reverify.sh, with no secret, a token that can only
+//   read and no cache; test/workflows.test.ts runs the script with
+//   iamreal-verify replaced, and what the command itself checks is Go's
+//   to test (cmd/iamreal-verify);
 // - what the build job of upload-ios.yml makes (ios/build-core.sh,
 //   ios/archive.sh, Xcode and cargo on the repository's code): its archive
 //   is what gets signed and uploaded; ios/check-archive.sh looks for the
@@ -262,7 +268,7 @@ export const IOS_PATHS: readonly string[] = ["ios/**", "device-core/**", "spec/v
  * package.json among them), the files the rebuild compares with
  * (web/circuits/, verifier/vk/) and strips with
  * (web/scripts/strip-circuit.mjs), the vectors the tests read
- * (spec/vectors/poseidon2.json), what is installed (the lockfile, the
+ * (spec/vectors/poseidon2.json, spec/vectors/declaration-code.json), what is installed (the lockfile, the
  * workspace, and the package.json of the workspace's other packages, which
  * `pnpm install --frozen-lockfile` compares the lockfile with too), the
  * files at the root that change every check once added (ROOT_FILES_PATHS:
@@ -276,6 +282,7 @@ export const CIRCUITS_PATHS: readonly string[] = [
   "web/circuits/**",
   "verifier/vk/**",
   "spec/vectors/poseidon2.json",
+  "spec/vectors/declaration-code.json",
   "web/scripts/strip-circuit.mjs",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
@@ -754,6 +761,60 @@ export const IOS_UPLOAD_JOBS: YamlMap = {
       },
     ],
   },
+};
+
+/**
+ * reverify.yml (#421, ADR-0025, ADR-0028): the operator's daily
+ * re-verification of the published proof logs, each from record 1, by the
+ * command anyone runs (cmd/iamreal-verify) on the files anyone reads.
+ * Started by the schedule and by hand, and by nothing a change can bring
+ * about; one run at a time, none cancelled. It holds no secret (SECRET_LINES
+ * names no line of it), its token can only read and it uses no cache (the
+ * rules for every file), so a run can touch neither the back end nor
+ * another run.
+ *
+ * The schedule is 00:30 in Taiwan (16:30 UTC), after the change of day
+ * there, when the back end publishes (a run that comes first checks up to
+ * the line of the day before).
+ */
+export const REVERIFY_WORKFLOW = "reverify.yml";
+export const REVERIFY_ON: Yaml = { schedule: [{ cron: "30 16 * * *" }], workflow_dispatch: null };
+export const REVERIFY_GROUP = "reverify";
+/** The script of .github/workflows/ that each of its jobs runs. */
+export const REVERIFY_SCRIPT = "reverify.sh";
+/** Where each proof log is published (ADR-0027, ADR-0028). */
+export const REVERIFY_DATA = { test: "https://test-data.iamreal.tw/", production: "https://data.iamreal.tw/" } as const;
+/**
+ * The job that re-verifies one proof log, exactly. It runs the repository's
+ * Go (the build of iamreal-verify) and the one script; the packages it
+ * installs are web/'s only, for bb, with no install script and no
+ * .pnpmfile.cjs, from npm's registry, and bb's SHA-256 is checked before
+ * the script uses it. 360 minutes is the most a job gets.
+ */
+const reverifyJob = (proofLog: keyof typeof REVERIFY_DATA): YamlMap => ({
+  "runs-on": "ubuntu-24.04",
+  "timeout-minutes": "360",
+  steps: [
+    step("actions/checkout"),
+    step("actions/setup-go"),
+    step("actions/setup-node"),
+    { name: "Install pnpm", run: INSTALL_PNPM },
+    {
+      name: "Install the packages of web/ (for bb), running no install script",
+      run: "pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile --registry=https://registry.npmjs.org/ --filter iamreal-web",
+    },
+    { name: "bb is the one of bb.js 6.0.0", run: CHECK_BB },
+    { name: "Build iamreal-verify", run: 'go build -o "$RUNNER_TEMP/iamreal-verify" ./cmd/iamreal-verify' },
+    { name: `Re-verify the ${proofLog} proof log from record 1`, run: `bash .github/workflows/${REVERIFY_SCRIPT} ${proofLog} ${REVERIFY_DATA[proofLog]}` },
+  ],
+});
+/**
+ * Its jobs, exactly: the test proof log, and the production one, which does
+ * not run (`if: false`) until its site is there.
+ */
+export const REVERIFY_JOBS: YamlMap = {
+  test: reverifyJob("test"),
+  production: { if: "false", ...reverifyJob("production") },
 };
 
 /**
@@ -1282,6 +1343,7 @@ export const WORKFLOW_FILES: readonly string[] = [
   "checks-ios.yml",
   "checks.yml",
   "deploy-test.yml",
+  REVERIFY_WORKFLOW,
   UPLOAD_ANDROID_WORKFLOW,
   IOS_UPLOAD_WORKFLOW,
 ];
@@ -1341,6 +1403,14 @@ export function workflowProblems(files: Readonly<Record<string, string>>, checkP
       if (!same(doc.on, { push: { branches: ["main"] } })) p("not triggered by a push to main only");
       if (doc.env !== undefined) p("an env at the top");
       if (!same(doc.jobs, DEPLOY_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
+      continue;
+    }
+    if (f === REVERIFY_WORKFLOW) {
+      // The schedule and by hand only: no push, pull request or other workflow starts it.
+      if (!same(doc.on, REVERIFY_ON)) p(`not triggered by its schedule and by hand only: ${JSON.stringify(doc.on)}`);
+      if (!same(doc.concurrency, { group: REVERIFY_GROUP, "cancel-in-progress": "false" })) p(`concurrency is not group ${REVERIFY_GROUP}, one run at a time and none cancelled`);
+      if (!same(doc.env, { IAMREAL_BB: BB_PATH })) p("the env at the top is not the one in test/workflows.ts");
+      if (!same(doc.jobs, REVERIFY_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
     if (f === UPLOAD_ANDROID_WORKFLOW) {
