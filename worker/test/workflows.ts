@@ -1335,6 +1335,37 @@ function cacheProblems(file: string, text: string): string[] {
   return problems;
 }
 
+/**
+ * The check from outside Cloudflare (#53, #413 "通知"): every hour, and by
+ * hand, it runs test/outside-check.ts against the test site; a line that
+ * fails fails the job, and GitHub's email for a failed scheduled run is the
+ * operator's notification (.github/README.md). No secret, a token that can
+ * only read, no cache (the rules for every file above), and the packages
+ * installed the way deploy-test.yml's upload installs wrangler: no install
+ * script, no .pnpmfile.cjs, the worker package only. The minute is 17, not
+ * 0: "High load times include the start of every hour. If the load is
+ * sufficiently high enough, some queued jobs may be dropped"
+ * (https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#schedule).
+ * One run at a time, none cancelled: a run that has not ended is one that
+ * would tell.
+ */
+export const WATCH_WORKFLOW = "watch-test.yml";
+export const WATCH_ON: Yaml = { schedule: [{ cron: "17 * * * *" }], workflow_dispatch: null };
+export const WATCH_GROUP = "watch-test";
+export const WATCH_JOBS: YamlMap = {
+  check: {
+    "runs-on": "ubuntu-24.04",
+    "timeout-minutes": "10",
+    steps: [
+      step("actions/checkout"),
+      step("actions/setup-node"),
+      { name: "Install pnpm", run: INSTALL_PNPM },
+      { run: "pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile --registry=https://registry.npmjs.org/ --filter iamreal-worker" },
+      { name: "Check the test site from outside Cloudflare", "working-directory": "worker", run: "node --experimental-strip-types test/outside-check.ts" },
+    ],
+  },
+};
+
 /** The workflows, exactly, by file name: one to a line, in order. */
 export const WORKFLOW_FILES: readonly string[] = [
   "cache.yml",
@@ -1346,6 +1377,7 @@ export const WORKFLOW_FILES: readonly string[] = [
   REVERIFY_WORKFLOW,
   UPLOAD_ANDROID_WORKFLOW,
   IOS_UPLOAD_WORKFLOW,
+  WATCH_WORKFLOW,
 ];
 
 /**
@@ -1427,6 +1459,14 @@ export function workflowProblems(files: Readonly<Record<string, string>>, checkP
       if (!same(doc.env, { DEVELOPER_DIR: IOS_DEVELOPER_DIR })) p("the env at the top is not the one in test/workflows.ts");
       if (!same(doc.concurrency, { group: IOS_UPLOAD_GROUP, "cancel-in-progress": "false" })) p(`concurrency is not group ${IOS_UPLOAD_GROUP}, one run at a time and none cancelled`);
       if (!same(doc.jobs, IOS_UPLOAD_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
+      continue;
+    }
+    if (f === WATCH_WORKFLOW) {
+      // On its schedule and by hand only: no push, pull request or other workflow starts it.
+      if (!same(doc.on, WATCH_ON)) p(`not triggered on its schedule and by hand only: ${JSON.stringify(doc.on)}`);
+      if (!same(doc.concurrency, { group: WATCH_GROUP, "cancel-in-progress": "false" })) p(`concurrency is not group ${WATCH_GROUP}, one run at a time and none cancelled`);
+      if (doc.env !== undefined) p("an env at the top");
+      if (!same(doc.jobs, WATCH_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
     // Whatever saves a cache runs on pushes to main and nothing else: on any other event (a pull
