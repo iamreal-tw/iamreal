@@ -52,7 +52,8 @@
 | `App/Mark.swift` | 記號：斜放的卡片和從後面站起來的島，和 `web/src/ui/logo.ts` 同一張圖、同一份輪廓 |
 | `App/SplashView.swift` | 啟動畫面：記號和「島民證明 │ iamreal.tw」（`design/copy/app.json`）。打開 app 時顯示一秒，同時向後台拿 `config`。系統自己的啟動畫面沒有改（它只能放圖片和底色，改它要動專案檔） |
 | `App/Copy.swift`、`App/Platforms.swift` | 句子從 `design/copy/card-proof.json` 讀，不屬於過卡的從 `design/copy/app.json` 讀（兩個檔都原樣包進 app）；Threads 的名稱、`@`、怎麼整理輸入的帳號、個人檔案的網址寫死在 app |
-| `App/CRLNumbers.swift` | 每一把發證金鑰用過的最高清冊編號。公開的數字；過卡之後 app 留下來的，除了它只有提醒的四樣 |
+| `App/CRLNumbers.swift` | 每一把發證金鑰用過的最高清冊編號。公開的數字；過卡之後 app 留下來的，除了它只有提醒的四樣和過卡裝置編號 |
+| `App/Counts.swift` | 計數：過卡裝置編號（換的規則在核心）、一次過卡的嘗試、`CardProofFlow.Stop` 對到表上的原因（見「PIN、憑證、簽章在哪裡」的計數那一點） |
 | `App/Reminder.swift` | 過卡提醒：下次提醒的日子怎麼算（間隔是整數週，落在同一個星期幾；選日期；一週後再提醒；每次過卡完成重排），和手機上存的四樣（開關、間隔、時刻、下次提醒的日子，存在偏好設定，關掉就一起刪掉；ADR-0016「app 在手機上留下什麼」） |
 | `App/ReminderScreens.swift`、`App/ReminderPages.swift`、`App/ReminderViews.swift` | 提醒的畫面：日子和時刻的寫法、選間隔和時刻、設定、從通知點進來的第 1 步上面那一段（句子從 `design/copy/app.json` 讀；過卡第 7 步在 `Screens.swift`，句子在 `card-proof.json`）；兩個畫面的按鈕要做的事；系統的通知（`UNUserNotificationCenter`，通知上有「一週後再提醒我」）。通知的權限在持卡人按「開啟提醒」時才要；系統不允許時什麼都不存，過卡照常完成；第 7 步的「打開通知設定」在 iOS 16 以上開到這個 app 的通知設定，iOS 15 開到這個 app 的設定頁。點通知打開第 1 步；正在過卡（第 2 到 5 步，可能有 PIN 在記憶體裡）時不丟掉，第 1 步上面那一段等回到第 1 步才出現，過完卡就不再出現。app 開著的時候通知照樣跳出來 |
 | `App/AppEnvironment.swift` | 這個 build 連哪個網站、簽哪一份證明紀錄的場合字串，是商店的 build 還是開發用 build，商店上那一個 app 的頁面。建置時寫死 |
@@ -77,7 +78,8 @@
 - **憑證和簽章**：選定的憑證和第一個簽章留在 `CardProofFlow`，證明算完就蓋成零；核心自己的那一份跟著 session 蓋掉
 - **姓名**：核心檢查憑證後回傳，只交給「輸入 PIN」的畫面
 - **憑證的到期日**：第 7 步要比憑證的到期日和下次提醒的日子（到期日比較早就多一句），所以 `CardProofFlow` 把選定的憑證的 `not_after` 交給送出之後的畫面（`CardProofFlow.Done.notAfter`），只在記憶體裡，回到開頭就丟；不存進手機，通知不提
-- **不寫磁碟**：過卡做到一半的狀態只在 `CardProofModel` 和 `CardProofFlow` 的記憶體裡，沒有用系統保存畫面狀態的任何機制，app 被系統結束就從第 1 步來。`Tests/BuildTests.swift` 檢查 `App/` 的原始碼沒有寫檔、偏好設定、鑰匙圈、狀態保存的呼叫，例外只有 `CRLNumbers.swift` 的清冊編號、`Reminder.swift` 的提醒的四樣，和持卡人按「複製連結」時的剪貼簿
+- **不寫磁碟**：過卡做到一半的狀態只在 `CardProofModel` 和 `CardProofFlow` 的記憶體裡，沒有用系統保存畫面狀態的任何機制，app 被系統結束就從第 1 步來。`Tests/BuildTests.swift` 檢查 `App/` 的原始碼沒有寫檔、偏好設定、鑰匙圈、狀態保存的呼叫，例外只有 `CRLNumbers.swift` 的清冊編號、`Reminder.swift` 的提醒的四樣、`Counts.swift` 的過卡裝置編號，和持卡人按「複製連結」時的剪貼簿
+- **計數**（`App/Counts.swift`，`spec/counts.md`；ADR-0032、ADR-0039，#434）：過卡到了表上的哪一步、停下來或要再試一次的原因代碼、感應中途卡片離開（第幾次感應）、送出被擋後再送同一筆、下載清冊、建樹、算證明花了多久的分級（時鐘往回調時不送）。一筆一個請求（`Backend.count`），不等回應、送不出去不重送，過卡照常。每一筆帶 `client`（`ios`）、嘗試編號（一次過卡一個，只在記憶體裡）、過卡裝置編號（`UserDefaults`，台灣的日期起算 31 天後換新的，舊的不留，規則在核心的 `idc_count_device_id`）、系統版本（`UIDevice.current.systemVersion`）、app 版本（`CFBundleShortVersionString`）、手機型號（`utsname` 的 machine，例如 `iPhone15,2`；不是 `UIDevice.name` 那個持卡人取的名字）；版本和型號不合格式的整個不送。內文由核心照步驟表組（`idc_count`）。原因是 `Counts.reason(of:)` 從 `CardProofFlow.Stop` 選的，不帶任何文字、帳號、匿名編號、卡片上的值。`CardProofFlow` 停下來（`fail`）的送 stop、讓那一步再做一次的送 retry；設定、最低版本、開始時被擋這幾種在建立流程之前，由 `CardProofModel` 送；`open` 在第 1 步出現時送。持卡人取消、呼叫的順序不對被拒絕都不送。送出一筆的內文最前面加上過卡裝置編號（`CardProofFlow.withDeviceID`）。不用 IDFA、`identifierForVendor`、推播權杖，不連結 `AdSupport`，沒有第三方的分析（#94）
 
 已知的限制：`SecureField` 交出來的是 Swift 的 `String`，欄位清空之後它在記憶體裡的那一份 app 蓋不到；`PIN` 自己的位元組會蓋成零。
 
@@ -232,6 +234,7 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 - `Tests/ThemeTests.swift`：`App/Theme.swift` 的每一個數值和 `design/tokens.json` 同名的那一個相同；標題的字型是 `--font-display` 的第一個，而且就是包進 app 的那一份
 - `Tests/ScreensTests.swift`：不用後台，拿 `design/copy/card-proof.md` 的例子（`@alice`、`7K2Q9FM4XD`、2026-11-16、王小明）做出第一次宣告的每一個畫面，和已經宣告 `@alice` 的卡片的第 4、5 步（目前宣告的帳號、改成別的帳號、再次過卡、更換、收回的確認）：每一句都在文字檔裡、沒有「了解更多」；第 1 步、第 3 步、第 4 步的每一種（沒有宣告、全部收回過、已經有宣告、改成別的帳號和它依次數換掉的那一句、不能再更換、今天已經過卡 3 次、卡片在 app 不認得的平台上有帳號）、第 5 步的每一種逐句照文字檔；選間隔和時刻、設定、從通知點進來的第 1 步，每一句照 `design/copy/app.md`；系統不允許通知時選間隔的畫面留著並說為什麼；設定打開的網址；照 app 畫的樣子拍成 390 點寬的整頁截圖，連同啟動畫面和提醒的畫面寫到 `web/test-output/app/screens-ios/`，檔名就是 `design/screens/` 裡對應的那一張（下面「截圖」）
 - `Tests/PausedTests.swift`：停止收過卡（#394），對著假後台（`config` 說不說 `paused`，`challenges`、`records` 回 `paused`）：第 1 步在「下一步」的位置寫 `before.paused`，回到 app 時再問一次；`config` 在第 2 步才說的，讀卡之前停下；第 5 步 `stops.paused` 只給「回到開頭」，不給「再試一次」；說了 `paused` 的 config 下一次過卡開始時再問；第 1 步每次打開（和回到 app 時）都再問一次 `config`，用來在讀卡之前說停止收過卡
+- `Tests/CountsTests.swift`：不用後台。過卡裝置編號在台灣的日期滿 31 天才換、讀不懂的值換掉；一筆計數帶什麼不帶什麼、版本和型號不合格式的拿掉；每一步只送一次、停下來之後不再送、伺服器的代碼表上沒有的送 `server_other`；`CardProofFlow.Stop` 的每一種都有表上的原因（核心組得出 iOS 的內文才算）；送出的內文帶過卡裝置編號；手機型號是系統的代碼。`Tests/CardProofTests.swift` 用假卡片過完四次卡之後，核對這幾次送出的每一筆計數：都是 iOS 的、只有表上的欄位、沒有帳號和 PIN；過完卡的四次各送了每一步一次和三個計時、沒有 stop；停止收過卡送了 `server_paused`、換卡送了 `other_card`；每一次送出都帶著計數的過卡裝置編號。計數也照樣送到本機的 Worker
 - `Tests/BusyTests.swift`：人太多（ADR-0026，#420），不用後台：按「下一步」時送的是 `GET /api/v1/config?start`，其他時候不帶記號；`429`、`503` `busy` 算人太多，`503` 別的代碼不算（對著本機的假後台，`NWListener`）。開始的那一次被擋時停在第 1 步，`before.busy` 在「下一步」正上方，卡片沒有被感應；讀卡時不帶記號的 `config` 被擋時用按「下一步」時拿到的那一份，照樣去感應卡片；開始的那一次沒有回答時沒有可以用的，停在讀卡之前寫 `stops.too_many`。第 3 步查現況被擋時寫 `stops.too_many`，按鈕是「上一步」「再試一次」；第 5 步拿題目、送出被擋時停在那一項，寫 `stops.too_many`（送出被擋不是「送出失敗」那一句），按鈕是「再試一次」和「取消」
 - `Tests/SubmitAnswerTests.swift`：對著本機只答一次的假後台（Network 框架的 `NWListener`）送出：201 的內文中途斷線或超過 1 MiB 時，`HTTPBackend.submit` 給沒有位元組、不是 `network`，交給核心讀是「什麼都沒說」（完成畫面只說記下了，#264）；剛好 1 MiB 照收、`503` 照舊是那個代碼
 - `Tests/ChallengeAgainTests.swift`：對著本機一個照順序回應的假後台（`NWListener`）拿題目（#404）：第一次讀完請求就關連線、第二次才回 → 拿到題目，送了兩次；兩次都不回 → `network`，只送兩次；有回應（429）或回應的內文中途斷掉 → 不重送；等回應的工作被取消 → 不重送；`records`、`card-state` 沒有回應時只送一次
@@ -252,21 +255,25 @@ App Store 要 app 帶一份 privacy manifest，申報用到的 required reason A
 
 | 類別 | 理由代碼 | 用在哪裡 | 為什麼是這個代碼 |
 |---|---|---|---|
-| `NSPrivacyAccessedAPICategoryUserDefaults` | `CA92.1` | `App/CRLNumbers.swift`（每把發證金鑰用過的最高清冊編號）、`App/Reminder.swift`（提醒的四樣設定），都是 `UserDefaults.standard` | Apple：「Declare this reason to access user defaults to read and write information that is only accessible to the app itself.」app 沒有 App Group、沒有延伸功能，讀寫的只有自己的 |
+| `NSPrivacyAccessedAPICategoryUserDefaults` | `CA92.1` | `App/CRLNumbers.swift`（每把發證金鑰用過的最高清冊編號）、`App/Reminder.swift`（提醒的四樣設定）、`App/Counts.swift`（過卡裝置編號和產生的日子），都是 `UserDefaults.standard` | Apple：「Declare this reason to access user defaults to read and write information that is only accessible to the app itself.」app 沒有 App Group、沒有延伸功能，讀寫的只有自己的 |
 | `NSPrivacyAccessedAPICategoryFileTimestamp` | `C617.1` | `App/` 的程式沒有用。連結進來的 `device-core/` 讓執行檔引用了這一類的函式：商店的 build 是 `fstat`、`lstat`（Barretenberg 的 `bbapi`），模擬器上的 Debug build 另外有 `stat`、`fstatat`（2026-11-26 用 `nm -u` 看的） | Apple：「Declare this reason to access the timestamps, size, or other metadata of files inside the app container, app group container, or the app's CloudKit container.」核心不碰檔案（`device-core/README.md`），app 交給它的是位元組，不是路徑；這些函式如果被叫到，碰得到的只有 app 自己容器裡的檔 |
 
 - **另外三類沒有用到**：系統開機時間（`systemUptime`、`mach_absolute_time`）、磁碟空間、使用中的鍵盤。`check-app.sh` 看原始碼裡的名稱和執行檔引用的函式，哪一類用到了卻沒申報、或申報了卻沒用到，建置就失敗。
 - **檔案時間戳那一類是往多報的方向填的。** Apple 的文件說的是：執行檔用到 required reason API，包著它的 bundle 就要有 privacy manifest 申報（「For each executable or dynamic library in an app that uses a required reason API, the bundle that includes the executable or dynamic library needs to include a privacy manifest file that reports the API.」）。文件沒有講「連結進來、但 app 的流程不會叫到」的函式算不算用到，也沒有講 C、Rust 的程式；App Store Connect 上傳時實際怎麼判斷，這裡沒有查到。執行檔既然引用了，就照會被叫到來申報。
 - **追蹤**：`NSPrivacyTracking` 是 `false`，沒有追蹤的網域（`docs/store-privacy-labels.md`「兩家各自另外問的」）。
-- **收集的資料**（`NSPrivacyCollectedDataTypes`）照 [`docs/store-privacy-labels.md`](../docs/store-privacy-labels.md) 裡 app 現在實際送的那幾列，每一類都是連結、不追蹤、用途 App Functionality：
+- **收集的資料**（`NSPrivacyCollectedDataTypes`）照 [`docs/store-privacy-labels.md`](../docs/store-privacy-labels.md) 裡 app 現在實際送的那幾列，每一類都是連結、不追蹤，用途照那一份（App Functionality、Analytics）：
 
   | manifest 的值 | 那一份的第幾列 |
   |---|---|
   | `NSPrivacyCollectedDataTypeUserID` | 第 1 列：宣告的帳號和島民編號 |
   | `NSPrivacyCollectedDataTypeCoarseLocation`、`NSPrivacyCollectedDataTypeOtherDiagnosticData` | 第 3 列：IP 位址（Cloudflare 的那一份現在就有） |
   | `NSPrivacyCollectedDataTypeOtherDataTypes` | 第 10 列：紀錄的其他欄位 |
+  | `NSPrivacyCollectedDataTypeDeviceID`（App Functionality、Analytics） | 第 5 列：過卡裝置編號 |
+  | `NSPrivacyCollectedDataTypeProductInteraction`（Analytics） | 第 6 列：計數的步驟和動作 |
+  | `NSPrivacyCollectedDataTypeOtherDiagnosticData` 多一個 Analytics | 第 7、9 列：停下來的原因代碼；手機型號、系統版本、app 版本 |
+  | `NSPrivacyCollectedDataTypePerformanceData`（Analytics） | 第 8 列：花了多久的分級 |
 
-  第 2、4 列（後台的連線紀錄，[#20](https://github.com/iamreal-tw/iamreal/issues/20)）用的類別已經在上面，做完不用改這個檔。第 5 到 9 列（過卡裝置編號和計數，[#434](https://github.com/iamreal-tw/iamreal/issues/434)）做的時候要加：`NSPrivacyCollectedDataTypeDeviceID`、`…ProductInteraction`、`…PerformanceData`，用途多一個 Analytics。Apple：Xcode 把 app 和各 SDK 的 manifest 彙整成一份 privacy report，在 App Store Connect 填隱私標示時參考它；標示本身還是要營運者在後台填（[#161](https://github.com/iamreal-tw/iamreal/issues/161)）。
+  第 2、4 列（後台的連線紀錄，[#20](https://github.com/iamreal-tw/iamreal/issues/20)）用的類別已經在上面。Apple：Xcode 把 app 和各 SDK 的 manifest 彙整成一份 privacy report，在 App Store Connect 填隱私標示時參考它；標示本身還是要營運者在後台填（[#161](https://github.com/iamreal-tw/iamreal/issues/161)）。
 
 ## 建置時的檢查（`check-app.sh`）
 

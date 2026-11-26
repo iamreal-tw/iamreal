@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 @testable import IamrealApp
 
@@ -31,6 +32,12 @@ final class CardProofTests: XCTestCase {
     private var notificationSettingsOpened = 0
     /// What the lowest version says of the build, when a test changes it under a model.
     private var minApp: MinApp?
+    /// The counts the models of a test sent, read, in the order they were sent (#434); and the card proof device ID as the
+    /// phone keeps it, the same for every model of a test, as for one phone.
+    private var countsSent: [[String: String]] = []
+    private var deviceIDStored: String?
+    /// The record bodies every model of a test sent.
+    private var submitted: [Data] = []
 
     override func setUp() async throws {
         backend = try TestBackend.load()
@@ -56,6 +63,63 @@ final class CardProofTests: XCTestCase {
         try await backend.setClock(now)
         try await switchesWithAnotherCardInTheWay()
         try await withdraws()
+        countsChecked()
+    }
+
+    /// What the counts of the four card proofs say (#434; spec/counts.md): every count is the iOS app's, with the members
+    /// of the table only and nothing of the card or the accounts; each card proof that was done sent every step once and
+    /// the three durations, and did not stop; the card proofs stopped sent server_paused, another card at a tap other_card;
+    /// every record sent carried the card proof device ID the counts carry.
+    private func countsChecked() {
+        let members: Set<String> = ["client", "event", "step", "reason", "action", "tap", "took", "device_id", "attempt_id", "os_version", "app_version", "model"]
+        XCTAssertFalse(countsSent.isEmpty)
+        for count in countsSent {
+            XCTAssertEqual(count["client"], "ios")
+            XCTAssertTrue(Set(count.keys).isSubset(of: members), "\(count)")
+            XCTAssertNotNil(count["os_version"], "the system's version: \(count)")
+            XCTAssertNotNil(count["model"].flatMap { $0.range(of: #"^[A-Za-z0-9 \-_.,()+]{1,32}$"#, options: .regularExpression) }, "the model: \(count)")
+            for never in ["alice", "bob", "carol", backend.pin, "測試用戶"] {
+                XCTAssertFalse(count.values.contains { $0.contains(never) }, "\(never) in \(count)")
+            }
+        }
+        var attempts: [String: [[String: String]]] = [:]
+        var order: [String] = []
+        for count in countsSent {
+            let id = count["attempt_id"] ?? ""
+            if attempts[id] == nil { order.append(id) }
+            attempts[id, default: []].append(count)
+        }
+        for counts in attempts.values { XCTAssertEqual(Set(counts.map { $0["device_id"] }).count, 1) }
+        let steps = ["open", "read", "config", "certificates", "certificate", "crl", "tree", "circuit", "engine", "checked", "pin", "scope_signed", "state", "chosen", "confirmed", "challenge", "code_signed", "proved", "done"]
+        let done = order.compactMap { attempts[$0] }.filter { $0.contains { $0["event"] == "step" && $0["step"] == "done" } }
+        XCTAssertEqual(done.count, 4)
+        for counts in done {
+            let reached = counts.filter { $0["event"] == "step" }.compactMap { $0["step"] }
+            // `open` is step 1's: a card proof begun again while step 1 stayed has none of its own.
+            let expected = reached.first == "open" ? steps : steps.filter { $0 != "open" }
+            XCTAssertEqual(reached.sorted(), expected.sorted(), "\(reached)")
+            XCTAssertEqual(reached.last, "done")
+            XCTAssertEqual(Set(counts.filter { $0["event"] == "duration" }.compactMap { $0["step"] }), ["crl", "tree", "proved"])
+            XCTAssertFalse(counts.contains { $0["event"] == "stop" })
+        }
+        let said = Set(countsSent.compactMap { c -> String? in
+            guard let event = c["event"], event == "stop" || event == "retry" else { return nil }
+            return "\(event):\(c["reason"] ?? "")"
+        })
+        // Stopped (#394), another card at a tap, and too many people (#420): the start turned away twice, the card's state,
+        // the challenge and the record turned away once each, and the record sent again.
+        for expected in ["stop:server_paused", "retry:other_card", "stop:server_busy", "stop:server_rate_limited", "retry:server_busy", "retry:server_rate_limited"] {
+            XCTAssertTrue(said.contains(expected), "\(expected) not in \(said)")
+        }
+        XCTAssertTrue(countsSent.contains { $0["event"] == "action" && $0["action"] == "resubmit" })
+        let ids = Set(countsSent.compactMap { $0["device_id"] })
+        XCTAssertEqual(ids.count, 1)
+        let records = submitted + (asked?.submitted ?? [])
+        XCTAssertGreaterThanOrEqual(records.count, 4)
+        for body in records {
+            let sent = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
+            XCTAssertEqual(sent?["device_id"] as? String, ids.first)
+        }
     }
 
     private func declares() async throws {
@@ -767,6 +831,10 @@ final class CardProofTests: XCTestCase {
         XCTAssertTrue(model.holdsPIN)
         try await press("再感應一次", in: model)
         XCTAssertEqual(model.screen.step, 4)
+        // Each a card that left during tap 2, counted as such: the PIN had been accepted when the second left as it went.
+        let dropped = countsSent.filter { $0["event"] == "action" && $0["action"] == "tap_dropped" }
+        XCTAssertEqual(dropped.map { $0["tap"] }, ["2", "2"])
+        XCTAssertFalse(countsSent.contains { $0["reason"] == "pin_maybe_received" })
     }
 
     // The server does not answer --------------------------------------------------------------------
@@ -1083,6 +1151,7 @@ final class CardProofTests: XCTestCase {
     private func makeModel(opened: Bool = true, card: Card? = nil, canReadCards: Bool = true, minApp: MinApp = .ok, storePage: URL? = nil) -> CardProofModel {
         let backend = self.backend!
         let asked = CountingBackend(HTTPBackend(site: backend.origin, publicFiles: backend.origin))
+        if let before = self.asked { submitted += before.submitted }
         self.asked = asked
         notifier = FakeNotifier()
         reminderStore = MemoryReminderStore()
@@ -1094,7 +1163,20 @@ final class CardProofTests: XCTestCase {
             clock: { [unowned self] in self.now },
             crlNumbers: MemoryCRLNumbers(),
             openSession: backend.openSession,
-            proofFiles: BundledFile.proofFiles(for:))
+            proofFiles: BundledFile.proofFiles(for:),
+            counts: Counts(Counts.Dependencies(
+                send: { [unowned self] body in
+                    if let count = (try? JSONSerialization.jsonObject(with: body)) as? [String: String] { self.countsSent.append(count) }
+                    // On to the Worker, which takes it as from the app.
+                    Task { await asked.count(body) }
+                },
+                clock: { [unowned self] in self.now },
+                random: { Data((0..<$0).map { _ in UInt8.random(in: 0...255) }) },
+                stored: { [unowned self] in self.deviceIDStored },
+                store: { [unowned self] in self.deviceIDStored = $0 },
+                osVersion: UIDevice.current.systemVersion,
+                appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+                model: Counts.machine())))
         let model = CardProofModel(CardProofModel.Dependencies(
             flow: flow,
             copy: Copy.bundled(),

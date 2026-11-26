@@ -21,6 +21,10 @@ protocol Backend {
     /// 201: the record is in the proof log. The answer's body, as it came;
     /// the core reads it (spec/records-response.md).
     func submit(_ body: Data) async throws -> Data
+    /// POST /api/v1/counts with `body`, the core's (spec/counts.md). Its
+    /// answer says nothing and is not read; one that does not get through
+    /// is nobody's failure, and is not sent again.
+    func count(_ body: Data) async
 }
 
 extension Backend {
@@ -58,8 +62,10 @@ struct BackendFailure: Error, Equatable {
 /// The back end over HTTPS. The two hosts are fixed when the app is built
 /// (AppEnvironment); a test gives it the address of a local Worker.
 ///
-/// No request carries a cookie, a cache or an identifier of the device,
-/// and nothing is stored: the session is ephemeral. Two headers the system
+/// No request carries a cookie or a cache, and nothing is stored: the
+/// session is ephemeral. Of the device, only the counts and the submission
+/// carry anything: the card proof device ID, and in a count the system's
+/// version, the app's and the phone's model (spec/counts.md; ADR-0039). Two headers the system
 /// would fill with what differs from phone to phone are fixed: User-Agent
 /// (the system's has the app's build and the system's version) and
 /// Accept-Language (the system's is the phone's list of languages). The
@@ -217,6 +223,15 @@ struct HTTPBackend: Backend {
             throw BackendFailure(code: Self.errorCode(data) ?? "http_\(response.statusCode)", requestID: Self.requestID(response), status: response.statusCode)
         }
         return data
+    }
+
+    func count(_ body: Data) async {
+        var request = URLRequest(url: site.appendingPathComponent("api/v1/counts"))
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Taken or dropped, answered or not: the same.
+        _ = try? await session.data(for: request)
     }
 
     /// What every request calls itself: the same for every phone and every

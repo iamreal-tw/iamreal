@@ -41,6 +41,7 @@ final class PausedTests: XCTestCase {
         func cardState(_ body: Data) async throws -> Data { throw BackendFailure(code: "network", requestID: nil) }
         func challenge() async throws -> String { throw BackendFailure(code: "paused", requestID: "0123456789abcdef") }
         func submit(_ body: Data) async throws -> Data { throw BackendFailure(code: "paused", requestID: "0123456789abcdef") }
+        func count(_ body: Data) async {}
     }
 
     private func model(_ backend: Backend) -> CardProofModel {
