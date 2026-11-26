@@ -52,6 +52,7 @@ import tw.iamreal.app.flow.MinApp
 import tw.iamreal.app.flow.Platforms
 import tw.iamreal.app.ui.demo.HangDemo
 import tw.iamreal.app.ui.demo.HangDemoWords
+import tw.iamreal.app.ui.demo.SenseDemo
 
 /**
  * What a screen asks of the phone: an address opened outside the app (false when no app on the phone opens it), a text put on the clipboard,
@@ -213,8 +214,17 @@ private fun Read(m: Model, outside: Outside) {
     if (m.readButton == ReadButton.NEXT) {
         Body(c.say("app_read.lift"), strong = true)
     } else {
-        Body(c.say("app_read.how", "spot" to c.say("app_read.spot_android")))
-        TapPlace(c)
+        // Where the card goes differs from one Android phone to another: the words and the demonstration say to look for it.
+        Body(c.say("app_read.how_android"))
+        m.senseDemo?.let { demo ->
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                SenseDemo(demo, c.say("app_demo.sense_android"))
+                // Not while the card is being read: the demonstration rests then.
+                Button(if (demo.playing) c.say("app_demo.stop") else c.say("app_demo.replay"), Modifier.testTag("sense-demo-button"), enabled = !m.readBusy, height = 46.dp) {
+                    if (demo.playing) demo.stop() else demo.play()
+                }
+            }
+        }
     }
     TaskList(c, listOf(c.say("read.server"), c.say("app_read.certificate"), c.say("read.check"), c.say("read.crl")), m.readItems, m.readMessage, "read-list")
     Actions {

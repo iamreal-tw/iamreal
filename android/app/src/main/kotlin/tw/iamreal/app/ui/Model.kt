@@ -19,6 +19,7 @@ import tw.iamreal.app.flow.Platforms
 import tw.iamreal.app.flow.Stop
 import tw.iamreal.app.ui.demo.HangDemoPlayer
 import tw.iamreal.app.ui.demo.HangTimeline
+import tw.iamreal.app.ui.demo.SenseDemoPlayer
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.FutureTask
@@ -140,6 +141,8 @@ internal class Model(
     val copy: Copy,
     /** design/motion/hang.json, as the installer carries it: read when a card proof first gets to step 6. */
     hangMotion: () -> String,
+    /** design/motion/sense.json, as the installer carries it: read when step 2 first comes up. */
+    senseMotion: () -> String,
 ) {
     val messages = Messages(copy)
     private val backend = Backend(wiring.site, wiring.data)
@@ -194,6 +197,12 @@ internal class Model(
         private set
 
     // Step 2
+    private val senseJson by lazy(senseMotion)
+
+    /** The demonstration of where the card goes, for this visit of step 2: it plays by itself once, and rests when the card is asked for. */
+    var senseDemo by mutableStateOf<SenseDemoPlayer?>(null)
+        private set
+
     var readItems by mutableStateOf(List(4) { ItemState.NONE })
         private set
     var readMessage by mutableStateOf<String?>(null)
@@ -414,6 +423,7 @@ internal class Model(
     private fun toRead() {
         dropAll()
         newFlow()
+        senseDemo = SenseDemoPlayer(senseJson)
         readItems = items(4, 0, false)
         readMessage = null
         readButton = ReadButton.TAP
@@ -445,6 +455,8 @@ internal class Model(
     fun tapToRead() {
         val f = flow ?: return
         var doneCount = 0
+        // The demonstration rests with the card in place, and does not move by itself again: the panel of the tap is over a still screen.
+        senseDemo?.stop()
         readBusy = true
         readMessage = null
         readItems = items(4, 0, true)
@@ -813,6 +825,7 @@ internal class Model(
         flow?.cancel()
         flow = null
         panel = null
+        senseDemo = null
         pin.clear()
         keptPinSince = null
         pinBusy = null
