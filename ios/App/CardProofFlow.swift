@@ -287,16 +287,32 @@ final class CardProofFlow {
     private var submission: Data?
 
     /// `config` is the body of GET /api/v1/config, fetched when the app
-    /// opened. Throws `Stop.server` when it has no `platforms`.
+    /// opened. Throws `Stop.server` when it has no `platforms`, and with
+    /// the code `paused` when it says the operator stopped taking card
+    /// proofs (docs/api/card-proof.md): before the card is read.
     init(_ deps: Dependencies, config: Data) throws {
         self.deps = deps
         self.config = config
         guard let body = try? JSONSerialization.jsonObject(with: config) as? [String: Any],
               let table = body["platforms"],
-              let platforms = try? JSONSerialization.data(withJSONObject: table, options: [.fragmentsAllowed])
+              let platforms = try? JSONSerialization.data(withJSONObject: table, options: [.fragmentsAllowed]),
+              let paused = Self.paused(config)
         else { throw Stop.server(BackendFailure(code: "malformed_response", requestID: nil)) }
+        if paused { throw Stop.server(BackendFailure(code: "paused", requestID: nil)) }
         self.platforms = platforms
         knownPlatforms = (try? JSONSerialization.data(withJSONObject: Platform.known.map(\.id))) ?? Data("[]".utf8)
+    }
+
+    /// `config`'s `paused` (docs/api/card-proof.md): whether the operator
+    /// stopped taking card proofs. Absent is false; nil when it is there
+    /// and is neither true nor false (spec/device-checks.md:
+    /// `malformed_response`), or the body is not an object.
+    static func paused(_ config: Data) -> Bool? {
+        guard let body = try? JSONSerialization.jsonObject(with: config) as? [String: Any] else { return nil }
+        guard let value = body["paused"] else { return false }
+        // JSON's true and false, not a number that NSNumber would also read as a Bool.
+        guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else { return nil }
+        return number.boolValue
     }
 
     /// Whether the PIN is in memory: for tests, which cannot see it.

@@ -33,7 +33,9 @@ struct Screens {
     // Step 1: before starting ------------------------------------------------------------------
 
     /// `notice`: on top, when the app was opened from the reminder.
-    func before(notice: Notice? = nil) -> Screen {
+    /// `paused`: the operator stopped taking card proofs, as the server's
+    /// config said: said in place of common.next (card-proof.md, step 1).
+    func before(notice: Notice? = nil, paused: Bool = false) -> Screen {
         // No platform table yet: by the platforms the app has its own definition of.
         var blocks: [Block] = [
             .title(copy("before.title")),
@@ -44,6 +46,7 @@ struct Screens {
         if Platform.known.count != 1 {
             blocks += [.text(copy("before.one_proof")), .strong(copy("before.listed_together"))]
         }
+        let questions = blocks.count
         blocks += [
             .question(copy("before.why_physical"), [.text(copy("before.why_physical_card")), .text(copy("before.why_physical_mobile"))]),
             // The two ways out of the card proof's screens: a person without a card cannot go on (card-proof.md, step 1).
@@ -53,6 +56,7 @@ struct Screens {
                 .action(Button(label: copy("before.how_to_get_moica"), action: .howToApply)),
             ]),
         ]
+        if paused { return Screen(step: 1, blocks: Array(blocks[..<questions]) + [.message(copy("before.paused"))] + blocks[questions...], notice: notice, settings: settingsButton) }
         return Screen(step: 1, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .start)], notice: notice, settings: settingsButton)
     }
 
@@ -449,8 +453,9 @@ struct Screens {
                 buttons: [Button(label: copy("app_read.tap_again"), action: .signAgain)],
                 cancel: cancel)
         }
-        // The PIN is gone, and the phone could not talk to the card: back to the start.
-        if stop == .dateChanged || stop == .card(.channel) {
+        // The PIN is gone, and the phone could not talk to the card: back to the start. So when the server takes no card
+        // proof for now (docs/api/card-proof.md, `paused`): the same record would be refused again.
+        if stop == .dateChanged || stop == .card(.channel) || Self.isPaused(stop) {
             return Screen(step: 5, blocks: blocks, buttons: [Button(label: copy("accounts.restart"), action: .restart)])
         }
         var buttons = [Button(label: copy("app_read.restart"), action: .readAgain)]
@@ -763,6 +768,8 @@ struct Screens {
             case "challenge_unknown": sentence = copy("stops.challenge_expired")
             case "crl_stale": sentence = copy("stops.server_crl_stale")
             case "daily_limit": sentence = copy("stops.daily_limit")
+            // The server takes no card proof for now (docs/api/card-proof.md, `paused`): not a failure to send again.
+            case "paused": sentence = copy("stops.paused")
             case "switch_limit": sentence = copy("stops.switch_limit")
             case "empty": sentence = copy("stops.empty")
             case "switch_restricted": sentence = copy("stops.switch_restricted")
@@ -772,6 +779,11 @@ struct Screens {
             }
             return [sentence] + (failure.requestID.map { [copy("stops.request_id", ["request_id": $0])] } ?? [])
         }
+    }
+
+    private static func isPaused(_ stop: Flow.Stop) -> Bool {
+        if case .server(let failure) = stop { return failure.code == "paused" }
+        return false
     }
 
     /// A certificate's time, YYMMDDHHMMSS (UTC), as its date in Taiwan.
