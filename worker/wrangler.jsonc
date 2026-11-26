@@ -12,7 +12,10 @@
   // "清空測試的證明紀錄"), and makes the class of the new name.
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Roster"] },
-    { "tag": "v2", "deleted_classes": ["Roster"], "new_sqlite_classes": ["ProofLog"] }
+    { "tag": "v2", "deleted_classes": ["Roster"], "new_sqlite_classes": ["ProofLog"] },
+    // v3 makes the class of the object that takes the counts (src/counts.ts). It keeps the counts
+    // in memory and stores nothing but its alarm.
+    { "tag": "v3", "new_sqlite_classes": ["Counts"] }
   ],
   // The CPU time one invocation may use, in every environment: 300,000 ms, the most that can
   // be set. Without it the hourly schedule was stopped after about 30 seconds, less than the
@@ -54,13 +57,22 @@
       "preview_urls": false,
       // The CRL mirror, every hour.
       "triggers": { "crons": ["0 * * * *"] },
-      "durable_objects": { "bindings": [{ "name": "PROOF_LOG", "class_name": "ProofLog" }] },
+      // PROOF_LOG: the proof log's object. COUNTS: the object that takes the counts (ADR-0032), which
+      // is another one, so that counts never wait on the proof log or it on them.
+      "durable_objects": {
+        "bindings": [
+          { "name": "PROOF_LOG", "class_name": "ProofLog" },
+          { "name": "COUNTS", "class_name": "Counts" }
+        ]
+      },
       // The public files, downloaded from test-data.iamreal.tw (ADR-0027).
       // DATA: the public data (ADR-0027). CONNECTION_LOG: the bucket the connection log is written
       // to (ADR-0022), under "connection/": a bucket with no public domain, apart from the public
       // data, whose lifecycle rule deletes every object under that prefix after 31 days (README.md,
       // "連線紀錄"). The operator makes the bucket and the rule before the first deploy; every hour the
       // Worker publishes the date of the oldest entry, so that a rule that does not delete shows.
+      // The same bucket holds the counts (ADR-0032), under "count-events/", with a rule of their own
+      // that deletes after 31 days too, and the same hourly look (README.md, "計數").
       "r2_buckets": [
         { "binding": "DATA", "bucket_name": "iamreal-test-data" },
         { "binding": "CONNECTION_LOG", "bucket_name": "iamreal-test-logs" }
@@ -76,7 +88,8 @@
         { "name": "RATE_CARD_STATE", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } },
         { "name": "RATE_RECORDS", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } },
         { "name": "RATE_PUBLIC_READS", "namespace_id": "1004", "simple": { "limit": 180, "period": 60 } },
-        { "name": "RATE_PAGES", "namespace_id": "1005", "simple": { "limit": 300, "period": 60 } }
+        { "name": "RATE_PAGES", "namespace_id": "1005", "simple": { "limit": 300, "period": 60 } },
+        { "name": "RATE_COUNTS", "namespace_id": "1006", "simple": { "limit": 120, "period": 60 } }
       ],
       "vars": {
         // The name of the proof log's Durable Object: clearing the test log is giving it a new name.
@@ -101,7 +114,10 @@
         // The date the test log was last cleared on, YYYY-MM-DD: every page says it beside the mark
         // of a test log (design/copy/test-site.md). Change it together with PROOF_LOG_OBJECT_NAME when
         // the proof log is cleared (README.md, "清空測試的證明紀錄").
-        "TEST_PROOF_LOG_CLEARED_ON": "2026-11-23"
+        "TEST_PROOF_LOG_CLEARED_ON": "2026-11-23",
+        // How many counts one minute's file holds at most (ADR-0032; src/counts.ts): plain digits, 0 to
+        // 100000. More than that in a minute are not kept; the file says how many there were.
+        "COUNT_EVENTS_PER_MINUTE": "600"
       }
     }
   }

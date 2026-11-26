@@ -48,6 +48,7 @@ import type { ProofLogRecord } from "iamreal-protocol/record.ts";
 import { type CardState, type RecordResult, RULES_VERSION, type SlotState, applyRecord } from "iamreal-protocol/record-rules.ts";
 import { type ApiParts, api, isApiPath } from "../src/api.ts";
 import { copyCards, dropCardsCopy, writeCard } from "../src/card-table.ts";
+import { Counts as DeployedCounts, countsOf } from "../src/counts.ts";
 import { EngineError } from "../src/engine.ts";
 import worker from "../src/index.ts";
 import { proofVerifier } from "../src/in-worker.ts";
@@ -116,6 +117,27 @@ const FAILING_WRITES = {
   view_state: "ON view_state",
 } as const;
 type FailingWrite = keyof typeof FAILING_WRITES;
+
+/**
+ * The counts' object of the test build: the deployed one, whose alarm a
+ * test rings when it has moved the clock (`POST /__test/counts/alarm`). The
+ * alarm it sets for itself goes by the real clock, and is the same handler.
+ */
+export class Counts extends DeployedCounts {
+  constructor(ctx: DurableObjectState, env: Env) {
+    // The bucket is looked up each time it is used: the object lives on while a test turns the bucket's fault on and off.
+    super(ctx, {
+      ...env,
+      get CONNECTION_LOG() {
+        return connectionLogFails ? failingBucket(env.CONNECTION_LOG) : env.CONNECTION_LOG;
+      },
+    });
+  }
+
+  testRunAlarm(): Promise<void> {
+    return this.alarm();
+  }
+}
 
 export class ProofLog extends DeployedProofLog {
   /** The second piece of timed work: when it is next due, how long after each run it is due again, and when it ran. */
@@ -594,6 +616,8 @@ export default {
    *
    * - `PUT /__test/connection-log-fault` with `true` or `false`: from now on
    *   every write to the connection log's bucket fails, or none does.
+   * - `POST /__test/counts/alarm` rings the alarm of the counts' object: a
+   *   minute that is over by the test's clock is written.
    * - `GET /__test/seen` answers the method and path of every request that
    *   reached this code since it was last asked, the doors aside: what
    *   Static Assets answers by itself is not among them.
@@ -626,6 +650,10 @@ export default {
       return done();
     }
     const env = testEnv(deployedEnv);
+    if (route === "POST /__test/counts/alarm") {
+      await (countsOf(env) as unknown as DurableObjectStub<Counts>).testRunAlarm();
+      return done();
+    }
     if (route === "POST /__test/proof-log/alarm") {
       // `?object=` names another object than the settings': the one of a proof log that was cleared (README.md, "清空測試的證明紀錄").
       const named = new URL(request.url).searchParams.get("object");

@@ -10,7 +10,7 @@ import { type TestWorker, startWorker } from "./harness.ts";
 import { CRL_TIME, freshProofLog, publishCrl, tw } from "./records.ts";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { CONNECTION_LOG_CHECKED, CONNECTION_LOG_FILE, checkFromOutside, runOutsideCheck } from "./outside-check.ts";
+import { CONNECTION_LOG_CHECKED, COUNT_EVENTS_CHECKED, CONNECTION_LOG_FILE, checkFromOutside, runOutsideCheck } from "./outside-check.ts";
 import type { Reader } from "./site-check.ts";
 
 /** The date this test's proof log was cleared on: the day its object first runs. */
@@ -57,11 +57,14 @@ async function failsOnly(parts: Partial<Parts>, line: string, saying: RegExp): P
 
 test("every check passes on a Worker that published today and has CRLs of both issuer keys", async () => {
   const lines = await checkFromOutside(AS_RUNNING);
-  assert.equal(lines.length, 7, "a line for each thing checked, and the one not checked yet");
+  assert.equal(lines.length, 8, "a line for each thing checked, and the two not checked yet");
   assert.deepEqual(lines.filter((l) => !l.ok), []);
   // The connection logs' line is off until #20 is deployed: it says so, and passes.
   assert.equal(CONNECTION_LOG_CHECKED, false);
-  assert.equal(lines.at(-1)!.what, "not checked yet: connection-log/oldest.json, the connection logs' age (#20)");
+  assert.equal(lines.at(-2)!.what, "not checked yet: connection-log/oldest.json, the connection logs' age (#20)");
+  // And the counts' line until #54 is.
+  assert.equal(COUNT_EVENTS_CHECKED, false);
+  assert.equal(lines.at(-1)!.what, "not checked yet: count-events/oldest.json, the counts' age (#54)");
 });
 
 test("the connection logs (#20), when checked: the back end looked in the last 2 hours, and none is older than 33 days in UTC; a missing file fails", async () => {

@@ -7,12 +7,14 @@ import { type ApiParts, api, isApiPath } from "./api.ts";
 import { poseidon2Hash, proofVerifier } from "./in-worker.ts";
 import { checkIssuerTable } from "./issuers.ts";
 import { OLDEST_KEY, isOverdue, oldestDay, oldestFile } from "./connection-log.ts";
+import { COUNT_EVENTS_OLDEST_KEY, COUNT_EVENTS_PREFIX } from "./counts.ts";
 import { type CrlMirror, crlMirrorInWorker } from "./mirror.ts";
 import { pageDataOfProofLog } from "./page-data.ts";
 import { proofLogOf } from "./proof-log.ts";
 import { proofLogSettingsOf } from "./settings.ts";
 import { type VisitorParts, visitor } from "./visitor.ts";
 
+export { Counts } from "./counts.ts";
 export { ProofLog } from "./proof-log.ts";
 
 // A build whose issuer keys are not one G2 and one G3 key does not start.
@@ -31,24 +33,25 @@ export default {
 
   /**
    * The hourly schedule (wrangler.jsonc, "triggers"): the date of the
-   * connection log's oldest entry is published (connection-log.ts), then
+   * connection log's oldest entry is published (connection-log.ts), and
+   * the date of the oldest file of counts (counts.ts), each by itself; then
    * one round of the CRL mirror.
    */
   async scheduled(_controller, env): Promise<void> {
     // First, and by itself: the mirror's trouble is not this file's, nor the other way round. If the bucket
     // cannot be listed or the file cannot be written, the file keeps its earlier time, which is what a check
     // from outside sees; here it is one line in the live log.
+    const time = now();
+    // A bucket that does not answer must not keep the mirror waiting: half a minute, then it is this hour's trouble.
+    const inTime = async <T>(work: Promise<T>): Promise<T> => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([work, new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error("no answer in 30 s")), 30_000)))]);
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+      }
+    };
     try {
-      const time = now();
-      // A bucket that does not answer must not keep the mirror waiting: half a minute, then it is this hour's trouble.
-      const inTime = async <T>(work: Promise<T>): Promise<T> => {
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        try {
-          return await Promise.race([work, new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error("no answer in 30 s")), 30_000)))]);
-        } finally {
-          if (timer !== undefined) clearTimeout(timer);
-        }
-      };
       const oldest = await inTime(oldestDay(env.CONNECTION_LOG));
       await inTime(env.DATA.put(OLDEST_KEY, oldestFile(time, oldest), { httpMetadata: { cacheControl: "public, max-age=60", contentType: "application/json" } }));
       // An entry older than any should be: the bucket's lifecycle rule is not deleting. Said here too; whoever
@@ -56,6 +59,15 @@ export default {
       if (isOverdue(oldest, time)) console.error(JSON.stringify({ event: "connection_log_overdue", oldest }));
     } catch (e) {
       console.error(JSON.stringify({ event: "connection_log_oldest_not_published", error: e instanceof Error ? e.name : "unknown" }));
+    }
+    // The same of the counts (counts.ts), which are in the same bucket under their own prefix, and with the
+    // same 31 days: the same file, the same bound. By itself, so that neither's trouble is the other's.
+    try {
+      const oldest = await inTime(oldestDay(env.CONNECTION_LOG, COUNT_EVENTS_PREFIX));
+      await inTime(env.DATA.put(COUNT_EVENTS_OLDEST_KEY, oldestFile(time, oldest), { httpMetadata: { cacheControl: "public, max-age=60", contentType: "application/json" } }));
+      if (isOverdue(oldest, time)) console.error(JSON.stringify({ event: "count_events_overdue", oldest }));
+    } catch (e) {
+      console.error(JSON.stringify({ event: "count_events_oldest_not_published", error: e instanceof Error ? e.name : "unknown" }));
     }
 
     // The only place that says which mirror it is (src/mirror.ts, `CrlMirror`).

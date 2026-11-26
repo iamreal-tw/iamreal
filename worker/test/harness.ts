@@ -170,6 +170,12 @@ export interface TestWorker {
    * their keys: each one's key and the JSON it holds, as text and read.
    */
   connectionLog(): Promise<{ key: string; text: string; entry: Record<string, unknown>; contentType: string | undefined }[]>;
+  /**
+   * Rings the alarm of the counts' object (test build, `POST
+   * /__test/counts/alarm`): the minute it holds is written if, by the
+   * Worker's clock, it is over.
+   */
+  ringCounts(): Promise<void>;
   /** From now on every write to the connection log's bucket fails, or, with false, none does. */
   failConnectionLog(fails: boolean): Promise<void>;
   /** Takes every object out of the connection log's bucket. */
@@ -480,7 +486,7 @@ export interface StartOptions {
 }
 
 /** The bindings of the per-IP limits (wrangler.jsonc, "ratelimits"). */
-export type RateBinding = "RATE_CHALLENGES" | "RATE_CARD_STATE" | "RATE_RECORDS" | "RATE_PUBLIC_READS" | "RATE_PAGES";
+export type RateBinding = "RATE_CHALLENGES" | "RATE_CARD_STATE" | "RATE_RECORDS" | "RATE_PUBLIC_READS" | "RATE_PAGES" | "RATE_COUNTS";
 
 /** The text of wrangler.jsonc with the limit of each binding named in `limits` replaced. Throws if a binding is not there once. */
 export function withRateLimits(config: string, limits: Readonly<Partial<Record<RateBinding, number>>>): string {
@@ -643,6 +649,10 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         out.push({ key, text, entry: JSON.parse(text) as Record<string, unknown>, contentType: object.httpMetadata?.contentType });
       }
       return out;
+    },
+    async ringCounts() {
+      const res = await server.fetch("/__test/counts/alarm", { method: "POST" });
+      if (res.status !== 204) throw new Error(`ringing the counts' alarm: HTTP ${res.status} ${await res.text()}`);
     },
     async putInConnectionLogBucket(key, text) {
       await (await worker.getEnv()).CONNECTION_LOG.put(key, text);
