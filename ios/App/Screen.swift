@@ -100,7 +100,7 @@ enum Block: Equatable {
              .lead(let text), .small(let text), .kicker(let text), .message(let text), .link(let text), .busy(let text), .declared(let text):
             return [text]
         case .doneHead(let card, let title, let lines): return (card?.texts ?? []) + [title] + lines
-        case .steps(let steps), .sentences(let steps): return steps
+        case .steps(let lines), .sentences(let lines): return lines
         case .linked(let before, let link, let after): return [before + link.label + after]
         case .points(let points, _): return points
         case .question(let question, let answer): return [question] + answer.flatMap(\.texts)

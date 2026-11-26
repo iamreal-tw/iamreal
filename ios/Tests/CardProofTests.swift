@@ -327,6 +327,12 @@ final class CardProofTests: XCTestCase {
         try await press("下一步", in: model)
         XCTAssertEqual(model.screen.step, 4)
         XCTAssertTrue(model.screen.texts.contains("請至少填一個帳號。"))
+        // The account it declares now, typed again: the card proof again, as "更新島民證明".
+        model.type("@Alice", on: "threads")
+        try await press("下一步", in: model)
+        XCTAssertEqual(rows(on: model.screen), [["Threads", "@alice", "不變"]])
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["上一步", "更新島民證明"])
+        try await press("上一步", in: model)
         // "不改了": what the card declares again; then to the field once more.
         try await press("不改了", in: model)
         XCTAssertTrue(model.screen.texts.contains("更新島民證明"))

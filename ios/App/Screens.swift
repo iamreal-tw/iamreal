@@ -199,15 +199,20 @@ struct Screens {
                 // Shown as the server sent it; kept in the list as it is.
                 return .row(name: row.platform, account: row.current ?? "", lines: rowLines(row))
             }
-            return .account(AccountRow(
-                platform: row.platform,
-                name: platform.name,
-                prefix: platform.prefix,
-                text: typed[row.platform] ?? "",
-                preview: Button(label: copy("app_accounts.preview"), action: .preview(row.platform)),
-                lines: lines ? rowLines(row) : [],
-                error: errors[row.platform]))
+            return field(row, platform, typed: typed, errors: errors, lines: lines ? rowLines(row) : [])
         }
+    }
+
+    /// A row with a field, and beside it the preview of the account typed.
+    private func field(_ row: Flow.StatusRow, _ platform: Platform, typed: [String: String], errors: [String: String], lines: [String]) -> Block {
+        .account(AccountRow(
+            platform: row.platform,
+            name: platform.name,
+            prefix: platform.prefix,
+            text: typed[row.platform] ?? "",
+            preview: Button(label: copy("app_accounts.preview"), action: .preview(row.platform)),
+            lines: lines,
+            error: errors[row.platform]))
     }
 
     private func previewNote(_ single: String?) -> [Block] {
@@ -226,10 +231,12 @@ struct Screens {
     func accounts(_ status: Flow.CardStatus, mode: AccountsMode = .open, typed: [String: String], errors: [String: String], message: String?) -> Screen {
         let declared = status.rows.contains { $0.current != nil }
         guard declared else { return fill(status, typed: typed, errors: errors, message: message) }
+        // No field to write it under: what is wrong with a row is said as what is wrong with the list.
+        let whole = message ?? errors.keys.sorted().first.flatMap { errors[$0] }
         // 3 records today: what the card declares, and the way back to the start.
-        if status.dailyLimit { return declaredNow(status, message: message) }
+        if status.dailyLimit { return declaredNow(status, message: whole) }
         switch mode {
-        case .open: return declaredNow(status, message: message)
+        case .open: return declaredNow(status, message: whole)
         case .switching: return switching(status, typed: typed, errors: errors, message: message)
         case .editing: return editing(status, typed: typed, errors: errors, message: message)
         }
@@ -313,6 +320,7 @@ struct Screens {
         // Used up, and not put there today: no other account can be declared.
         if !row.correctionToday, row.switchesLeft == 0 {
             blocks.append(.text(copy("accounts.row_used_up", ["switches_used": String(row.switchCount)])))
+            if let whole = message ?? errors[row.platform] { blocks.append(.message(whole)) }
             return Screen(step: 4, blocks: blocks, secondary: keep, cancel: cancel)
         }
         let cost = row.correctionToday
@@ -322,14 +330,7 @@ struct Screens {
                 : copy("accounts.switch_limit", ["switches_left": String(row.switchesLeft - 1)])
         blocks += [
             .subheading(copy("accounts.switch")),
-            .account(AccountRow(
-                platform: row.platform,
-                name: platform.name,
-                prefix: platform.prefix,
-                text: typed[row.platform] ?? "",
-                preview: Button(label: copy("app_accounts.preview"), action: .preview(row.platform)),
-                lines: [],
-                error: errors[row.platform])),
+            field(row, platform, typed: typed, errors: errors, lines: []),
         ]
         if let message { blocks.append(.message(message)) }
         blocks.append(.sentences([copy("accounts.switch_effect", ["account": now]), cost]))
@@ -388,8 +389,7 @@ struct Screens {
             .title(copy("confirm.title")),
             .text(empty ? copy("confirm.intro_withdraw_all") : single != nil ? copy("confirm.intro_public") : copy("confirm.intro")),
         ]
-        let rows = consequence.rows.map { row($0, lines: rowSentences($0)) }
-        blocks += rows
+        blocks += consequence.rows.map { row($0, lines: rowSentences($0)) }
         blocks += [
             .pair(copy("confirm.date"), consequence.today),
             .pair(copy("confirm.short_id_label"), copy("confirm.short_id", ["short_id": status.shortID])),
@@ -410,8 +410,8 @@ struct Screens {
         }
         let button: String
         if empty {
-            if single != nil, consequence.rows.count == 1, case .row(_, let account, _) = rows[0] {
-                button = copy("confirm.button_withdraw", ["account": account])
+            if single != nil, consequence.rows.count == 1, let only = consequence.rows.first {
+                button = copy("confirm.button_withdraw", ["account": Platform.handle(only.platform, only.username)])
             } else {
                 button = copy("confirm.button_withdraw_all")
             }
