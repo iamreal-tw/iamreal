@@ -50,7 +50,7 @@ class DeviceCoreTest {
         assertTrue("cases of the Android app", mine.size >= 20)
         val verdicts = mutableSetOf<String>()
         for (case in mine) {
-            val answer = JSONObject(String(DeviceCore.minApp(case.getJSONObject("config").toString().toByteArray(), case.getInt("app_build"), case.getLong("now"))))
+            val answer = JSONObject(String(DeviceCore.minApp(case.get("config").toString().toByteArray(), case.getInt("app_build"), case.getLong("now"))))
             assertEquals(case.getString("name"), case.getString("result"), answer.getString("verdict"))
             if (case.getString("result") == "ok_until") assertEquals(case.getString("name"), case.getString("from"), answer.getString("from"))
             verdicts += answer.getString("verdict")
