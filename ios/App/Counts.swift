@@ -93,7 +93,8 @@ final class Counts {
     /// nothing more is: the card proof is over.
     @MainActor
     final class Attempt {
-        private unowned let counts: Counts
+        // Strong: the counts hold no attempt, so there is no cycle.
+        private let counts: Counts
         private let id: String
         private var reached: Set<String> = []
         private var stopped = false

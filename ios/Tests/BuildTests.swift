@@ -189,7 +189,8 @@ final class BuildTests: XCTestCase {
     /// restores a scene with, and no content type on a field, by which the
     /// system would offer to save what is typed. What is kept: the highest
     /// CRL number of each issuer, in App/CRLNumbers.swift, and the four
-    /// settings of the reminder, in App/Reminder.swift (ADR-0016).
+    /// settings of the reminder, in App/Reminder.swift (ADR-0016), and the
+    /// card proof device ID, in App/Counts.swift (ADR-0039).
     func testNothingOfACardProofIsWrittenToDisk() throws {
         let forbidden = try NSRegularExpression(pattern: #"SceneStorage|AppStorage|NSUserActivity|restorationIdentifier|encodeRestorableState|UserDefaults|FileManager|NSKeyedArchiver|\.write\(|Keychain|SecItem|NSUbiquitous|CoreData|UIPasteboard|textContentType"#)
         var allowed = 0
@@ -197,7 +198,7 @@ final class BuildTests: XCTestCase {
             for match in forbidden.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
                 let word = String(source[try XCTUnwrap(Range(match.range, in: source))])
                 // The CRL numbers, and the link the cardholder asks to copy.
-                if (["CRLNumbers.swift", "Reminder.swift"].contains(name) && word == "UserDefaults") || (name == "IamrealApp.swift" && word == "UIPasteboard") {
+                if (["CRLNumbers.swift", "Reminder.swift", "Counts.swift"].contains(name) && word == "UserDefaults") || (name == "IamrealApp.swift" && word == "UIPasteboard") {
                     allowed += 1
                     continue
                 }
