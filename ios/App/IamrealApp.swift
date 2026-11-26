@@ -40,11 +40,7 @@ struct IamrealApp: App {
     /// The version the settings write: the store's date version; `dev` for
     /// the development build (design/copy/app.md, the settings).
     private static var version: String {
-        #if DEBUG
-        return "dev"
-        #else
-        return Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-        #endif
+        AppEnvironment.storeBuild ? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "" : "dev"
     }
 
     var body: some Scene {

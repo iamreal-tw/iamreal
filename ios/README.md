@@ -24,7 +24,11 @@
 | `min_app` 讀不懂（包括 app 自己的 build number 不是整數） | 第 2 步停在「連上島民證明的伺服器」，和 `config` 讀不懂相同，不讀卡 |
 | 手機不能讀卡（沒有 NFC） | 整個畫面換掉第 1 步 |
 
-「到 App Store 更新」開的是 `App/AppEnvironment.swift` 的 `storePage`（`https://apps.apple.com/app/id<數字>`）。這個 app 在 App Store Connect 的數字還沒有寫進去，寫進去之前那兩個畫面照樣寫要更新，沒有按鈕。
+「到 App Store 更新」開的是商店上那一個 app（`tw.iamreal.app`，ADR-0037）的頁面，`https://apps.apple.com/app/id<數字>`。商店上只有一個 app，TestFlight 和 App Store 是 App Store Connect 的同一筆，所以數字只有一個，連測試網站或正式網站都一樣：
+
+- **數字是 `6837606453`**，寫在 `App/AppEnvironment.swift` 的 `storeAppID`（一行；只有數字，不帶 `id`）。它是 App Store Connect 這個 app 的「App 資訊」裡的 Apple ID，不是密鑰。要換就改那一行。
+- **商店的 build（Release）** 在那兩個畫面有「到 App Store 更新」的按鈕。`storeAppID` 是 `nil` 的 build 沒有按鈕，句子照舊。
+- **開發用 build（Debug，`tw.iamreal.app.dev`）沒有按鈕**：它不在商店，商店的頁面是另一個 app 的，在那裡更新不會讓這個 build 變新。開發用 build 太舊時，從新的原始碼再用線裝一次（「怎麼用線裝到手機」）。畫面上的句子不分 build，照樣寫到 App Store 更新。
 
 第 2 步有感應位置的示範（[#376](https://github.com/iamreal-tw/iamreal/issues/376)），取代原本的示意圖和圖說：進到第 2 步就開始，三輪（10.55 秒）後停在卡片貼好的那一格；下面是同一顆按鈕（「停止」「再看一次」）。按了「感應卡片」之後示範停在卡片貼好的那一格、不自己重播（沒有感應到、再感應一次時也是），感應中那顆按鈕不能按；讀完之後不畫。減少動態時照樣播，對 VoiceOver 是一句說明（`app_demo.sense_iphone`）。說明的那一句沒有改。
 
@@ -51,7 +55,7 @@
 | `App/CRLNumbers.swift` | 每一把發證金鑰用過的最高清冊編號。公開的數字；過卡之後 app 留下來的，除了它只有提醒的四樣 |
 | `App/Reminder.swift` | 過卡提醒：下次提醒的日子怎麼算（間隔是整數週，落在同一個星期幾；選日期；一週後再提醒；每次過卡完成重排），和手機上存的四樣（開關、間隔、時刻、下次提醒的日子，存在偏好設定，關掉就一起刪掉；ADR-0016「app 在手機上留下什麼」） |
 | `App/ReminderScreens.swift`、`App/ReminderPages.swift`、`App/ReminderViews.swift` | 提醒的畫面：日子和時刻的寫法、選間隔和時刻、設定、從通知點進來的第 1 步上面那一段（句子從 `design/copy/app.json` 讀；過卡第 7 步在 `Screens.swift`，句子在 `card-proof.json`）；兩個畫面的按鈕要做的事；系統的通知（`UNUserNotificationCenter`，通知上有「一週後再提醒我」）。通知的權限在持卡人按「開啟提醒」時才要；系統不允許時什麼都不存，過卡照常完成；第 7 步的「打開通知設定」在 iOS 16 以上開到這個 app 的通知設定，iOS 15 開到這個 app 的設定頁。點通知打開第 1 步；正在過卡（第 2 到 5 步，可能有 PIN 在記憶體裡）時不丟掉，第 1 步上面那一段等回到第 1 步才出現，過完卡就不再出現。app 開著的時候通知照樣跳出來 |
-| `App/AppEnvironment.swift` | 這個 build 連哪個網站、簽哪一份證明紀錄的場合字串。建置時寫死 |
+| `App/AppEnvironment.swift` | 這個 build 連哪個網站、簽哪一份證明紀錄的場合字串，是商店的 build 還是開發用 build，商店上那一個 app 的頁面。建置時寫死 |
 | `App/BundledFile.swift` | 包進 app 的檔案 |
 | `App/IamrealApp.swift` | app 的進入點：用上面那些組出這個 build 的過卡 |
 | `App/Bridge.h` | Swift 看得到的 C：只有 `device-core/include/iamreal_device_core.h` |
@@ -215,7 +219,7 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 測試在模擬器裡跑，直接讀這個程式庫在 Mac 上的檔案（模擬器看得到 Mac 的磁碟），不複製。
 
 - `Tests/DeviceCoreTests.swift`：從 Swift 呼叫核心，對 `spec/vectors/scope.json`（兩份證明紀錄的場合字串）和 `spec/vectors/min-app.json` 裡 iOS 的每一案（最低版本的四種結果）；連結進來的函式庫的版本等於標頭檔的；Barretenberg 有回應
-- `Tests/BuildTests.swift`：包進去的 `hang.json`、`sense.json` 和 `design/motion/` 的逐位元組相同；這個 build 是開發用 build（識別碼、網址、場合字串；測試跑在 Debug；Release 的識別碼、名稱、網址由 `check-app.sh` 看）、只給 iPhone、內建的檔案都在而且就是上表的來源、參數檔的雜湊和網頁版下載時核對的相同、「測試的證明紀錄」的標示和 app 的名稱在 `design/copy/`、包進去的 `card-proof.json`、`app.json`、字型和程式庫裡的逐位元組相同；`App/` 的原始碼用到的每一句都在 `design/copy/card-proof.json` 或 `app.json`、`app.json` 的每一句都用到了（主畫面上的名稱和 Android 的通知類別除外）、自己沒有寫任何中文的句子；`App/` 的原始碼不寫磁碟（清冊編號和提醒的四樣除外）
+- `Tests/BuildTests.swift`：包進去的 `hang.json`、`sense.json` 和 `design/motion/` 的逐位元組相同；這個 build 是開發用 build（識別碼、網址、場合字串；測試跑在 Debug；Release 的識別碼、名稱、網址由 `check-app.sh` 看）、商店的頁面是那一個 app 的而且只有商店的 build 會開、只給 iPhone、內建的檔案都在而且就是上表的來源、參數檔的雜湊和網頁版下載時核對的相同、「測試的證明紀錄」的標示和 app 的名稱在 `design/copy/`、包進去的 `card-proof.json`、`app.json`、字型和程式庫裡的逐位元組相同；`App/` 的原始碼用到的每一句都在 `design/copy/card-proof.json` 或 `app.json`、`app.json` 的每一句都用到了（主畫面上的名稱和 Android 的通知類別除外）、自己沒有寫任何中文的句子；`App/` 的原始碼不寫磁碟（清冊編號和提醒的四樣除外）
 - `Tests/ReminderTests.swift`：下次提醒的日子（一個月、三個月、六個月、跨月跨年、同一個星期幾、選日期只管這一次、能選的日子、一週後再提醒、每次過卡重排）和手機上存的東西，不靠系統真的發通知（換成記下被叫做什麼的假通知）；關掉提醒後，偏好設定裡沒有留下任何一樣；系統不允許通知時什麼都不存
 - `Tests/CardProofTests.swift`：用假卡片過卡（上面那一節）；中斷和錯誤的每一種（上面那張表）：三次感應各自的卡片離開、沒有感應到、按了取消，送 PIN 時離開不自動重送，5 分鐘前後、過了 5 分鐘按下確認也不簽、最後一次感應之後不受影響，最低版本的四種結果、沒有 NFC
 - `Tests/CardChannelTests.swift`：安全通道對 `spec/vectors/card-channel.json` 的每一案：靜態金鑰、卡片識別碼、金鑰資訊、卡片的挑戰、安全通道的金鑰和 EXTERNAL AUTHENTICATE、一連串指令的加密、MAC 和計數器（沒有資料的指令也加一）、PIN 的區塊、要簽的區塊
