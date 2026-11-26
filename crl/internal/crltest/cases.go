@@ -270,5 +270,48 @@ func Cases(key, other *rsa.PrivateKey) []Case {
 	cases = append(cases, Case{Name: "bad-signature", What: "the last byte of the signature changed", DER: der, Usable: false, Reason: "not_usable_signature"})
 	c = base(r, Serial(hexBytes("05")), Serial(hexBytes("06")))
 	cases = append(cases, Case{Name: "other-key", What: "signed by another key", DER: Make(c, other), Usable: false, Reason: "not_usable_signature"})
+
+	// Two reasons at once, for each step of the order (spec/revocation-tree.md,
+	// "Reason codes") that no case above has both of: the earlier one decides
+	// (#218). Added last, so that the cases above keep their entries.
+	c = base(r, Serial(hexBytes("05")))
+	c.NoNullTBS, c.NoNullOuter = true, true
+	der = Make(c, key)
+	der[len(der)-1] ^= 1
+	cases = append(cases, Case{Name: "no-null-bad-signature", What: "sha256WithRSAEncryption without NULL parameters, and a signature that does not verify: the algorithm (check 2) comes before the signature (check 3)", DER: der, Usable: false, Reason: "not_usable_algorithm"})
+	c = base(r, Serial(hexBytes("05")))
+	c.Extensions = others(15)
+	der = Make(c, key)
+	der[len(der)-1] ^= 1
+	cases = append(cases, Case{Name: "bad-signature-seventeen-extensions", What: "17 extensions of the CRL, and a signature that does not verify: the signature (check 3) comes before too many (check 4)", DER: der, Usable: false, Reason: "not_usable_signature"})
+	c = base(r, Serial(hexBytes("05")), Serial(hexBytes("06")))
+	c.CriticalAKI = true
+	c.Entries[1].Extensions = others(16)
+	add("critical-and-entry-seventeen-extensions", "authorityKeyIdentifier marked critical, and an entry with 17 extensions: the CRL's extensions (check 6) come before the entries (check 10)", false, "not_usable_critical_extension", c)
+	c = base(r, Serial(hexBytes("05")))
+	c.Number = -1
+	c.Extensions = []Extension{{ID: OIDDeltaCRLIndicator, Value: Integer(4659)}}
+	add("delta-no-number", "deltaCRLIndicator, and no cRLNumber: the delta (check 7) comes before the CRL number (check 9)", false, "not_usable_delta", c)
+	c = base(r, Serial(hexBytes("05")))
+	c.Number = -1
+	c.Extensions = []Extension{{ID: OIDIssuingDistributionPoint, Value: idp}}
+	add("idp-no-number", "issuingDistributionPoint, and no cRLNumber: the partition (check 8) comes before the CRL number (check 9)", false, "not_usable_partitioned", c)
+	// An entry's reasonCode, a second time (DER ENUMERATED 1).
+	reasonAgain := Extension{ID: OIDReasonCode, Value: []byte{0x0a, 0x01, 0x01}}
+	c = base(r, Serial(hexBytes("05")), Serial(hexBytes("06")))
+	c.Entries[1].Extensions = []Extension{reasonAgain}
+	add("entry-duplicate", "an entry with its reasonCode twice", false, "not_usable_duplicate_extension", c)
+	c = base(r, Serial(hexBytes("05")), Serial(hexBytes("06")))
+	c.Entries[1].Extensions = append(others(15), reasonAgain)
+	add("entry-seventeen-extensions-one-twice", "an entry with 17 extensions, reasonCode twice among them: within the entry, too many comes before the duplicate", false, "not_usable_too_many_extensions", c)
+	c = base(r, Serial(hexBytes("05")), Serial(hexBytes("06")))
+	c.Entries[1].CriticalReason = true
+	c.Entries[1].Extensions = []Extension{reasonAgain}
+	add("entry-duplicate-and-critical", "an entry with its reasonCode twice, the first marked critical: within the entry, the duplicate comes before the critical extension", false, "not_usable_duplicate_extension", c)
+	c = base(r, Serial(hexBytes("3123456789abcdef0123456789abcdef")), Serial(hexBytes("b123456789abcdef0123456789abcdef")))
+	c.Entries[1].CriticalReason = true
+	add("entry-critical-and-same-low-127", "two serials that share their lowest 127 bits, the second entry with a critical reasonCode: the entries (check 10) come before the collision (check 11)", false, "not_usable_critical_extension", c)
+	add("negative-and-same-low-127", "two serials that share their lowest 127 bits, and a negative serial: the entries (check 10) come before the collision (check 11)", false, "not_usable_serial",
+		base(r, Serial(hexBytes("3123456789abcdef0123456789abcdef")), Serial(hexBytes("b123456789abcdef0123456789abcdef")), []byte{0xff, 0x01}))
 	return cases
 }

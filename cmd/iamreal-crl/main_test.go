@@ -182,8 +182,8 @@ func TestIndex(t *testing.T) {
 		if m[7] != wantRoot {
 			t.Errorf("%s: root %s, want %s", c.Name, m[7], wantRoot)
 		}
-		// Only other-key and bad-signature verify under no key.
-		if (m[1] == "-") != (c.Name == "other-key" || c.Name == "bad-signature") {
+		// Only these verify under no key: signed by another, or a signature byte changed (two of them with another reason first).
+		if (m[1] == "-") != (c.Name == "other-key" || c.Name == "bad-signature" || c.Name == "no-null-bad-signature" || c.Name == "bad-signature-seventeen-extensions") {
 			t.Errorf("%s: issuer %s", c.Name, m[1])
 		}
 	}
