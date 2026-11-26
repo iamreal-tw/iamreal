@@ -153,9 +153,10 @@ const yymmdd = (d: Date) => d.toISOString().slice(2, 10).replace(/-/g, "");
 let day = 0;
 const MACHINE_START = Date.now();
 const AHEAD = anchorOffset(MACHINE_START);
-/** The test's clock: the machine's, `AHEAD`; the whole days come on top (`dayOf`). */
+/** The test's clock: the machine's, `AHEAD`; the whole days come on top. */
 const testNow = () => Date.now() + AHEAD;
-const dayOf = (n: number) => taiwanDate(testNow() + n * 86_400_000);
+/** The date of day `n`, from one fixed instant, the run's start on the test's clock: noon in Taiwan. The clocks that run keep that date (checked last). */
+const dayOf = (n: number) => taiwanDate(MACHINE_START + AHEAD + n * 86_400_000);
 const today = () => dayOf(day);
 const firstDay = dayOf(0);
 
@@ -2934,8 +2935,8 @@ await tryStep("the test site's build: the mark of a test log, the test site's he
   }
 });
 
-// The run kept its date because it took less than RUN_HOURS from noon in Taiwan (clock.ts).
-check(Date.now() - MACHINE_START < RUN_HOURS * 3_600_000 && dayOf(0) === firstDay, `the run took ${Math.round((Date.now() - MACHINE_START) / 60_000)} minutes, less than ${RUN_HOURS} hours: its first date is still ${firstDay} (${dayOf(0)})`);
+// The clocks that run (the page's, the Worker's) kept the date the test counted from: the run took less than RUN_HOURS from noon in Taiwan (clock.ts).
+check(Date.now() - MACHINE_START < RUN_HOURS * 3_600_000 && taiwanDate(testNow()) === firstDay, `the run took ${Math.round((Date.now() - MACHINE_START) / 60_000)} minutes, less than ${RUN_HOURS} hours: the test's clock is still on ${firstDay} (${taiwanDate(testNow())})`);
 
 writeFileSync(join(out, "ui-report.json"), JSON.stringify({ results, shown, component: component.requests.map((r) => ({ func: r.func, tbs: r.tbs })) }, null, 2));
 await browser.close();
