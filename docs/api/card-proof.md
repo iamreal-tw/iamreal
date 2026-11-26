@@ -31,10 +31,19 @@ record is or how it is verified. It can change without invalidating records.
   are more than a household or an office behind one address uses; they
   are the operator's settings and not part of this document. A request
   that was answered `429` can be sent again as it was once the time has
-  passed: the card does not have to be read or sign again for it. What the
-  page and the apps do with a `429` today is in their own documents; that
-  each offers to send again, and that a `429` to `config` in the middle of
-  a card proof does not stop it, is not built yet.
+  passed: the card does not have to be read or sign again for it. The web
+  page offers to send again after a `429` to `challenges`, `card-state` or
+  `records`, and a `429` to a `config` without the mark (`config`, below)
+  does not stop its card proof; the apps do not yet (their own documents).
+- **Every endpoint that asks the proof log can answer `503` `busy`**, with
+  a `Retry-After` header: the proof log is overloaded and turned the
+  request away (ADR-0026, "Durable Object 撐不住時"). Like a `429`, the
+  request can be sent again as it was once the time has passed. A
+  submission turned away after it was counted is kept in the connection
+  log as a refused one (error `busy`); one turned away before is not.
+  `config` answers `503` `busy` too, when it carries the mark of a card
+  proof's start and too many card proofs started in this minute (`config`,
+  below).
 - **The server keeps a connection log of one kind of request, and of no
   other** (ADR-0022): a submission of a record (`POST /api/v1/records`)
   that carried a challenge the server issued and that it counted towards
@@ -110,8 +119,8 @@ Issues a challenge ([`spec/challenge.md`](../../spec/challenge.md)).
 - The server writes nothing for this request. A challenge is in its
   connection log only inside the body of a counted submission that did not
   become a record ("Rules for every endpoint").
-- Errors: `429` `rate_limited` ("Rules for every endpoint"); `503` `paused`
-  (under `records`, below): no challenge is issued.
+- Errors: `429` `rate_limited`, `503` `busy` ("Rules for every endpoint");
+  `503` `paused` (under `records`, below): no challenge is issued.
 
 What the device does with it: checks the format in its one spelling; checks
 that the date is today in Taiwan by the device's own clock, and stops
@@ -156,7 +165,7 @@ for all of them (ADR-0017).
     record stored at that moment, not the count of the last line published
     in `fingerprints.jsonl`. The answer carries no proof log fingerprint.
 - Errors: `400` `malformed`, also for a scope this proof log does not accept;
-  `429` `rate_limited` ("Rules for every endpoint").
+  `429` `rate_limited`, `503` `busy` ("Rules for every endpoint").
 
 The server sends facts, not conclusions. The device computes the rest from
 them and from today's date in Taiwan by its own clock:
@@ -305,6 +314,7 @@ Submits one card proof: the card's whole list of accounts.
   | `403` | `switch_restricted` | The record rules accept the record, but the server's operating policy does not accept a switch in it. The whole list is refused |
   | `503` | `crl_stale` | The newest CRL of the record's issuer key is more than 3 days old, or the server has none; no card proof of that issuer key is accepted |
   | `429` | `rate_limited` | The network sent too many submissions in this minute ("Rules for every endpoint"). The submission was not read and does not count |
+  | `503` | `busy` | The proof log is overloaded ("Rules for every endpoint"). The same submission can be sent again |
 
   A submission that fails leaves the challenge usable, up to the 5
   submissions. The challenge is looked at twice (below), and a submission
@@ -415,6 +425,18 @@ Submits one card proof: the card's whole list of accounts.
 
 ## `GET /api/v1/config`
 
+- **The mark of a start: `GET /api/v1/config?start`.** A client asks for
+  `config` with `start` (the parameter's value is not read) once a card
+  proof, when the cardholder presses the button that begins it, before a
+  card is read. Only that request is counted against the site-wide limit:
+  how many card proofs may start in a minute, all networks together
+  (ADR-0026, "全站的總量上限"). Over it, `config` answers `503` `busy`
+  with `Retry-After`, and the client tells the cardholder that too many
+  people are using it now, before a card is read. Every other time a
+  client asks for `config` (when a page opens, while a card is read) it
+  does so without the mark, and only the per-network limit applies; a
+  `429` or a `503` then does not stop a card proof, which goes on with
+  the `config` it already has.
 - Response `200`:
 
   ```
@@ -475,7 +497,8 @@ name the platforms the cardholder sees: the device shows its own names
 proof log does not accept; the cardholder sees the platform ID and the account
 in the list before signing.
 
-- Errors: `429` `rate_limited` ("Rules for every endpoint").
+- Errors: `429` `rate_limited` ("Rules for every endpoint"); `503` `busy`,
+  only with the mark of a start (above).
 
 What the device does with what it cannot read:
 
@@ -506,7 +529,7 @@ What the device does with what it cannot read:
 - It says nothing of the records written since that line: `count` here can
   be less than the `count` of `card-state`.
 - It is answered while the proof log is paused.
-- Errors: `429` `rate_limited` ("Rules for every endpoint").
+- Errors: `429` `rate_limited`, `503` `busy` ("Rules for every endpoint").
 
 ## `GET /api/v1/rebuild`
 
@@ -530,7 +553,7 @@ No device reads it.
   name the operator set while card proofs were not stopped begins nothing,
   and the answer stays what it was.
 - While a rebuild is `running`, `challenges` and `records` answer `paused`.
-- Errors: `429` `rate_limited` ("Rules for every endpoint").
+- Errors: `429` `rate_limited`, `503` `busy` ("Rules for every endpoint").
 
 ## `POST /api/v1/counts`
 

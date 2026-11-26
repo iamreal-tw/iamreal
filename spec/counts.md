@@ -211,6 +211,7 @@ reader, a browser or the server said in words is never sent.
 | `server_malformed_response` | web, android, ios | An answer the device cannot read |
 | `server_paused` | web, android, ios | The server answered `paused` |
 | `server_rate_limited` | web, android, ios | The server answered `rate_limited` |
+| `server_busy` | web, android, ios | The server answered `busy`: too many card proofs started in this minute (`config` with the mark of a start), or the proof log is overloaded (ADR-0026) |
 | `server_internal` | web, android, ios | The server answered `internal` |
 | `server_crl_stale` | web, android, ios | The server answered `crl_stale` |
 | `server_challenge_unknown` | web, android, ios | The server answered `challenge_unknown` |

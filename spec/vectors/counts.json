@@ -343,6 +343,11 @@
         "android",
         "ios"
       ],
+      "server_busy": [
+        "web",
+        "android",
+        "ios"
+      ],
       "server_internal": [
         "web",
         "android",

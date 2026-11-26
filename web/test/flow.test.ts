@@ -2212,6 +2212,36 @@ describe("the counts the page sends (spec/counts.md; ADR-0032, ADR-0039)", () =>
     assert.deepEqual(s.backend.submissions.map((b) => b.device_id), [counted[0]!.device_id, counted[0]!.device_id]);
   });
 
+  test("too many people to the card's state, then asked again: `retry` with `server_busy`, the same attempt goes on, and the card signs once", async () => {
+    let answers = 0;
+    const s = await setup({ echoPublicInputs: true, backend: { cardStateReply: () => (++answers === 1 ? { status: 503, body: { error: "busy" } } : null) } });
+    await s.flow.readCard();
+    assert.deepEqual(await stopOf(s.flow.confirmCard(PIN)), { code: "server", server: "busy", status: 503 });
+    assert.equal(s.flow.phase, "card_state_failed");
+    await s.flow.retryCardState();
+    const done = await s.flow.proceed(s.flow.choose(listOf(s.flow.cardStatus!, { threads: "alice" })).accounts);
+    assert.equal(done.seq, 1);
+    const counted = await sent(s);
+    assert.deepEqual(counted.filter((c) => c.event !== "step").map((c) => [c.event, c.reason]), [["retry", "server_busy"]]);
+    assert.equal(stepsOf(counted).filter((st) => st === "scope_signed").length, 1);
+    assert.equal(stepsOf(counted).at(-1), "done");
+    assert.equal(new Set(counted.map((c) => c.attempt_id)).size, 1);
+  });
+
+  test("too many people to the challenge, then proceed() again: `retry` with `server_rate_limited`, and the same attempt is done", async () => {
+    let answers = 0;
+    const s = await setup({ echoPublicInputs: true, backend: { challenge: () => (++answers === 1 ? { status: 429, body: { error: "rate_limited" } } : `2026-11-16.${"0".repeat(26)}`) } });
+    const cq = await toChosen(s);
+    assert.deepEqual(await stopOf(s.flow.proceed(cq.accounts)), { code: "server", server: "rate_limited", status: 429 });
+    assert.equal(s.flow.phase, "chosen");
+    const done = await s.flow.proceed(cq.accounts);
+    assert.equal(done.seq, 1);
+    const counted = await sent(s);
+    assert.deepEqual(counted.filter((c) => c.event !== "step").map((c) => [c.event, c.reason]), [["retry", "server_rate_limited"]]);
+    assert.equal(stepsOf(counted).at(-1), "done");
+    assert.equal(new Set(counted.map((c) => c.attempt_id)).size, 1);
+  });
+
   for (const countsAre of ["failing", "held"] as const) {
     test(`counts that are ${countsAre === "failing" ? "refused by the network" : "never answered"}: the card proof is made as ever, and none is sent twice`, async () => {
       const s = await setup({ echoPublicInputs: true, countsAre });

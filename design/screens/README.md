@@ -42,6 +42,7 @@
 | `check-desktop.png`、`check-phone.png` | `/check`（如何檢查 Threads 帳號的島民證明；「惡意手法」都折著） | 實作版 |
 | `faq-desktop.png`、`faq-phone.png` | `/faq`（每一題都收著） | 實作版 |
 | `faq-question-desktop.png`、`faq-question-phone.png` | `/faq#threads-knows`（連到某一題：那一題展開） | 實作版 |
+| `busy-desktop.png`、`busy-phone.png` | 要讀證明紀錄的頁面，證明紀錄撐不住時（`503`，「現在人太多」；這裡是 `/p/7K2Q9FM4XD`） | 實作版 |
 | `privacy-desktop.png`、`privacy-phone.png` | `/privacy`（隱私權說明） | 實作版 |
 | `prepare-desktop.png`、`prepare-phone.png` | `/prepare`（過卡需要什麼） | 實作版 |
 | `og-image.png` | 每一頁的連結預覽圖（`og:image`）。網站送的就是這一張：`worker/site/og-image.png` 是它逐位元組的拷貝（`worker/scripts/site-files.ts`），改這張圖時重跑那支腳本 | 定稿版 |
@@ -53,6 +54,9 @@
 | 截圖 | 畫面 | 版本 |
 |---|---|---|
 | `card-proof-web-1-before-desktop.png` | 第 1 步：開始之前（正式的建置，只認得 Threads） | 實作版 |
+| `card-proof-web-1-busy-desktop.png` | 第 1 步：按「下一步」時人太多（`config?start` 回 `503` `busy`），那一句在「下一步」上面 | 實作版 |
+| `card-proof-web-3-busy-desktop.png` | 第 3 步：卡片簽完、查現況時人太多，「再試一次」 | 實作版 |
+| `card-proof-web-5-busy-desktop.png` | 第 5 步：拿題目時人太多，「回到上一步」「再試一次」 | 實作版 |
 | `card-proof-web-2-read-desktop.png` | 第 2 步：讀取卡片 | 實作版 |
 | `card-proof-web-2-read-revoked-desktop.png` | 第 2 步：憑證已經被廢止，停在這裡 | 實作版 |
 | `card-proof-web-3-pin-desktop.png` | 第 3 步：輸入 PIN | 實作版 |

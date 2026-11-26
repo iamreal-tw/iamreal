@@ -122,3 +122,41 @@ export async function withinLimit(env: Env, kind: RateClass, request: Request): 
     return true;
   }
 }
+
+/**
+ * The site-wide limit of ADR-0026: how many card proofs may start in a
+ * minute, whoever starts them. A card proof starts when the cardholder
+ * presses the button that begins it, and the client then asks for
+ * `GET /api/v1/config?start` (docs/api/card-proof.md); only that request
+ * is counted here, under one key for the whole site, so the count is of
+ * people starting, not of the other times a client asks for `config`.
+ * Counted apart in each of Cloudflare's locations, as every limit here: the
+ * connections from Taiwan mostly come in through one. A request without an
+ * address is counted too: there is no network to leave out.
+ */
+export const STARTS_KEY = "starts";
+
+/** Whether one more card proof may start this minute, and counts it. A binding that fails or is not there lets it start, and says so in the live log. */
+export async function withinStarts(env: Env): Promise<boolean> {
+  try {
+    return (await env.RATE_STARTS.limit({ key: STARTS_KEY })).success;
+  } catch (e) {
+    console.error(JSON.stringify({ event: "rate_limit_unavailable", class: "starts", error: e instanceof Error ? e.name : "unknown" }));
+    return true;
+  }
+}
+
+/**
+ * Whether a call to the proof log's object was turned away because the
+ * object is overloaded: Cloudflare sets `overloaded` on such an error, and
+ * says not to retry it at once
+ * (https://developers.cloudflare.com/durable-objects/best-practices/error-handling/).
+ * The API answers `503` `busy` and a page answers the page of too many
+ * people (ADR-0026, "Durable Object 撐不住時").
+ */
+export function isOverloaded(e: unknown): boolean {
+  for (let x: unknown = e, depth = 0; typeof x === "object" && x !== null && depth < 4; x = (x as { cause?: unknown }).cause, depth++) {
+    if ((x as { overloaded?: unknown }).overloaded === true) return true;
+  }
+  return false;
+}

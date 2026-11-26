@@ -110,6 +110,7 @@ export const REASONS = {
   server_malformed_response: ALL,
   server_paused: ALL,
   server_rate_limited: ALL,
+  server_busy: ALL,
   server_internal: ALL,
   server_crl_stale: ALL,
   server_challenge_unknown: ALL,

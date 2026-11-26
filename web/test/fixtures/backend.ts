@@ -50,6 +50,8 @@ export interface BackendOptions {
   config?: unknown;
   /** The answer to card-state, as it is; by default the proof log of its own. */
   cardState?: Record<string, unknown>;
+  /** An answer of its own to card-state (an error such as 503 busy), or null for the usual one. */
+  cardStateReply?: () => { status: number; body: unknown } | null;
   /** The answer to a submission; by default 201 with the kinds of the proof log of its own. */
   submit?: (body: Record<string, unknown>) => { status: number; body: unknown };
 }
@@ -184,6 +186,8 @@ export class FakeBackend {
       return this.json(200, { challenge: c });
     }
     if (method === "POST" && path === "/api/v1/card-state") {
+      const own = o.cardStateReply?.() ?? null;
+      if (own !== null) return this.json(own.status, own.body);
       return this.json(200, o.cardState ?? this.stateAnswer());
     }
     if (method === "POST" && path === "/api/v1/records") {
