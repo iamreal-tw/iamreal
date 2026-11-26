@@ -280,6 +280,18 @@ class CardProof(private val deps: Deps) {
         throw stop
     }
 
+    /**
+     * The minimum app version of [config] at the phone's clock now (spec/min-app.md; ADR-0035: before a PIN is asked for and
+     * before a card is tapped). Before each tap: the start date may come while a card proof is on its way.
+     */
+    private fun checkMinApp(config: ByteArray) {
+        when (val verdict = minApp(config, deps.appBuild, deps.now())) {
+            is MinApp.TooOld -> fail(Stop("min_app", mapOf("from" to verdict.from)))
+            MinApp.Unreadable -> fail(Stop("server", mapOf("code" to "malformed_response")))
+            else -> {}
+        }
+    }
+
     /** The wait between tap 2 and tap 3 is over ([IDLE_MS]). */
     fun idleExpired(): Boolean = firstSignedAt?.let { deps.now() - it >= IDLE_MS } ?: false
 
@@ -306,11 +318,7 @@ class CardProof(private val deps: Deps) {
             false -> {}
         }
         // The minimum app version (spec/min-app.md), before the card is read: step 1 looked too, at the answer it had.
-        when (val verdict = minApp(config, deps.appBuild, deps.now())) {
-            is MinApp.TooOld -> throw Stop("min_app", mapOf("from" to verdict.from))
-            MinApp.Unreadable -> throw Stop("server", mapOf("code" to "malformed_response"))
-            else -> {}
-        }
+        checkMinApp(config)
         this.config = config
         events.done(Item.SERVER)
 
@@ -439,7 +447,6 @@ class CardProof(private val deps: Deps) {
         } catch (e: CardException) {
             // Whether this PIN was ever accepted is looked at before this tap adds to it.
             val accepted = pinAccepted
-            if (connection.pinAccepted) pinAccepted = true
             throw if (e.reason == CardException.Reason.PIN_MAYBE_SENT && accepted) CardException(CardException.Reason.DROPPED) else e
         } finally {
             if (connection.pinAccepted) pinAccepted = true
@@ -452,6 +459,7 @@ class CardProof(private val deps: Deps) {
     /** [pin] stays the caller's, who overwrites it. A PIN the card refuses ends nothing: the screen asks again. */
     fun confirmCard(pin: ByteArray, events: Events): Status {
         if (session == 0L || background == null || scopeSignature != null || ended) throw Stop("state")
+        config?.let(::checkMinApp)
         // Nothing is signed, and no request carries the scoped ID, before these pass.
         awaitBackground()
         val signature = sign(events, DeviceCore.scopeString(), pin)
@@ -613,6 +621,7 @@ class CardProof(private val deps: Deps) {
         val shown = chosen
         if (shown == null || ended) throw Stop("state")
         checkIdle()
+        config?.let(::checkMinApp)
         sameAsShown()
         val accounts = chosenAccountsJson ?: throw Stop("cancelled")
         val challenge: String

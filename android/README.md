@@ -9,10 +9,10 @@
 過卡被打斷時（[#171](https://github.com/iamreal-tw/iamreal/issues/171)），句子都在 `design/copy/card-proof.md` 各步的「app」，哪一個原因說哪一句在 `ui/Messages.kt`：
 
 - **卡片離開、NFC 被關掉、換了卡**：只重做那一次感應（「再感應一次」）。第 3 步這時 PIN 欄位不能改，用的是記憶體裡的 PIN
-- **送 PIN 時掉線**：卡片從來沒有接受過這個 PIN 時，app 不重送，清掉 PIN，請持卡人再輸入。卡片接受過（之後才掉線）的，PIN 是對的，留著重送：`card/Card.kt` 的 `pinAccepted`，`flow/CardProof.kt` 的 `sign`
+- **送 PIN 時掉線**：卡片從來沒有接受過這個 PIN 時，app 不重送，清掉 PIN，請持卡人再輸入。卡片回了 app 不認得的答覆時也一樣。卡片接受過（之後才掉線）的，PIN 是對的，留著重送：`card/Card.kt` 的 `pinAccepted`，`flow/CardProof.kt` 的 `sign`
 - **PIN 不正確**：清掉 PIN，第 3 步重新輸入；發生在第三次感應時回到開頭
 - **第二次感應後滿 5 分鐘**：清掉 PIN，回到第 1 步，最上面寫原因。app 切到背景再回來時也看一次時間
-- **最低版本**（`config` 的 `min_app`，ADR-0035、`spec/min-app.md`）：怎麼判斷在核心（`idc_min_app`），拿 app 自己的 `versionCode` 和手機的時鐘去問。打開 app、每次回到第 1 步都看：比最低版本舊、還沒到起算日，第 1 步最上面提醒，照常過卡；起算日當天起整個第 1 步換掉，只剩開 Google Play 的按鈕。第 2 步感應之前再看一次。這一欄讀不懂時不往下，和平台表讀不懂相同
+- **最低版本**（`config` 的 `min_app`，ADR-0035、`spec/min-app.md`）：怎麼判斷在核心（`idc_min_app`），拿 app 自己的 `versionCode` 和手機的時鐘去問。打開 app、每次回到第 1 步都看：比最低版本舊、還沒到起算日，第 1 步最上面提醒，照常過卡；起算日當天起整個第 1 步換掉，只剩開 Google Play 的按鈕。三次感應之前各再看一次（`flow/CardProof.kt` 的 `checkMinApp`）：過卡做到一半到了起算日，也在等卡片之前停下。這一欄讀不懂時不往下，和平台表讀不懂相同
 - **沒有 NFC 的手機**：整個第 1 步換掉。NFC 只是關著的，在按了「感應卡片」之後說，給開系統設定的按鈕
 
 還沒有的：

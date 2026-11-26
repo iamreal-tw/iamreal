@@ -922,7 +922,14 @@ async function interruptions(): Promise<void> {
   }
   // In the background and back within the 5 minutes: as it was left.
   await awayAndBack();
-  find((n) => n.text === again, "step 3 again, after the background, with 再感應一次");
+  await waitText(again, "step 3 again, after the background, with 再感應一次", 20_000);
+  // 取消 on the panel of the tap made again: the PIN stays kept, 確認卡片 and an open field do not come back.
+  press(again);
+  await waitText(say("app_panel.android_wait_title"), "the panel of the tap made again");
+  press(say("common.cancel"));
+  for (let i = 0; i < 50 && waitingTaps.length > 0; i++) await sleep(100);
+  await waitText(again, "step 3 again, after 取消 on the panel", 10_000);
+  check(!textsOf(visible()).includes(say("pin.confirm_card")), "step 3, the PIN kept, 取消 on the panel: still 再感應一次, not 確認卡片");
   // NFC turned off since step 2: no PIN goes, the tap is made again.
   handed = pinsHanded;
   press(again);
@@ -996,6 +1003,41 @@ async function interruptions(): Promise<void> {
   await tap();
   await waitText(step(4), "step 4", 120_000);
 
+  // In the background and back within the 5 minutes of the PIN: step 4 as it was left, and the last tap is made with the PIN in memory.
+  await awayAndBack();
+  await waitText(step(4), "step 4 again, after the background", 20_000);
+  check(!textsOf(visible()).includes(say("app_before.idle")), "step 4, back within the 5 minutes: nothing dropped");
+  emulator.tap(field("account-threads"));
+  emulator.type("alice");
+  hideKeyboard();
+  press(say("common.next"));
+  await waitText(say("confirm.title"), "step 5");
+  // The last tap, with a card that does not take this PIN (its PIN was changed since the second tap): the card proof is over.
+  handed = pinsHanded;
+  press(say("confirm.button_declare_single"));
+  await waitText(say("progress.title"), "step 5, in progress");
+  await hold(JSON.stringify({ certificates: backend.certificates, key, pin: WRONG_PIN, pause_ms: 0 }));
+  await waitText(say("pin.pin_incorrect"), "step 5: the sentence for a PIN the card refuses", 20_000);
+  {
+    const s = wholeScreen();
+    check(pinsHanded === handed + 1, "step 5, back from the background: the PIN in memory was handed to the card");
+    check(s.includes(say("accounts.restart")) && !s.includes(again), "step 5, a PIN the card refuses: only 回到開頭");
+  }
+  press(say("accounts.restart"));
+  await waitText(step(1), "step 1 again, after 回到開頭", 20_000);
+  press(say("common.next"));
+  await waitText(step(2), "step 2");
+  press(say("app_read.tap_card"));
+  await tap();
+  await waitText(say("app_read.lift"), "step 2's list to end", 120_000);
+  press(say("common.next"));
+  await waitText(step(3), "step 3");
+  emulator.tap(field("pin"));
+  emulator.type(PIN);
+  press(say("pin.confirm_card"));
+  await tap();
+  await waitText(step(4), "step 4", 120_000);
+
   // The app ended by the system, with a PIN in memory: from step 1, with nothing said.
   emulator.shell(`am force-stop ${APP}`);
   emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
@@ -1048,6 +1090,29 @@ async function oldVersionAndNoNfc(): Promise<void> {
   await waitText(say("app_before.too_old_title"), "the screen in place of step 1, from step 2", 20_000);
   check(waitingTaps.length === 0, "from the start date: step 2 stops before it waits for a card");
   emulator.shell(`date @${before + Math.round((Date.now() - started) / 1000)}`);
+  await awayAndBack();
+  await waitText(soon, "step 1 again, the clock back before the start date", 20_000);
+
+  // The start date comes after the card was read: step 3 asks no card for the PIN.
+  press(say("common.next"));
+  await waitText(step(2), "step 2");
+  press(say("app_read.tap_card"));
+  await tap();
+  await waitText(say("app_read.lift"), "step 2's list to end, before the start date", 120_000);
+  press(say("common.next"));
+  await waitText(step(3), "step 3");
+  emulator.tap(field("pin"));
+  emulator.type(PIN);
+  {
+    const at = emulatorNow();
+    const since = Date.now();
+    const handedBefore = pinsHanded;
+    emulator.shell(`date @${Math.floor(Date.parse(`${tomorrow}T00:00:30+08:00`) / 1000)}`);
+    press(say("pin.confirm_card"));
+    await waitText(say("app_before.too_old_title"), "the screen in place of step 1, from step 3", 20_000);
+    check(waitingTaps.length === 0 && pinsHanded === handedBefore, "from the start date: step 3 stops before it waits for a card, no PIN handed over");
+    emulator.shell(`date @${at + Math.round((Date.now() - since) / 1000)}`);
+  }
   await awayAndBack();
   await waitText(soon, "step 1 again, the clock back before the start date", 20_000);
 

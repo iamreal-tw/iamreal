@@ -1,5 +1,7 @@
 package tw.iamreal.app
 
+import android.content.Context
+import androidx.core.content.pm.PackageInfoCompat
 import tw.iamreal.app.card.Card
 import tw.iamreal.app.card.ReadsInFront
 
@@ -28,5 +30,5 @@ internal class Wiring(
 }
 
 /** The installed app's own `versionCode`, as the system has it. */
-internal fun appBuildOf(context: android.content.Context): Int =
-    androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(context.packageManager.getPackageInfo(context.packageName, 0)).toInt()
+internal fun appBuildOf(context: Context): Int =
+    PackageInfoCompat.getLongVersionCode(context.packageManager.getPackageInfo(context.packageName, 0)).toInt()

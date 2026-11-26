@@ -262,13 +262,14 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         thread(name = "config") {
             it.run()
             val said = try { CardProof.pausedIn(it.get()) == true } catch (e: ExecutionException) { false }
-            // An answer that did not come, or a clock the core does not take, says nothing of the version: step 2 stops there.
-            val version = try { CardProof.minApp(it.get(), wiring.appBuild, System.currentTimeMillis()) } catch (e: ExecutionException) { MinApp.Ok } catch (e: Stop) { MinApp.Ok }
+            // An answer that did not come, or a clock the core does not take, says nothing of the version: what the last answer
+            // said stands, and step 2 stops there. A field that cannot be read leaves step 1 as usual: step 2 says so.
+            val version = try { CardProof.minApp(it.get(), wiring.appBuild, System.currentTimeMillis()) } catch (e: ExecutionException) { null } catch (e: Stop) { null }
             // Not when it was asked again meanwhile: the later answer says.
             main.post {
                 if (synchronized(this@Model) { config === it }) {
                     paused = said
-                    minApp = if (version == MinApp.Unreadable) MinApp.Ok else version
+                    if (version != null) minApp = if (version == MinApp.Unreadable) MinApp.Ok else version
                 }
             }
         }
@@ -380,8 +381,8 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         step = Step.READ
     }
 
-    /** Step 1 in front again: asks the server whether card proofs are stopped, or resumed, meanwhile. */
-    fun checkPaused() {
+    /** Step 1 in front again: asks the server whether card proofs are stopped, or resumed, meanwhile, and what its minimum app version is now. */
+    fun checkConfig() {
         if (step == Step.BEFORE) askConfigAgain()
     }
 
@@ -423,20 +424,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
             },
             { stop ->
                 readBusy = false
-                // The server's minimum version went past this build since step 1 asked: back to step 1, which is replaced.
-                if (stop.code == "min_app") {
-                    dropAll()
-                    minApp = MinApp.TooOld(stop.values.getValue("from"))
-                    step = Step.BEFORE
-                    return@step
-                }
-                // A phone without NFC is told so in place of step 1.
-                if (stop.code == "card" && stop.values["reason"] == CardException.Reason.NO_NFC.name) {
-                    dropAll()
-                    hasNfc = false
-                    step = Step.BEFORE
-                    return@step
-                }
+                if (replacesStepOne(stop)) return@step
                 val reason = stop.values["reason"]
                 if (stop.code == "card" && reason == CardException.Reason.CANCELLED.name) {
                     // Back to the screen as it was before the button was pressed.
@@ -510,13 +498,15 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
             },
             { stop ->
                 pinBusy = null
+                if (replacesStepOne(stop)) return@step
                 pinMessage = messages.stop(stop, Messages.At.PIN)
                 val reason = stop.values["reason"]
                 when {
                     // The card did not take the PIN, or may have: it is typed again (never sent again by itself).
                     // Nor is it kept for a card the secure channel cannot be made with: the sentence sends the cardholder to a card reader,
                     // and another tap needs the PIN typed again (design/copy/card-proof.md, "3. 輸入 PIN", app).
-                    stop.code == "card" && reason in setOf(CardException.Reason.PIN_INCORRECT.name, CardException.Reason.PIN_MAYBE_SENT.name, CardException.Reason.CHANNEL.name) -> pin.clear()
+                    // Nor for an answer of the card the app does not know: it may be its answer to the PIN.
+                    stop.code == "card" && reason in setOf(CardException.Reason.PIN_INCORRECT.name, CardException.Reason.PIN_MAYBE_SENT.name, CardException.Reason.CHANNEL.name, CardException.Reason.OTHER.name) -> pin.clear()
                     // A locked card takes no PIN: the card proof is over.
                     stop.code == "card" && reason == CardException.Reason.LOCKED.name -> {
                         pin.clear()
@@ -525,7 +515,8 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
                     // The PIN did not reach a card, or the tap was cancelled: the same PIN, the tap again.
                     stop.code == "card" || stop.code == "other_card" -> {
                         // Cancelling the panel is back to the screen as it was; anything else offers the tap again.
-                        pinKept = reason != CardException.Reason.CANCELLED.name
+                        // A PIN that was kept stays kept, and its field shut, through a cancelled panel: the card may have taken it already.
+                        pinKept = pinKept || reason != CardException.Reason.CANCELLED.name
                         if (pinMessage == null && pinKept) pinMessage = copy.say("common.halted")
                     }
                     else -> {
@@ -684,6 +675,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
             },
             { stop ->
                 if (stop.code == "idle") return@step stopped(stop)
+                if (replacesStepOne(stop)) return@step
                 progressItems = items(4, doneCount, false, halted = true)
                 progressMessage = messages.stop(stop, Messages.At.DECLARE)
                 progressRequestId = stop.requestId
@@ -741,6 +733,21 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         notice = if (stop.code == "idle") copy.say("app_before.idle") else null
         askConfigAgain()
         step = Step.BEFORE
+    }
+
+    /**
+     * A tap that found what stands in the place of step 1: this build went past the server's minimum version since step 1
+     * asked, or the phone has no NFC. Everything is dropped, back to step 1, which is replaced ([gate]). False for any other stop.
+     */
+    private fun replacesStepOne(stop: Stop): Boolean {
+        when {
+            stop.code == "min_app" -> minApp = MinApp.TooOld(stop.values.getValue("from"))
+            stop.code == "card" && stop.values["reason"] == CardException.Reason.NO_NFC.name -> hasNfc = false
+            else -> return false
+        }
+        dropAll()
+        step = Step.BEFORE
+        return true
     }
 
     /** The PIN has waited [CardProof.IDLE_MS] for the last tap: dropped, back to step 1, with the reason. */
