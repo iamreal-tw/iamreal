@@ -68,6 +68,10 @@
         // with one that does not. Otherwise the API answers nothing but 500 (src/settings.ts),
         // and test/environments.test.ts fails before that.
         "PROOF_LOG_KIND": "test",
+        // "true" stops taking card proofs; "false" takes them (ADR-0033; README.md, "停止和恢復收過卡").
+        // The operator changes it on Cloudflare's dashboard. The next deploy writes this file's value
+        // over the dashboard's: to deploy while it is stopped, write "true" here and deploy that.
+        "CARD_PROOFS_PAUSED": "false",
         // The date the test log was last cleared on, YYYY-MM-DD: every page says it beside the mark
         // of a test log (design/copy/test-site.md). Change it together with PROOF_LOG_OBJECT_NAME when
         // the proof log is cleared (README.md, "清空測試的證明紀錄").

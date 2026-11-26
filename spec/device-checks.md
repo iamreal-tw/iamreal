@@ -253,7 +253,7 @@ proof with a reason code of its own, so that the screen can say which:
 
 | Answer | Code | Not taken when | Rules |
 |---|---|---|---|
-| `GET /api/v1/config` | `malformed_response` | `crl_max_age_days` is not read, or the platform table cannot be read | "The age bound" above; [`list-consequence.md`](list-consequence.md), "Reading the platform table" |
+| `GET /api/v1/config` | `malformed_response` | `crl_max_age_days` is not read, the platform table cannot be read, or `paused` is there and is neither `true` nor `false` (absent is `false`) | "The age bound" above; [`list-consequence.md`](list-consequence.md), "Reading the platform table" |
 | `POST /api/v1/card-state` | `malformed_response` | The card's state cannot be read | [`list-consequence.md`](list-consequence.md), "Reading the card's state" |
 | `POST /api/v1/challenges` | `challenge_malformed` | Not a challenge in its one spelling | [`challenge.md`](challenge.md), "The cardholder's device" |
 | | `challenge_not_today` | Its date is not today in Taiwan | [`challenge.md`](challenge.md), "The cardholder's device" |
