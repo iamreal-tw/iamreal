@@ -82,7 +82,7 @@ Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts
 | `card-proof-app-4-accounts-phone.png` | 第 4 步：你的帳號 | 實作版（Android） |
 | `card-proof-app-5-confirm-phone.png` | 第 5 步：確認 | 實作版（Android） |
 | `card-proof-app-5-progress-phone.png` | 第 5 步：進行中 | 實作版（Android） |
-| `card-proof-app-6-hang-phone.png` | 第 6 步：掛上去，這張卡片的第一筆紀錄 | 實作版（iOS） |
+| `card-proof-app-6-hang-phone.png` | 第 6 步：掛上去，這張卡片的第一筆紀錄；示範還沒開始播的第一格 | 實作版（iOS） |
 | `card-proof-app-6-hang-short-phone.png` | 第 6 步：再次過卡的短版 | 實作版（iOS） |
 | `card-proof-app-7-reminder-phone.png` | 第 7 步：提醒，手機上還沒有存提醒 | 實作版（iOS） |
 | `card-proof-app-7-reminder-on-phone.png` | 第 7 步：提醒已經開著 | 實作版（iOS） |
