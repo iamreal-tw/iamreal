@@ -61,7 +61,7 @@ func (everyRoot) CRLDates(string, string) ([]verifier.Date, error) {
 func fakeDeps(pv prooflog.ProofVerifier, crls prooflog.CRLArchive) deps {
 	return deps{
 		verifier: func(verifier.Config) (prooflog.ProofVerifier, error) { return pv, nil },
-		archive: func(string, bool, func(string)) (prooflog.CRLArchive, []crl.IndexMismatch, error) {
+		archive: func(crlFiles, bool, func(string)) (prooflog.CRLArchive, []crl.IndexMismatch, error) {
 			return crls, nil, nil
 		},
 	}

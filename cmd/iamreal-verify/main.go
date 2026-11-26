@@ -54,16 +54,16 @@ type deps struct {
 	// trustIndex, otherwise rebuilding the index from the files. When
 	// rebuilding, it also returns every difference between the index and
 	// the rebuilt one; the archive is that of the rebuilt index.
-	archive func(dir string, trustIndex bool, progress func(name string)) (prooflog.CRLArchive, []crl.IndexMismatch, error)
+	archive func(files crlFiles, trustIndex bool, progress func(name string)) (prooflog.CRLArchive, []crl.IndexMismatch, error)
 }
 
 func newVerifier(cfg verifier.Config) (prooflog.ProofVerifier, error) { return verifier.New(cfg) }
 
 // openArchive opens an archive whose CRLs are checked under keys.
-func openArchive(keys func() ([]crl.NamedKey, error)) func(string, bool, func(string)) (prooflog.CRLArchive, []crl.IndexMismatch, error) {
-	return func(dir string, trustIndex bool, progress func(string)) (prooflog.CRLArchive, []crl.IndexMismatch, error) {
+func openArchive(keys func() ([]crl.NamedKey, error)) func(crlFiles, bool, func(string)) (prooflog.CRLArchive, []crl.IndexMismatch, error) {
+	return func(files crlFiles, trustIndex bool, progress func(string)) (prooflog.CRLArchive, []crl.IndexMismatch, error) {
 		if trustIndex {
-			a, err := crl.ReadArchiveIndex(dir)
+			a, err := crl.ReadArchiveIndex(files.dir)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -73,7 +73,14 @@ func openArchive(keys func() ([]crl.NamedKey, error)) func(string, bool, func(st
 		if err != nil {
 			return nil, nil, err
 		}
-		a, diffs, err := crl.RebuildArchive(dir, k, progress)
+		var a *crl.Archive
+		var diffs []crl.IndexMismatch
+		if files.remote {
+			// One file at a time, from the URL (crlFiles).
+			a, diffs, err = crl.RebuildArchiveOf(files.index, files.hasIndex, files.files, k, progress)
+		} else {
+			a, diffs, err = crl.RebuildArchive(files.dir, k, progress)
+		}
 		if err != nil {
 			return nil, nil, err
 		}
@@ -219,25 +226,18 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
 		return exitError
 	}
-	archive := *archiveDir // the CRL archive's directory, given or made from -data
+	files := crlFiles{dir: *archiveDir} // the CRL archive: the directory given, or what -data has
 	var archiveProblems []string
 	if crlSrc != nil {
-		dir, problems, cleanup, err := crlSrc.crlArchive(*trustIndex, stderr)
+		made, cleanup, err := crlSrc.crlArchive(*trustIndex, stderr)
 		if err != nil {
 			fmt.Fprintf(stderr, "iamreal-verify: CRL archive: %v\n", err)
 			return exitError
 		}
 		defer cleanup()
-		archive, archiveProblems = dir, problems
-		for _, p := range problems {
-			fmt.Fprintf(stderr, "iamreal-verify: CRL archive: %s\n", p)
-		}
+		files = made
 	}
-	v, err := d.verifier(verifier.Config{BB: *bb, CRSDir: *crs, Timeout: *timeout})
-	if err != nil {
-		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
-		return exitError
-	}
+	archive := files.dir
 	var crls prooflog.CRLArchive = noArchive{}
 	var diffs []crl.IndexMismatch
 	switch {
@@ -250,9 +250,18 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 	}
 	if archive != "" {
 		progress := func(name string) { fmt.Fprintf(stderr, "iamreal-verify: CRL %s\n", name) }
-		if crls, diffs, err = d.archive(archive, *trustIndex, progress); err != nil {
+		if crls, diffs, err = d.archive(files, *trustIndex, progress); err != nil {
 			fmt.Fprintf(stderr, "iamreal-verify: CRL archive: %v\n", err)
 			return exitError
+		}
+		// What reading the files found on the way (a file of a URL whose
+		// content is not what its name says): known only now that each was
+		// read as the index was rebuilt.
+		if files.problems != nil {
+			archiveProblems = files.problems()
+			for _, p := range archiveProblems {
+				fmt.Fprintf(stderr, "iamreal-verify: CRL archive: %s\n", p)
+			}
 		}
 		// The rebuilt index is the one that counts (spec/revocation-tree.md,
 		// "Re-verifying with the index"): report every difference and go on.
@@ -262,6 +271,13 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		if len(diffs) > 0 {
 			fmt.Fprintf(stderr, "iamreal-verify: CRL archive: %d difference(s) between %s and the CRL files; continuing with the index rebuilt from the files\n", len(diffs), crl.IndexFileName)
 		}
+	}
+	// After the archive, as it always was: the archive's files used to be
+	// downloaded before this, and are now downloaded as the index is rebuilt.
+	v, err := d.verifier(verifier.Config{BB: *bb, CRSDir: *crs, Timeout: *timeout})
+	if err != nil {
+		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
+		return exitError
 	}
 	var rep *prooflog.Report
 	if pub != nil && pub.broken != nil {

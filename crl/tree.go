@@ -54,51 +54,45 @@ var one = func() fr.Element { var e fr.Element; e.SetOne(); return e }()
 func NewTree(keys []Key) (*Tree, error) { return newTree(keys, nil) }
 
 // A TreeBuilder builds one tree after another and, for each, reuses the
-// hashes of the tree it built before: a leaf's by its key, a branch's by
-// the hashes of its two children. The hash of a node is a function of
-// those alone (see Tree), so a reused hash is the hash NewTree computes,
-// and the tree is NewTree's tree, node for node.
+// hashes of the tree it built before: a leaf's if that tree has a leaf of
+// the same key, a branch's if that tree has, at the same place, a branch
+// whose two children have the same two hashes. The hash of a node is a
+// function of those alone (see Tree), so a reused hash is the hash NewTree
+// computes, and the tree is NewTree's tree, node for node.
 //
 // It is for the CRLs of one issuer key, in any order: two of them differ
 // in a few hundred serial numbers out of hundreds of thousands, so nearly
-// every node of one is a node of the other (README.md, "重用雜湊").
-// Only the last tree's hashes are kept, so the memory is that of one
-// tree's, however many are built. Nothing is written anywhere, and nothing
-// outlives the builder. The zero value is ready to use; it is not for use
-// by several goroutines at once.
+// every node of one is a node of the other (README.md, "重用雜湊"). No
+// table is kept: the tree before is walked alongside the one being built.
+// So what a builder holds is the last tree it built and nothing else,
+// however many it builds. Nothing is written anywhere, and nothing outlives
+// the builder. The zero value is ready to use; it is not for use by several
+// goroutines at once.
 type TreeBuilder struct {
-	last     reuseTable
+	last     *Tree
 	computed int
 }
 
-// A reuseTable holds the hashes of one tree: of each leaf by its key, of
-// each branch by its children's hashes (the zero element for an empty
-// subtree, as in the hash itself).
-type reuseTable struct {
-	leaves   map[Key]fr.Element
-	branches map[[2]fr.Element]fr.Element
-}
-
-// reuse is what a tree under construction reads earlier hashes from and
-// writes its own to.
+// reuse is the tree before, read while a tree is built, and the count of
+// the hashes that could not be taken from it.
 type reuse struct {
-	from, to reuseTable
+	from     *Tree
 	computed int
 }
+
+// noNode is the place in the tree before of a subtree it does not have:
+// an empty subtree there, or no tree before at all.
+const noNode = empty
 
 // NewTree builds the tree of keys, as the function NewTree does.
 func (b *TreeBuilder) NewTree(keys []Key) (*Tree, error) {
-	r := &reuse{from: b.last, to: reuseTable{
-		leaves: make(map[Key]fr.Element, len(keys)),
-		// About 0.44 branches per key for random keys.
-		branches: make(map[[2]fr.Element]fr.Element, len(keys)/2+1),
-	}}
+	r := &reuse{from: b.last}
 	t, err := newTree(keys, r)
 	if err != nil {
-		// Nothing was built: the hashes of the tree before stay.
+		// Nothing was built: the tree before stays.
 		return nil, err
 	}
-	b.last, b.computed = r.to, r.computed
+	b.last, b.computed = t, r.computed
 	return t, nil
 }
 
@@ -125,64 +119,99 @@ func newTree(keys []Key, r *reuse) (*Tree, error) {
 	}
 	// About 1.44 nodes per key for random keys.
 	t.nodes = make([]node, 0, len(keys)+len(keys)/2+1)
-	t.root = t.build(0, len(t.keys), 0)
+	t.root = t.build(0, len(t.keys), 0, r.before())
 	t.reuse = nil
 	return t, nil
 }
 
-// leafHash is Poseidon2(k, 1, 1), reused if the tree before had the key.
-func (t *Tree) leafHash(key Key) fr.Element {
-	r := t.reuse
-	if r != nil {
-		if h, ok := r.from.leaves[key]; ok {
-			r.to.leaves[key] = h
-			return h
+// before returns the root of the tree before, as the place a build starts
+// reading it from: none if there is no tree before, or it is empty.
+func (r *reuse) before() int32 {
+	if r == nil || r.from == nil {
+		return noNode
+	}
+	return r.from.root
+}
+
+// leafHash is Poseidon2(k, 1, 1) for the leaf of key at this level, reused
+// if the tree before has a leaf of the same key. p is the node of the tree
+// before at the same place (the same low bits of the path), or noNode: the
+// key's leaf, if that tree has it, is p or below p, along the key's bits.
+func (t *Tree) leafHash(key Key, level int, p int32) fr.Element {
+	if r := t.reuse; r != nil {
+		prev := r.from
+		for p != noNode && prev.nodes[p].left != leaf {
+			if key.bit(level) == 1 {
+				p = prev.nodes[p].right
+			} else {
+				p = prev.nodes[p].left
+			}
+			level++
 		}
+		if p != noNode && prev.keys[prev.nodes[p].right] == key {
+			return prev.nodes[p].hash
+		}
+		r.computed++
 	}
 	var k fr.Element
 	k.SetBytes(key[:])
-	h := poseidon2.Hash3(&k, &one, &one)
-	if r != nil {
-		r.to.leaves[key] = h
-		r.computed++
-	}
-	return h
+	return poseidon2.Hash3(&k, &one, &one)
 }
 
-// branchHash is Poseidon2(l, r), reused if the tree before had a branch
-// with these two children.
-func (t *Tree) branchHash(l, r fr.Element) fr.Element {
-	re := t.reuse
-	children := [2]fr.Element{l, r}
-	if re != nil {
-		if h, ok := re.from.branches[children]; ok {
-			re.to.branches[children] = h
-			return h
+// branchHash is Poseidon2(l, r), reused if p, the node of the tree before
+// at the same place, is a branch whose children have these two hashes.
+func (t *Tree) branchHash(l, r fr.Element, p int32) fr.Element {
+	if re := t.reuse; re != nil {
+		prev := re.from
+		if p != noNode && prev.nodes[p].left != leaf && prev.hash(prev.nodes[p].left) == l && prev.hash(prev.nodes[p].right) == r {
+			return prev.nodes[p].hash
 		}
-	}
-	h := poseidon2.Hash2(&l, &r)
-	if re != nil {
-		re.to.branches[children] = h
 		re.computed++
 	}
-	return h
+	return poseidon2.Hash2(&l, &r)
 }
 
-func (t *Tree) build(lo, hi, level int) int32 {
+// below returns the nodes of the tree before under p, on the side of bit
+// 0 and of bit 1 at this level. Under a leaf there is only the leaf
+// itself, on the side its key's bit says: a tree has one node for a
+// subtree of one key, at whatever level the subtree begins.
+func (t *Tree) below(p int32, level int) (int32, int32) {
+	if p == noNode {
+		return noNode, noNode
+	}
+	prev := t.reuse.from
+	n := prev.nodes[p]
+	if n.left != leaf {
+		return n.left, n.right
+	}
+	if prev.keys[n.right].bit(level) == 1 {
+		return noNode, p
+	}
+	return p, noNode
+}
+
+// build makes the node of keys[lo:hi], which share their lowest `level`
+// bits of the path. p is the node of the tree before for the keys that
+// share those bits, or noNode; it is read only by a TreeBuilder.
+func (t *Tree) build(lo, hi, level int, p int32) int32 {
 	switch hi - lo {
 	case 0:
 		return empty
 	case 1:
-		t.nodes = append(t.nodes, node{hash: t.leafHash(t.keys[lo]), left: leaf, right: int32(lo)})
+		t.nodes = append(t.nodes, node{hash: t.leafHash(t.keys[lo], level, p), left: leaf, right: int32(lo)})
 		return int32(len(t.nodes) - 1)
 	}
 	if level >= pathBits {
 		panic("crl: keys collide on the whole path") // excluded by NewTree
 	}
 	mid := lo + sort.Search(hi-lo, func(i int) bool { return t.keys[lo+i].bit(level) == 1 })
-	l := t.build(lo, mid, level+1)
-	r := t.build(mid, hi, level+1)
-	t.nodes = append(t.nodes, node{hash: t.branchHash(t.hash(l), t.hash(r)), left: l, right: r})
+	p0, p1 := noNode, noNode
+	if t.reuse != nil {
+		p0, p1 = t.below(p, level)
+	}
+	l := t.build(lo, mid, level+1, p0)
+	r := t.build(mid, hi, level+1, p1)
+	t.nodes = append(t.nodes, node{hash: t.branchHash(t.hash(l), t.hash(r), p), left: l, right: r})
 	return int32(len(t.nodes) - 1)
 }
 

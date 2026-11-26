@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -23,6 +24,28 @@ func sameTree(t *testing.T, what string, got, want *Tree) {
 	if got.reuse != nil {
 		t.Fatalf("%s: the tree still holds the builder's tables", what)
 	}
+}
+
+// randomKeys returns n keys of random 16-byte serial numbers, no two of
+// which share their lowest 127 bits.
+func randomKeys(t *testing.T, r *rand.Rand, n int) []Key {
+	t.Helper()
+	keys := make([]Key, 0, n)
+	seen := map[pathOrder]bool{}
+	for len(keys) < n {
+		x := new(big.Int).SetUint64(r.Uint64())
+		x.Lsh(x, 64).Or(x, new(big.Int).SetUint64(r.Uint64()))
+		k, err := KeyFromInt(x)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if seen[k.path()] {
+			continue
+		}
+		seen[k.path()] = true
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // keysOfInts returns the keys of serial numbers given as integers.
@@ -92,9 +115,9 @@ func TestTreeBuilderVectors(t *testing.T) {
 // as the one before, or differs in one key, takes almost no new hash.
 func TestTreeBuilderRun(t *testing.T) {
 	r := rand.New(rand.NewPCG(439, 1))
-	base := RandomKeysForTest(r, 5000)
+	base := randomKeys(t, r, 5000)
 	without := func(keys []Key, n int) []Key { return slices.Clone(keys[n:]) }
-	with := func(keys []Key, n int) []Key { return append(slices.Clone(keys), RandomKeysForTest(r, n)...) }
+	with := func(keys []Key, n int) []Key { return append(slices.Clone(keys), randomKeys(t, r, n)...) }
 	lists := [][]Key{
 		base,
 		with(base, 7),             // some added
@@ -134,7 +157,7 @@ func TestTreeBuilderRun(t *testing.T) {
 			}
 			sameTree(t, fmt.Sprintf("order %v, list %d", order, i), got, want[i])
 			// A proof of absence reads the same tree.
-			absent := RandomKeysForTest(r, 1)[0]
+			absent := randomKeys(t, r, 1)[0]
 			pg, errG := got.ProveAbsent(absent)
 			pw, errW := want[i].ProveAbsent(absent)
 			if (errG == nil) != (errW == nil) || (errG == nil && (pg.Root.Cmp(pw.Root) != 0 || pg.OldKey.Cmp(pw.OldKey) != 0 || pg.IsOld0 != pw.IsOld0)) {
@@ -157,7 +180,7 @@ func TestTreeBuilderRun(t *testing.T) {
 		t.Errorf("7 keys more computed %d hashes", b.Computed())
 	}
 	// Only the last tree's hashes are kept: after an unrelated list, the first is computed anew.
-	if _, _ = b.NewTree(RandomKeysForTest(r, 10)); b.Computed() == 0 {
+	if _, _ = b.NewTree(randomKeys(t, r, 10)); b.Computed() == 0 {
 		t.Error("an unrelated list computed nothing")
 	}
 	if again, _ := b.NewTree(lists[0]); b.Computed() != again.Hashes() {
@@ -277,7 +300,7 @@ func TestBuildIndexOfReadsOneAtATime(t *testing.T) {
 	}
 
 	// RebuildArchiveOf with these files is RebuildArchive of a directory that holds them.
-	dir := copyArchive(t, "one.crl", "duplicate.crl", "empty.crl")
+	dir := copyArchive(t, "one", "duplicate", "empty")
 	index := FormatIndex(want)
 	if err := os.WriteFile(filepath.Join(dir, IndexFileName), index, 0o644); err != nil {
 		t.Fatal(err)
@@ -290,7 +313,7 @@ func TestBuildIndexOfReadsOneAtATime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(diffsDir) != 0 || len(diffsFiles) != 0 || !slices.Equal(fromDir.Lines(), fromFiles.Lines()) {
+	if len(diffsDir) != 0 || len(diffsFiles) != 0 || !reflect.DeepEqual(fromDir, fromFiles) {
 		t.Errorf("the archive of the files is not the archive of the directory: %v / %v", diffsDir, diffsFiles)
 	}
 	if _, diffs, _ := RebuildArchiveOf(nil, false, nil, keys, nil); len(diffs) != 1 || diffs[0].Problem != "is missing" {
