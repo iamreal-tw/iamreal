@@ -32,6 +32,9 @@
 //
 // `node --experimental-strip-types scripts/site-files.ts` writes all of them again,
 // after a change of src/headers.ts, of the subset or of the image.
+//
+// Static Assets also sends site/favicon.ico, the site's icon, which
+// scripts/favicon.ts draws and this script does not touch (`FAVICON_FILE`).
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import { dirname, join } from "node:path";
@@ -49,7 +52,7 @@ const SITE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "site");
  * "Static Assets"). The Worker cannot send a file either way: it has no
  * binding to them.
  */
-export const RUN_WORKER_FIRST: readonly string[] = ["/*", "!/copy.js", "!/demo.js", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"];
+export const RUN_WORKER_FIRST: readonly string[] = ["/*", "!/copy.js", "!/demo.js", "!/favicon.ico", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"];
 
 /**
  * The headings' typeface under site/, where the style sheet loads it from
@@ -116,14 +119,22 @@ export function hangTimelineModule(): string {
 }
 
 /**
+ * The site's icon under site/, at the address a browser or a link preview
+ * asks for by itself, and the one every page links to (src/pages/layout.ts,
+ * #356): the mark, drawn by scripts/favicon.ts. Committed as it is, like
+ * pages.css and copy.js; a deploy build checks it is the one of HEAD.
+ */
+export const FAVICON_FILE = "favicon.ico";
+
+/**
  * Every file of site/ a deploy uploads besides the card proof page's, by
- * its path under site/, sorted: the copy buttons' script, the demonstration's player, the typeface, the
+ * its path under site/, sorted: the copy buttons' script, the demonstration's player, the icon, the typeface, the
  * link preview's image, the style sheet and the two files of rules. The page's files are under site/proof/, which
  * is not in the repository (.gitignore): a deploy builds them there
  * (deploy.ts, `buildSite`) and checks what the directory then holds
  * (proof-page.ts).
  */
-export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "copy.js", DEMO_FILE, FONT_FILE, OG_IMAGE_FILE, "pages.css"];
+export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "copy.js", DEMO_FILE, FAVICON_FILE, FONT_FILE, OG_IMAGE_FILE, "pages.css"];
 
 /** Which proof log a site is of (wrangler.jsonc, `PROOF_LOG_KIND`). */
 export type ProofLogKind = "test" | "production";
@@ -131,7 +142,7 @@ export type ProofLogKind = "test" | "production";
 const block = (path: string, headers: Readonly<Record<string, string>>, more: readonly string[] = []): string =>
   [path, ...Object.entries(headers).map(([name, value]) => `  ${name}: ${value}`), ...more.map((line) => `  ${line}`)].join("\n");
 
-/** The headers of the visitors' files, the style sheet, the script, the typeface and the image: the pages' (`VISITOR_HEADERS`), asked for again by their ETag each time. */
+/** The headers of the visitors' files, the style sheet, the script, the icon, the typeface and the image: the pages' (`VISITOR_HEADERS`), asked for again by their ETag each time. */
 const visitorFile = (path: string, every: Readonly<Record<string, string>>): string => block(path, { ...VISITOR_HEADERS, ...every }, ["! Cache-Control", `Cache-Control: ${VISITOR_FILE_CACHE}`]);
 
 /**
@@ -142,7 +153,7 @@ const visitorFile = (path: string, every: Readonly<Record<string, string>>): str
  *   not there is a file, so a 404, a redirect and a 405 under /proof have
  *   them too. On Cloudflare the 404 and the redirect were seen to; the
  *   405 needs a file to be there (README.md, "Static Assets").
- * - /pages.css, /copy.js, /demo.js, /fonts/* and /og-image.png: the visitors' pages' headers
+ * - /pages.css, /copy.js, /demo.js, /favicon.ico, /fonts/* and /og-image.png: the visitors' pages' headers
  *   (`VISITOR_HEADERS`), and `VISITOR_FILE_CACHE` in place of the
  *   Cache-Control Static Assets sends by itself (taken off with "!", then
  *   set: two values would be joined). The script's policy has no
@@ -165,6 +176,8 @@ export function siteHeaders(kind: ProofLogKind): string {
     visitorFile("/copy.js", every),
     "",
     visitorFile(`/${DEMO_FILE}`, every),
+    "",
+    visitorFile(`/${FAVICON_FILE}`, every),
     "",
     visitorFile("/fonts/*", every),
     "",

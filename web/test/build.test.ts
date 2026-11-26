@@ -134,6 +134,8 @@ test("the production build has nothing of the mark, and it is the one page: no h
   assert.deepEqual([...files.keys()].filter((f) => f.endsWith(".html")), ["index.html"]);
   const page = loadedBy(files, "index.html").map((f) => files.get(f)!).join("\n");
   for (const s of [...MOICA_KEYS, "localhost:61161", "iamreal:public:0"]) assert.ok(page.includes(s), `the card proof page loads ${JSON.stringify(s)}`);
+  // The site's icon, as every page of the site links to it (worker/src/pages/layout.ts, #356): the one file at /favicon.ico.
+  assert.equal(files.get("index.html")!.match(/rel="icon"[^>]*/g)?.join(), 'rel="icon" href="/favicon.ico" /', "the page's icon is the site's /favicon.ico");
 });
 
 test("no other build has the mark of a test log", async () => {

@@ -88,6 +88,7 @@ import { makeCrl } from "../fixtures/crls.ts";
 import { type TestKey, hex, makeKey } from "../fixtures/der-build.ts";
 import { randomSerials, testIssuerKeys } from "../fixtures/world.ts";
 import { Browser, Page, sleep } from "./cdp.ts";
+import { RUN_HOURS, anchorOffset, taiwanDate } from "./clock.ts";
 import { FakeComponent, type FakeCardSpec } from "./fake-component.ts";
 import { CONTENT_SECURITY_POLICY, ISOLATION_HEADERS, OPENER_HEADERS, TEST_SITE_CONTENT_SECURITY_POLICY } from "./headers.ts";
 import { startWorkerSite } from "./worker-site.ts";
@@ -138,16 +139,24 @@ mkdirSync(issuersDir);
 for (const n of ["G2", "G3"] as const) writeFileSync(join(issuersDir, `issuer-${n}.der`), issuerKeys[n].spki);
 
 const yymmdd = (d: Date) => d.toISOString().slice(2, 10).replace(/-/g, "");
-const taiwanDate = (ms: number) => new Date(ms + 8 * 3600_000).toISOString().slice(0, 10);
 /**
  * The test's clock, the Worker's and the page's together, runs `day` whole
  * days ahead of the machine's (setDay below): a card has at most 3 valid
  * records a day (spec/record-rules.md, check 6), a switch counts once a day
  * (a change on the day of the last one is a correction), and this test makes
  * many with one card. Each day the fake MOICA publishes a CRL dated that day.
+ *
+ * Under those whole days, all three run `AHEAD` of the machine's clock, so
+ * that the run starts at noon in Taiwan (clock.ts): what the test expects
+ * and what the page shows are never on two sides of midnight (#219).
  */
 let day = 0;
-const dayOf = (n: number) => taiwanDate(Date.now() + n * 86_400_000);
+const MACHINE_START = Date.now();
+const AHEAD = anchorOffset(MACHINE_START);
+/** The test's clock: the machine's, `AHEAD`; the whole days come on top. */
+const testNow = () => Date.now() + AHEAD;
+/** The date of day `n`, from one fixed instant, the run's start on the test's clock: noon in Taiwan. The clocks that run keep that date (checked last). */
+const dayOf = (n: number) => taiwanDate(MACHINE_START + AHEAD + n * 86_400_000);
 const today = () => dayOf(day);
 const firstDay = dayOf(0);
 
@@ -182,7 +191,7 @@ const revoked = await makeCard({ serial: "5555567890abcdef1234567890abcdef" });
 const g2card = await makeCard({ serial: "6666567890abcdef1234567890abcdef", issuer: issuerKeys.G2 });
 const expired = await makeCard({ serial: "2345567890abcdef1234567890abcdef", notAfter: "251231155959Z" });
 // Valid from 16:00 UTC on a day 40 days from now: 00:00 of the next day in Taiwan.
-const notYetUtc = new Date(Date.now() + 40 * 86_400_000);
+const notYetUtc = new Date(testNow() + 40 * 86_400_000);
 const notYet = await makeCard({ serial: "3456567890abcdef1234567890abcdef", notBefore: yymmdd(notYetUtc) + "160000Z" });
 const notYetTaiwan = new Date(Date.parse(notYetUtc.toISOString().slice(0, 10)) + 86_400_000).toISOString().slice(0, 10);
 const foreign = await makeCard({ serial: "4567567890abcdef1234567890abcdef", holderExtensions: [CERT_POLICIES, subjectDirectoryAttributes({ subjectKind: 0x09 })] });
@@ -191,7 +200,7 @@ const unknownIssuer = await makeCard({ serial: "6789567890abcdef1234567890abcdef
 const lockable = await makeCard({ serial: "7890567890abcdef1234567890abcdef", tries: 1 });
 const fresh = await makeCard({ serial: "0890567890abcdef1234567890abcdef" });
 
-const now = Date.now();
+const now = testNow();
 const G3_SERIALS = [...randomSerials(20_000, 3n), revoked.serial];
 /** The G3 CRL of day `n`: dated its first second in Taiwan, numbered 300 + n. */
 const g3CrlOf = (n: number) => makeCrl({ issuer: issuerKeys.G3, serials: G3_SERIALS, crlNumber: BigInt(300 + n), thisUpdate: new Date(Date.parse(`${dayOf(n)}T00:00:00+08:00`)) });
@@ -245,7 +254,7 @@ async function mirror(): Promise<void> {
   const round = await worker.runSchedule();
   if (round.outcome !== "ok") throw new Error(`the Worker's schedule: ${round.outcome}\n${worker.logLines().join("\n")}`);
 }
-await site.setClockAhead(0);
+await site.setClockAhead(AHEAD);
 await mirror();
 {
   const index = new TextDecoder().decode((await worker.files("crl/index.jsonl"))[0]?.bytes ?? new Uint8Array());
@@ -316,7 +325,7 @@ browser.on((m, p) => {
   }
 });
 // The page's clock: Date.now, which the engine reads (src/index.ts), runs
-// `day` days ahead, in every load of the page, set before its scripts run.
+// `AHEAD` and `day` days ahead, in every load of the page, set before its scripts run.
 // The setter changes it in a page already loaded (the card proofs on one
 // page load); it is not enumerable, so the checks of what the page keeps
 // (foundOnPage) see the page's own globals only.
@@ -324,7 +333,7 @@ const clockSource = (n: number) => `(() => {
   const now = Date.now.bind(Date);
   let days = ${n};
   Object.defineProperty(window, "__iamrealClockDays", { set: (d) => { days = d; } });
-  Date.now = () => now() + days * 86400000;
+  Date.now = () => now() + ${AHEAD} + days * 86400000;
 })()`;
 let clockScript = (await page.send("Page.addScriptToEvaluateOnNewDocument", { source: clockSource(0) })).identifier as string;
 /**
@@ -333,7 +342,7 @@ let clockScript = (await page.send("Page.addScriptToEvaluateOnNewDocument", { so
  */
 async function setDay(n: number): Promise<void> {
   day = n;
-  await site.setClockAhead(n * 86_400_000);
+  await site.setClockAhead(AHEAD + n * 86_400_000);
   crls.G3 = await g3CrlOf(n);
   g3Number = 300 + n;
   await mirror();
@@ -342,7 +351,7 @@ async function setDay(n: number): Promise<void> {
   await page.eval(`window.__iamrealClockDays = ${n}`).catch(() => undefined);
   console.log(`\n== day ${n}: ${today()}`);
 }
-/** Moves the page's clock alone to `days` (whole or not) ahead of the machine's; the Worker's stays. */
+/** Moves the page's clock alone to `days` (whole or not) ahead of the test's (`testNow`); the Worker's stays. */
 async function setPageClock(days: number): Promise<void> {
   await page.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: clockScript });
   clockScript = (await page.send("Page.addScriptToEvaluateOnNewDocument", { source: clockSource(days) })).identifier as string;
@@ -1966,7 +1975,7 @@ await tryStep("the date changes while step 5 is up: not signed, stops.date_chang
   const target = Date.parse(`${today()}T23:59:47+08:00`);
   const midnight = target + 13_000; // 00:00:00 of the next day in Taiwan
   try {
-    await setPageClock((target - Date.now()) / 86_400_000);
+    await setPageClock((target - testNow()) / 86_400_000);
     const undo = await rewrite("*/api/v1/card-state", (b) => {
       b.platforms[EXAMPLE].correction_date = today();
       b.last_card_proof = today();
@@ -2632,7 +2641,7 @@ await tryStep("before the PIN: a CRL older than the one this browser used", () =
   check(outside.length === 0, `the page and its workers (${types.join(", ")}) connected only to ${PAGE_ORIGIN}; the component's window only to ${componentOrigin}: ${JSON.stringify(outside.slice(0, 5))}`);
   // On its own origin, the page asked for the page itself and its files under /proof/, the API
   // and the CRL mirror, nothing else (the page moved from / to /proof). /favicon.ico is the
-  // browser's own request, not the page's.
+  // site's icon, which the page links to (index.html): a file of the site, not of the page's build.
   const own = ours
     .filter((r) => !popups.has(r.sessionId) && !r.url.startsWith("about:") && new URL(r.url).origin === PAGE_ORIGIN)
     .map((r) => new URL(r.url).pathname)
@@ -2919,6 +2928,9 @@ await tryStep("the test site's build: the mark of a test log, the test site's he
     await testSite.close();
   }
 });
+
+// The clocks that run (the page's, the Worker's) kept the date the test counted from: the run took less than RUN_HOURS from noon in Taiwan (clock.ts).
+check(Date.now() - MACHINE_START < RUN_HOURS * 3_600_000 && taiwanDate(testNow()) === firstDay, `the run took ${Math.round((Date.now() - MACHINE_START) / 60_000)} minutes, less than ${RUN_HOURS} hours: the test's clock is still on ${firstDay} (${taiwanDate(testNow())})`);
 
 writeFileSync(join(out, "ui-report.json"), JSON.stringify({ results, shown, component: component.requests.map((r) => ({ func: r.func, tbs: r.tbs })) }, null, 2));
 await browser.close();
