@@ -73,14 +73,14 @@ Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts
 
 | 截圖 | 畫面 | 版本 |
 |---|---|---|
-| `card-proof-app-1-before-phone.png` | 第 1 步：開始之前 | 實作版（iOS） |
+| `card-proof-app-1-before-phone.png` | 第 1 步：開始之前 | 實作版（Android） |
 | `card-proof-app-2-read-iphone-phone.png` | 第 2 步：讀取卡片，iPhone 的感應位置 | 實作版（iOS） |
 | `card-proof-app-2-read-android-phone.png` | 第 2 步：讀取卡片，Android，有感應位置的示意圖 | 實作版（Android） |
 | `card-proof-app-2-reading-iphone-phone.png` | 第 2 步：iPhone 感應中，系統的感應面板 | 定稿版 |
-| `card-proof-app-3-pin-phone.png` | 第 3 步：輸入 PIN | 實作版（iOS） |
-| `card-proof-app-4-accounts-phone.png` | 第 4 步：你的帳號 | 實作版（iOS） |
-| `card-proof-app-5-confirm-phone.png` | 第 5 步：確認 | 實作版（iOS） |
-| `card-proof-app-5-progress-phone.png` | 第 5 步：進行中 | 實作版（iOS） |
+| `card-proof-app-3-pin-phone.png` | 第 3 步：輸入 PIN | 實作版（Android） |
+| `card-proof-app-4-accounts-phone.png` | 第 4 步：你的帳號 | 實作版（Android） |
+| `card-proof-app-5-confirm-phone.png` | 第 5 步：確認 | 實作版（Android） |
+| `card-proof-app-5-progress-phone.png` | 第 5 步：進行中 | 實作版（Android） |
 | `card-proof-app-6-done-phone.png` | 第 6 步：完成，這張卡片的第一筆紀錄 | 實作版（Android） |
 
 ### app 的其他畫面

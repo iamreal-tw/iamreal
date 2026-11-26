@@ -774,7 +774,6 @@ async function toAccounts(o: { wrongPinFirst?: boolean; blockClicks?: boolean; s
   const s3 = await page.text();
   check((await page.text("[data-card-read]")) === [C.pin.card_read, "測試用戶", C.pin.name_note].join("\n"), `step 3: the name, and that it stays here: ${JSON.stringify(await page.text("[data-card-read]"))}`);
   for (const s of [C.pin.purpose, C.pin.stays]) check(s3.includes(s), `step 3, next to the PIN field: "${s}"`);
-  check(!s3.includes(C.pin.card_and_pin), "step 3: who holds the card and the PIN is said on step 5, not here");
   await noLinkOut("step 3");
   if (o.screenshots) await screenshot(`${o.screenshots}-3-pin`);
   if (o.wrongPinFirst) {
@@ -852,7 +851,6 @@ function checkAccountsNotes(label: string, st: AccountsSeen, kind: "never" | "no
   check(st.title === a.title, `${label}: step 4's title "${st.title}"`);
   check(has(a.preview_note) && has(a.switches_limited), `${label}: step 4, the preview, that switches are limited`);
   check(has(a.how_change) === (kind === "nothing") && has(a.one_per_platform) === (kind === "never"), `${label}: how to change the list`);
-  check(!has(a.not_yours) && !has(a.how_refresh), `${label}: step 4 no longer says that the account is not checked, nor how card proof again works`);
   check(!has("還有平台沒填"), `${label}: no nudge to fill every platform`);
   check(st.links.length === 0, `${label}: step 4 links to no other page ${JSON.stringify(st.links)}`);
   check(JSON.stringify(st.buttons.filter((b) => b !== C.accounts.preview)) === JSON.stringify([C.common.next, C.common.cancel]), `${label}: step 4 buttons ${JSON.stringify(st.buttons)}`);
@@ -876,7 +874,6 @@ function checkDeclared(label: string, st: AccountsSeen, current: [string, string
   const others = single ? [a.switch, fill(a.withdraw, { account: current[0]![1] })] : [a.edit_list];
   check(JSON.stringify(st.buttons) === JSON.stringify([a.refresh, ...others, C.common.cancel]), `${label}: step 4 buttons ${JSON.stringify(st.buttons)}`);
   check(!st.main.includes(a.switches_limited) && !st.main.includes(a.switch_limit.split("，")[0]!), `${label}: step 4 does not speak of the switches' limit before 改成別的帳號`);
-  check(!st.main.includes(a.not_yours) && !st.main.includes(fill(a.not_yours_single, { platform: THREADS_NAME })), `${label}: step 4 no longer says that the account is not checked`);
   check(st.links.length === 0, `${label}: step 4 links to no other page ${JSON.stringify(st.links)}`);
   check(st.rows.every((r) => r.value === null), `${label}: no field before an action is chosen`);
 }
@@ -900,9 +897,7 @@ function checkConfirm(label: string, c: ConfirmSeen, want: [platform: string, na
   const points = empty ? [f.history_stays, notIdentifiable, f.holder_later_withdraw] : [notIdentifiable, fill(f.holder_later, { platform: named, cannot_delete: f.cannot_delete })];
   check(JSON.stringify(c.points) === JSON.stringify(points), `${label}: step 5's points ${JSON.stringify(c.points)}`);
   check(JSON.stringify(c.heed) === JSON.stringify(empty ? [] : [f.cannot_delete]), `${label}: step 5, "${f.cannot_delete}" in bold ${JSON.stringify(c.heed)}`);
-  check(!c.main.includes(C.pin.card_and_pin) && !c.main.includes(f.no_identity), `${label}: step 5 says who holds the card and the PIN once, in the new words`);
   check(c.listedTogether === (!empty && single === null), `${label}: step 5 ${!empty && single === null ? "says" : "does not say"} the accounts are listed together`);
-  check(!c.main.includes(fill(f.listed_single, { platform: THREADS_NAME })), `${label}: step 5, that it is public is in the first sentence, not a sentence of its own`);
   check(c.withdrawStays === (!empty && single === null && want.some((r) => r[3].includes(C.kinds.withdraw))), `${label}: step 5, that a withdrawn account's records stay`);
   check(JSON.stringify(c.buttons) === JSON.stringify([C.common.back, button, C.common.cancel]), `${label}: step 5 buttons ${JSON.stringify(c.buttons)}`);
 }
@@ -2474,11 +2469,10 @@ await tryStep("Threads only: a first declaration (the field alone)", async () =>
   check(st.title === "你的 Threads 帳號" && st.title === fill(A.title_single, { platform: THREADS_NAME }), `step 4, one platform: the title "${st.title}"`);
   check(JSON.stringify(st.lead) === JSON.stringify([A.none_yet, "填上你要宣告的 Threads 帳號。"]), `step 4, one platform: ${JSON.stringify(st.lead)}`);
   check(
-    !st.main.includes(fill(A.one_per_platform_single, { platform: THREADS_NAME })) && !st.main.includes(A.switches_limited) && !st.main.includes(A.one_per_platform) && !st.main.includes(A.fill_one),
+    !st.main.includes(A.switches_limited) && !st.main.includes(A.one_per_platform) && !st.main.includes(A.fill_one),
     "step 4, one platform, a first declaration: no rules of switching, not the sentences of more than one",
   );
   check(st.main.includes(A.preview_note), "step 4, one platform: the preview");
-  check(!st.main.includes(fill(A.not_yours_single, { platform: THREADS_NAME })) && !st.main.includes(A.not_yours), "step 4: no longer 系統無法確認這個 Threads 帳號是不是你的……");
   check((await page.eval<string>("document.title")) === "你的 Threads 帳號", "step 4, one platform: the page's title");
   check(JSON.stringify(st.buttons) === JSON.stringify([A.preview, C.common.next, C.common.cancel]), `step 4, one platform: the buttons ${JSON.stringify(st.buttons)}`);
   await screenshot("single-4-accounts");
@@ -2830,7 +2824,7 @@ await tryStep("the production build's step 1: one platform, named", async () => 
     await prod.waitFor(step("before"), "the production build's step 1");
     // One platform: what the proof says and that it is public is step 5's first sentence, not step 1's.
     const s1 = await prod.text();
-    check(!(await prod.eval<boolean>(`!!document.querySelector('[data-one-proof]')`)) && !s1.includes(C.before.one_proof) && !s1.includes(fill(C.before.one_proof_single, { platform: THREADS_NAME })), "the production build's step 1: no sentence of what the proof lists");
+    check(!(await prod.eval<boolean>(`!!document.querySelector('[data-one-proof]')`)) && !s1.includes(C.before.one_proof), "the production build's step 1: no sentence of what the proof lists");
     check(
       [C.before.title, C.before.duration, C.before.prepare_card, C.before.citizens_only, C.before.why_physical, C.before.how_to_get].every((x) => s1.includes(x)) && !s1.includes("我們只收台灣中華民國國民的自然人憑證正卡"),
       "the production build's step 1: the words of card-proof.md",

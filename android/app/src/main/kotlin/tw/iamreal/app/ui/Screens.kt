@@ -48,15 +48,19 @@ import androidx.compose.ui.unit.sp
 import tw.iamreal.app.flow.CardProof
 import tw.iamreal.app.flow.Platforms
 
-/** What a screen asks of the phone: an address opened outside the app, a text put on the clipboard, a text handed to the system's share sheet. */
-internal class Outside(val open: (String) -> Unit, val copy: (String) -> Unit, val share: (String) -> Unit, val nfcSettings: () -> Unit)
+/**
+ * What a screen asks of the phone: an address opened outside the app (false when no app on the phone opens it), a text put on the clipboard,
+ * a text handed to the system's share sheet.
+ */
+internal class Outside(val open: (String) -> Boolean, val copy: (String) -> Unit, val share: (String) -> Unit, val nfcSettings: () -> Unit)
 
 /**
  * The six steps (design/copy/card-proof.md), one screen each, laid out
  * after design/screens/card-proof-app-*, and the panel of a tap over them.
  * Every sentence is the copy's; which one is [Messages]'s and [Model]'s to
  * say. No screen links to a page of the site but step 6, whose links are the
- * card's own pages and the platform's (docs/design/principles.md, 1).
+ * card's own pages and the platform's; step 1's two links are for someone
+ * without a card yet, who gets no further (docs/design/principles.md, 1).
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -79,7 +83,7 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
                     StepBar(m.copy, m.step.number)
                     Spacer(Modifier.height(6.dp))
                     when (m.step) {
-                        Step.BEFORE -> Before(m)
+                        Step.BEFORE -> Before(m, outside)
                         Step.READ -> Read(m, outside)
                         Step.PIN -> Pin(m)
                         Step.ACCOUNTS -> Accounts(m, outside)
@@ -94,19 +98,42 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
     }
 }
 
+/**
+ * before.find_office: a search for household registration offices, handed to the phone's map app (`geo:0,0?q=`,
+ * https://developer.android.com/guide/components/intents-common#Maps); on a phone without one, the same search on a map's site, as the
+ * web's step 1 opens it (https://developers.google.com/maps/documentation/urls/get-started). The words searched for are
+ * design/copy/card-proof.md's ("1. 開始之前"), percent-encoded. The app asks for no location: what is near is the map's to tell.
+ */
+private const val FIND_OFFICE_QUERY = "%E6%88%B6%E6%94%BF%E4%BA%8B%E5%8B%99%E6%89%80"
+internal const val FIND_OFFICE_MAP = "geo:0,0?q=$FIND_OFFICE_QUERY"
+internal const val FIND_OFFICE_SITE = "https://www.google.com/maps/search/?api=1&query=$FIND_OFFICE_QUERY"
+
+/** before.how_to_get_moica: the certificate authority's site (design/copy/card-proof.md, "1. 開始之前"). */
+private const val MOICA = "https://moica.nat.gov.tw/"
+
 @Composable
-private fun Before(m: Model) {
+private fun Before(m: Model, outside: Outside) {
     val c = m.copy
     m.notice?.let { Problem(it) }
     Title(c.say("before.title"))
     Body(c.say("before.prepare_card"), strong = true)
     Body(c.say("before.citizens_only"))
-    // The app knows one platform: the sentence names it.
-    Body(c.say("before.one_proof_single", "platform" to Platforms.THREADS.name))
+    // With one platform nothing more: what the proof says, and that it is public, is step 5's to say.
+    for (line in m.messages.beforeSeveral()) Body(line)
     Actions { Button(c.say("common.next"), Modifier.fillMaxWidth(), primary = true) { m.start() } }
     Questions {
-        Question(c.say("before.why_physical"), c.say("before.why_physical_card"), c.say("before.why_physical_mobile"))
-        Question(c.say("before.how_to_get"), c.say("before.how_to_get_counter"), c.say("before.how_to_get_moica"))
+        Question(c.say("before.why_physical")) {
+            Answer(c.say("before.why_physical_card"))
+            Answer(c.say("before.why_physical_mobile"))
+        }
+        Question(c.say("before.how_to_get")) {
+            Answer(c.say("before.how_to_get_counter"))
+            // Nothing of a card proof goes with either: there is none yet.
+            Button(c.say("before.find_office"), Modifier.fillMaxWidth().testTag("find-office"), height = 46.dp) {
+                if (!outside.open(FIND_OFFICE_MAP)) outside.open(FIND_OFFICE_SITE)
+            }
+            Link(c.say("before.how_to_get_moica"), Modifier.padding(top = 4.dp, bottom = 8.dp), size = 15.sp) { outside.open(MOICA) }
+        }
     }
 }
 
@@ -161,7 +188,6 @@ private fun Pin(m: Model) {
     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Point(c.say("pin.purpose"))
         Point(c.say("app_pin.stays"))
-        Point(c.say("pin.card_and_pin"))
     }
     if (busy && m.pinBusy != "") Small(m.pinBusy!!)
     Actions {
@@ -175,46 +201,118 @@ private fun Pin(m: Model) {
     }
 }
 
+/** Step 4 (design/copy/card-proof.md, "4. 你的帳號"): the screen for what the card declares, and for what was pressed on it. Whichever, step 5 is next. */
 @Composable
 private fun Accounts(m: Model, outside: Outside) {
-    val c = m.copy
     val status = m.status ?: return
-    val single = m.single
-    Title(if (single != null) c.say("accounts.title_single", "platform" to single) else c.say("accounts.title"))
-    for (line in m.messages.accountsLead(status, single)) Body(line)
+    when (m.accountsMode) {
+        AccountsMode.SWITCH -> SwitchAccount(m, m.messages.switchView(status), outside)
+        AccountsMode.EDIT -> FillAccounts(m, m.messages.editListView(status), outside)
+        AccountsMode.OPEN -> when (val view = m.messages.accountsView(status)) {
+            is Messages.FillView -> FillAccounts(m, view, outside)
+            is Messages.DeclaredView -> DeclaredAccounts(m, view)
+        }
+    }
+}
+
+/** 3 records of the card today: the sentence, and "回到開頭", which drops the PIN as "取消" does. */
+@Composable
+private fun DailyLimit(m: Model, sentence: String) {
+    Body(sentence, strong = true)
+    Actions { Button(m.copy.say("accounts.restart"), Modifier.fillMaxWidth(), primary = true) { m.cancel() } }
+}
+
+/** The card declares accounts: what it declares and when it last did, "更新島民證明", and the other things to do. */
+@Composable
+private fun DeclaredAccounts(m: Model, view: Messages.DeclaredView) {
+    val c = m.copy
+    Title(view.title)
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Body(view.declaredNow)
+        for (a in view.current) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (a.name != null) BasicText(a.name, Modifier.width(120.dp).alignByBaseline(), style = TextStyle(color = Colours.mute, fontSize = 15.sp, lineHeight = 1.6.em))
+                BasicText(a.account, Modifier.weight(1f).alignByBaseline().testTag("current-${a.platform}"), style = TextStyle(color = Colours.ink, fontSize = Type.sizeH3, lineHeight = Type.leadingH3, fontWeight = Type.weightAccount))
+            }
+        }
+        view.last?.let { Small(it) }
+    }
+    view.dailyLimit?.let { return DailyLimit(m, it) }
+    // Why the list cannot be signed as it is: there is no row here to write it under.
+    for (message in m.rowMessages.values + listOfNotNull(m.listMessage)) Problem(message)
+    // The main button: the list as it is, nothing to type.
+    Actions { Button(view.refresh, Modifier.fillMaxWidth(), primary = true) { m.refresh() } }
+    Small(view.refreshNote, colour = Colours.text)
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        view.switchAccount?.let { TextButton(it, action = true) { m.switchAccount() } }
+        view.withdraw?.let { TextButton(it, action = true) { m.withdraw() } }
+        view.editList?.let { TextButton(it, action = true) { m.editList() } }
+    }
+    Rule(Modifier.padding(top = 8.dp))
+    TextButton(c.say("common.cancel")) { m.cancel() }
+}
+
+/** A row of step 4: its platform, the field and "預覽", or the account as it is; what is said of it under it. */
+@Composable
+private fun AccountRow(m: Model, row: Messages.AccountRow, outside: Outside) = Column(Modifier.fillMaxWidth().padding(vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Subhead(row.name)
+    if (!row.editable) {
+        // Kept as it is, or a day with 3 records: shown, not changed.
+        Body(if (row.current.isEmpty()) "" else row.prefix + row.current, Modifier.testTag("account-${row.platform}"))
+    } else {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            AccountField(m.fields[row.platform] ?: "", row.prefix, enabled = true, tag = "account-${row.platform}", modifier = Modifier.weight(1f)) {
+                m.type(row.platform, it)
+            }
+            Button(m.copy.say("app_accounts.preview"), height = 52.dp) { m.previewUrl(row.platform)?.let(outside.open) }
+        }
+    }
+    for (line in row.lines) Small(line)
+    m.rowMessages[row.platform]?.let { Problem(it) }
+}
+
+/** Rows to fill: the card declares nothing (a row filled is a new declaration), or after "修改帳號清單" each row changed on its own. */
+@Composable
+private fun FillAccounts(m: Model, view: Messages.FillView, outside: Outside) {
+    val c = m.copy
+    Title(view.title)
+    for (line in view.lead) Body(line)
     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Rule()
-        for (slot in status.slots) {
-            val presentation = if (slot.known) Platforms.of(slot.platform) else null
-            Column(Modifier.fillMaxWidth().padding(vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Subhead(presentation?.name ?: slot.platform)
-                if (presentation == null || status.dailyLimit) {
-                    // Kept as it is, or a day with 3 records: shown, not changed.
-                    Body((presentation?.prefix ?: "") + (slot.current ?: ""), Modifier.testTag("account-${slot.platform}"))
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        AccountField(m.fields[slot.platform] ?: "", presentation.prefix, enabled = true, tag = "account-${slot.platform}", modifier = Modifier.weight(1f)) {
-                            m.fields[slot.platform] = it
-                        }
-                        Button(c.say("app_accounts.preview"), height = 52.dp) { m.previewUrl(slot.platform)?.let(outside.open) }
-                    }
-                }
-                if (!status.dailyLimit) for (line in m.messages.rowLines(slot)) Small(line)
-                m.rowMessages[slot.platform]?.let { Problem(it) }
-            }
+        for (row in view.rows) {
+            AccountRow(m, row, outside)
             Rule()
         }
     }
-    if (status.dailyLimit) {
-        Body(c.say("stops.daily_limit"), strong = true)
-        Actions { Button(c.say("accounts.restart"), Modifier.fillMaxWidth(), primary = true) { m.cancel() } }
-        return
-    }
-    for (note in m.messages.accountsNotes(status, single)) Small(note, colour = Colours.text)
+    view.dailyLimit?.let { return DailyLimit(m, it) }
+    for (note in view.notes) Small(note, colour = Colours.text)
     m.listMessage?.let { Problem(it) }
     Actions { Button(c.say("common.next"), Modifier.fillMaxWidth(), primary = true) { m.toConfirm() } }
     Rule(Modifier.padding(top = 22.dp))
-    Small(m.messages.notYours(single), colour = Colours.text)
+    if (view.editList) TextButton(c.say("accounts.keep"), action = true) { m.keep() }
+    TextButton(c.say("common.cancel")) { m.cancel() }
+}
+
+/** After "改成別的帳號" (one platform): the account now, a field for another, what changing it does and what it costs. */
+@Composable
+private fun SwitchAccount(m: Model, view: Messages.SwitchView, outside: Outside) {
+    val c = m.copy
+    Title(view.title)
+    Body(view.intro)
+    if (view.row != null) {
+        Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            view.heading?.let { Stress(it, Modifier.padding(bottom = 10.dp)) }
+            Rule()
+            AccountRow(m, view.row, outside)
+            Rule()
+        }
+    }
+    Small(view.cost, colour = Colours.text)
+    view.previewNote?.let { Small(it, colour = Colours.text) }
+    m.listMessage?.let { Problem(it) }
+    if (view.row != null) Actions { Button(c.say("common.next"), Modifier.fillMaxWidth(), primary = true) { m.toConfirm() } }
+    Rule(Modifier.padding(top = 22.dp))
+    TextButton(view.keep, action = true) { m.keep() }
     TextButton(c.say("common.cancel")) { m.cancel() }
 }
 
@@ -267,10 +365,9 @@ private fun Confirm(m: Model) {
     val c = m.copy
     val q = m.consequence ?: return
     val status = m.status ?: return
-    val single = m.single
-    val empty = q.accounts.isEmpty()
+    val view = m.messages.confirmView(q, status)
     Title(c.say("confirm.title"))
-    Body(if (empty) c.say("confirm.intro_withdraw_all") else if (single != null) c.say("confirm.intro_single") else c.say("confirm.intro"))
+    Body(view.intro)
     Summary {
         for (row in q.rows) {
             SummaryRow(rowName(row.platform, row.known), { SummaryValue(rowAccount(row.platform, row.known, row.username), strong = true) }, listOf(m.messages.rowSentences(row)), "confirm-${row.platform}")
@@ -278,14 +375,14 @@ private fun Confirm(m: Model) {
         SummaryRow(c.say("confirm.date"), { SummaryValue(q.today) })
         SummaryRow(c.say("confirm.short_id_label"), { ShortId(c.say("confirm.short_id", "short_id" to status.shortId), status.shortId) })
     }
-    if (q.rows.any { it.kind == "withdraw" }) Body(c.say("confirm.withdraw_stays"))
-    if (!empty) Stress(if (single != null) c.say("confirm.listed_single", "platform" to single) else c.say("confirm.listed_together"), Modifier.padding(top = 12.dp))
+    view.withdrawStays?.let { Body(it) }
+    // Several platforms: as plain to see as the list, apart from the points. With one, the first sentence says the account is made public.
+    view.listedTogether?.let { Stress(it, Modifier.padding(top = 12.dp)) }
     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Point(c.say("confirm.no_identity"))
-        Point((if (empty) c.say("confirm.later_withdraw") else c.say("confirm.later")) + c.say("confirm.permanent"))
+        for (point in view.points) Point(point.text, point.strong)
     }
     Actions {
-        Button(m.messages.confirmButton(q, single), Modifier.fillMaxWidth(), primary = true) { m.declare() }
+        Button(view.button, Modifier.fillMaxWidth(), primary = true) { m.declare() }
         Button(c.say("common.back"), Modifier.fillMaxWidth()) { m.backToAccounts() }
     }
     TextButton(c.say("common.cancel")) { m.cancel() }
