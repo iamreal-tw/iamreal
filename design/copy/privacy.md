@@ -1,6 +1,6 @@
 # 隱私權說明
 
-「隱私權說明」那一頁，網址 `iamreal.tw/privacy`。頁尾要連到這裡（`home.md`「頁尾」加上「隱私權說明」，和這一頁一起做）。原則在 `docs/design/principles.md`，尤其是第 3 條「不說得比實際多」：只寫做得到的事，做不到的照實寫。
+「隱私權說明」那一頁，網址 `iamreal.tw/privacy`。每一頁的頁尾連到這裡（`home.md`「頁尾」）。原則在 `docs/design/principles.md`，尤其是第 3 條「不說得比實際多」：只寫做得到的事，做不到的照實寫。
 
 - 這一份是對外的承諾。後台記什麼、留多久、用到哪些業者改了，這一份在同一個 PR 裡改
 - 稱呼用「你」；經營網站的人寫「營運者」，不寫「我們」
@@ -53,9 +53,11 @@
 · 卡片的簽章
 
 過卡的頁面在你的瀏覽器裡只存一樣東西：它用過的廢止清冊的版本號，用來確認下次拿到的清冊不比這次舊。這個值不會送出。
+
+用 app 過卡時，app 在手機上存兩樣東西：它用過的廢止清冊的版本號，和網頁一樣；還有開著過卡提醒時，提醒的間隔、時刻和下次提醒的日子。關掉提醒，這些設定就刪掉。這兩樣都不會送出。
 ```
 
-瀏覽器裡存的東西見 `web/src/storage.ts` 和 ADR-0015。
+瀏覽器裡存的東西見 `web/src/storage.ts` 和 ADR-0015。app 存的見 Android 的 `MainActivity.kt`（廢止清冊的版本號）、`reminder/Phone.kt`（提醒），iOS 的 `CRLNumbers.swift`、`Reminder.swift`；提醒是手機自己排的通知，不經過營運者（#297）。過卡裝置編號（第 7 段）app 還沒有，有了之後這一段和第 7 段一起改。
 
 ## 4. 持卡人：送出、而且公開的
 
@@ -222,10 +224,12 @@ iamreal.tw 整個放在 Cloudflare 上：頁面、後台、證明紀錄和連線
 
 · Threads：營運者不和 Threads 交換資料。島民證明的頁面會向 Threads 載入個人檔案，見上面。
 
+· Apple 和 Google：app 從 App Store、Google Play 安裝。商店自己收安裝數、各版本的使用量和當機報告；當機報告只來自在手機設定裡同意分享給開發者的人，營運者看得到報告，不知道是誰。這些照 Apple 的隱私權政策和 Google 的隱私權政策處理。
+
 · 寫信給營運者：信和你的信箱位址留在營運者的信箱（Gmail）裡。
 ```
 
-讀卡元件那一條和常見問題的 `/faq#security` 說法相同。
+讀卡元件那一條和常見問題的 `/faq#security` 說法相同。Apple 和 Google 那一條照「app 的計數、當機回報和商店的隱私標示」（#94）的第 6 點；「Apple 的隱私權政策」連到 https://www.apple.com/legal/privacy/ ，「Google 的隱私權政策」連到 https://policies.google.com/privacy 。
 
 ## 13. 保存多久
 

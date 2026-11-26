@@ -483,6 +483,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `/verify` | 如何驗證證明紀錄（`design/copy/verify.md`） | Worker 產生，不問證明紀錄 |
 | `/check` | 如何檢查 Threads 帳號的島民證明（`design/copy/check.md`） | Worker 產生，不問證明紀錄 |
 | `/prepare` | 過卡需要什麼（`design/copy/prepare.md`） | Worker 產生，不問證明紀錄 |
+| `/privacy` | 隱私權說明（`design/copy/privacy.md`）；每一頁的頁尾和兩個 app 的設定頁連到這裡 | Worker 產生，不問證明紀錄 |
 | `/hang` | 掛上去，從首頁點進來時（`design/copy/hang.md`） | Worker 產生，不問證明紀錄 |
 | `/hang/<短編號>` | 掛上去，帶著一張島民證明（`design/copy/hang.md`） | Worker 產生，短編號讀得成才問證明紀錄 |
 | `/copy.js` | 複製按鈕的程式，只有 `/faq`、`/verify` 和 `/hang/<短編號>` 載入；在常見問題上也展開網址指到的那一題 | Static Assets 直接送 `site/copy.js`，不跑 Worker |

@@ -125,6 +125,7 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
     ["/verify", 200, true],
     ["/check", 200],
     ["/prepare", 200],
+    ["/privacy", 200],
     ["/hang", 200, true],
     ["/no-such-page", 404],
   ];

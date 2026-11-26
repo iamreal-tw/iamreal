@@ -54,10 +54,12 @@ const testBuild = build("test", values);
 test("the only addresses in the deploy build are MOICA's two, the ones crl/README.md gives, and the ones the pages write", () => {
   checkAddresses(deploy);
   // The pages' are the repository, Threads, the site's own domain (the link /hang/<short ID> copies), MOICA's site
-  // (the two links of /prepare) and the maintainer's blog (the FAQ's 誰在做島民證明？), each over HTTPS. (The data
+  // (the two links of /prepare), the maintainer's blog (the FAQ's 誰在做島民證明？) and the privacy policies /privacy links to
+  // (Cloudflare's, Apple's, Google's), each over HTTPS. (The data
   // domain is in the card proof page's policy, which is in site/_headers and no longer in the Worker.)
-  for (const address of PAGE_ADDRESSES) assert.match(address, /^https:\/\/((github\.com|www\.threads\.com|moica\.nat\.gov\.tw|\$\{site\.host\})[/;]|opasschang\.com$)/);
-  assert.ok(!deploy.code.includes("data.iamreal.tw") && !deploy.code.includes("Document-Isolation-Policy"), "the deploy build has nothing of the card proof page's headers");
+  for (const address of PAGE_ADDRESSES) assert.match(address, /^https:\/\/((github\.com|www\.threads\.com|moica\.nat\.gov\.tw|\$\{site\.host\})[/;]|opasschang\.com$|www\.cloudflare\.com\/privacypolicy\/$|www\.apple\.com\/legal\/privacy\/$|policies\.google\.com\/privacy$)/);
+  // The data domains as origins: the privacy statement names them as words (privacy.md, sections 1 and 5).
+  assert.ok(!deploy.code.includes("https://data.iamreal.tw") && !deploy.code.includes("https://test-data.iamreal.tw") && !deploy.code.includes("Document-Isolation-Policy"), "the deploy build has nothing of the card proof page's headers");
   assert.throws(() => checkAddresses({ ...deploy, code: `${deploy.code}\nfetch("https://example.org/");` }));
 });
 
