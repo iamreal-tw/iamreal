@@ -1,0 +1,1761 @@
+{
+  "spec": "counts",
+  "status": "draft",
+  "note": "table: every code of spec/counts.md and the clients it is for, as an implementation has it. cases: a parsed count, and whether it is taken or dropped whole.",
+  "generated_by": "protocol/test/generate/counts.ts",
+  "table": {
+    "clients": [
+      "web",
+      "android",
+      "ios"
+    ],
+    "events": [
+      "page",
+      "step",
+      "stop",
+      "retry",
+      "action",
+      "duration"
+    ],
+    "pages": [
+      "home",
+      "card",
+      "account",
+      "proof_log",
+      "faq",
+      "verify",
+      "check",
+      "prepare",
+      "privacy",
+      "hang"
+    ],
+    "steps": {
+      "open": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "read": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "component": [
+        "web"
+      ],
+      "certificates": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "certificate": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "config": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "circuit": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "engine": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "crl": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "tree": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "checked": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "pin": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "scope_signed": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "state": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "chosen": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "confirmed": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "challenge": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "code_signed": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "proved": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "done": [
+        "web",
+        "android",
+        "ios"
+      ]
+    },
+    "reasons": {
+      "component_unreachable": [
+        "web"
+      ],
+      "no_reader": [
+        "web"
+      ],
+      "no_card": [
+        "web"
+      ],
+      "popup_blocked": [
+        "web"
+      ],
+      "nfc_off": [
+        "android",
+        "ios"
+      ],
+      "no_nfc": [
+        "android",
+        "ios"
+      ],
+      "no_tap": [
+        "android",
+        "ios"
+      ],
+      "tap_cancelled": [
+        "android",
+        "ios"
+      ],
+      "other_card": [
+        "android",
+        "ios"
+      ],
+      "pin_maybe_received": [
+        "android",
+        "ios"
+      ],
+      "channel": [
+        "android",
+        "ios"
+      ],
+      "first_generation": [
+        "android",
+        "ios"
+      ],
+      "pin_incorrect": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "card_locked": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "card_error": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "card_signature": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "no_certificate": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "cert_expired": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "cert_not_yet_valid": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "cert_not_citizen_primary": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "cert_unsupported_format": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "cert_unknown_issuer": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "cert_ambiguous": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "crl_unavailable": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "crl_hash": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "crl_unusable": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "crl_rollback": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "crl_stale": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "revoked": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "artifact": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "engine": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "proof_check": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "challenge_malformed": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "challenge_not_today": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "date_changed": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "idle": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "state": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "app_too_old": [
+        "android",
+        "ios"
+      ],
+      "username": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "blocked_switch_limit": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "blocked_empty": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "blocked_daily_limit": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_network": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_malformed_response": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_paused": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_rate_limited": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_busy": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_internal": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_crl_stale": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_challenge_unknown": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_challenge_used": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_challenge_attempts": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_proof": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_root": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_date_order": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_empty": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_switch_limit": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_daily_limit": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_switch_restricted": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_malformed": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_scope": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_platform": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "server_other": [
+        "web",
+        "android",
+        "ios"
+      ]
+    },
+    "card_proof_actions": {
+      "tap_dropped": [
+        "android",
+        "ios"
+      ],
+      "resubmit": [
+        "web",
+        "android",
+        "ios"
+      ]
+    },
+    "visitor_actions": {
+      "start_card_proof": [
+        "web"
+      ],
+      "download_app_android": [
+        "web"
+      ],
+      "download_app_ios": [
+        "web"
+      ],
+      "copy_proof_link": [
+        "web"
+      ]
+    },
+    "taps": [
+      "1",
+      "2",
+      "3"
+    ],
+    "timed_steps": {
+      "crl": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "tree": [
+        "web",
+        "android",
+        "ios"
+      ],
+      "proved": [
+        "web",
+        "android",
+        "ios"
+      ]
+    },
+    "durations": [
+      "lt_1s",
+      "1s_3s",
+      "3s_10s",
+      "10s_30s",
+      "30s_60s",
+      "1m_3m",
+      "gt_3m"
+    ],
+    "sources": [
+      "none",
+      "domain"
+    ],
+    "browsers": [
+      "chrome",
+      "edge",
+      "firefox",
+      "safari",
+      "samsung",
+      "other"
+    ],
+    "oses": [
+      "windows",
+      "macos",
+      "linux",
+      "chromeos",
+      "android",
+      "ios",
+      "other"
+    ]
+  },
+  "cases": [
+    {
+      "name": "web, a step",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": true
+    },
+    {
+      "name": "web, the step only the web page has",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "component"
+      },
+      "taken": true
+    },
+    {
+      "name": "web, the last step",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "done"
+      },
+      "taken": true
+    },
+    {
+      "name": "android, a step, with no browser and no operating system",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "certificates"
+      },
+      "taken": true
+    },
+    {
+      "name": "ios, a step",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "scope_signed"
+      },
+      "taken": true
+    },
+    {
+      "name": "web, stopped: no card reader",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "stop",
+        "reason": "no_reader"
+      },
+      "taken": true
+    },
+    {
+      "name": "web, stopped: the certificate is on the CRL",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "stop",
+        "reason": "revoked"
+      },
+      "taken": true
+    },
+    {
+      "name": "web, stopped: a code the server answered",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "stop",
+        "reason": "server_challenge_attempts"
+      },
+      "taken": true
+    },
+    {
+      "name": "web, to be tried again: the PIN was wrong",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "retry",
+        "reason": "pin_incorrect"
+      },
+      "taken": true
+    },
+    {
+      "name": "web, to be tried again: the browser blocked the window",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "retry",
+        "reason": "popup_blocked"
+      },
+      "taken": true
+    },
+    {
+      "name": "android, stopped: NFC is off",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "stop",
+        "reason": "nfc_off"
+      },
+      "taken": true
+    },
+    {
+      "name": "ios, stopped: another card at the second tap",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "stop",
+        "reason": "other_card"
+      },
+      "taken": true
+    },
+    {
+      "name": "ios, stopped: the app is too old",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "stop",
+        "reason": "app_too_old"
+      },
+      "taken": true
+    },
+    {
+      "name": "ios, the card left during the second tap",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "action",
+        "action": "tap_dropped",
+        "tap": "2"
+      },
+      "taken": true
+    },
+    {
+      "name": "android, the card left during the first tap",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "action",
+        "action": "tap_dropped",
+        "tap": "1"
+      },
+      "taken": true
+    },
+    {
+      "name": "web, the record sent again",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "action",
+        "action": "resubmit"
+      },
+      "taken": true
+    },
+    {
+      "name": "web, how long the proof took",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "duration",
+        "step": "proved",
+        "took": "10s_30s"
+      },
+      "taken": true
+    },
+    {
+      "name": "android, how long the tree took",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "duration",
+        "step": "tree",
+        "took": "lt_1s"
+      },
+      "taken": true
+    },
+    {
+      "name": "web, with versions and the card reader's name",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "pin",
+        "browser_version": "131.0.6778.86",
+        "os_version": "10.0",
+        "reader": "Generic Smart Card Reader 0"
+      },
+      "taken": true
+    },
+    {
+      "name": "ios, with versions",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "done",
+        "os_version": "18.1.1",
+        "app_version": "1.4"
+      },
+      "taken": true
+    },
+    {
+      "name": "the members in another order",
+      "count": {
+        "step": "read",
+        "os": "macos",
+        "browser": "firefox",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "event": "step",
+        "client": "web"
+      },
+      "taken": true
+    },
+    {
+      "name": "a page",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home"
+      },
+      "taken": true
+    },
+    {
+      "name": "a proof page, with its short ID",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "card",
+        "short_id": "7K2Q9FM4XD"
+      },
+      "taken": true
+    },
+    {
+      "name": "an account's page, without the account",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "account"
+      },
+      "taken": true
+    },
+    {
+      "name": "a visitor's action",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "action",
+        "action": "start_card_proof"
+      },
+      "taken": true
+    },
+    {
+      "name": "a visitor's action on a proof page",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "action",
+        "action": "download_app_ios"
+      },
+      "taken": true
+    },
+    {
+      "name": "not an object",
+      "count": [
+        {
+          "client": "web",
+          "device_id": "0123456789abcdef0123456789abcdef",
+          "attempt_id": "fedcba9876543210fedcba9876543210",
+          "browser": "chrome",
+          "os": "windows",
+          "event": "step",
+          "step": "read"
+        }
+      ],
+      "taken": false
+    },
+    {
+      "name": "null",
+      "count": null,
+      "taken": false
+    },
+    {
+      "name": "a string",
+      "count": "step",
+      "taken": false
+    },
+    {
+      "name": "an empty object",
+      "count": {},
+      "taken": false
+    },
+    {
+      "name": "no client",
+      "count": {
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "no event",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "a client the table has not",
+      "count": {
+        "client": "desktop",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "an event the table has not",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "error",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "a value that is a number",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "action",
+        "action": "tap_dropped",
+        "tap": 2
+      },
+      "taken": false
+    },
+    {
+      "name": "a value that is null",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "reader": null
+      },
+      "taken": false
+    },
+    {
+      "name": "a value that is an object",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": {
+          "code": "read"
+        }
+      },
+      "taken": false
+    },
+    {
+      "name": "a step the table has not",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "reading"
+      },
+      "taken": false
+    },
+    {
+      "name": "a step in capitals",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "READ"
+      },
+      "taken": false
+    },
+    {
+      "name": "the web page's step from an app",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "component"
+      },
+      "taken": false
+    },
+    {
+      "name": "a reason the table has not",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "stop",
+        "reason": "out_of_memory"
+      },
+      "taken": false
+    },
+    {
+      "name": "an app's reason from the web page",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "stop",
+        "reason": "nfc_off"
+      },
+      "taken": false
+    },
+    {
+      "name": "the web page's reason from an app",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "stop",
+        "reason": "popup_blocked"
+      },
+      "taken": false
+    },
+    {
+      "name": "a reason that is an error's text",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "stop",
+        "reason": "TypeError: Cannot read properties of undefined"
+      },
+      "taken": false
+    },
+    {
+      "name": "an action the table has not",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "action",
+        "action": "share"
+      },
+      "taken": false
+    },
+    {
+      "name": "an app's action from the web page",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "action",
+        "action": "tap_dropped",
+        "tap": "1"
+      },
+      "taken": false
+    },
+    {
+      "name": "a tap that is no tap",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "action",
+        "action": "tap_dropped",
+        "tap": "4"
+      },
+      "taken": false
+    },
+    {
+      "name": "a dropped tap without which tap",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "action",
+        "action": "tap_dropped"
+      },
+      "taken": false
+    },
+    {
+      "name": "a tap with another action",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "action",
+        "action": "resubmit",
+        "tap": "1"
+      },
+      "taken": false
+    },
+    {
+      "name": "a duration of a step that is not timed",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "duration",
+        "step": "pin",
+        "took": "lt_1s"
+      },
+      "taken": false
+    },
+    {
+      "name": "a duration in milliseconds",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "duration",
+        "step": "proved",
+        "took": "12345"
+      },
+      "taken": false
+    },
+    {
+      "name": "a duration without how long",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "duration",
+        "step": "proved"
+      },
+      "taken": false
+    },
+    {
+      "name": "a browser the table has not",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "netscape",
+        "os": "windows",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "a whole User-Agent as the browser",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "os": "windows",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "an operating system the table has not",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows 11",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "a page the table has not",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "admin"
+      },
+      "taken": false
+    },
+    {
+      "name": "a page from an app",
+      "count": {
+        "client": "android",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "event": "page",
+        "page": "home"
+      },
+      "taken": false
+    },
+    {
+      "name": "a step with a reason",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "reason": "no_reader"
+      },
+      "taken": false
+    },
+    {
+      "name": "a stop without a reason",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "stop"
+      },
+      "taken": false
+    },
+    {
+      "name": "a stop with a step",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "stop",
+        "reason": "no_reader",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "a member the table has not",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "note": "anything"
+      },
+      "taken": false
+    },
+    {
+      "name": "a member named __proto__",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "__proto__": "anything"
+      },
+      "taken": false
+    },
+    {
+      "name": "a member named constructor",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "constructor": "anything"
+      },
+      "taken": false
+    },
+    {
+      "name": "a step named after a method of every object",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "toString"
+      },
+      "taken": false
+    },
+    {
+      "name": "a reason named constructor",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "stop",
+        "reason": "constructor"
+      },
+      "taken": false
+    },
+    {
+      "name": "a time",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "time": "2026-11-16T12:00:00Z"
+      },
+      "taken": false
+    },
+    {
+      "name": "an account",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "done",
+        "username": "alice"
+      },
+      "taken": false
+    },
+    {
+      "name": "a scoped ID",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "state",
+        "scoped_id": "7K2Q9FM4XD"
+      },
+      "taken": false
+    },
+    {
+      "name": "an error's message",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "stop",
+        "reason": "card_error",
+        "message": "0x76100006"
+      },
+      "taken": false
+    },
+    {
+      "name": "a card proof without the device ID",
+      "count": {
+        "client": "web",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "a card proof without the attempt ID",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "a card proof with a visit ID",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "a page with the device ID",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "event": "page",
+        "page": "home"
+      },
+      "taken": false
+    },
+    {
+      "name": "a page without the visit ID",
+      "count": {
+        "client": "web",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home"
+      },
+      "taken": false
+    },
+    {
+      "name": "a web count without the browser",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "os": "windows",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "a web count without the operating system",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "an app's count with a browser",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "an app's count with a card reader",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "reader": "ACS ACR122U",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "a web count with an app version",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "app_version": "1.4",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "a page with a version",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "browser_version": "17.4",
+        "event": "page",
+        "page": "home"
+      },
+      "taken": false
+    },
+    {
+      "name": "a proof page without its short ID",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "card"
+      },
+      "taken": false
+    },
+    {
+      "name": "a short ID on another page",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "short_id": "7K2Q9FM4XD"
+      },
+      "taken": false
+    },
+    {
+      "name": "a short ID on a card proof",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "done",
+        "short_id": "7K2Q9FM4XD"
+      },
+      "taken": false
+    },
+    {
+      "name": "an ID of 31 digits",
+      "count": {
+        "client": "web",
+        "device_id": "123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "an ID in capitals",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "FEDCBA9876543210FEDCBA9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "an ID that is a UUID",
+      "count": {
+        "client": "web",
+        "device_id": "01234567-89ab-cdef-0123-456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read"
+      },
+      "taken": false
+    },
+    {
+      "name": "a visit ID that is no hex",
+      "count": {
+        "client": "web",
+        "visit_id": "gggggggggggggggggggggggggggggggg",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home"
+      },
+      "taken": false
+    },
+    {
+      "name": "a short ID in lowercase",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "card",
+        "short_id": "7k2q9fm4xd"
+      },
+      "taken": false
+    },
+    {
+      "name": "a short ID of 9 characters",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "card",
+        "short_id": "7K2Q9FM4X"
+      },
+      "taken": false
+    },
+    {
+      "name": "a short ID with a letter the alphabet has not",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "card",
+        "short_id": "7K2Q9FM4XU"
+      },
+      "taken": false
+    },
+    {
+      "name": "a version with a letter",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "browser_version": "131.0b2"
+      },
+      "taken": false
+    },
+    {
+      "name": "a version of five parts",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "browser_version": "1.2.3.4.5"
+      },
+      "taken": false
+    },
+    {
+      "name": "a version that ends in a dot",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "os_version": "18.1."
+      },
+      "taken": false
+    },
+    {
+      "name": "a version with a part of six digits",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "app_version": "1.123456"
+      },
+      "taken": false
+    },
+    {
+      "name": "an empty version",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "os_version": ""
+      },
+      "taken": false
+    },
+    {
+      "name": "a card reader's name with a hyphen",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "reader": "ACS ACR-122U"
+      },
+      "taken": false
+    },
+    {
+      "name": "a card reader's name of 65 characters",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "reader": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "taken": false
+    },
+    {
+      "name": "a card reader's name with a character outside ASCII",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "reader": "讀卡機"
+      },
+      "taken": false
+    },
+    {
+      "name": "an empty card reader's name",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "reader": ""
+      },
+      "taken": false
+    }
+  ]
+}

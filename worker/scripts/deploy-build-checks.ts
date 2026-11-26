@@ -206,7 +206,8 @@ export function checkNothingOfTheTestBuild(b: BuildContents): void {
  * cleared on, whether card proofs are taken (`CARD_PROOFS_PAUSED`, which
  * the operator changes on the dashboard: README.md, "停止和恢復收過卡") and the
  * name of a rebuild from the proof log the operator asks for
- * (`REBUILD_PROOF_LOG`, changed the same way: README.md, "從證明紀錄重建"): so the issuer keys, MOICA's addresses and the clock cannot be
+ * (`REBUILD_PROOF_LOG`, changed the same way: README.md, "從證明紀錄重建"), the
+ * object that takes the counts and how many a minute holds (README.md, "計數"): so the issuer keys, MOICA's addresses and the clock cannot be
  * read from a setting, and the Worker has no binding to read the files of
  * Static Assets by (`checkSiteFiles`). (A secret set on the Worker with
  * `wrangler secret` is not in the configuration and is not seen here.)
@@ -214,7 +215,7 @@ export function checkNothingOfTheTestBuild(b: BuildContents): void {
 export function checkBindings(wranglerOutput: string): void {
   assert.deepEqual(
     bindingsIn(wranglerOutput),
-    { PROOF_LOG: "Durable Object", DATA: "R2 Bucket", CONNECTION_LOG: "R2 Bucket", RATE_CHALLENGES: "Rate Limit", RATE_CARD_STATE: "Rate Limit", RATE_RECORDS: "Rate Limit", RATE_PUBLIC_READS: "Rate Limit", RATE_PAGES: "Rate Limit", RATE_STARTS: "Rate Limit", PROOF_LOG_OBJECT_NAME: "Environment Variable", PROOF_LOG_KIND: "Environment Variable", CARD_PROOFS_PAUSED: "Environment Variable", REBUILD_PROOF_LOG: "Environment Variable", TEST_PROOF_LOG_CLEARED_ON: "Environment Variable" },
+    { PROOF_LOG: "Durable Object", DATA: "R2 Bucket", CONNECTION_LOG: "R2 Bucket", RATE_CHALLENGES: "Rate Limit", RATE_CARD_STATE: "Rate Limit", RATE_RECORDS: "Rate Limit", RATE_PUBLIC_READS: "Rate Limit", RATE_PAGES: "Rate Limit", RATE_COUNTS: "Rate Limit", RATE_STARTS: "Rate Limit", COUNTS: "Durable Object", COUNT_EVENTS_PER_MINUTE: "Environment Variable", PROOF_LOG_OBJECT_NAME: "Environment Variable", PROOF_LOG_KIND: "Environment Variable", CARD_PROOFS_PAUSED: "Environment Variable", REBUILD_PROOF_LOG: "Environment Variable", TEST_PROOF_LOG_CLEARED_ON: "Environment Variable" },
     "the deploy build's bindings",
   );
 }

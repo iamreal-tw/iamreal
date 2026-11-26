@@ -54,6 +54,8 @@ export interface TestSettings {
   readonly REBUILD_PROOF_LOG?: string;
   /** The date the test log was last cleared on (src/settings.ts), in place of wrangler.jsonc's. */
   readonly TEST_PROOF_LOG_CLEARED_ON?: string;
+  /** How many counts a minute's file holds (src/counts.ts). wrangler.jsonc sets "600". */
+  readonly COUNT_EVENTS_PER_MINUTE?: string;
 }
 
 /**

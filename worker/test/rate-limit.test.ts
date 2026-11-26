@@ -15,7 +15,7 @@ import { block, copyLines, wantLines, wantPreview } from "./copy.ts";
 import { type RateBinding, type TestWorker, startWorker, withRateLimits } from "./harness.ts";
 import { TEST_SCOPE, freshProofLog, newCard, publishG3, sub } from "./records.ts";
 
-const LIMITS: Readonly<Record<RateBinding, number>> = { RATE_CHALLENGES: 3, RATE_CARD_STATE: 4, RATE_RECORDS: 2, RATE_PUBLIC_READS: 5, RATE_PAGES: 6, RATE_STARTS: 50 };
+const LIMITS: Readonly<Record<RateBinding, number>> = { RATE_CHALLENGES: 3, RATE_CARD_STATE: 4, RATE_RECORDS: 2, RATE_PUBLIC_READS: 5, RATE_PAGES: 6, RATE_COUNTS: 7, RATE_STARTS: 50 };
 
 let worker: TestWorker;
 before(async () => {
@@ -57,6 +57,8 @@ const REQUESTS: Readonly<Record<string, { binding: RateBinding; send: (ip: strin
   config: { binding: "RATE_PUBLIC_READS", send: (ip) => ask("/api/v1/config", ip), ok: 200 },
   fingerprint: { binding: "RATE_PUBLIC_READS", send: (ip) => ask("/api/v1/fingerprint", ip), ok: 200 },
   rebuild: { binding: "RATE_PUBLIC_READS", send: (ip) => ask("/api/v1/rebuild", ip), ok: 200 },
+  // Not a count the table has: it is counted against the limit all the same, and answered as any count.
+  counts: { binding: "RATE_COUNTS", send: (ip) => ask("/api/v1/counts", ip, { method: "POST", body: "{}" }), ok: 204 },
   "the home page": { binding: "RATE_PAGES", send: (ip) => ask("/", ip), ok: 200 },
   "a page that asks the proof log nothing": { binding: "RATE_PAGES", send: (ip) => ask("/faq", ip), ok: 200 },
   "an address that is no page": { binding: "RATE_PAGES", send: (ip) => ask("/nothing-here", ip), ok: 404 },
@@ -209,7 +211,7 @@ describe("the limits are settings", () => {
     assert.throws(() => withRateLimits(config.replace("RATE_PAGES", "RATE_OTHER"), { RATE_PAGES: 1 }));
     // Each counter is its own: no two bindings share a namespace.
     const namespaces = [...config.matchAll(/"namespace_id": "([0-9]+)"/g)].map((m) => m[1]);
-    assert.deepEqual([namespaces.length, new Set(namespaces).size], [6, 6]);
+    assert.deepEqual([namespaces.length, new Set(namespaces).size], [7, 7]);
   });
 
   test("another Worker, started with another number for one class, stops that class at that number", async () => {

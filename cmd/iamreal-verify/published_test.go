@@ -201,7 +201,7 @@ func testDataDomain(t *testing.T) map[string][]byte {
 	files["proof-log/"+fingerprintsFileName] = fmt.Appendf(nil, `{"date":"2026-11-24","count":3,"fingerprint":"%s"}`+"\n", fp)
 	// The card state file the server writes with that line: the states
 	// after the three records, by the rules with the archive of testdata/.
-	crls, _, err := openArchive(testIssuerKeys)(filepath.Join("testdata", "archive"), true, nil)
+	crls, _, err := openArchive(testIssuerKeys)(crlFiles{dir: filepath.Join("testdata", "archive")}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

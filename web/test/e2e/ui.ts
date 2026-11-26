@@ -81,6 +81,7 @@ import { build } from "vite";
 import { SITE_DOMAIN, cardPath, handle, presentationOf } from "../../src/platforms.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
 import { shortId } from "iamreal-protocol/scoped-id.ts";
+import { DEVICE_ID_KEY } from "../../src/counts.ts";
 import { STORAGE_KEY_PREFIX } from "../../src/storage.ts";
 import { COPY, fill } from "../../src/ui/copy.ts";
 import { CERT_POLICIES, KEY_USAGE_ENCRYPTION, AUTHORITY_KEY_ID, SUBJECT_KEY_ID, buildTbs, certificate, name, subjectDirectoryAttributes } from "../fixtures/certs.ts";
@@ -2678,10 +2679,14 @@ await tryStep("card proofs stopped: step 1 says so before a card is read; stoppe
  * The next `n` requests the page sends to `pattern` answered here as the server answers too many people:
  * `status`, `{"error":code}`, `Retry-After: 60`; the ones after go on to the Worker. `answered()` counts them.
  */
-async function tooManyOn(pattern: string, status: 429 | 503, code: "rate_limited" | "busy", n = 1): Promise<{ undo: () => Promise<void>; answered: () => number }> {
+async function tooManyOn(pattern: string, status: 429 | 503, code: "rate_limited" | "busy", n = 1, counts?: Record<string, unknown>[]): Promise<{ undo: () => Promise<void>; answered: () => number }> {
   let answered = 0;
-  const undo = await intercept(pattern, async (p) => {
-    if (answered < n) {
+  // With `counts`: every request of the API is seen (one pattern a page), the counts' bodies kept, and only `pattern`'s turned away.
+  const part = pattern.replaceAll("*", "");
+  const undo = await intercept(counts ? "*/api/v1/*" : pattern, async (p) => {
+    const url: string = p.request.url;
+    if (counts && url.endsWith("/api/v1/counts") && typeof p.request.postData === "string") counts.push(JSON.parse(p.request.postData));
+    if (answered < n && (!counts || url.includes(part))) {
       answered++;
       await page.send("Fetch.fulfillRequest", {
         requestId: p.requestId,
@@ -2707,7 +2712,8 @@ await tryStep("too many people: the start turned away before a card is read; the
   await page.waitFor(`[...document.querySelectorAll('main button')].some((b) => b.textContent === ${JSON.stringify(C.common.next)}) || null`, "step 1: 下一步");
   const reads = componentCount();
   for (const [status, code] of [[503, "busy"], [429, "rate_limited"]] as const) {
-    const start = await tooManyOn("*/api/v1/config?start*", status, code);
+    const counted: Record<string, unknown>[] = [];
+    const start = await tooManyOn("*/api/v1/config?start*", status, code, 1, counted);
     try {
       await page.clickButton(C.common.next);
       await page.waitFor(`document.querySelector('[data-busy]') || null`, `step 1: too many people (${status})`, 15_000);
@@ -2715,6 +2721,10 @@ await tryStep("too many people: the start turned away before a card is read; the
       check((await page.text("[data-busy]")) === C.before.busy, `step 1, ${status} ${code}: "${await page.text("[data-busy]")}"`);
       check((await page.eval<string>(`document.querySelector('[data-step]')?.dataset.step`)) === "before" && (await buttonTexts()).includes(C.common.next), `step 1, ${status}: still step 1, 下一步 there to press again`);
       check(componentCount() === reads, `step 1, ${status}: nothing asked of the component, no window of it opened`);
+      // The counts are told, as a retry: step 1 stays (spec/counts.md, "Reasons").
+      await new Promise((r) => setTimeout(r, 300));
+      const told = counted.filter((c) => c.event !== "step").map((c) => `${String(c.event)} ${String(c.reason)}`);
+      check(JSON.stringify(told) === JSON.stringify([`retry server_${code}`]), `step 1, ${status}: one count, a retry with server_${code} (${JSON.stringify(told)})`);
       if (status === 503) await screenshot("busy-1-before");
     } finally {
       await start.undo();
@@ -2825,7 +2835,10 @@ await tryStep("storage", async () => {
     caches: await caches.keys(),
     cookies: document.cookie,
   }))()`);
-  check(JSON.stringify(st.local) === JSON.stringify({ [STORAGE_KEY_PREFIX + "G3"]: String(g3Number) }), `localStorage holds only the CRL number (${g3Number}): ${JSON.stringify(st.local)}`);
+  check(
+    /^[0-9a-f]{32}\.\d{4}-\d{2}-\d{2}$/.test(String(st.local[DEVICE_ID_KEY])) && JSON.stringify({ ...st.local, [DEVICE_ID_KEY]: undefined }) === JSON.stringify({ [STORAGE_KEY_PREFIX + "G3"]: String(g3Number) }),
+    `localStorage holds only the CRL number (${g3Number}) and the card proof device ID with its date: ${JSON.stringify(st.local)}`,
+  );
   check(st.session === 0 && st.idb.length === 0 && st.caches.length === 0 && st.cookies === "", `nothing else stored: ${JSON.stringify(st)}`);
 });
 

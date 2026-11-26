@@ -73,7 +73,10 @@
 //   PIN              from the caller; kept in memory until the second
 //                    signature is made, the flow stops, or IDLE_MS pass
 //                    after the first; never stored
-//   failures         returned to the caller only; no request carries them
+//   failures         returned to the caller; of each, the counts (counts.ts,
+//                    ADR-0032) send one code of a fixed table, and nothing
+//                    else of it: no request carries its text, a path, a
+//                    date, an account or anything read from the card
 import { type AcceptedKind, type CardStateResponse, type Config, type Fetch, NOTHING_TOLD, type PlatformRow, ServerError, type Submission, requestCardState, requestChallenge, requestConfig, submitRecord } from "./api.ts";
 import { type Card, CardError, type CardErrorCode, type CardSignature } from "./card/card.ts";
 import { type CardCertificate, type CertificateProblem, cardKey, selectCertificate } from "./certificate.ts";
@@ -92,10 +95,16 @@ import { EMPTY_SLOT, type Kind, MAX_SWITCHES, type SlotState, applyList, dailyLi
 import { type ProofLog, scopeOf } from "iamreal-protocol/scope.ts";
 import { scopedId, scopedIdText, shortId } from "iamreal-protocol/scoped-id.ts";
 import { byPlatform, isAnyUsername } from "iamreal-protocol/username-format.ts";
+import type { Step } from "iamreal-protocol/counts.ts";
+import { type FlowCounts, reasonOf } from "./counts.ts";
 import type { CrlNumberStore } from "./storage.ts";
 import { bytesOfBigint, equalBytes, wipe } from "iamreal-protocol/bytes.ts";
 
-/** Why the flow stopped. Returned to the caller; never sent to the server (ADR-0016). */
+/**
+ * Why the flow stopped. Returned to the caller. The server is sent one code
+ * for it, chosen from a fixed table (counts.ts, `reasonOf`; ADR-0032), and
+ * nothing else of it.
+ */
 export type Stop =
   /** `detail` is the short code the screen shows with `card_error` (CardError.detail). */
   | { code: "card"; card: CardErrorCode; detail?: string }
@@ -191,7 +200,29 @@ export interface FlowDeps {
   startConfig?: Config | null;
   /** Runs `f` after `ms` milliseconds; returns a function that cancels it. setTimeout in the page; tests replace it with the clock. */
   setTimer?: (ms: number, f: () => void) => () => void;
+  /**
+   * The counts (counts.ts; ADR-0032): told each step reached and why the
+   * flow stopped, and asked for the card proof device ID the submission
+   * carries. They change nothing the flow checks, nor the order; without
+   * them (tests) nothing is counted and the submission carries no ID.
+   */
+  counts?: FlowCounts;
 }
+
+/** The step of the counts' table each thing done is (spec/counts.md, "Steps"). */
+const STEP_OF: Readonly<Record<Progress, Step>> = {
+  component: "component",
+  certificates: "certificates",
+  certificate: "certificate",
+  config: "config",
+  circuit: "circuit",
+  engine: "engine",
+  crl: "crl",
+  tree: "tree",
+  challenge: "challenge",
+  signed: "code_signed",
+  proved: "proved",
+};
 
 /** The longest the PIN, the certificate and the first signature wait for the second signature: 5 minutes. */
 export const IDLE_MS = 5 * 60_000;
@@ -408,6 +439,10 @@ export class CardProofFlow {
   private inStep = false;
   /** resubmit() was called: the submission's earlier answer may have been lost. */
   private resubmitted = false;
+  /** The counts were told this card proof begins (readCard). */
+  private begun = false;
+  /** The counts were told why this card proof stopped (countStop). */
+  private stopCounted = false;
 
   constructor(deps: FlowDeps) {
     this.deps = deps;
@@ -438,9 +473,36 @@ export class CardProofFlow {
     return taiwanDay(this.deps.clock());
   }
 
-  /** Tells the screen a thing is done, unless the flow stopped. */
+  /** Tells the screen and the counts a thing is done, unless the flow stopped. */
   private progress(step: Progress): void {
-    if (!this.stopped) this.deps.onProgress?.(step);
+    if (this.stopped) return;
+    this.reached(STEP_OF[step]);
+    this.deps.onProgress?.(step);
+  }
+
+  /**
+   * Tells the counts a step was reached, unless the flow stopped or the
+   * counts were told why it will: after its stop a card proof has no step.
+   */
+  private reached(step: Step): void {
+    if (!this.stopped && !this.stopCounted) this.deps.counts?.step(step);
+  }
+
+  /**
+   * Tells the counts why the card proof stopped, once: a check in the
+   * background that failed is told when it fails, and not again when the
+   * next step ends the flow on it.
+   */
+  private countStop(stop: Stop): void {
+    if (this.stopCounted) return;
+    this.stopCounted = true;
+    this.deps.counts?.stop(reasonOf(stop));
+  }
+
+  /** A stop that leaves the step to be tried again: the counts are told its code, and it is thrown. */
+  private again(stop: Stop): never {
+    this.deps.counts?.retry(reasonOf(stop));
+    throw new FlowStop(stop);
   }
 
   private timed<T>(step: string, p: Promise<T>): Promise<T> {
@@ -458,7 +520,10 @@ export class CardProofFlow {
   }
 
   private end(stop: Stop): void {
-    if (!this.stopped) this.stopped = stop;
+    if (!this.stopped) {
+      this.stopped = stop;
+      this.countStop(stop);
+    }
     this.phaseValue = "stopped";
     this.dropSecrets();
     this.dropState();
@@ -612,7 +677,15 @@ export class CardProofFlow {
 
   async readCard(): Promise<CardRead> {
     this.expect("start");
-    return this.once(() => this.readCardStep());
+    return this.once(() => {
+      // Once for a flow: reading again after a blocked window is the same card proof.
+      if (!this.begun) {
+        this.begun = true;
+        this.deps.counts?.begin();
+      }
+      this.reached("read");
+      return this.readCardStep();
+    });
   }
 
   private async readCardStep(): Promise<CardRead> {
@@ -622,7 +695,7 @@ export class CardProofFlow {
     } catch (e) {
       this.live();
       // A blocked window sent nothing to the card: the same step can be tried again.
-      if (e instanceof CardError && e.code === "popup_blocked") throw new FlowStop(cardStop(e));
+      if (e instanceof CardError && e.code === "popup_blocked") this.again(cardStop(e));
       this.fail(cardStop(e));
     }
     this.live(...ders);
@@ -648,6 +721,7 @@ export class CardProofFlow {
     this.background.promise.then(
       () => {
         if (this.phaseValue === "checking") this.phaseValue = "ready_for_pin";
+        this.reached("checked");
       },
       () => undefined,
     );
@@ -703,7 +777,10 @@ export class CardProofFlow {
     bg.promise = run().catch((e: unknown) => {
       const stop = toStop(e);
       bg.failed = stop;
-      if (this.phaseValue !== "done" && this.phaseValue !== "stopped") this.deps.onBackgroundStop?.(stop);
+      if (this.phaseValue !== "done" && this.phaseValue !== "stopped") {
+        this.countStop(stop);
+        this.deps.onBackgroundStop?.(stop);
+      }
       throw new FlowStop(stop);
     });
     bg.promise.catch(() => undefined);
@@ -743,7 +820,10 @@ export class CardProofFlow {
 
   async confirmCard(pin: string): Promise<CardStatus> {
     this.expect("checking", "ready_for_pin");
-    return this.once(() => this.confirmCardStep(pin));
+    return this.once(() => {
+      this.reached("pin");
+      return this.confirmCardStep(pin);
+    });
   }
 
   /** The card's state asked again, after the server said too many people to it (cardStateNow). Nothing is signed again. */
@@ -763,7 +843,7 @@ export class CardProofFlow {
       this.live();
       // A wrong PIN or a blocked window does not end the flow: the screen asks
       // again. Nothing is kept, the PIN included.
-      if (e instanceof CardError && (e.code === "pin_incorrect" || e.code === "popup_blocked")) throw new FlowStop(cardStop(e));
+      if (e instanceof CardError && (e.code === "pin_incorrect" || e.code === "popup_blocked")) this.again(cardStop(e));
       this.fail(cardStop(e));
     }
     this.live(signed.signature, signed.certificate);
@@ -777,6 +857,7 @@ export class CardProofFlow {
     }
     this.pin = pin;
     this.scopeSignature = sig;
+    this.reached("scope_signed");
     // The wait for the second signature starts now (IDLE_MS).
     this.startIdleTimer();
     const id = await scopedId(sig, (a, b) => this.deps.prover.hash2(a, b));
@@ -802,7 +883,7 @@ export class CardProofFlow {
       if (tooMany(e)) {
         this.phaseValue = "card_state_failed";
         this.checkIdle();
-        throw new FlowStop(toStop(e));
+        this.again(toStop(e));
       }
       this.fail(toStop(e));
     }
@@ -813,6 +894,7 @@ export class CardProofFlow {
     this.state = state;
     this.status = statusOf(state, this.background!.done!.platforms, idText, today);
     this.phaseValue = "status_known";
+    this.reached("state");
     return this.status;
   }
 
@@ -834,10 +916,18 @@ export class CardProofFlow {
   choose(entries: Choice): Consequence {
     this.expect("status_known", "chosen");
     this.checkIdle();
-    const consequence = this.consequenceOf(entries);
+    let consequence: Consequence;
+    try {
+      consequence = this.consequenceOf(entries);
+    } catch (e) {
+      // A list that is not possible, or an account not in its format: the cardholder changes the list.
+      if (e instanceof FlowStop) this.again(e.stop);
+      throw e;
+    }
     this.chosen = consequence;
     this.choice = { ...entries };
     this.phaseValue = "chosen";
+    this.reached("chosen");
     return consequence;
   }
 
@@ -897,6 +987,7 @@ export class CardProofFlow {
     this.checkStillValid(this.today());
     const accounts = chosen.accounts;
     this.phaseValue = "signing";
+    this.reached("confirmed");
 
     let challenge: unknown;
     try {
@@ -908,7 +999,7 @@ export class CardProofFlow {
         // proceed() asks for a challenge again; the wait for the second signature still counts from the first.
         this.phaseValue = "chosen";
         this.checkIdle();
-        throw new FlowStop(toStop(e));
+        this.again(toStop(e));
       }
       this.fail(toStop(e));
     }
@@ -950,7 +1041,7 @@ export class CardProofFlow {
         // for the second signature still counts from the first.
         this.phaseValue = "chosen";
         this.checkIdle();
-        throw new FlowStop(cardStop(e));
+        this.again(cardStop(e));
       }
       this.fail(cardStop(e));
     }
@@ -1030,7 +1121,7 @@ export class CardProofFlow {
   private async submit(): Promise<Done> {
     const s = this.submission!;
     try {
-      const accepted = await this.timed("submit", submitRecord(this.deps.fetch, s));
+      const accepted = await this.timed("submit", submitRecord(this.deps.fetch, s, this.deps.counts?.deviceId() ?? null));
       this.live();
       return this.done(s, { seq: accepted.seq, recordHash: accepted.recordHash, ordinal: accepted.ordinal, kinds: accepted.kinds });
     } catch (e) {
@@ -1042,7 +1133,7 @@ export class CardProofFlow {
       if (e instanceof ServerError && (e.code === "network" || e.status === 429 || (e.status >= 500 && e.code !== "crl_stale" && e.code !== "paused"))) {
         // The record can be sent again as it is (up to 5 submissions per challenge).
         this.phaseValue = "submit_failed";
-        throw new FlowStop({ code: "server", server: e.code, status: e.status });
+        this.again({ code: "server", server: e.code, status: e.status });
       }
       if (this.resubmitted && e instanceof ServerError && e.code === "challenge_used") return this.foundInCardState(s, e);
       this.fail(toStop(e));
@@ -1059,6 +1150,7 @@ export class CardProofFlow {
    */
   private done(s: Submission, r: Pick<Done, "seq" | "recordHash" | "ordinal" | "kinds">): Done {
     this.phaseValue = "done";
+    this.reached("done");
     this.submission = null;
     const expected = this.chosen!.rows;
     return {
@@ -1114,6 +1206,7 @@ export class CardProofFlow {
     this.expect("submit_failed");
     this.phaseValue = "submitting";
     this.resubmitted = true;
+    this.deps.counts?.action("resubmit");
     return this.submit();
   }
 

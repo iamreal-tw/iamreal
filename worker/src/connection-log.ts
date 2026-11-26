@@ -108,12 +108,14 @@ export async function writeEntry(bucket: R2Bucket, entry: ConnectionLogEntry): P
  * lists its keys in order, so the first key under the prefix is the oldest
  * entry's: one request, whatever the log holds. Throws if the bucket cannot
  * be listed, or if that key is not an entry's: then nothing can be said.
+ * With another `prefix`, the same of what the bucket holds under it, whose
+ * keys begin with a date in the same way (the counts, counts.ts).
  */
-export async function oldestDay(bucket: R2Bucket): Promise<string | null> {
-  const first = (await bucket.list({ prefix: CONNECTION_LOG_PREFIX, limit: 1 })).objects[0];
+export async function oldestDay(bucket: R2Bucket, prefix: string = CONNECTION_LOG_PREFIX): Promise<string | null> {
+  const first = (await bucket.list({ prefix, limit: 1 })).objects[0];
   if (first === undefined) return null;
-  const day = /^(\d{4}-\d{2}-\d{2})\//.exec(first.key.slice(CONNECTION_LOG_PREFIX.length))?.[1];
-  if (day === undefined) throw new Error("the first key of the connection log does not begin with a date");
+  const day = /^(\d{4}-\d{2}-\d{2})\//.exec(first.key.slice(prefix.length))?.[1];
+  if (day === undefined) throw new Error("the first key under the prefix does not begin with a date");
   return day;
 }
 

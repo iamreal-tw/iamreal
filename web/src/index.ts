@@ -5,10 +5,11 @@
 // domain), the clock, the one storage key.
 // The screen (src/ui/) calls startEngine() once when the page opens, then
 // createCardProof() with that engine for each card proof (ADR-0013).
-import { type Config, dataOriginFetch, requestConfig, sameOriginFetch } from "./api.ts";
+import { type Config, type ServerError, dataOriginFetch, requestConfig, sameOriginFetch } from "./api.ts";
 import { BASE } from "./base.ts";
 import type { Card } from "./card/card.ts";
 import { startTreeBuilder, treeWorkerCount } from "./crl/parallel.ts";
+import { type FlowCounts, cardProofCounts } from "./counts.ts";
 import { CardProofFlow, type FlowDeps, tooMany as tooManyOf } from "./flow.ts";
 import { proofEngine } from "./prover/engine.ts";
 import type { Prover } from "./prover/prover.ts";
@@ -26,6 +27,23 @@ const wasmUrl = (): string => new URL(BB_WASM_PATH, location.origin).href;
 /** Starts the page's one proof engine (bb.js, CRS, Noir). Call it once, when the page opens. */
 export function startEngine(onTiming?: (step: string, ms: number) => void): Prover {
   return proofEngine({ fetch: sameOriginFetch, wasmPath: wasmUrl(), onTiming });
+}
+
+let counts: FlowCounts | null = null;
+
+/**
+ * The counts of this page (src/counts.ts; ADR-0032): one for every card
+ * proof made on it. `localStorage` is asked for each time it is used: a
+ * browser that refuses it throws there, and the counts go on without it.
+ */
+export function pageCounts(): FlowCounts {
+  return (counts ??= cardProofCounts({
+    fetch: sameOriginFetch,
+    storage: { getItem: (key) => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value) },
+    clock: () => Date.now(),
+    random: (bytes) => crypto.getRandomValues(bytes as Uint8Array<ArrayBuffer>),
+    userAgent: navigator.userAgent,
+  }));
 }
 
 export function createCardProof(opts: {
@@ -56,25 +74,29 @@ export function createCardProof(opts: {
     onProgress: opts.onProgress,
     idleMs: IDLE_LIMIT_MS,
     startConfig: opts.startConfig ?? null,
+    counts: pageCounts(),
   });
 }
 
 /**
  * The cardholder pressed the button that starts a card proof: `config` asked
  * with the mark of a start (`?start`, docs/api/card-proof.md), the one
- * request counted against the site-wide limit (ADR-0026). `busy` when the
- * server turned it away as too many (429, or 503 `busy`): the screen says so
- * before a card is read. `paused` when card proofs are stopped. The config
+ * request counted against the site-wide limit (ADR-0026). `rate_limited`
+ * (429) or `busy` (503 `busy`) when the server turned it away as too many:
+ * the screen says so before a card is read, the same for both, and the
+ * counts are told which, as a `retry` (step 1 stays, to be pressed again).
+ * `paused` when card proofs are stopped. The config
  * otherwise, for the card proof to fall back on (createCardProof's
  * startConfig); null when there was no answer or none that could be read:
  * the card proof goes on, and the reading asks again.
  */
-export async function askToStart(): Promise<"busy" | "paused" | Config | null> {
+export async function askToStart(): Promise<"busy" | "rate_limited" | "paused" | Config | null> {
   try {
     const config = await requestConfig(sameOriginFetch, { start: true });
     return config.paused ? "paused" : config;
   } catch (e) {
-    return tooManyOf(e) ? "busy" : null;
+    if (!tooManyOf(e)) return null;
+    return (e as ServerError).status === 429 ? "rate_limited" : "busy";
   }
 }
 

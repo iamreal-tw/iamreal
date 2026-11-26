@@ -1,8 +1,9 @@
 // The API under /api/ (docs/api/card-proof.md): challenges, card-state,
-// records and config.
+// records, config and counts.
 //
 // Every answer is JSON with `Cache-Control: no-store` and an `X-Request-Id`
-// of its own; none sets a cookie or a CORS header. The back end keeps a
+// of its own (the answer to a count has no body); none sets a cookie or a
+// CORS header. The back end keeps a
 // connection log of one kind of request and no other (ADR-0022): a
 // submission of a record that the proof log's object counted, written by
 // connection-log.ts with the IP address it came from, kept 31 days. For any
@@ -21,7 +22,9 @@ import { EMPTY_FINGERPRINT } from "iamreal-protocol/record.ts";
 import { EMPTY_SLOT } from "iamreal-protocol/record-rules.ts";
 import { lookupScope } from "iamreal-protocol/scope.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
+import { readCountText } from "iamreal-protocol/counts.ts";
 import { type CountedSubmission, entryOf, writeEntry } from "./connection-log.ts";
+import { countsOf, countsPerMinuteOf } from "./counts.ts";
 import { readStrings } from "./json.ts";
 import { RETRY_AFTER_SECONDS, type RateClass, isOverloaded, withinLimit, withinStarts } from "./rate-limit.ts";
 import { recordVerifies } from "./record-proof.ts";
@@ -34,7 +37,10 @@ import type { ProofVerifier } from "./verify.ts";
 /** The largest request body read, in bytes: a longer one is `malformed`. */
 export const MAX_BODY_BYTES = 64 * 1024;
 
-/** What an endpoint answers: a status and a JSON body. */
+/** The largest count read, in bytes: the longest the table allows is under a third of it. */
+export const MAX_COUNT_BYTES = 2048;
+
+/** What an endpoint answers: a status and a JSON body, or with `undefined` no body. */
 interface Reply {
   readonly status: number;
   readonly body: unknown;
@@ -129,18 +135,18 @@ async function askProofLog<T>(run: () => T | Promise<T>): Promise<T> {
 }
 
 /**
- * The request's body as text, or null if it is longer than MAX_BODY_BYTES or
+ * The request's body as text, or null if it is longer than `most` bytes or
  * not UTF-8. No more than the limit and one byte is kept.
  */
-async function readBody(request: Request): Promise<string | null> {
+async function readBody(request: Request, most: number = MAX_BODY_BYTES): Promise<string | null> {
   if (request.body === null) return "";
   const reader = request.body.getReader();
-  const bytes = new Uint8Array(MAX_BODY_BYTES + 1);
+  const bytes = new Uint8Array(most + 1);
   let length = 0;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    if (length + value.length > MAX_BODY_BYTES) {
+    if (length + value.length > most) {
       await reader.cancel();
       return null;
     }
@@ -289,6 +295,31 @@ async function getRebuild(_request: Request, env: Env): Promise<Reply> {
   return ok(rebuild === null ? { name: null, status: null, records: 0, reason: null } : { name: rebuild.token, status: rebuild.status, records: rebuild.records, reason: rebuild.reason });
 }
 
+/**
+ * `POST /api/v1/counts`: one count (spec/counts.md; ADR-0032, ADR-0039). A
+ * count the table takes goes to the counts' object (counts.ts), as the
+ * reader rebuilt it from the table and with nothing of the request; any
+ * other is dropped whole. The answer is the same either way, and has no
+ * body: a client does not look at it. The proof log's object is not asked,
+ * and nothing is written to the connection log. If the counts' object
+ * cannot be asked, the count is lost and the live log gets one line with
+ * nothing of the count: a count never fails anything.
+ */
+async function postCount(request: Request, env: Env): Promise<Reply> {
+  settings(env);
+  const perMinute = countsPerMinuteOf(env);
+  const text = await readBody(request, MAX_COUNT_BYTES);
+  const count = text === null ? null : readCountText(text);
+  if (count !== null) {
+    try {
+      await countsOf(env).add(count, perMinute);
+    } catch (e) {
+      console.error(JSON.stringify({ event: "count_not_kept", error: e instanceof Error ? e.name : "unknown" }));
+    }
+  }
+  return { status: 204, body: undefined };
+}
+
 /** What the API is given besides the environment: the pieces that are behind an interface, so that each can be replaced by itself. */
 export interface ApiParts {
   /** Verifies the proof of a submitted record (verify.ts). */
@@ -302,7 +333,8 @@ interface Endpoint {
    * (rate-limit.ts; ADR-0026). The three of a card proof each have their
    * own. `config`, `fingerprint` and `rebuild` are public reads, counted
    * together: anyone may ask them at any time, and two of them ask the
-   * proof log's object every time.
+   * proof log's object every time. Counts are a class of their own
+   * (ADR-0032): a page sends several for one card proof.
    */
   readonly rate: RateClass;
   readonly handle: (request: Request, env: Env, parts: ApiParts, notes: Notes) => Promise<Reply>;
@@ -315,6 +347,7 @@ const ENDPOINTS: ReadonlyMap<string, Endpoint> = new Map([
   ["/api/v1/config", { method: "GET", rate: "public_reads", handle: getConfig }],
   ["/api/v1/fingerprint", { method: "GET", rate: "public_reads", handle: getFingerprint }],
   ["/api/v1/rebuild", { method: "GET", rate: "public_reads", handle: getRebuild }],
+  ["/api/v1/counts", { method: "POST", rate: "counts", handle: postCount }],
 ]);
 
 /** Whether the API answers for this path: everything under /api/. */
@@ -377,12 +410,12 @@ export async function api(request: Request, env: Env, parts: ApiParts, later: (w
     void writeEntry(env.CONNECTION_LOG, entryOf(request, id, now(), notes.counted, end)).then(written);
   }
   const headers = new Headers({
-    "Content-Type": "application/json",
+    ...(reply.body !== undefined && { "Content-Type": "application/json" }),
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
     "X-Request-Id": id,
   });
   if (reply.allow !== undefined) headers.set("Allow", reply.allow);
   if (reply.retryAfter !== undefined) headers.set("Retry-After", String(reply.retryAfter));
-  return new Response(JSON.stringify(reply.body), { status: reply.status, headers });
+  return new Response(reply.body === undefined ? null : JSON.stringify(reply.body), { status: reply.status, headers });
 }

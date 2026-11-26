@@ -10,9 +10,10 @@
 |---|---|
 | 清冊鏡像（[排程做什麼](#排程做什麼)）：每小時抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl`，驗章、建樹，寫清冊存檔的索引 `crl/index.jsonl`。`crl/testdata/` 的每一案和 Go 的 `crl/` 比對過 | |
 | 證明紀錄的 Durable Object：題目表、紀錄、卡片狀態表、證明紀錄的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | |
-| 限流（[限流](#限流)）：照 IP 的上限，題目、卡片現況、送出、公開的讀取、頁面五類分開算，IPv4 照單一位址、IPv6 照 /64，超過回 `429` 和 `Retry-After`，訪客頁面回一頁說明；全站的總量上限，只數開始過卡的那一次 `config?start`；Durable Object 撐不住時介面回 `503` `busy`、頁面回人太多的那一頁 | 兩個 app 對 `429`、`busy` 的處理；WAF 的那一條規則和挑戰頁還沒有在測試網站設過 |
-| 連線紀錄（[連線紀錄](#連線紀錄)）：被算了一次的送出一筆各記一個 R2 物件（請求編號、時間、結果、IP、國家代碼、網路業者的編號、過卡裝置編號；成功的加第幾筆，沒成功的加錯誤代碼和內文），留 31 天，靠儲存桶的生命週期規則；每小時公布最舊一筆的日期，讓外面看得出規則有沒有在刪。其他的請求不記。營運者查詢的指令和收到查詢、刪除請求時的做法（[查連線紀錄](#查連線紀錄)） | 讀那個日期的外部檢查（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）；客戶端還沒有帶過卡裝置編號 |
-| API 的六個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`、`GET /api/v1/rebuild`；存著的規則版本和程式不同時、營運者停止收過卡時（[停止和恢復收過卡](#停止和恢復收過卡)），`challenges` 和 `records` 回 `paused` | 全站的總量上限、Durable Object 撐不住時的 `busy`（照 IP 的上限有了，見上一列） |
+| 限流（[限流](#限流)）：照 IP 的上限，題目、卡片現況、送出、公開的讀取、計數、頁面六類分開算，IPv4 照單一位址、IPv6 照 /64，超過回 `429` 和 `Retry-After`，訪客頁面回一頁說明；全站的總量上限，只數開始過卡的那一次 `config?start`；Durable Object 撐不住時介面回 `503` `busy`、頁面回人太多的那一頁 | 兩個 app 對 `429`、`busy` 的處理；WAF 的那一條規則和挑戰頁還沒有在測試網站設過 |
+| 收計數（[計數](#計數)，ADR-0032、ADR-0039）：`POST /api/v1/counts` 照 `spec/counts.md` 的表收，不合的整筆丟掉；收下的交給專門收計數的 Durable Object，每分鐘寫成不公開的儲存桶裡 `count-events/` 底下的一個檔，裡面沒有 IP，留 31 天；每分鐘的明細有上限；每小時公布最舊一檔的日期。送計數的客戶端現在只有網頁版的過卡 | 加總（[#435](https://github.com/iamreal-tw/iamreal/issues/435)）、營運者看數字的那一頁（[#436](https://github.com/iamreal-tw/iamreal/issues/436)）、訪客頁面和兩個 app 送計數（[#275](https://github.com/iamreal-tw/iamreal/issues/275)、[#433](https://github.com/iamreal-tw/iamreal/issues/433)、[#434](https://github.com/iamreal-tw/iamreal/issues/434)）；讀最舊日期的外部檢查還沒打開；這個物件一秒收得了多少還沒量 |
+| 連線紀錄（[連線紀錄](#連線紀錄)）：被算了一次的送出一筆各記一個 R2 物件（請求編號、時間、結果、IP、國家代碼、網路業者的編號、過卡裝置編號；成功的加第幾筆，沒成功的加錯誤代碼和內文），留 31 天，靠儲存桶的生命週期規則；每小時公布最舊一筆的日期，讓外面看得出規則有沒有在刪。其他的請求不記。營運者查詢的指令和收到查詢、刪除請求時的做法（[查連線紀錄](#查連線紀錄)） | 讀那個日期的外部檢查（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）；帶過卡裝置編號的客戶端現在只有網頁版，兩個 app 還沒有 |
+| API 的七個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`、`GET /api/v1/rebuild`、`POST /api/v1/counts`；存著的規則版本和程式不同時、營運者停止收過卡時（[停止和恢復收過卡](#停止和恢復收過卡)），`challenges` 和 `records` 回 `paused` | 限流見上面那一列 |
 | 寫滿 1,000 筆的紀錄檔和它的雜湊清單搬到 R2，讀回來核對過才刪掉 Durable Object 裡的那 1,000 筆（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)） | |
 | 每天台灣時間換日公布證明紀錄：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布證明紀錄](#每天換日公布證明紀錄)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的證明紀錄），重驗通過（[部署後要營運者做的](#每天換日公布證明紀錄)）；清空之後，2026-11-22 公布了營運者用真卡片過卡的那一筆，重驗通過（[#71](https://github.com/iamreal-tw/iamreal/issues/71)） | |
 | 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過；送出一筆時用它驗證 | |
@@ -58,7 +59,7 @@ pnpm local                       # 可加 --port 8080、--data <目錄>
 
 ### `/api/` 底下每個回應
 
-- 都是 JSON，帶 `Cache-Control: no-store`、`X-Content-Type-Options: nosniff` 和自己的 `X-Request-Id`（8 個隨機位元組的十六進位）。不設 cookie，不送 CORS 標頭。
+- 都是 JSON，帶 `Cache-Control: no-store`、`X-Content-Type-Options: nosniff` 和自己的 `X-Request-Id`（8 個隨機位元組的十六進位）。不設 cookie，不送 CORS 標頭。收計數的那一個（[計數](#計數)）回 `204`，沒有內容，也就沒有 `Content-Type`。
 - 不是介面的路徑回 `404` `not_found`；方法不對回 `405` `method_not_allowed`，帶 `Allow`。
 - **後台只替一種請求存連線紀錄**（ADR-0022，[連線紀錄](#連線紀錄)）：帶著後台發過的題目、被算了一次的送出一筆。其他的請求後台不寫任何東西。後台自己出錯（回 `500` `internal`）時另外寫一行，只在即時的輸出看得到，沒有開保存：
 
@@ -87,6 +88,7 @@ pnpm local                       # 可加 --port 8080、--data <目錄>
 | `POST /api/v1/records` | Worker 和 Durable Object 各兩段 | 見[送出一筆](#送出一筆) |
 | `POST /api/v1/card-state` | Worker 檢查格式，Durable Object 讀卡片狀態表 | 場合字串不是這份證明紀錄的、匿名編號不是它唯一的寫法，都是 `malformed`，不問 Durable Object。平台表的每個平台一項；存著的狀態沒有某個平台的名額時，那一項是沒用過的名額。回應沒有 `head` |
 | `GET /api/v1/config` | Worker 自己 | `crl_max_age_days` 是 3；`platforms` 是這份證明紀錄的平台表；`min_app` 是這份證明紀錄的最低版本 |
+| `POST /api/v1/counts` | Worker 檢查，收計數的 Durable Object 收 | 見[計數](#計數)。不問證明紀錄的 Durable Object |
 | `GET /api/v1/fingerprint` | Durable Object | 最近一次公布的那一行：`date`、`count`、`fingerprint`。回的是物件記著自己已經寫進指紋檔、讀回核對過的最後一行，不去讀儲存桶（[每天換日公布證明紀錄](#每天換日公布證明紀錄)）。還沒公布過時 `date` 是 `null`、`count` 是 0、`fingerprint` 是 64 個 0。`paused` 時照常回答。舊後台叫 `head` 的那個介面，Worker 沒有 |
 
 **平台表**寫在 [`protocol/src/platforms.ts`](../protocol/src/platforms.ts)，照證明紀錄分兩張，內容和 `spec/scope.md` 的表一字不差（`protocol/` 的測試拿規格的 Markdown 核對）。後台只從 [`src/settings.ts`](src/settings.ts) 的 `proofLogSettingsOf` 一個地方取得它：`config` 送給裝置的、`card-state` 列的、檢查存著的卡片狀態用的是同一張。這個環境用哪一份證明紀錄，是設定 `PROOF_LOG_KIND`（見[設定檔](#設定檔)）；設定只說是哪一份，表的內容不在設定裡。
@@ -892,7 +894,9 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 | `name` | `iamreal-test` | Worker 的名稱。部署的權杖只能部署這一個 |
 | `workers_dev`、`preview_urls` | `false` | 不開 `workers.dev` 的網址，只走自訂網域 `test.iamreal.tw`。自訂網域在儀表板上設，不在這裡（ADR-0029） |
 | `triggers.crons` | `0 * * * *` | 每小時整點跑一次排程 |
-| `durable_objects` | `PROOF_LOG` → 類別 `ProofLog` | 一份證明紀錄一個 Durable Object |
+| `durable_objects` | `PROOF_LOG` → 類別 `ProofLog`；`COUNTS` → 類別 `Counts` | 一份證明紀錄一個 Durable Object；收計數的是另一個（[計數](#計數)），最上層的 migration `v3` 建它的類別 |
+| `ratelimits` | `RATE_CHALLENGES` 等六個 | 照 IP 的上限，一類一個（[限流](#限流)） |
+| `vars.COUNT_EVENTS_PER_MINUTE` | `600` | 一分鐘的計數明細最多留幾筆（[計數](#計數)）。0 到 100000 的整數；不是的話收計數的介面回 `500` |
 | `r2_buckets` | `DATA` → `iamreal-test-data` | 公開的檔案，經 `test-data.iamreal.tw` 下載（ADR-0027） |
 | `vars.PROOF_LOG_OBJECT_NAME` | `test-3` | 證明紀錄那個 Durable Object 的名稱。清空測試的證明紀錄時換成下一個號碼，用過的名稱不再用（[清空測試的證明紀錄](#清空測試的證明紀錄)）；維持 `test-` 開頭（[證明紀錄和物件的名稱要對得上](#證明紀錄和物件的名稱要對得上)） |
 | `vars.PROOF_LOG_KIND` | `test` | 這個環境用哪一份證明紀錄，`test` 或 `production`。它決定接受哪個場合字串、平台表是哪一張（ADR-0028）；兩者的內容寫在 `protocol/`，不在設定裡。不是這兩個值、或和 `PROOF_LOG_OBJECT_NAME` 對不上時，五個介面和 Worker 產生的每個頁面都回 `500`（Static Assets 的檔案不跑 Worker，照常送） |
@@ -911,7 +915,7 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 
 ## 排程做什麼
 
-每小時一次。先公布連線紀錄最舊一筆的日期（[連線紀錄](#連線紀錄)，和下面的鏡像互不影響），再做一輪清冊鏡像（[`src/mirror.ts`](src/mirror.ts)），照 [`spec/revocation-tree.md`](../spec/revocation-tree.md)。鏡像三步：
+每小時一次。先公布連線紀錄最舊一筆的日期（[連線紀錄](#連線紀錄)）和計數明細最舊一檔的日期（[計數](#計數)），兩件各做各的，和下面的鏡像也互不影響；再做一輪清冊鏡像（[`src/mirror.ts`](src/mirror.ts)），照 [`spec/revocation-tree.md`](../spec/revocation-tree.md)。鏡像三步：
 
 **一、抓和存。**
 
@@ -1294,7 +1298,7 @@ ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限
 
 程式在 [`src/rate-limit.ts`](src/rate-limit.ts)，用的是 Workers 的 [Rate Limiting binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)。
 
-**五類分開算**，一類一個綁定，上限寫在 [`wrangler.jsonc`](wrangler.jsonc) 的 `ratelimits`：
+**六類分開算**，一類一個綁定，上限寫在 [`wrangler.jsonc`](wrangler.jsonc) 的 `ratelimits`：
 
 | 類 | 綁定 | 哪些請求 | 每分鐘（起始值，待維護者定） |
 |---|---|---|---|
@@ -1302,6 +1306,7 @@ ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限
 | 卡片現況 | `RATE_CARD_STATE` | `POST /api/v1/card-state` | 30 |
 | 送出 | `RATE_RECORDS` | `POST /api/v1/records` | 30 |
 | 公開的讀取 | `RATE_PUBLIC_READS` | `GET /api/v1/config`、`fingerprint`、`rebuild`，三個合起來 | 180 |
+| 計數 | `RATE_COUNTS` | `POST /api/v1/counts`（[計數](#計數)） | 120 |
 | 頁面 | `RATE_PAGES` | 每一個跑到 Worker 的頁面請求（`GET`、`HEAD`），找不到的網址也算 | 300 |
 | 全站的總量上限（不照 IP） | `RATE_STARTS` | 只有 `GET /api/v1/config?start`，所有網路合起來 | 60 |
 
@@ -1330,7 +1335,7 @@ ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限
 - 期間只能是 10 或 60 秒（「Must be either 10 or 60」）
 - 「Rate limits are approximate and apply separately in each Cloudflare location.」每個機房各算各的，是近似值：擋得住單一來源的大量請求，不是精確的配額
 - 文件寫「It is not recommended to use IP addresses or locations (regions or countries)」當鍵，理由是很多人可能共用一個 IP。這裡照 ADR-0026 用 IP：上限訂成共用 IP 的家庭或辦公室也用不完的量，擋的是單一來源的大量請求；之後查詢介面發金鑰時，帶金鑰的請求改用金鑰當鍵
-- `namespace_id` 是帳號裡自己取的正整數，「unique within your Cloudflare account」：兩個綁定用同一個就會算在一起。測試環境用 1001 到 1006；正式環境要另外六個
+- `namespace_id` 是帳號裡自己取的正整數，「unique within your Cloudflare account」：兩個綁定用同一個就會算在一起。測試環境用 1001 到 1007；正式環境要另外七個
 
 **改上限**：改 `wrangler.jsonc` 那一行的 `limit`，合併到 `main`，部署後生效。這是「部署會執行到的東西」，營運者看過才合併（`CONTRIBUTING.md`）。照 Cloudflare 的分析裡被擋的量調；被擋的請求後台自己不留紀錄。
 
@@ -1338,7 +1343,7 @@ ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限
 
 ### 全站的總量上限
 
-ADR-0026 的「全站的總量上限」：不照 IP，數的是**每分鐘開始過卡的次數**（`src/rate-limit.ts` 的 `withinStarts`，綁定 `RATE_STARTS`，起始值每分鐘 60 次，待維護者定）。
+ADR-0026 的「全站的總量上限」：不照 IP，數的是**每分鐘開始過卡的次數**（`src/rate-limit.ts` 的 `withinStarts`，綁定 `RATE_STARTS`，起始值每分鐘 60 次，正式上線前照量測重定，[#52](https://github.com/iamreal-tw/iamreal/issues/52)）。
 
 - **只算帶記號的那一次 `config`**：持卡人按下「開始過卡」時，客戶端問 `GET /api/v1/config?start`（`docs/api/card-proof.md`）。所有網路用同一個鍵（`starts`）算。其他時候問的 `config` 不帶記號，不算進這裡，只受上面照 IP 的上限。
 - **超過時**回 `503`，`{"error":"busy"}`，`Retry-After: 60`。網頁版在讀卡之前就停下，說現在人太多，不開內政部元件的視窗。
@@ -1535,6 +1540,44 @@ node --experimental-strip-types scripts/connection-log.ts --from 2026-11-20 --to
 - 怎麼確認寫信來的人就是那些送出的人。只有時間和 IP，任何知道某人 IP 的人都能來問。
 - 收到的請求和處理的經過要不要留紀錄、留在哪裡、留多久（信本身在營運者的信箱裡，隱私權說明第 12 段）。
 - 對不出來（沒有 IP、時間太模糊、已經超過 31 天）時怎麼回覆。
+
+## 計數
+
+客戶端在幾個固定的地方回報「發生了哪一件事」，後台收下來（ADR-0032、ADR-0039；規格 [#431](https://github.com/iamreal-tw/iamreal/issues/431)，這一段是 [#54](https://github.com/iamreal-tw/iamreal/issues/54)）。一筆計數能帶什麼，寫死在一張表：[`spec/counts.md`](../spec/counts.md)，TypeScript 的那一份是 [`protocol/src/counts.ts`](../protocol/src/counts.ts)，後台和網頁版的過卡用同一份，標準答案在 `spec/vectors/counts.json`。後台的程式在 [`src/counts.ts`](src/counts.ts) 和 `src/api.ts` 的 `postCount`。
+
+**收**（`POST /api/v1/counts`）：
+
+- 內容最多 2,048 個位元組。照表讀（`readCount`）：有一個值不在表上、多一個或少一個成員、編號或版本號或讀卡機名稱的格式不對、不是 JSON，整筆丟掉，什麼都不留
+- 收下和丟掉回的都是 `204`，沒有內容。客戶端不看回應
+- 限流另算一類（[限流](#限流)的 `RATE_COUNTS`），照 IP 算。**IP 只用在這裡**：交給 Durable Object 的是讀表時照表重新組出來的那一筆，沒有請求的任何東西（位址、標頭、請求編號）
+- 計數不寫連線紀錄；即時的輸出不寫計數的任何內容。後台自己出錯時才有一行：交不到收計數的物件是 `{"event":"count_not_kept","error":"Error"}`；設定不對（`PROOF_LOG_KIND` 等，和每個介面一樣先讀，或 `COUNT_EVENTS_PER_MINUTE` 不是數字）回 `500`，寫 `internal_error` 那一行
+- 不問證明紀錄的 Durable Object：Worker 檢查完交給另一個物件（綁定 `COUNTS`，類別 `Counts`，名稱固定是 `counts`）。看頁面的量比過卡多得多，不讓它和寫證明紀錄的搶同一個寫入者（ADR-0023）
+
+**存**：
+
+- 那個物件把這一分鐘收到的計數放在記憶體裡。分鐘照收到的時間（UTC），計數自己沒有時刻
+- 一分鐘結束後寫成一個檔，放進不公開的儲存桶 `iamreal-test-logs`（和連線紀錄同一個，綁定也是 `CONNECTION_LOG`）：
+
+  ```
+  count-events/2026-11-26/2026-11-26T14:05Z.json
+  {"minute":"2026-11-26T14:05Z","counts":[{"client":"web","event":"step","step":"read","device_id":"…","attempt_id":"…","browser":"chrome","os":"windows"}],"dropped":0}
+  ```
+
+  `counts` 照收到的順序，每一筆的成員照 `spec/counts.md` 的順序。沒有收下任何一筆的那一分鐘不寫檔
+- 寫檔靠物件裡的一個計時器（`setTimeout`，設在這一分鐘結束後一秒）。用計時器是為了讓物件留在記憶體：Cloudflare 會把閒置的 Durable Object 收掉，能休眠的 10 秒就收，記憶體裡的東西跟著沒了；還有計時器沒跑完的物件不會被收（[Lifecycle of a Durable Object](https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/)，2026-11-26 讀的：休眠的條件之一是「No setTimeout/setInterval scheduled callbacks are set」）。另外設一個 alarm（存在物件的儲存裡）當備用；下一分鐘第一筆計數進來時，上一分鐘還沒寫也會先寫掉
+- **每分鐘最多留 `COUNT_EVENTS_PER_MINUTE` 筆**（[設定檔](#設定檔)，現在 600）。超過的不留，只在那個檔的 `dropped` 記這一分鐘另外來了幾筆：明細的量不由送的人決定。這個數字由 Worker 每次帶給物件，物件自己不讀設定
+- 寫檔失敗時，即時的輸出寫一行 `{"event":"count_events_not_written","minute":"…","error":"Error"}`，那一分鐘的計數就沒了。物件被重啟或換版（部署）時，還在記憶體裡的那一分鐘也沒了。計數只供營運者參考，不補
+- 儲存桶裡三個前綴互不重疊：`connection/`（連線紀錄）、`count-events/`（計數的明細，31 天）、`count-totals/`（加總，永久，[#435](https://github.com/iamreal-tw/iamreal/issues/435)，還沒有）
+
+**31 天後刪除**靠儲存桶的生命週期規則（[營運者在 Cloudflare 和 GitHub 上設的](#營運者在-cloudflare-和-github-上設的)），程式不刪。規則有沒有在刪，和連線紀錄同一種看法（[連線紀錄](#連線紀錄)）：每小時的排程用後台自己的綁定列出 `count-events/` 底下的第一個鍵，把它的日期寫成公開資料的 `count-events/oldest.json`（`{"checked":"<UTC 的時間>","oldest":"<UTC 的日期>"}`，一檔都沒有時 `oldest` 是 `null`）。比今天早超過 33 天時，即時的輸出寫一行 `count_events_overdue`，外部的檢查（`test/outside-check.ts`）也會失敗。不在部署前讀回規則，不用讀 R2 的權杖。外部檢查的那一行現在關著（`COUNT_EVENTS_CHECKED`），等這一版部署、檔案出現之後在另一個 PR 打開。
+
+**測試**：[`test/counts.test.ts`](test/counts.test.ts) 對本機 workerd 上的整個 Worker 送請求，移動時鐘、讓物件的 alarm 響一次，讀 R2 模擬裡的檔。`spec/vectors/counts.json` 的每一案都送一次，檔裡只有表收的那些；檔裡沒有 IP、標頭、請求編號；沒有多出連線紀錄；超過每分鐘上限時明細停在上限、多的記成次數；證明紀錄的 Durable Object 什麼都不回答時計數照收；放一個 34 天前的檔，公布的日期、即時的輸出和外部檢查都看得到。超過照 IP 的上限回 `429` 在 `test/rate-limit.test.ts`。
+
+**還沒在 Cloudflare 上看過的**：
+
+- 這個物件一秒收得了多少（和 [#52](https://github.com/iamreal-tw/iamreal/issues/52) 的量測一起量）
+- 計時器是不是真的讓物件留到那一分鐘寫出來（照文件會；本機的 workerd 不會收掉物件，測不到）
+- 生命週期規則真的刪掉 `count-events/` 的檔：滿 32 天後營運者看一次
 
 ## 停止和恢復收過卡
 
@@ -1757,7 +1800,7 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 | R2 | 儲存桶 `iamreal-test-data`，位置 Automatic、存放等級 Standard；自訂網域 `test-data.iamreal.tw` | `wrangler.jsonc` 的 `r2_buckets`；部署不建任何資源（`--experimental-provision=false`，[第一次部署量到的](#第一次部署量到的)） |
 | R2 儲存桶的 CORS | 只允許 `https://test.iamreal.tw` 用 `GET` | 過卡的頁面從資料網域下載清冊存檔（ADR-0027） |
 | R2 儲存桶的生命週期規則 | `card-state-7-days`：前綴 `proof-log/card-state/`（[#277](https://github.com/iamreal-tw/iamreal/issues/277) 之前是改名之前的目錄），物件建立 7 天後刪除（[#185](https://github.com/iamreal-tw/iamreal/issues/185)） | 程式不刪卡片狀態檔（[每天換日公布證明紀錄](#每天換日公布證明紀錄)「部署後要營運者做的」） |
-| 連線紀錄的儲存桶 `iamreal-test-logs`（[#415](https://github.com/iamreal-tw/iamreal/issues/415)） | Public Access 關著，沒有網域、沒有 CORS。生命週期規則 `connection-31-days`：前綴 `connection/`，物件建立 31 天後刪除。不設 bucket lock | 後台存 IP 的地方，留 31 天（ADR-0022，[連線紀錄](#連線紀錄)）。規則沒有在刪時，公開的 `connection-log/oldest.json` 看得出來 |
+| 連線紀錄的儲存桶 `iamreal-test-logs`（[#415](https://github.com/iamreal-tw/iamreal/issues/415)） | Public Access 關著，沒有網域、沒有 CORS。生命週期規則 `connection-31-days`：前綴 `connection/`，物件建立 31 天後刪除。計數的明細在同一個儲存桶：規則 `count-events-31-days`，前綴 `count-events/`，31 天後刪除（2026-11-26，[#54](https://github.com/iamreal-tw/iamreal/issues/54)）；`count-totals/` 不設規則（[計數](#計數)）。不設 bucket lock | 後台存 IP 的地方，留 31 天（ADR-0022，[連線紀錄](#連線紀錄)）。規則沒有在刪時，公開的 `connection-log/oldest.json` 看得出來 |
 | `test-data.iamreal.tw` 的快取規則 | 可以快取；Edge TTL 選「有 `Cache-Control` 就照它，沒有就不快取」，Browser TTL 照物件的標頭。儀表板沒有「沒有就用 60 秒」這個選項 | 所以後台寫進儲存桶的每個物件都自己設 `Cache-Control`：會變的 60 秒，不會變的一年（[排程做什麼](#排程做什麼)、[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)、[每天換日公布證明紀錄](#每天換日公布證明紀錄)）；沒設的物件不會被快取 |
 | Real User Measurements（Web Analytics） | `iamreal.tw` → Speed → Real user monitoring 選 **Disable completely**（2026-11-21，[#240](https://github.com/iamreal-tw/iamreal/issues/240)）。沒設定過時是開著的：每個 HTML 頁面會被加一個 `static.cloudflareinsights.com` 的 `<script>`（[Static Assets](#static-assets)「Cloudflare 上看過的」最後一段）。正式的網域在第一次部署之前同樣關掉 | 頁面只載入自己網域的資源（`CONTRIBUTING.md`「頁面」）、沒有第三方的程式（ADR-0032）。`test/site-check.ts` 的「沒有一頁有不是自己網站的 script」檢查它 |
 | `iamreal.tw` 這個 zone | 新增網域時關掉「Bot Preference Sync」：它會在網站的 `robots.txt` 前面插入 Cloudflare 的設定；AI 爬蟲的政策留預設 | `robots.txt` 由程式決定 |
@@ -1799,7 +1842,8 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `src/pages/` | 把資料變成 HTML：`html.ts`（跳脫）、`layout.ts`（每一頁的外框、導覽列、頁尾、測試的證明紀錄的標示、程式的 `<script>`）、`home.ts`、`proof.ts`（島民證明）、`account.ts`（查詢頁）、`proof-log-page.ts`（證明紀錄頁和 `?after=` 的讀法）、`record-words.ts`（一筆紀錄做了什麼的寫法，島民證明頁的「全部紀錄」和證明紀錄頁共用）、`faq.ts`（常見問題，首頁的八題也讀它）、`verify.ts`、`hang.ts`、`not-found.ts`（找不到這一頁） |
 | `demo/` | 掛上去的示範的播放程式的原始檔 `player.js`；送出去的是 `site/demo.js` |
 | `site/` | Static Assets 的檔案，Cloudflare 直接送：`pages.css`、`copy.js`、`demo.js`、`favicon.ico`、`fonts/`、`og-image.png`、`_headers`、`_redirects` 在版控裡，`proof/` 放 `web/` 的建置 |
-| `src/api.ts` | `/api/` 底下的介面：路徑和方法、每個回應的標頭、五個介面、後台自己出錯時的那一行 |
+| `src/api.ts` | `/api/` 底下的介面：路徑和方法、每個回應的標頭、每個介面、後台自己出錯時的那一行 |
+| `src/counts.ts` | 收計數的 Durable Object：一分鐘的計數放在記憶體、寫成 `count-events/` 底下的一個檔、每分鐘的上限（[計數](#計數)） |
 | `src/submission.ts` | 讀 `records` 的請求：`malformed`、`scope`、`platform` 各是哪一種 |
 | `src/record-proof.ts` | 從一筆紀錄的欄位重建公開輸入、交給驗證器 |
 | `src/json.ts` | 讀請求的 JSON，鍵重複就拒絕 |

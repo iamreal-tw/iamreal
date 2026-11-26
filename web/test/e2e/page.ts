@@ -5,6 +5,7 @@
 import { dataOriginFetch, sameOriginFetch } from "../../src/api.ts";
 import { FakeCard } from "../../src/card/fake.ts";
 import { startTreeBuilder, treeWorkerCount } from "../../src/crl/parallel.ts";
+import { cardProofCounts } from "../../src/counts.ts";
 import { CardProofFlow, FlowStop } from "../../src/flow.ts";
 import type { IssuerKey } from "../../src/issuers.ts";
 import { BB_WASM_PATH } from "../../src/index.ts";
@@ -57,6 +58,14 @@ async function main() {
 
   const issuers: IssuerKey[] = fx.issuers.map((i) => ({ name: i.name, modulus: BigInt("0x" + i.modulus), bits: i.bits }));
   const signingKey = await crypto.subtle.importKey("pkcs8", b64(fx.cardKeyPkcs8), { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+  // The page's counts, as src/index.ts makes them: one for every card proof of the page.
+  const counts = cardProofCounts({
+    fetch: sameOriginFetch,
+    storage: localStorage,
+    clock: () => Date.now(),
+    random: (bytes) => crypto.getRandomValues(bytes as Uint8Array<ArrayBuffer>),
+    userAgent: navigator.userAgent,
+  });
   const results = [];
   for (const [i, r] of fx.runs.entries()) {
     run = i;
@@ -75,6 +84,7 @@ async function main() {
         prover,
         startTreeBuilder: () => startTreeBuilder(treeWorkerCount(navigator.hardwareConcurrency ?? 1), wasmPath),
         onTiming,
+        counts,
       },
     );
     const start = performance.now();

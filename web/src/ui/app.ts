@@ -40,7 +40,7 @@
 // formats from the server's table (the engine's CardStatus); each
 // platform's prefix, hint and address from src/platforms.ts. ids and data-*
 // attributes are for the headless browser test and hold no value.
-import { type CardProofFlow, type CardStatus, type Config, type Consequence, type Done, FlowStop, type Progress, type Prover, type Stop, askToStart, cardProofsPaused, createCardProof, presentationOf } from "../index.ts";
+import { type CardProofFlow, type CardStatus, type Config, type Consequence, type Done, FlowStop, type Progress, type Prover, type Stop, askToStart, cardProofsPaused, pageCounts, createCardProof, presentationOf } from "../index.ts";
 import type { Card } from "../card/card.ts";
 import { COPY, fill, parts } from "./copy.ts";
 import { button, el, replace, sentence } from "./dom.ts";
@@ -251,7 +251,11 @@ export function startApp(o: AppOptions): void {
       askToStart().then((answer) => {
         start.disabled = false;
         if (!next.isConnected) return;
-        if (answer === "busy") return void next.before(busyLine);
+        if (answer === "busy" || answer === "rate_limited") {
+          // Step 1 stays, to be pressed again: a retry, with the server's code (spec/counts.md).
+          pageCounts().retry(answer === "busy" ? "server_busy" : "server_rate_limited");
+          return void next.before(busyLine);
+        }
         if (answer === "paused") return void next.replaceWith(pausedLine());
         startConfig = answer;
         read();
@@ -325,6 +329,7 @@ export function startApp(o: AppOptions): void {
       // The component's window opens now, in the click (one click, one window).
       if (!card.open()) {
         // Nothing was sent. The same button, once the browser allows the window.
+        pageCounts().retry("popup_blocked");
         message.show(stopMessage({ code: "card", card: "popup_blocked" }));
         return;
       }
@@ -402,6 +407,7 @@ export function startApp(o: AppOptions): void {
       if (value === "") return; // never sent without a PIN
       if (!card.open()) {
         // Nothing was sent, and the PIN went nowhere: typed again, pressed again.
+        pageCounts().retry("popup_blocked");
         message.show(stopMessage({ code: "card", card: "popup_blocked" }));
         field.focus();
         return;
@@ -634,6 +640,7 @@ export function startApp(o: AppOptions): void {
         replace(field.why);
         return u;
       }
+      pageCounts().retry("username");
       showUnder(platform, stopMessage({ code: "username", platform }));
       return null;
     };
@@ -690,7 +697,10 @@ export function startApp(o: AppOptions): void {
       const u = valid(row!.platform);
       if (u === null) return;
       // Withdrawing is the other action: an empty field goes nowhere.
-      if (u === "") return showUnder(row!.platform, stopMessage({ code: "blocked", reason: "empty" }));
+      if (u === "") {
+        pageCounts().retry("blocked_empty");
+        return showUnder(row!.platform, stopMessage({ code: "blocked", reason: "empty" }));
+      }
       const entries = { ...listNow(status), [row!.platform]: u };
       choose(f, entries, (st) => accounts(f, st, { mode: "switch", typed: entries }), showUnder);
     }
@@ -739,6 +749,7 @@ export function startApp(o: AppOptions): void {
       // The component's window for the second signature opens now, in the click.
       if (!card.open()) {
         // Nothing was sent; the PIN stays where it was (the engine, until the wait runs out).
+        pageCounts().retry("popup_blocked");
         message.show(stopMessage({ code: "card", card: "popup_blocked" }));
         return;
       }

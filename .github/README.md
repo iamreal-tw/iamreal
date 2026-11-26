@@ -262,7 +262,7 @@ iamreal-verify -bb <bb> -crs <通用參數目錄> -proof-log test -data https://
 - **執行紀錄裡看得到的**：`iamreal-verify` 在標準錯誤印的每一行（讀哪個網址、公布了幾筆、每一份清冊、雜湊清單、指紋檔、卡片狀態檔的結果，和每一個問題）；標準輸出的前三行（證明紀錄成立時是成立、筆數、指紋；不成立時只有一行，寫壞在第幾行、哪一個代碼）和每一筆無效的紀錄（第幾筆、哪一個代碼）。每一筆有效的紀錄和每張卡片的現況不印：它們在公開的證明紀錄裡，印出來只會讓執行紀錄跟著筆數變長。最後一行是結果和這一次跑了幾秒：
 
   ```
-  reverify: the test proof log at https://test-data.iamreal.tw/ passed: exit code 0, 575 seconds
+  reverify: the test proof log at https://test-data.iamreal.tw/ passed: exit code 0, 75 seconds
   ```
 
 - **什麼時候跑**：排程是 UTC 16:30，台灣時間 00:30。後台在台灣的日期換了之後公布那一天的指紋（[`worker/README.md`「每天換日公布證明紀錄」](../worker/README.md#每天換日公布證明紀錄)）。重驗比公布早跑到時，核對到前一天那一行為止，照樣有結果。GitHub 的排程在尖峰時會延後；公開的程式庫 60 天沒有活動，排程會被停掉（[schedule](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)），要到 Actions 的頁面重新打開。排程只在 `main` 上的那一份工作流程檔跑。手動觸發：Actions 頁面的「Run workflow」，或 `gh workflow run reverify.yml`。
@@ -295,7 +295,7 @@ iamreal-verify -bb <bb> -crs <通用參數目錄> -proof-log test -data https://
 
 **一次超過一小時，就開票做進度檔。** 最後一行印秒數，超過 3,600 秒時再多印一行提醒。
 
-**時間現在幾乎都花在清冊存檔，不在紀錄。** 2026-11-26 在一台 M1 Max 上照這個工作的做法對測試網站跑了一次：1 筆紀錄、58 份清冊（G2、G3 各 29 份），575 秒，其中驗那一筆證明不到一秒，其餘是下載每一份清冊、重新驗章、建樹（`cmd/iamreal-verify/README.md`：內政部大小的清冊一份 5 到 10 秒）。清冊存檔只會變多，測試網站 2026-11-19 部署到那一天是 58 份，一天約 8 份、一份約 10 秒；照這個速度估，約 360 份時一次就超過一小時，大約在 2027 年 1 月上旬，不必等紀錄變多。到那時候要做的進度檔，先記的是「驗過的清冊」那一項（ADR-0025 的進度檔本來就有它）。GitHub 的 runner 上要多久，看第一次手動觸發的執行紀錄。做進度檔時要一起解的：ADR-0025 寫進度檔放 GitHub Actions 的快取，ADR-0029 之後只有 `cache.yml` 能寫快取（[#413](https://github.com/iamreal-tw/iamreal/issues/413)）。工作的上限是 6 小時，GitHub 給一個工作最長的時間。
+**時間幾乎都花在清冊存檔，不在紀錄；現在最大的一項是下載。** 清冊存檔只會變多：內政部每把發證金鑰一天簽 4 份，一天多 8 份、約 103 MB。2026-11-26 在一台 M1 Max 上照這個工作的做法對測試網站跑了一次（1 筆紀錄、58 份清冊，G2、G3 各 29 份，共 746 MB）：74.7 秒，其中下載 40.1 秒（一份約 0.7 秒）、重建索引 32.6 秒（每把金鑰的第一份共 17 秒，之後的每一份約 0.33 秒）、驗那一筆證明和其餘的約 2 秒；記憶體最高 370 MB。同一天改之前是 573.7 秒，幾乎都在建樹：那時每一份清冊的樹都從頭算，一份約 9 秒，一天多約 73 秒（[#439](https://github.com/iamreal-tw/iamreal/issues/439)；`crl/README.md`「重用雜湊」）。照本機的數字估，現在一天多約 8 秒：約 2028 年初一次超過一小時，約 7 年後碰到一個工作 6 小時的上限。這是推估，GitHub 的 runner 上下載和計算的速度不同，實際的秒數看執行紀錄（改之前 runner 上是 481 秒，#439 的內文）。超過一小時要做的進度檔，先記的是「驗過的清冊」那一項（ADR-0025 的進度檔本來就有它）。做進度檔時要一起解的：ADR-0025 寫進度檔放 GitHub Actions 的快取，ADR-0029 之後只有 `cache.yml` 能寫快取（[#413](https://github.com/iamreal-tw/iamreal/issues/413)）。工作的上限是 6 小時，GitHub 給一個工作最長的時間。
 
 **正式的證明紀錄**：`production` 這個工作寫好了，讀 `https://data.iamreal.tw/`，但有一行 `if: false`，不跑。正式網站有了之後，刪掉 `reverify.yml` 裡 `production` 底下的 `if: false` 那一行，和 `worker/test/workflows.ts` 的 `REVERIFY_JOBS` 裡 `production` 的 `if: "false"`（兩邊要一致，測試會擋）。
 
@@ -311,6 +311,7 @@ iamreal-verify -bb <bb> -crs <通用參數目錄> -proof-log test -data https://
 | 清冊存檔的索引裡，G2、G3 最新的可用清冊，日期不早於昨天 | 鏡像停了，或內政部的清冊沒有更新 |
 | 資料網域有今天的卡片狀態檔 `proof-log/card-state/<日期>.jsonl` | 同上，今天沒有公布 |
 | 資料網域的 `connection-log/oldest.json` 讀得懂，`checked` 在 2 小時內，`oldest` 是 `null` 或不早於今天（UTC）的 33 天前（#20；還沒打開，見下面） | 後台沒有在看連線紀錄，或有超過期限還沒刪的 |
+| 資料網域的 `count-events/oldest.json`，同一種讀法、同樣的門檻（#54；還沒打開） | 後台沒有在看計數的明細，或有超過期限還沒刪的 |
 
 門檻和時間：
 
@@ -328,7 +329,7 @@ cd worker
 node --experimental-strip-types test/outside-check.ts
 ```
 
-**連線紀錄那一項（#20）還沒打開。**
+**連線紀錄那一項（#20）和計數那一項（#54）還沒打開。** 計數那一項和連線紀錄的做法相同：後台每小時看計數明細最舊一檔的日期，寫成 `count-events/oldest.json`；由 `COUNT_EVENTS_CHECKED` 關著，等 #54 部署、檔案出現之後打開。下面講連線紀錄的幾點，計數都一樣。
 
 - 後台每小時看一次最舊的連線紀錄，把結果寫成資料網域上的 `connection-log/oldest.json`：`{"checked":"<UTC 的時間>","oldest":"<UTC 的日期>"}`，一筆都沒有時 `oldest` 是 `null`。
 - 這個檢查只讀那一個公開的檔，不讀儲存桶，不握讀 R2 的權杖。
