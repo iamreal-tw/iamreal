@@ -148,13 +148,14 @@ const FAILING_WRITES = {
 } as const;
 type FailingWrite = keyof typeof FAILING_WRITES;
 
+/** The site-wide limit's object: the deployed one, as it is. */
+export { Starts } from "../src/starts.ts";
+
 /**
  * The counts' object of the test build: the deployed one, whose alarm a
  * test rings when it has moved the clock (`POST /__test/counts/alarm`). The
  * alarm it sets for itself goes by the real clock, and is the same handler.
  */
-export { Starts } from "../src/starts.ts";
-
 export class Counts extends DeployedCounts {
   constructor(ctx: DurableObjectState, env: Env) {
     // The bucket is looked up each time it is used: the object lives on while a test turns the bucket's fault on and off.

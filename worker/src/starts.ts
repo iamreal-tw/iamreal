@@ -11,11 +11,15 @@
 //   overloaded by them must not be the one a card proof starts through.
 // - The minutes are those of the clock (UTC). A start that is turned away is
 //   not counted, so a minute of refusals does not lengthen the wait.
-// - The count is held in memory and nothing is stored. When the object is
-//   stopped (a deploy, Cloudflare moving it, or 10 seconds with no start,
-//   https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/)
-//   the minute starts again at zero: that lets more start, never fewer, and
-//   10 seconds with no start is a minute far below any limit.
+// - The count is held in memory and nothing is stored: a write for each
+//   start would cost more than the count is worth. Cloudflare takes an idle
+//   object out of memory after 10 seconds, unless a timer is still to run
+//   (https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/;
+//   counts.ts does the same), so a minute that has a start has a timer that
+//   runs out when the minute is over: a burst, then 10 quiet seconds, does
+//   not start the minute again at zero. When the object is stopped all the
+//   same (a deploy, Cloudflare moving it), the minute starts again at zero:
+//   that lets more start, never fewer.
 import { DurableObject } from "cloudflare:workers";
 import { now } from "#target";
 
@@ -23,6 +27,8 @@ export class Starts extends DurableObject<Env> {
   /** The minute the count is of, as minutes since the epoch, or null before the first start. */
   #minute: number | null = null;
   #started = 0;
+  /** The timer that keeps the object in memory until the minute of the count is over. */
+  #timer: ReturnType<typeof setTimeout> | null = null;
 
   /** Whether one more card proof may start this minute, of at most `perMinute`; counts it if it may. */
   start(perMinute: number): boolean {
@@ -33,6 +39,13 @@ export class Starts extends DurableObject<Env> {
     }
     if (this.#started >= perMinute) return false;
     this.#started++;
+    this.#keepUntilOver();
     return true;
+  }
+
+  /** Starts the timer that runs out when the clock's minute is over, unless it runs already. */
+  #keepUntilOver(): void {
+    if (this.#timer !== null) return;
+    this.#timer = setTimeout(() => (this.#timer = null), 60_000 - (Date.now() % 60_000));
   }
 }

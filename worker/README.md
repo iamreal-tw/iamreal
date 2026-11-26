@@ -1353,7 +1353,7 @@ ADR-0026 的「全站的總量上限」：不照 IP，數的是**每分鐘開始
 - **超過時**回 `503`，`{"error":"busy"}`，`Retry-After: 60`。網頁版在讀卡之前就停下，說現在人太多，不開內政部元件的視窗。
 - 先過照 IP 的上限才算這裡：被照 IP 擋下的請求不佔全站的名額。被這裡擋下的也不算：一分鐘裡被擋的再多，下一分鐘照樣有 60 個名額。
 - 沒有來源位址的請求（本機）也算：沒有網路可以不算。上限遠比一個人在本機過卡的次數大。
-- **誰在數**：一個專用的 Durable Object（[`src/starts.ts`](src/starts.ts)，綁定 `STARTS`，類別 `Starts`，名稱固定是 `starts`）。整個網站只有一份計數，不分機房。分鐘照時鐘（UTC）算；計數只放在記憶體，什麼都不存。物件被停下（部署、Cloudflare 搬它、或 10 秒沒有人開始過卡）時這一分鐘從零重算：只會多放人，不會多擋人，而 10 秒沒有人開始的那一分鐘，遠低於上限。
+- **誰在數**：一個專用的 Durable Object（[`src/starts.ts`](src/starts.ts)，綁定 `STARTS`，類別 `Starts`，名稱固定是 `starts`）。整個網站只有一份計數，不分機房。分鐘照時鐘（UTC）算；計數只放在記憶體，什麼都不存（每次開始過卡都寫一次，成本比計數本身值得的多）。閒置 10 秒的物件會被移出記憶體，計時器還沒跑完的不會（[計數](#計數)也是這樣做）：有人開始過卡的那一分鐘，物件留一個到這一分鐘結束才跑完的計時器，所以一陣請求之後靜 10 秒，這一分鐘不會從零重算。物件還是被停下時（部署、Cloudflare 搬它），這一分鐘從零重算：只會多放人，不會多擋人。
 - **為什麼是另一個物件**：不是證明紀錄的物件，也不是收計數的物件（[計數](#計數)）。計數只受照 IP 的上限，很多網路一起送計數時那個物件可能撐不住，開始過卡不該跟著停；證明紀錄的物件撐不住時，照下一節回 `busy`。
 - **為什麼不用綁定**：原本用的是 Rate Limiting binding，整個網站一個鍵（綁定 `RATE_STARTS`）。綁定的計數在每台機器各一份，實際的上限是 60 乘上收到請求的機器數：測試網站上 2 秒內 80 次 `config?start` 全部回 `200`（2026-11-27，[#466](https://github.com/iamreal-tw/iamreal/issues/466)）。
 - 物件出錯或不在、或設定不是 0 到 100000 的整數時放行，即時的輸出寫一行 `{"event":"rate_limit_unavailable","class":"starts",…}`，和每一類被綁定放行時相同。物件撐不住（`overloaded`）也一樣放行：接著問的證明紀錄的物件撐不住時，自己會回 `busy`。
@@ -1381,9 +1381,10 @@ Durable Object 回 `overloaded`（錯誤帶著 `overloaded: true`，文件說不
 - 動作：Block，期間 10 秒（Free 方案的選項）
 - 打開和關掉：規則列表上的開關。關掉之後只剩 Worker 裡的那一層，而那一層擋不住每次開新連線的來源（上面「這個綁定的性質」）：**每次開新連線的洪水只有這一條擋得住**，上線前一定要設好
 - 被這一條擋下的請求不會跑到 Worker，後台什麼都不知道；看 Security → Events
-- 設好之後驗一次：從一台電腦每次開新連線，平行送 100 次 `POST /api/v1/challenges`，看有沒有被擋下的（被 WAF 擋下的是 Cloudflare 的回應，不是 Worker 的 `429` `rate_limited`）：
+- **上限要訂多少要重新想**：上面寫「寬很多」，是以為 Worker 那一層擋得住單一來源的洪水。現在每次開新連線的洪水只有這一條擋得住，它的上限就是那種洪水能送多少；Worker 裡六類合起來每分鐘約 690 次，約每 10 秒 115 次，比那個寬很多的上限擋不了什麼。由維護者定（[#466](https://github.com/iamreal-tw/iamreal/issues/466)）
+- 設好之後驗一次：從一台電腦每次開新連線，在 10 秒內平行送比規則的上限多的 `POST /api/v1/challenges`（下面的 `N`），看有沒有被擋下的（被 WAF 擋下的是 Cloudflare 的回應，不是 Worker 的 `429` `rate_limited`）：
   ```sh
-  seq 1 100 | xargs -P 20 -I{} curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'content-type: application/json' --data '{}' https://test.iamreal.tw/api/v1/challenges | sort | uniq -c
+  seq 1 N | xargs -P 20 -I{} curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'content-type: application/json' --data '{}' https://test.iamreal.tw/api/v1/challenges | sort | uniq -c
   ```
 
 **二、緊急時的挑戰頁（平時關著）**

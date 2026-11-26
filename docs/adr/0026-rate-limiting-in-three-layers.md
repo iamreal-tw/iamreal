@@ -8,7 +8,7 @@ status: accepted
 >
 > 補充（2026-11-26，[#418](https://github.com/iamreal-tw/iamreal/issues/418)）：再多一種，公開的讀取（`GET /api/v1/config`、`fingerprint`、`rebuild`），三個合起來算。後兩個每次都問 Durable Object；`config` 不問，放在這一類是因為它同樣是誰都能隨時問的讀取。
 >
-> 補充（2026-11-27，[#466](https://github.com/iamreal-tw/iamreal/issues/466)）：Rate Limiting binding 在 Cloudflare 上的計數是每台機器各一份，不是每個機房一份。在測試網站量到：同一條連線送 50 次，第 30 次之後被擋；每次開新連線送 100 次，一次都沒擋。照 IP 的上限因此只擋得住在同一條連線上連發的來源，每次開新連線的來源要靠第二層的 WAF 規則；全站的總量上限改用一個 Durable Object 計數。
+> 補充（2026-11-27，[#466](https://github.com/iamreal-tw/iamreal/issues/466)）：Rate Limiting binding 在 Cloudflare 上的計數是每台機器各一份，不是每個機房一份。在測試網站量到：同一條連線送 50 次，從第 30 次起被擋；每次開新連線送 100 次，一次都沒擋。照 IP 的上限因此只擋得住在同一條連線上連發的來源，每次開新連線的來源要靠第二層的 WAF 規則；全站的總量上限改用一個 Durable Object 計數。
 
 會打到 Durable Object 的請求，由三層限流擋：Cloudflare 自動的 DDoS 防護、一條 WAF 的限流規則、Worker 裡的 Rate Limiting binding。請求多到撐不住時，先放掉過卡，留住訪客的頁面；全站的總量上限擋在「開始過卡」，持卡人在插卡之前就知道現在人太多。
 
@@ -91,8 +91,8 @@ Durable Object 回 `overloaded` 時（文件說這個錯誤不要重試，[error
 - **全站的總量上限擋在題目**：頁面不用改請求的順序；被擋的人已經插卡、輸入過 PIN。
 - **不設總量上限，只靠 Durable Object 自己回 `overloaded`**：撐不住時頁面和過卡一起失敗，沒有誰先讓路。
 - **總量上限用 Rate Limiting binding，整個網站一個鍵**（2026-11-26 到 11-27 用過）：binding 的計數每台機器各一份，總量實際上是上限乘上收到請求的機器數；測試網站上 2 秒內 80 次開始過卡全部放行，上限是 60（[#466](https://github.com/iamreal-tw/iamreal/issues/466)）。
-- **總量上限放在收計數的物件**（ADR-0032）：計數只受照 IP 的上限，很多網路一起送計數就可能讓那個物件撐不住，開始過卡不該跟著停。
-- **照 IP 的上限也搬進 Durable Object**：算得準，IPv6 的 /64 也有，但每個 API 請求都多問一次 Durable Object，限流本來就是為了減少 Durable Object 的負擔。
+- **總量上限放在收計數的物件**（ADR-0032；2026-11-27 補，[#466](https://github.com/iamreal-tw/iamreal/issues/466)）：計數只受照 IP 的上限，很多網路一起送計數就可能讓那個物件撐不住，開始過卡不該跟著停。
+- **照 IP 的上限也搬進 Durable Object**（2026-11-27 補，[#466](https://github.com/iamreal-tw/iamreal/issues/466)）：算得準，IPv6 的 /64 也有，但每個 API 請求都多問一次 Durable Object，限流本來就是為了減少 Durable Object 的負擔。
 - **整站的 I'm Under Attack 模式**：過卡的介面、下載、程式化的讀取全部一起擋。
 - **被擋的請求也記內文**：被打時量大，內文對查問題沒有用。
 
@@ -102,7 +102,7 @@ Durable Object 回 `overloaded` 時（文件說這個錯誤不要重試，[error
 - **通過開始那一關的人，之後仍可能遇到 Durable Object 撐不住。** 那時已經插過卡；畫面讓他重試，不必重新開始。
 - **隱私權說明加挑戰頁的那一段**，和平常不放 cookie 的說法放在一起。
 - **還沒查到、要在測試網站上看的**：WAF 的限流規則會不會連快取命中的請求一起算（所以外層的上限訂得比 Worker 寬很多）；Workers 的快取哪些方案能用、快取命中時 WAF 還跑不跑。（2026-11-27 改，[#466](https://github.com/iamreal-tw/iamreal/issues/466)：原本還列了「Rate Limiting binding 的計數存在哪裡、留多久」，量到的是每台機器各一份，見上面的補充。）
-- **每次開新連線的單一來源，只有 WAF 那一條規則擋得住**（2026-11-27 補，[#466](https://github.com/iamreal-tw/iamreal/issues/466)）：那條規則上線前一定要設好。它照完整的 IP 算，IPv6 換 /64 裡的位址又每次開新連線的來源，兩層都擋不住；被打時先看 Cloudflare 的分析，再決定要不要把照 IP 的上限也搬進 Durable Object。
+- **每次開新連線的單一來源，只有 WAF 那一條規則擋得住**（2026-11-27 補，[#466](https://github.com/iamreal-tw/iamreal/issues/466)）：那條規則上線前一定要設好，上面寫的「上限寬鬆」也要重新定，它的上限就是這種洪水能送多少。它照完整的 IP 算，IPv6 換 /64 裡的位址又每次開新連線的來源，兩層都擋不住；被打時先看 Cloudflare 的分析，再決定要不要把照 IP 的上限也搬進 Durable Object。
 - **頁面真的被輪著打時**，先打開挑戰頁，再把頁面的資料搬出 Durable Object；搬到 KV 還是 D1（ADR-0023 寫的是 D1），到時候再定，資料都從紀錄重建得出來。讀取量量出來撐不到尖峰時也一樣。為了改得快，施工時頁面讀資料經過一個換得掉的介面。這一份的三層不變。
 - **挑戰頁開著的期間**，訪客要先過一次檢查；平台抓連結預覽的程式過不了，那段時間貼出去的島民證明連結可能沒有預覽。
 - 查詢介面的金鑰怎麼申請、額度多少，跟查詢介面一起定。
