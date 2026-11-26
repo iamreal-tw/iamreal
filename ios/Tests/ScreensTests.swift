@@ -530,7 +530,6 @@ final class ScreensTests: XCTestCase {
         let demo = try XCTUnwrap(screens.hangDemo(done, playing: false))
         var long = demo
         long.account = "@" + String(repeating: "abcdefghij", count: 3)
-        long.words.open = copy("done.open_profile", ["account": long.account, "platform": "Threads"])
         var moments: [(String, HangDemo, Double)] = [
             ("copy", demo, 1.7), ("profile", demo, 5.1), ("edit", demo, 7.3), ("links", demo, 9.5), ("paste", demo, 12.7),
             ("pasted", demo, 14.4), ("listed", demo, 16.7), ("result", demo, timeline.duration),

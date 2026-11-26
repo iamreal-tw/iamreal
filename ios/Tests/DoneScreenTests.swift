@@ -105,7 +105,7 @@ final class DoneScreenTests: XCTestCase {
             "在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。",
             "iamreal.tw/p/7K2Q9FM4XD",
             "複製證明連結",
-            "打開 @alice 的 Threads 個人檔案",
+            "打開 Threads",
             // The demonstration: what VoiceOver reads in its place, and its one button.
             "示範：按「複製證明連結」，到 Threads 的個人檔案按「編輯個人檔案」、「連結」、「新增連結」，貼上網址後按「完成」，個人檔案上多了一行連結。",
             "再看一次",
@@ -119,7 +119,7 @@ final class DoneScreenTests: XCTestCase {
         // screen's one main button. The way on is not it, and there is no way back: the record was sent.
         let pair = try XCTUnwrap(screen.blocks.firstIndex(of: .sideBySide([
             Button(label: "複製證明連結", action: .copyLink),
-            Button(label: "打開 @alice 的 Threads 個人檔案", action: .openProfile("threads")),
+            Button(label: "打開 Threads", action: .openProfile("threads"), spoken: "打開 @alice 的 Threads 個人檔案"),
         ])))
         guard case .demo = screen.blocks[pair + 1], case .steps = screen.blocks[pair + 2] else { return XCTFail("the buttons, the demonstration, the four steps: \(screen.blocks)") }
         XCTAssertEqual(inline(screen).map(\.action), [.openProof])
@@ -203,7 +203,7 @@ final class DoneScreenTests: XCTestCase {
         XCTAssertEqual(demo.link, "iamreal.tw/p/7K2Q9FM4XD")
         XCTAssertEqual(demo.address, "https://iamreal.tw/p/7K2Q9FM4XD")
         XCTAssertEqual(demo.words.all, [
-            "島民證明的畫面", "把證明掛上你的 Threads 個人檔案", "複製證明連結", "已複製", "打開 @carol.tw 的 Threads 個人檔案",
+            "島民證明的畫面", "把證明掛上你的 Threads 個人檔案", "複製證明連結", "已複製", "打開 Threads",
             "Threads 的個人檔案（示意）", "編輯個人檔案", "訪客找的就是這一行",
             "按了「編輯個人檔案」之後（示意）", "名稱", "用戶名稱", "個人簡介", "興趣", "連結", "精選",
             "按了「連結」之後（示意）", "新增連結",

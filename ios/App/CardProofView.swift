@@ -375,6 +375,7 @@ struct ScreenView: View {
                 .padding(.horizontal, 12)
         }
         .buttonStyle(Framed(main: main))
+        .accessibilityLabel(button.spoken ?? button.label)
         .disabled(!button.enabled)
         .opacity(button.enabled ? 1 : 0.45)
     }

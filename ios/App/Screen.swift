@@ -245,6 +245,9 @@ struct Button: Equatable {
     var label: String
     var action: Action
     var enabled = true
+    /// What VoiceOver reads in the place of the label, where the label is
+    /// a short form of it.
+    var spoken: String?
 }
 
 /// What a button does. CardProofModel.perform does it.

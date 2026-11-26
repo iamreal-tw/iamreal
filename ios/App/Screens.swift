@@ -595,9 +595,11 @@ struct Screens {
         // knows: the order of the demonstration's first screen, which is this one.
         let profiles = done.accounts.compactMap { account in
             Platform.of(account.platform).map { platform in
+                // The short words, so that the two fit side by side; VoiceOver reads whose profile it opens.
                 Button(
-                    label: copy("done.open_profile", ["account": Platform.handle(account.platform, account.username), "platform": platform.name]),
-                    action: .openProfile(account.platform))
+                    label: copy("hang.open_threads", ["platform": platform.name]),
+                    action: .openProfile(account.platform),
+                    spoken: copy("done.open_profile", ["account": Platform.handle(account.platform, account.username), "platform": platform.name]))
             }
         }
         blocks.append(.sideBySide([Button(label: copied ? copy("done.copied") : copy("hang.copy"), action: .copyLink)] + profiles))
@@ -632,7 +634,7 @@ struct Screens {
             title: copy("hang.title_single", ["platform": threads.name]),
             copy: copy("hang.copy"),
             copied: copy("done.copied"),
-            open: copy("done.open_profile", ["account": handle, "platform": threads.name]),
+            open: copy("hang.open_threads", ["platform": threads.name]),
             kickProfile: copy("app_demo_hang.kick_profile"),
             edit: copy("app_demo_hang.edit"),
             found: copy("app_demo_hang.found"),

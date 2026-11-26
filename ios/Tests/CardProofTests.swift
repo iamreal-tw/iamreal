@@ -187,7 +187,7 @@ final class CardProofTests: XCTestCase {
             "在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。",
             link,
             "複製證明連結",
-            "打開 @alice 的 Threads 個人檔案",
+            "打開 Threads",
             "示範：按「複製證明連結」，到 Threads 的個人檔案按「編輯個人檔案」、「連結」、「新增連結」，貼上網址後按「完成」，個人檔案上多了一行連結。",
             "再看一次",
             "按「編輯個人檔案」", "按「連結」", "按「新增連結」", "在「網址」貼上剛才複製的連結，按右上角的「完成」",
@@ -200,7 +200,7 @@ final class CardProofTests: XCTestCase {
         // The two buttons are side by side, above the demonstration.
         XCTAssertTrue(model.screen.blocks.contains(.sideBySide([
             Button(label: "複製證明連結", action: .copyLink),
-            Button(label: "打開 @alice 的 Threads 個人檔案", action: .openProfile("threads")),
+            Button(label: "打開 Threads", action: .openProfile("threads"), spoken: "打開 @alice 的 Threads 個人檔案"),
         ])))
         // The demonstration, with this card's account and the address of its page. It plays when its picture
         // comes onto the screen (the picture then asks for it, as here): its button stops it, at its last
@@ -243,7 +243,7 @@ final class CardProofTests: XCTestCase {
         let ordinal = try XCTUnwrap(
             html.range(of: #"(?<=<p class="ordinal">第 )[0-9,]+(?= 張島民證明</p>)"#, options: .regularExpression).map { String(html[$0]) },
             "the card's page writes its ordinal")
-        try await press("打開 @alice 的 Threads 個人檔案", in: model)
+        try await press("打開 Threads", in: model)
         XCTAssertEqual(opened.last?.absoluteString, "https://www.threads.com/@alice")
 
         // Step 7: the reminder, offered: three months from today, 9:00 in the evening.
@@ -486,7 +486,10 @@ final class CardProofTests: XCTestCase {
         // Another account: the whole of step 6, for the new account's profile.
         XCTAssertEqual(model.screen.step, 6)
         XCTAssertTrue(model.screen.texts.contains("把證明掛上你的 Threads 個人檔案"))
-        XCTAssertTrue(model.screen.texts.contains("打開 @carol.tw 的 Threads 個人檔案"))
+        XCTAssertTrue(model.screen.blocks.contains(.sideBySide([
+            Button(label: "複製證明連結", action: .copyLink),
+            Button(label: "打開 Threads", action: .openProfile("threads"), spoken: "打開 @carol.tw 的 Threads 個人檔案"),
+        ])))
         XCTAssertFalse(model.screen.texts.contains { $0.hasPrefix("如果你換了新的自然人憑證") })
         // Step 7, asked again (nothing is kept on this phone), and "這次不要": nothing is kept, on to the last step.
         try await press("下一步", in: model)
