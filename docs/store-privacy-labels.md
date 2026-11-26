@@ -42,7 +42,7 @@ App Store 的「App 隱私權」和 Google Play 的「資料安全性」，兩�
 | 6 | 計數：過卡走到哪一步、按了哪些按鈕、感應中途掉線（第幾次感應）、客戶端是 Android 還是 iOS；把同一次過卡的各步接起來的嘗試編號。明細 31 天；加總永久，加總裡沒有編號 | ADR-0032「數什麼」、ADR-0039；隱私權說明第 7 段 | 還沒做（#433、#434） | Usage Data › Product Interaction | Analytics | 是 | App activity › App interactions | Analytics | 必要 |
 | 7 | 計數：停下來時的錯誤代碼。明細 31 天，加總永久 | ADR-0032、ADR-0016；隱私權說明第 7 段 | 還沒做（#433、#434） | Diagnostics › Other Diagnostic Data | Analytics | 是 | App info and performance › Diagnostics | Analytics | 必要 |
 | 8 | 計數：過卡的幾個步驟花了多久，分成寫死的幾級。明細 31 天，加總永久 | ADR-0032「數什麼」；隱私權說明第 7 段 | 還沒做（#433、#434） | Diagnostics › Performance Data | Analytics | 是 | App info and performance › Diagnostics | Analytics | 必要 |
-| 9 | 計數：手機型號、系統版本、app 版本。明細 31 天；加總按月、人數少於 5 的不存 | ADR-0039「計數多帶的」；隱私權說明第 7 段 | 還沒做（#433、#434） | Diagnostics › Other Diagnostic Data（多報） | Analytics | 是 | App info and performance › Diagnostics（多報） | Analytics | 必要 |
+| 9 | 計數：手機型號、系統版本、app 版本。明細 31 天；加總按月 | ADR-0039「計數多帶的」；隱私權說明第 7 段 | 還沒做（#433、#434） | Diagnostics › Other Diagnostic Data（多報） | Analytics | 是 | App info and performance › Diagnostics（多報） | Analytics | 必要 |
 | 10 | 隨每一筆送出、寫進公開的證明紀錄的其他欄位：題目、發證金鑰是第幾代、廢止清冊的樹根、證明。永久 | `spec/record.md`；隱私權說明第 4 段 | 有 | Other Data › Other Data Types（多報） | App Functionality | 是 | 沒有合適的類別，不報（下面第 4 項） | — | — |
 
 各列的類別為什麼這樣選：
