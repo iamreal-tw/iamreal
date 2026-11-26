@@ -496,6 +496,15 @@ export class ProofLog extends DurableObject<Env> {
       // An object that starts has its alarm set, once the constructor has returned (`timedWork` is a subclass's to
       // override): the daily publication is due at a time of day, whether or not anything is asked of the object.
       ctx.waitUntil(Promise.resolve().then(() => this.#setAlarmWithoutFailing()));
+      // A rebuild from the proof log the operator asks for by a name this object has made none for (settings.ts,
+      // `rebuildName`), and only while the operator has stopped taking card proofs: begun once the constructor has
+      // returned (`bucket` is a subclass's to override). It is the object's start that looks: on Cloudflare a changed
+      // setting is a new version of the Worker, and the object starts again with it.
+      const { rebuildName, cardProofsPaused } = this.settings;
+      if (rebuildName !== null && !this.#replaced) {
+        if (cardProofsPaused) ctx.waitUntil(Promise.resolve().then(() => this.beginRebuild(rebuildName)).catch((e: unknown) => logFailure("rebuild_not_begun", e)));
+        else if (rebuildProgress(sql)?.token !== rebuildName) console.log(JSON.stringify({ event: "rebuild_not_begun", reason: "card proofs are not stopped" }));
+      }
     }
   }
 

@@ -287,3 +287,60 @@ describe("after the swap", () => {
     assert.equal((await worker.fetch("/api/v1/challenges", { method: "POST" })).status, 200);
   });
 });
+
+describe("the operator asks for a rebuild by a setting (REBUILD_PROOF_LOG)", () => {
+  const status = async (): Promise<unknown> => (await worker.fetch("/api/v1/rebuild")).json();
+  /** The settings as the dashboard has them after a change, and the object started again with them, as a new version of the Worker starts it. */
+  const set = async (name: string, more: { CARD_PROOFS_PAUSED?: string; REBUILD_PROOF_LOG?: string }): Promise<void> => {
+    await worker.setSettings({ PROOF_LOG_KIND: "test", PROOF_LOG_OBJECT_NAME: name, ...more });
+    await worker.proofLog.restart();
+  };
+
+  test("only while card proofs are stopped: with the name alone nothing begins; stopped, the object begins when it starts, once for the name; GET /api/v1/rebuild says how far it is and how it ended; afterwards card proofs stay stopped until the operator takes them again", async () => {
+    await freshProofLog(worker);
+    const name = await freshProofLog(worker);
+    const root = await publishG3(worker);
+    const cards = await fillTo(root, 4);
+    const before = await computed(cards);
+    assert.deepEqual(await status(), { name: null, status: null, records: 0, reason: null });
+
+    // The name without the stop: nothing begins, and one line says why.
+    await set(name, { REBUILD_PROOF_LOG: "2026-11-27-1" });
+    assert.deepEqual(await status(), { name: null, status: null, records: 0, reason: null });
+    assert.ok(worker.logLines().some((l) => l.includes('"event":"rebuild_not_begun"') && l.includes("card proofs are not stopped")));
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    const five = await computed(cards);
+    assert.notDeepEqual(five, before);
+
+    // Stopped, with the name: begun as the object starts, and the alarm makes its steps.
+    await set(name, { CARD_PROOFS_PAUSED: "true", REBUILD_PROOF_LOG: "2026-11-27-1" });
+    assert.deepEqual(await status(), { name: "2026-11-27-1", status: "running", records: 0, reason: null });
+    assert.equal((await rebuildToItsEnd()).status, "swapped");
+    assert.deepEqual(await status(), { name: "2026-11-27-1", status: "swapped", records: 5, reason: null });
+    assert.deepEqual(await computed(cards), five);
+    // The object starts again with the same name, as it does whenever it has had nothing to do: no second rebuild.
+    await worker.proofLog.restart();
+    assert.deepEqual(await status(), { name: "2026-11-27-1", status: "swapped", records: 5, reason: null });
+    assert.equal(await worker.proofLog.alarmInMs() === null || (await worker.proofLog.rebuildStatus())!.status === "swapped", true);
+    // Card proofs stay stopped: the rebuild does not take them again.
+    assert.equal((await worker.fetch("/api/v1/challenges", { method: "POST" })).status, 503);
+    // Another name while stopped is another rebuild.
+    await set(name, { CARD_PROOFS_PAUSED: "true", REBUILD_PROOF_LOG: "2026-11-27-2" });
+    assert.deepEqual(await status(), { name: "2026-11-27-2", status: "running", records: 0, reason: null });
+    assert.equal((await rebuildToItsEnd()).status, "swapped");
+    // The operator takes card proofs again, the name left as it is: nothing is rebuilt, and a record is written.
+    await set(name, { CARD_PROOFS_PAUSED: "false", REBUILD_PROOF_LOG: "2026-11-27-2" });
+    assert.deepEqual(await status(), { name: "2026-11-27-2", status: "swapped", records: 5, reason: null });
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+  });
+
+  test("a value that is not a name is a mistake made on the dashboard: nothing answers rather than guess", async () => {
+    const name = await freshProofLog(worker);
+    for (const bad of ["a name with spaces", "x".repeat(41), "名字"]) {
+      await worker.setSettings({ PROOF_LOG_KIND: "test", PROOF_LOG_OBJECT_NAME: name, REBUILD_PROOF_LOG: bad });
+      assert.equal((await worker.fetch("/api/v1/config")).status, 500, bad);
+    }
+    await worker.setSettings({ PROOF_LOG_KIND: "test", PROOF_LOG_OBJECT_NAME: name, REBUILD_PROOF_LOG: "" });
+    assert.equal((await worker.fetch("/api/v1/config")).status, 200);
+  });
+});

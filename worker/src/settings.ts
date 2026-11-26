@@ -57,6 +57,17 @@ export interface ProofLogSettings {
    */
   readonly cardProofsPaused: boolean;
   /**
+   * The name of the rebuild from the proof log the operator asks for
+   * (`REBUILD_PROOF_LOG`, ADR-0033; README.md, "從證明紀錄重建"), or null when
+   * none is asked for: absent or the empty string, as wrangler.jsonc has it.
+   * The proof log's object makes one rebuild for each name, when it starts
+   * with a name it has made none for, and only while `cardProofsPaused`
+   * (src/proof-log.ts). A name is 1 to 40 of `A-Za-z0-9._-`: it is written
+   * in the object's log lines and in what `GET /api/v1/rebuild` answers, so
+   * it is nothing that must stay unknown.
+   */
+  readonly rebuildName: string | null;
+  /**
    * For a test log, the date it was last cleared on, `YYYY-MM-DD`
    * (`TEST_PROOF_LOG_CLEARED_ON`; ADR-0028): every page of the site says it
    * beside the mark of a test log. Before the first clearing it is the
@@ -110,5 +121,8 @@ export function proofLogSettingsOf(env: Env): ProofLogSettings {
   // A test log's pages are not served without the date beside their mark.
   const cleared: unknown = (env as { TEST_PROOF_LOG_CLEARED_ON?: unknown }).TEST_PROOF_LOG_CLEARED_ON;
   if (kind === "test" && (typeof cleared !== "string" || parseDay(cleared) === null)) throw new Error("TEST_PROOF_LOG_CLEARED_ON is not a date");
-  return { kind, platforms: platformsOf(kind), minApp: MIN_APP[kind], restrictLateSwitches: restrict === "true", cardProofsPaused: paused === "true", testProofLogClearedOn: kind === "test" ? (cleared as string) : null, siteHost: SITE_HOSTS[kind] };
+  // Declared in wrangler.jsonc as the empty string; any other value that is not a name is a mistake made on the dashboard.
+  const rebuild: unknown = (env as { REBUILD_PROOF_LOG?: unknown }).REBUILD_PROOF_LOG;
+  if (rebuild !== undefined && (typeof rebuild !== "string" || !/^[A-Za-z0-9._-]{0,40}$/.test(rebuild))) throw new Error("REBUILD_PROOF_LOG is not a name");
+  return { rebuildName: rebuild === undefined || rebuild === "" ? null : rebuild, kind, platforms: platformsOf(kind), minApp: MIN_APP[kind], restrictLateSwitches: restrict === "true", cardProofsPaused: paused === "true", testProofLogClearedOn: kind === "test" ? (cleared as string) : null, siteHost: SITE_HOSTS[kind] };
 }
