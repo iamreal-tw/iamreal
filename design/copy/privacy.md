@@ -224,7 +224,7 @@ iamreal.tw 整個放在 Cloudflare 上：頁面、後台、證明紀錄和連線
 
 · Threads：營運者不和 Threads 交換資料。島民證明的頁面會向 Threads 載入個人檔案，見上面。
 
-· Apple 和 Google：app 從 App Store、Google Play 安裝。商店自己收安裝數、各版本的使用量和當機報告；當機報告只來自在手機設定裡同意分享診斷資料的人，營運者看得到報告，不知道是誰。這些照 Apple 的隱私權政策和 Google 的隱私權政策處理。
+· Apple 和 Google：app 從 App Store、Google Play 安裝。商店自己收安裝數、各版本的使用量和當機報告；當機報告只來自在手機設定裡同意分享的人，營運者看得到報告，不知道是誰。這些照 Apple 的隱私權政策和 Google 的隱私權政策處理。
 
 · 寫信給營運者：信和你的信箱位址留在營運者的信箱（Gmail）裡。
 ```
