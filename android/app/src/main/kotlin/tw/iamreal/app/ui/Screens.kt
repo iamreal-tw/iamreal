@@ -1,6 +1,5 @@
 package tw.iamreal.app.ui
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,9 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
@@ -42,6 +39,9 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -52,14 +52,21 @@ import tw.iamreal.app.flow.Platforms
  * What a screen asks of the phone: an address opened outside the app (false when no app on the phone opens it), a text put on the clipboard,
  * a text handed to the system's share sheet.
  */
-internal class Outside(val open: (String) -> Boolean, val copy: (String) -> Unit, val share: (String) -> Unit, val nfcSettings: () -> Unit)
+internal class Outside(
+    val open: (String) -> Boolean,
+    val copy: (String) -> Unit,
+    val share: (String) -> Unit,
+    val nfcSettings: () -> Unit,
+    /** The system's page of the app's notifications. */
+    val notificationSettings: () -> Unit,
+)
 
 /**
- * The six steps (design/copy/card-proof.md), one screen each, laid out
+ * The eight steps (design/copy/card-proof.md), one screen each, laid out
  * after design/screens/card-proof-app-*, and the panel of a tap over them.
  * Every sentence is the copy's; which one is [Messages]'s and [Model]'s to
- * say. No screen links to a page of the site but step 6, whose links are the
- * card's own pages and the platform's; step 1's two links are for someone
+ * say. No screen links to a page of the site but steps 6 and 8, whose links
+ * are the card's own page and the platform's; step 1's two links are for someone
  * without a card yet, who gets no further (docs/design/principles.md, 1).
  */
 @OptIn(ExperimentalComposeUiApi::class)
@@ -68,8 +75,8 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
     // The tags below are the names a test finds the fields by.
     Box(Modifier.fillMaxSize().background(Colours.bg).safeDrawingPadding().imePadding().semantics { testTagsAsResourceId = true }) {
         Column(Modifier.fillMaxSize()) {
-            // The settings from the first and the last step: not while a card proof is under way.
-            val settings = m.step == Step.BEFORE || m.step == Step.DONE
+            // The settings from the first step and from the ones after the submission: not while a card proof is under way.
+            val settings = m.step == Step.BEFORE || m.step.submitted
             Header(m.copy.say("common.service_name"), if (settings) r.app.say("settings.open") else null) { r.openSettings() }
             // Each step starts at its top.
             key(m.step) {
@@ -89,7 +96,9 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
                         Step.ACCOUNTS -> Accounts(m, outside)
                         Step.CONFIRM -> Confirm(m)
                         Step.PROGRESS -> Progress(m)
-                        Step.DONE -> Done(m, r, outside)
+                        Step.HANG -> Hang(m, outside)
+                        Step.REMIND -> RemindStep(r, m.copy, m.done?.validUntil, back = { m.backToHang() }, next = { m.toDone() }, notificationSettings = outside.notificationSettings)
+                        Step.DONE -> Finish(m, r, outside)
                     }
                 }
             }
@@ -410,134 +419,169 @@ private fun Progress(m: Model) {
     }
 }
 
-/** A line across in dashes: between the things that can be done besides (design/DESIGN.md, "線"). */
-@Composable
-private fun DashedRule() = Canvas(Modifier.fillMaxWidth().height(1.dp)) {
-    drawLine(Colours.dot, Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 3.dp.toPx())))
-}
-
 /** The card's proof in small (design/DESIGN.md, "證明卡"): the mark, its accounts, how its short ID begins. No red: it is not the card. */
 @Composable
 private fun SmallCard(c: Copy, accounts: List<Pair<String?, String>>, shortId: String, modifier: Modifier = Modifier) = Column(
-    modifier.background(Colours.bg, RoundedCornerShape(Type.radiusPanel)).border(1.5.dp, Colours.ink, RoundedCornerShape(Type.radiusPanel)).padding(10.dp),
-    verticalArrangement = Arrangement.spacedBy(4.dp),
+    modifier.background(Colours.bg, RoundedCornerShape(Type.radiusPanel)).border(1.5.dp, Colours.ink, RoundedCornerShape(Type.radiusPanel)).padding(16.dp),
+    verticalArrangement = Arrangement.spacedBy(6.dp),
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Logo(Modifier.size(18.dp), animated = true)
-        BasicText(c.say("done.proof"), style = TextStyle(color = Colours.ink, fontSize = 12.sp, fontWeight = Type.weightHeading))
+        Logo(Modifier.size(24.dp), animated = true)
+        BasicText(c.say("done.proof"), style = TextStyle(color = Colours.ink, fontSize = 15.sp, fontWeight = Type.weightHeading))
     }
     Spacer(Modifier.height(4.dp))
     for ((name, account) in accounts) {
-        if (name != null) BasicText(name, style = TextStyle(color = Colours.mute, fontSize = 11.sp))
-        BasicText(account, Modifier.testTag("proof-account"), style = TextStyle(color = Colours.ink, fontSize = Type.sizeBody, lineHeight = 1.2.em, fontWeight = Type.weightAccount))
+        if (name != null) BasicText(name, style = TextStyle(color = Colours.mute, fontSize = Type.sizeSmall))
+        BasicText(account, Modifier.testTag("proof-account"), style = TextStyle(color = Colours.ink, fontSize = Type.sizeH3, lineHeight = 1.2.em, fontWeight = Type.weightAccount))
     }
-    ShortId(c.say("confirm.short_id_label") + " " + c.say("confirm.short_id", "short_id" to shortId), shortId, size = 10.sp, colour = Colours.text)
+    ShortId(c.say("confirm.short_id_label") + " " + c.say("confirm.short_id", "short_id" to shortId), shortId, size = Type.sizeSmall, colour = Colours.text)
 }
 
+/** "打開你的島民證明看看。": the words that open the card's page in the red of what you do, the rest of the sentence as the body. */
 @Composable
-private fun Done(m: Model, r: ReminderModel, outside: Outside) {
+private fun OpensProof(sentence: String, link: String, onOpen: () -> Unit) {
+    val at = sentence.indexOf(link)
+    val words = buildAnnotatedString {
+        if (at < 0) {
+            append(sentence)
+        } else {
+            append(sentence.substring(0, at))
+            withStyle(SpanStyle(color = Colours.you, fontWeight = Type.weightHeading, textDecoration = TextDecoration.Underline)) { append(link) }
+            append(sentence.substring(at + link.length))
+        }
+    }
+    BasicText(
+        words,
+        Modifier.clickable(role = Role.Button, onClick = onOpen).defaultMinSize(minHeight = Type.minTarget).padding(vertical = 8.dp).testTag("open-proof"),
+        style = TextStyle(color = Colours.ink, fontSize = Type.sizeBody, lineHeight = Type.leadingSmall),
+    )
+}
+
+/** The card's link as the screen writes it, without a scheme: what goes on the profile. */
+@Composable
+private fun ProofLink(link: String) =
+    BasicText(link, Modifier.background(Colours.soft).padding(horizontal = 12.dp, vertical = 8.dp).testTag("proof-link"), style = TextStyle(color = Colours.ink, fontSize = 15.sp, fontFamily = Type.mono))
+
+/** What the proof log recorded, as the server says it: shown only where that is not what step 5 said. */
+@Composable
+private fun Recorded(c: Copy, d: CardProof.Done, view: Messages.DoneView) {
+    if (!view.showRecord) return
+    Stress(c.say("done.recorded"), Modifier.padding(top = 20.dp))
+    Body(d.date)
+    view.record?.let { Body(it) }
+    Summary {
+        for (row in view.rows) {
+            SummaryRow(
+                rowName(row.platform, row.known),
+                { SummaryValue(rowAccount(row.platform, row.known, row.username), strong = true) },
+                listOfNotNull(row.kind, row.expected, row.switchUsed),
+                "recorded-${row.platform}",
+            )
+        }
+    }
+    if (view.record != null) Body(c.say("done.short_id", "short_id" to d.shortId))
+}
+
+/**
+ * Step 6: hang the link on the profile, and nothing else (design/copy/card-proof.md, "6. 掛上去", app). Someone back for a card proof
+ * again is asked only whether the link is still there, until "沒有看到連結，重新掛上". No way back: step 5 has submitted.
+ */
+@Composable
+private fun Hang(m: Model, outside: Outside) {
     val c = m.copy
     val d = m.done ?: return
     val url = m.proofUrl(d.shortId)
     val link = "${m.domain}/p/${d.shortId}"
-    var copied by remember { mutableStateOf(false) }
     val view = m.messages.done(d, m.single)
+    val openProof = c.say("done.open_proof")
+    val wide = Modifier.fillMaxWidth()
 
-    // What the proof log recorded is not what step 5 said: first of all, above the title.
+    // What the proof log recorded is not what step 5 said: first of all, above the date.
     view.mismatch?.let { Problem(it, Modifier.testTag("done-mismatch")) }
-    if (view.withdrawAll) {
-        Title(view.title)
-        Body(view.recordedOn)
-    } else {
-        Row(
-            Modifier.fillMaxWidth().background(Colours.soft, RoundedCornerShape(Type.radiusPanel)).padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SmallCard(c, view.card, d.shortId, Modifier.width(120.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Stress(view.title)
-                Small(view.recordedOn, colour = Colours.text)
-            }
-        }
-    }
+    Small(view.recordedOn, colour = Colours.text)
     view.kindsUnreadable?.let { Body(it) }
 
-    // The body: hang the link on the profile (design/copy/hang.md, part 1), without the web's QR code.
-    val notes = listOfNotNull(
-        if (view.newCard && !view.withdrawAll) c.say("done.new_card") else null,
-        if (view.withdrawnLink) c.say("done.withdrawn_link") else null,
-    ) + view.otherCards
-    if (!view.withdrawAll) {
-        Title(view.hangTitle, Modifier.padding(top = 26.dp))
-        BasicText(view.anyone, style = TextStyle(color = Colours.ink, fontSize = 17.sp, lineHeight = 1.8.em))
-        BasicText(link, Modifier.padding(top = 6.dp).background(Colours.soft).padding(horizontal = 12.dp, vertical = 8.dp).testTag("proof-link"), style = TextStyle(color = Colours.ink, fontSize = 15.sp, fontFamily = Type.mono))
-        Button(if (copied) c.say("done.copied") else c.say("done.copy"), Modifier.fillMaxWidth(), primary = true) {
+    val stillThere = view.stillThere
+    if (stillThere != null && !m.hangWhole) {
+        Title(stillThere)
+        ProofLink(link)
+        OpensProof(view.look, openProof) { outside.open(url) }
+        Body(view.why)
+        Actions {
+            Button(c.say("common.next"), wide, primary = true) { m.toRemind() }
+            Button(c.say("hang.rehang"), wide) { m.hangAgain() }
+        }
+        return
+    }
+
+    var copied by remember { mutableStateOf(false) }
+    Title(view.hangTitle)
+    Body(view.why)
+    ProofLink(link)
+    // One main button a screen (design/DESIGN.md): copying the link is what this step is for.
+    Actions {
+        Button(if (copied) c.say("done.copied") else c.say("hang.copy"), wide, primary = true) {
             outside.copy(url)
             copied = true
         }
-        for ((sentence, address) in view.profiles) Link(sentence) { outside.open(address) }
-        Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            Rule(colour = Colours.ink)
-            for ((n, step) in listOf(c.say("done.step_edit"), c.say("done.step_link"), c.say("done.step_add"), c.say("done.step_paste")).withIndex()) {
-                Row(Modifier.fillMaxWidth().padding(vertical = 18.dp)) {
-                    BasicText("${n + 1}", Modifier.width(36.dp).alignByBaseline(), style = TextStyle(color = Colours.ink, fontSize = 22.sp, lineHeight = 1.4.em, fontWeight = Type.weightHeading, fontFamily = Type.display))
-                    BasicText(step, Modifier.weight(1f).alignByBaseline(), style = TextStyle(color = Colours.ink, fontSize = 17.sp, lineHeight = 1.6.em, fontWeight = Type.weightHeading))
-                }
-                Rule()
-            }
-        }
-        for (note in notes) Small(note)
-        Rule(Modifier.padding(top = 12.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Link(view.hung) { outside.open(url) }
-            Small(c.say("done.hung_done"), colour = Colours.text)
-        }
-    } else {
-        for (note in notes) Small(note)
+        for ((sentence, address) in view.profiles) Button(sentence, wide) { outside.open(address) }
     }
-
-    // What the proof log recorded: only where it is not what step 5 said.
-    if (view.showRecord) {
-        Stress(c.say("done.recorded"), Modifier.padding(top = 20.dp))
-        Body(d.date)
-        view.record?.let { Body(it) }
-        Summary {
-            for (row in view.rows) {
-                SummaryRow(
-                    rowName(row.platform, row.known),
-                    { SummaryValue(rowAccount(row.platform, row.known, row.username), strong = true) },
-                    listOfNotNull(row.kind, row.expected, row.switchUsed),
-                    "recorded-${row.platform}",
-                )
+    // The four steps on the platform; the demonstration takes their place later (card-proof.md, "示範").
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Rule(colour = Colours.ink)
+        for ((n, step) in view.steps.withIndex()) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 18.dp)) {
+                BasicText("${n + 1}", Modifier.width(36.dp).alignByBaseline(), style = TextStyle(color = Colours.ink, fontSize = 22.sp, lineHeight = 1.4.em, fontWeight = Type.weightHeading, fontFamily = Type.display))
+                BasicText(step, Modifier.weight(1f).alignByBaseline(), style = TextStyle(color = Colours.ink, fontSize = 17.sp, lineHeight = 1.6.em, fontWeight = Type.weightHeading))
             }
-        }
-        if (view.record != null) Body(c.say("done.short_id", "short_id" to d.shortId))
-    }
-
-    // What can be done besides, not needed for the proof.
-    if (!view.withdrawAll) {
-        Column(Modifier.fillMaxWidth().padding(top = 36.dp)) {
-            BasicText(c.say("done.optional"), Modifier.padding(bottom = 14.dp), style = TextStyle(color = Colours.mute, fontSize = 15.sp))
-            for ((note, button) in view.shares) {
-                DashedRule()
-                Optional(c.say("done.share_title"), note) { Button(button, Modifier.fillMaxWidth().padding(top = 12.dp), height = 46.dp) { outside.share("${view.shareText}\n$url") } }
-            }
-            DashedRule()
-            // The reminder, in the place of the web's "記得每三個月回來過卡一次" (design/copy/card-proof.md, "6. 完成", app, "提醒").
-            DoneReminderSection(r, c, d.validUntil)
+            Rule()
         }
     }
-    // Another card proof.
-    Actions { Button(c.say("done.restart"), Modifier.fillMaxWidth()) { m.cancel() } }
+    for (note in view.notes) Small(note)
+    Rule(Modifier.padding(top = 12.dp))
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        OpensProof(view.hung, openProof) { outside.open(url) }
+        Small(c.say("done.hung_done"), colour = Colours.text)
+    }
+    Recorded(c, d, view)
+    Actions { Button(c.say("common.next"), wide) { m.toRemind() } }
 }
 
-/** One of the things that can be done besides: its heading, what it is, and a button where there is one. */
+/**
+ * Step 8: done, and the invitation to share (design/copy/card-proof.md, "8. 完成和分享", app). A card proof that withdrew everything
+ * comes here from step 5: its date, that the link can be taken down, and no way back.
+ */
 @Composable
-private fun Optional(title: String, note: String, button: @Composable () -> Unit = {}) = Column(Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
-    Subhead(title)
-    BasicText(note, Modifier.padding(top = 6.dp), style = TextStyle(color = Colours.text, fontSize = 15.sp, lineHeight = 1.75.em))
-    button()
+private fun Finish(m: Model, r: ReminderModel, outside: Outside) {
+    val c = m.copy
+    val d = m.done ?: return
+    val view = m.messages.done(d, m.single)
+    val wide = Modifier.fillMaxWidth()
+    val finish = {
+        r.notNow()
+        m.cancel()
+    }
+    if (view.withdrawAll) {
+        view.mismatch?.let { Problem(it, Modifier.testTag("done-mismatch")) }
+        Title(view.title)
+        Body(view.recordedOn)
+        view.kindsUnreadable?.let { Body(it) }
+        Body(view.unlink)
+        Recorded(c, d, view)
+        Actions { Button(c.say("finish.done"), wide, primary = true) { finish() } }
+        return
+    }
+    val url = m.proofUrl(d.shortId)
+    Title(view.title)
+    SmallCard(c, view.card, d.shortId, wide.padding(top = 8.dp))
+    // The card's ordinal, where the answer had one, and the invitation: one paragraph. Sharing is asked for, not required.
+    Body((view.ordinal ?: "") + c.say("finish.invite"), Modifier.padding(top = 8.dp))
+    Body(c.say("finish.thanks"))
+    Actions {
+        for (share in view.shares) Button(share, wide, primary = true) { outside.share("${view.shareText}\n$url") }
+        Button(c.say("finish.done"), wide) { finish() }
+        Button(c.say("common.back"), wide) { m.toRemind() }
+    }
 }
 
 /** The panel of a tap, from the bottom of the screen (design/copy/card-proof.md, "app：感應的面板"). */

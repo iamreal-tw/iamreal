@@ -9,9 +9,10 @@ import tw.iamreal.app.flow.CardProof.Row
 import java.io.File
 
 /**
- * What step 6 says of the server's answer (design/copy/card-proof.md,
- * "完成"): the sentences are read from design/copy/card-proof.json, and the
- * expected ones are spelled out here from the same file's keys.
+ * What the steps after the submission say of the server's answer
+ * (design/copy/card-proof.md, "6. 掛上去" and "8. 完成和分享"): the sentences
+ * are read from design/copy/card-proof.json, and the expected ones are
+ * spelled out here as the copy's examples write them.
  */
 class DoneViewTest {
     private val copy = Copy(File(System.getProperty("iamreal.copy"), "card-proof.json").readText())
@@ -35,30 +36,72 @@ class DoneViewTest {
     fun `a first declaration, recorded as the screen said`() {
         val d = done(listOf(row("threads", "first", "alice")), listOf(Recorded("threads", "first", "alice", 1)), firstRecord = true)
         val view = messages.done(d, "Threads")
-        assertEquals(copy.say("done.first"), messages.doneTitle(d))
+        assertEquals("恭喜你完成島民證明", view.title)
         assertNull(view.mismatch)
         assertEquals(copy.say("done.record_single"), view.record)
         assertNull(view.kindsUnreadable)
         assertEquals(listOf(listOf("threads", "alice", copy.say("kinds.first"), null, null)), view.rows.map(::lines))
-        assertEquals(emptyList<String>(), view.otherCards)
-        assertEquals(false, view.withdrawnLink)
+        // The card's first record: a new card has a new link. Nothing else under the steps.
+        assertEquals(listOf("如果你換了新的自然人憑證，請把個人檔案的連結換成新的連結。"), view.notes)
     }
 
     @Test
-    fun `a first declaration, the small card, the hanging on the profile and what can be done besides`() {
+    fun `a first declaration, step 6 whole and step 8 with the card's ordinal`() {
         val d = done(listOf(row("threads", "first", "alice")), listOf(Recorded("threads", "first", "alice", 1)), firstRecord = true)
         val view = messages.done(d, "Threads")
-        // The sentences as design/copy/card-proof.md's example of step 6 writes them.
-        assertEquals("你拿到島民證明了", view.title)
-        assertEquals(listOf<Pair<String?, String>>(null to "@alice"), view.card)
+        // Step 6, as design/copy/card-proof.md's example writes it (app).
         assertEquals("2026-11-16 記進了證明紀錄。", view.recordedOn)
-        assertEquals("最後一步：掛到你的 Threads 個人檔案", view.hangTitle)
-        assertEquals("任何人都能宣告任何帳號。你把連結掛上個人檔案，別人才知道這個帳號承認這張證明。", view.anyone)
+        assertEquals("把證明掛上你的 Threads 個人檔案", view.hangTitle)
+        assertEquals("在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。", view.why)
         assertEquals(listOf("打開 @alice 的 Threads 個人檔案" to "https://www.threads.com/@alice"), view.profiles)
-        assertEquals(listOf("把你的島民證明分享到 Threads。" to "分享"), view.shares)
-        assertEquals("我剛剛換了第 128 張島民證明，宣告本帳號背後是一名台灣人。", view.shareText)
+        assertEquals(listOf("按「編輯個人檔案」", "按「連結」", "按「新增連結」", "在「網址」貼上剛才複製的連結，按右上角的「完成」"), view.steps)
         assertEquals("掛好了嗎？打開你的島民證明看看。", view.hung)
-        assertEquals(listOf(false, true, false, false), listOf(view.withdrawAll, view.newCard, view.withdrawnLink, view.showRecord))
+        assertEquals(false, view.short)
+        assertNull(view.stillThere)
+        // Step 8.
+        assertEquals("恭喜你完成島民證明", view.title)
+        assertEquals(listOf<Pair<String?, String>>(null to "@alice"), view.card)
+        assertEquals("這是第 128 張島民證明。", view.ordinal)
+        assertEquals(listOf("分享到 Threads"), view.shares)
+        assertEquals("我剛剛換了第 128 張島民證明，宣告本帳號背後是一名台灣人。", view.shareText)
+        assertEquals(listOf(false, false), listOf(view.withdrawAll, view.showRecord))
+    }
+
+    @Test
+    fun `a card proof again, step 6 asks only whether the link is still there`() {
+        val expected = listOf(row("threads", "refresh", "alice", current = "alice"))
+        val view = messages.done(done(expected, listOf(Recorded("threads", "refresh", "alice", 1))), "Threads")
+        assertEquals(true, view.short)
+        assertEquals("你的 Threads 個人檔案上，還有這個連結嗎？", view.stillThere)
+        assertEquals("打開你的島民證明看看。", view.look)
+        assertEquals("在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。", view.why)
+        assertEquals("島民證明已更新", view.title)
+        assertEquals(emptyList<String>(), view.notes)
+    }
+
+    @Test
+    fun `step 6 is the whole one for anything but a card proof again on one platform, recorded as step 5 said`() {
+        val unchanged = listOf(row("threads", "refresh", "alice", current = "alice"))
+        val same = listOf(Recorded("threads", "refresh", "alice", 1))
+        fun short(d: CardProof.Done, single: String? = "Threads") = messages.done(d, single).let { it.short to it.stillThere }
+        val whole = false to null
+        // Several platforms.
+        assertEquals(whole, short(done(unchanged, same), single = null))
+        // The server recorded something else than step 5 said.
+        assertEquals(whole, short(done(unchanged, listOf(Recorded("threads", "switch", "alice", 1)), listOf("threads"))))
+        // The answer's kinds could not be read.
+        assertEquals(whole, short(done(unchanged, null)))
+        // A new declaration, a switch, an account declared again after a withdrawal.
+        assertEquals(whole, short(done(listOf(row("threads", "first", "alice")), listOf(Recorded("threads", "first", "alice", 1)), firstRecord = true)))
+        assertEquals(whole, short(done(listOf(row("threads", "switch", "bob", current = "alice", previous = "alice", switchesLeft = 4)), listOf(Recorded("threads", "switch", "bob", 1)))))
+        assertEquals(whole, short(done(listOf(row("threads", "refresh", "alice", current = null)), listOf(Recorded("threads", "refresh", "alice", 1)))))
+    }
+
+    @Test
+    fun `without an ordinal in the answer, step 8 starts at the invitation`() {
+        val expected = listOf(row("threads", "refresh", "alice", current = "alice"))
+        assertNull(messages.done(done(expected, listOf(Recorded("threads", "refresh", "alice", 1)), ordinal = null), "Threads").ordinal)
+        assertEquals("這是第 1,284 張島民證明。", messages.done(done(expected, listOf(Recorded("threads", "refresh", "alice", 1)), ordinal = 1284), "Threads").ordinal)
     }
 
     @Test
@@ -80,18 +123,26 @@ class DoneViewTest {
         val view = messages.done(done(expected, listOf(Recorded("test-example", "refresh", "a-b", 1), Recorded("threads", "refresh", "alice", 1))), null)
         assertEquals("島民證明已更新", view.title)
         assertEquals(listOf<Pair<String?, String>>("test-example" to "a-b", "Threads" to "@alice"), view.card)
-        assertEquals("最後一步：掛到你的個人檔案", view.hangTitle)
-        assertEquals(copy.say("done.anyone"), view.anyone)
+        assertEquals("把證明掛上你的個人檔案", view.hangTitle)
+        assertEquals("任何人都能宣告任何帳號。你把同一個連結掛上每個帳號的個人檔案，別人才知道那個帳號承認這張證明。", view.why)
         // No page of an account on a platform the app does not know.
         assertEquals(listOf("打開 @alice 的 Threads 個人檔案" to "https://www.threads.com/@alice"), view.profiles)
-        assertEquals(false, view.newCard)
+        assertEquals(emptyList<String>(), view.notes)
+        assertEquals(false, view.short)
     }
 
     @Test
-    fun `every account withdrawn, no card and no hanging, only that the links can be taken down`() {
-        val view = messages.done(done(listOf(row("threads", "withdraw", "alice", current = "alice")), listOf(Recorded("threads", "withdraw", "alice", 0))), "Threads")
+    fun `every account withdrawn, no card and no hanging, only that the link can be taken down`() {
+        val d = done(listOf(row("threads", "withdraw", "alice", current = "alice")), listOf(Recorded("threads", "withdraw", "alice", 0)))
+        val view = messages.done(d, "Threads")
         assertEquals("已全部收回", view.title)
-        assertEquals(listOf(true, true), listOf(view.withdrawAll, view.withdrawnLink))
+        assertEquals(true, view.withdrawAll)
+        assertEquals("2026-11-16 記進了證明紀錄。", view.recordedOn)
+        assertEquals("你可以拿掉 Threads 個人檔案上的證明連結。", view.unlink)
+        // With several platforms, the sentence of an account withdrawn.
+        assertEquals("已經收回的帳號，個人檔案上的連結可以拿掉。", messages.done(d, null).unlink)
+        // That sentence is step 6's only when the list still has an account: there is no step 6 here.
+        assertEquals(emptyList<String>(), view.notes)
         assertEquals(emptyList<Pair<String?, String>>(), view.card)
         assertEquals(emptyList<Pair<String, String>>(), view.profiles)
         assertEquals(false, view.showRecord)
@@ -105,15 +156,27 @@ class DoneViewTest {
     }
 
     @Test
-    fun `the titles, by what the server recorded`() {
+    fun `the titles of step 8, by what the server recorded`() {
+        fun title(d: CardProof.Done, single: String? = "Threads") = messages.doneTitle(d, single)
         val unchanged = listOf(row("threads", "refresh", "alice", current = "alice"))
-        assertEquals(copy.say("done.refresh"), messages.doneTitle(done(unchanged, listOf(Recorded("threads", "refresh", "alice", 1)))))
-        // The server recorded a switch where the screen said nothing changes: not "unchanged".
-        assertEquals(copy.say("done.changed"), messages.doneTitle(done(unchanged, listOf(Recorded("threads", "switch", "alice", 1)), listOf("threads"))))
-        assertEquals(copy.say("done.withdraw_all"), messages.doneTitle(done(listOf(row("threads", "withdraw", "alice", current = "alice")), listOf(Recorded("threads", "withdraw", "alice", 0)))))
-        assertEquals(copy.say("done.recorded_only"), messages.doneTitle(done(unchanged, null)))
+        val switched = listOf(row("threads", "switch", "carol.tw", current = "alice", previous = "alice", switchesLeft = 3))
+        // The four of the copy's table with one platform: a new declaration, a card proof again, a switch, everything withdrawn.
+        assertEquals("恭喜你完成島民證明", title(done(listOf(row("threads", "first", "alice")), listOf(Recorded("threads", "first", "alice", 1)), firstRecord = true)))
+        assertEquals("島民證明已更新", title(done(unchanged, listOf(Recorded("threads", "refresh", "alice", 1)))))
+        assertEquals("島民證明換成 @carol.tw 了", title(done(switched, listOf(Recorded("threads", "switch", "carol.tw", 1)))))
+        assertEquals("已全部收回", title(done(listOf(row("threads", "withdraw", "alice", current = "alice")), listOf(Recorded("threads", "withdraw", "alice", 0)))))
+        // Declared again after a withdrawal, and a first declaration on a card with records: congratulated like a first one.
+        assertEquals("恭喜你完成島民證明", title(done(listOf(row("threads", "refresh", "alice", current = null)), listOf(Recorded("threads", "refresh", "alice", 1)))))
+        assertEquals("恭喜你完成島民證明", title(done(listOf(row("threads", "first", "alice")), listOf(Recorded("threads", "first", "alice", 1)))))
+        // An account put there today changed today: named as a switch is.
+        assertEquals("島民證明換成 @bob 了", title(done(listOf(row("threads", "correction", "bob", current = "alice", previous = "alice")), listOf(Recorded("threads", "correction", "bob", 1)))))
+        // Several platforms: a list that changed is only said to be updated.
+        assertEquals("島民證明已更新", title(done(switched, listOf(Recorded("threads", "switch", "carol.tw", 1))), single = null))
+        // The server recorded a switch where the screen said nothing changes: not "unchanged", and the account it is now.
+        assertEquals("島民證明換成 @alice 了", title(done(unchanged, listOf(Recorded("threads", "switch", "alice", 1)), listOf("threads"))))
+        assertEquals("證明紀錄已經記下這次過卡", title(done(unchanged, null)))
         // Nothing of the answer told, on a card's first record: still only that it was recorded.
-        assertEquals(copy.say("done.recorded_only"), messages.doneTitle(done(listOf(row("threads", "first", "alice")), null, firstRecord = true, seq = null)))
+        assertEquals("證明紀錄已經記下這次過卡", title(done(listOf(row("threads", "first", "alice")), null, firstRecord = true, seq = null)))
     }
 
     @Test
@@ -122,19 +185,19 @@ class DoneViewTest {
         assertEquals(listOf(null, null), listOf(view.mismatch, view.record))
         assertEquals(copy.say("done.kinds_unreadable"), view.kindsUnreadable)
         assertEquals(0, view.rows.size)
-        assertEquals(emptyList<String>(), view.otherCards)
+        assertEquals(emptyList<String>(), view.notes)
     }
 
     @Test
     fun `other cards declare the account too, said once per such account and not of one withdrawn`() {
         val expected = listOf(row("test-example", "withdraw", "a-b", current = "a-b", known = false), row("threads", "refresh", "alice", current = "alice"))
         val view = messages.done(done(expected, listOf(Recorded("test-example", "withdraw", "a-b", 4), Recorded("threads", "refresh", "alice", 2))), null)
-        assertEquals(listOf(copy.say("done.other_cards", "account" to "@alice")), view.otherCards)
+        // An account withdrawn and the list not empty: its link can be taken down. Then the other cards.
+        assertEquals(listOf("已經收回的帳號，個人檔案上的連結可以拿掉。", copy.say("done.other_cards", "account" to "@alice")), view.notes)
         assertEquals(copy.say("done.record_list"), view.record)
-        assertEquals(true, view.withdrawnLink)
         // One card, or a number the answer does not have: nothing said.
         for (cards in listOf(1L, 0L, null)) {
-            assertEquals(emptyList<String>(), messages.done(done(listOf(expected[1]), listOf(Recorded("threads", "refresh", "alice", cards))), "Threads").otherCards)
+            assertEquals(emptyList<String>(), messages.done(done(listOf(expected[1]), listOf(Recorded("threads", "refresh", "alice", cards))), "Threads").notes)
         }
     }
 

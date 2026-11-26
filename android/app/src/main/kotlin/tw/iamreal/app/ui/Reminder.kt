@@ -61,8 +61,8 @@ internal class Pickers(
 )
 
 /**
- * The reminder as the screens show it (design/copy/app.md, "過卡提醒", "設定"; card-proof.md, "6. 完成",
- * app), and which screen is up. What is stored is [Reminders]'s; what is here besides is in memory only.
+ * The reminder as the screens show it (design/copy/app.md, "過卡提醒", "設定"; card-proof.md, "7. 提醒"),
+ * and which screen is up. What is stored is [Reminders]'s; what is here besides is in memory only.
  */
 internal class ReminderModel(
     private val reminders: Reminders,
@@ -90,7 +90,7 @@ internal class ReminderModel(
     var picked by mutableStateOf(false)
         private set
 
-    /** Step 6: "開啟提醒" was pressed and the system did not let the app notify. */
+    /** Step 7: "開啟提醒" was pressed and the system did not let the app notify. */
     var doneDenied by mutableStateOf(false)
         private set
 
@@ -142,17 +142,36 @@ internal class ReminderModel(
         refresh()
     }
 
-    /** "開啟提醒" on step 6: the defaults, once the system lets the app notify. */
-    fun turnOnFromDone() = askPermission { allowed ->
+    /** "開啟提醒" on step 7: the defaults, once the system lets the app notify, and then [on] (the next step). If it does not, step 7 says so. */
+    fun turnOnFromStep(on: () -> Unit) = askPermission { allowed ->
         if (allowed) {
-            plan = reminders.turnOn(Reminders.DEFAULT_INTERVAL, Reminders.DEFAULT_TIME, null, today())
-            picked = false
+            turnOnDefaults()
+            on()
         } else {
             doneDenied = true
         }
     }
 
-    /** "改間隔或時刻", "更改", the switch turned on: the screen of the interval and the time, from what is on, else the defaults. */
+    private fun turnOnDefaults() {
+        plan = reminders.turnOn(Reminders.DEFAULT_INTERVAL, Reminders.DEFAULT_TIME, null, today())
+        picked = false
+        doneDenied = false
+    }
+
+    /**
+     * Back in the app with step 7 up, after it said the system does not let the app notify ("打開通知設定"): asked again,
+     * and if the app may notify now, the defaults are set, as "開啟提醒" would have. Step 7 then shows the reminder that is on.
+     */
+    fun backAtStep(allowed: Boolean) {
+        if (doneDenied && plan == null && allowed) turnOnDefaults()
+    }
+
+    /** "這次不要", and leaving the steps after the submission: nothing is stored, and what the system said is asked again the next time. */
+    fun notNow() {
+        doneDenied = false
+    }
+
+    /** "改提醒間隔或時刻", the switch turned on: the screen of the interval and the time, from what is on, else the defaults. */
     fun openSchedule() {
         scheduleFrom = screen
         draftInterval = plan?.interval ?: Reminders.DEFAULT_INTERVAL
@@ -225,27 +244,28 @@ internal class ReminderModel(
     fun at(day: LocalDate, time: LocalTime): String = words.day(day) + words.time(time)
 }
 
-/** What step 6 says of the reminder: its heading, its sentence, the line under it, and the certificate's sentence. */
-internal class DoneReminder(
+/** What step 7 says (design/copy/card-proof.md, "7. 提醒"). */
+internal class RemindView(
     val kind: Kind,
     val title: String,
-    val text: String,
-    /** The line under it: where the reminder is kept, or, when the system did not let the app notify, why there is none. */
-    val note: String,
+    /** Why a reminder, and when it comes: one sentence each. Where the system did not let the app notify, that sentence alone. */
+    val lines: List<String>,
+    /** The certificate's sentence, under the day: it ends before the reminder comes. */
     val expires: String?,
-    /** The day and time in [text], set in bold. */
+    /** The day and time in [lines], set in bold. */
     val at: String?,
 ) {
+    /** Nothing stored: offered. On: the day it was set again for. Denied: "開啟提醒" was pressed and the system does not let the app notify. */
     enum class Kind { ASK, ON, DENIED }
 }
 
 /**
- * What step 6 says of the reminder (design/copy/card-proof.md, "6. 完成", app, "提醒"): offered when
- * nothing is stored, the day it was set again for when it is on, the web's two sentences and why when
- * the system did not let the app notify. [validUntil] is the certificate's last day, from memory.
+ * What step 7 says: the reminder offered when nothing is stored, the day it was set again for when it is on, and why
+ * there is none when the system did not let the app notify. [validUntil] is the certificate's last day, from memory.
  */
-internal fun doneReminder(card: Copy, words: When, plan: Plan?, picked: Boolean, denied: Boolean, validUntil: LocalDate?, today: LocalDate): DoneReminder {
-    if (plan == null && denied) return DoneReminder(DoneReminder.Kind.DENIED, card.say("done.return_title"), card.say("done.return_note"), card.say("app_done.reminder_denied"), null, null)
+internal fun remindView(card: Copy, words: When, plan: Plan?, picked: Boolean, denied: Boolean, validUntil: LocalDate?, today: LocalDate): RemindView {
+    val title = card.say("app_done.reminder_title")
+    if (plan == null && denied) return RemindView(RemindView.Kind.DENIED, title, listOf(card.say("app_reminder.denied")), null, null)
     val shown = plan ?: Plan(Reminders.DEFAULT_INTERVAL, Reminders.DEFAULT_TIME, Reminders.next(today, Reminders.DEFAULT_INTERVAL))
     val day = words.day(shown.day)
     val time = words.time(shown.time)
@@ -254,20 +274,18 @@ internal fun doneReminder(card: Copy, words: When, plan: Plan?, picked: Boolean,
     } else {
         card.say("app_done.reminder_next_about", "day" to day, "time" to time, "interval" to words.interval(shown.interval))
     }
-    val expires = if (validUntil != null && validUntil.isBefore(shown.day)) card.say("app_done.reminder_expires", "valid_until" to validUntil) else null
-    return DoneReminder(
-        if (plan == null) DoneReminder.Kind.ASK else DoneReminder.Kind.ON,
-        card.say("app_done.reminder_title"),
-        card.say("app_done.reminder_why") + next,
-        card.say("app_done.reminder_local"),
-        expires,
+    return RemindView(
+        if (plan == null) RemindView.Kind.ASK else RemindView.Kind.ON,
+        title,
+        listOf(card.say("app_reminder.why"), next),
+        if (validUntil != null && validUntil.isBefore(shown.day)) card.say("app_done.reminder_expires", "valid_until" to validUntil) else null,
         day + time,
     )
 }
 
 /** A sentence with the day and time of the reminder in it set in bold. */
 @Composable
-private fun WithDay(text: String, at: String?, modifier: Modifier = Modifier) {
+private fun WithDay(text: String, at: String?) {
     val i = if (at == null) -1 else text.indexOf(at)
     val shown = buildAnnotatedString {
         if (i < 0) {
@@ -278,25 +296,38 @@ private fun WithDay(text: String, at: String?, modifier: Modifier = Modifier) {
             append(text.substring(i + at!!.length))
         }
     }
-    BasicText(shown, modifier.padding(top = 6.dp), style = TextStyle(color = Colours.text, fontSize = 15.sp, lineHeight = 1.75.em))
+    BasicText(shown, style = TextStyle(color = Colours.text, fontSize = Type.sizeBody, lineHeight = Type.leadingBody))
 }
 
-/** The last of what can be done besides on step 6: the reminder (design/screens/app-reminder-1-done-phone.png). */
+/**
+ * Step 7: the reminder, and nothing else (design/copy/card-proof.md, "7. 提醒"). [back] is step 6, [next] step 8;
+ * [notificationSettings] opens the system's page of the app's notifications.
+ */
 @Composable
-internal fun DoneReminderSection(r: ReminderModel, card: Copy, validUntil: LocalDate?) {
-    val say = doneReminder(card, r.words, r.plan, r.picked, r.doneDenied, validUntil, r.today())
-    Column(Modifier.fillMaxWidth().padding(vertical = 16.dp).testTag("done-reminder")) {
-        Subhead(say.title)
-        WithDay(say.text, say.at)
-        BasicText(say.note, Modifier.padding(top = 6.dp), style = TextStyle(color = Colours.text, fontSize = 15.sp, lineHeight = 1.75.em))
-        say.expires?.let { BasicText(it, Modifier.padding(top = 6.dp), style = TextStyle(color = Colours.ink, fontSize = 15.sp, lineHeight = 1.75.em)) }
-        when (say.kind) {
-            DoneReminder.Kind.ASK -> {
-                Button(card.say("app_done.reminder_turn_on"), Modifier.fillMaxWidth().padding(top = 12.dp), primary = true, height = 46.dp) { r.turnOnFromDone() }
-                Change(card.say("app_done.reminder_adjust"), "reminder-adjust") { r.openSchedule() }
+internal fun RemindStep(r: ReminderModel, card: Copy, validUntil: LocalDate?, back: () -> Unit, next: () -> Unit, notificationSettings: () -> Unit) {
+    val view = remindView(card, r.words, r.plan, r.picked, r.doneDenied, validUntil, r.today())
+    val wide = Modifier.fillMaxWidth()
+    Title(view.title)
+    Column(Modifier.fillMaxWidth().testTag("remind"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        for (line in view.lines) WithDay(line, view.at)
+        view.expires?.let { Body(it, strong = true) }
+    }
+    Actions {
+        when (view.kind) {
+            RemindView.Kind.ASK -> Button(card.say("app_done.reminder_turn_on"), wide, primary = true) { r.turnOnFromStep(next) }
+            RemindView.Kind.ON -> Button(card.say("common.next"), wide, primary = true) { next() }
+            RemindView.Kind.DENIED -> Button(card.say("app_reminder.settings"), wide, primary = true) { notificationSettings() }
+        }
+        Button(card.say("common.back"), wide) { back() }
+    }
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        if (view.kind != RemindView.Kind.DENIED) TextButton(card.say("app_reminder.adjust"), Modifier.testTag("reminder-adjust"), action = true) { r.openSchedule() }
+        // Not for a reminder that is on: that is turned off in the settings.
+        if (view.kind != RemindView.Kind.ON) {
+            TextButton(card.say("app_reminder.skip")) {
+                r.notNow()
+                next()
             }
-            DoneReminder.Kind.ON -> Change(card.say("app_done.reminder_change"), "reminder-change") { r.openSchedule() }
-            DoneReminder.Kind.DENIED -> {}
         }
     }
 }
