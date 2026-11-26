@@ -433,13 +433,35 @@ async function cardProof(p: Proof): Promise<string> {
   // Step 2
   await waitText(step(2), "step 2");
   if (p.thorough) {
+    // The demonstration of where the card goes (design/copy/card-proof.md, "示範"): one element to a screen reader; it plays by itself
+    // when the step comes up, three rounds, and 停止 goes straight to its rest: the card in place.
+    {
+      const picture = find((n) => n.id === "sense-demo", "the demonstration of step 2");
+      check(picture.description === say("app_demo.sense_android"), `step 2's demonstration reads as its one sentence of the copy ("${picture.description.slice(0, 20)}…")`);
+      const [stop, replay] = [say("app_demo.stop"), say("app_demo.replay")];
+      const says = (label: string): boolean => textsOf(visible()).includes(label);
+      check(says(stop) && !says(replay), "step 2: the demonstration plays by itself, and its button says 停止");
+      press(stop);
+      await waitText(replay, "step 2's demonstration stopped", 10_000);
+      check(says(replay) && !says(stop), "step 2: 停止 stops the demonstration, and its button says 再看一次");
+      if (RECORD_SENSE !== undefined) {
+        emulator.adb("emu", "screenrecord", "start", "--fps", "60", "--bit-rate", "12M", "--time-limit", "40", RECORD_SENSE);
+        await sleep(1_000);
+        press(replay);
+        await sleep(28_000);
+        emulator.adb("emu", "screenrecord", "stop");
+        await waitText(replay, "step 2's demonstration at rest after its three rounds", 10_000);
+        check(true, `step 2: the demonstration came to rest by itself after its rounds, recorded as ${RECORD_SENSE}`);
+      }
+      toTop();
+    }
     shot("step-2");
     await designShot("card-proof-app-2-read-android-phone.png");
     const s = wholeScreen();
-    shows(s, "step 2", [say("read.title"), say("app_read.how", { spot: SPOT }), ...READ_ITEMS, say("common.back"), say("app_read.tap_card")]);
+    shows(s, "step 2", [say("read.title"), say("app_read.how_android"), say("app_demo.replay"), ...READ_ITEMS, say("common.back"), say("app_read.tap_card")]);
     check(![say("read.component"), say("read.reader"), say("read.certificate")].some((x) => s.includes(x)), "step 2's list has no item of MOICA's component or a card reader");
-    const figure = find((n) => n.id === "tap-place", "step 2's figure of where the card goes");
-    check(figure.description === say("app_read.figure_android"), "step 2's figure reads as its one sentence of the copy");
+    // Where on its back differs from one Android phone to another: nothing here says the middle, or not to move the card.
+    check(!s.some((t) => t.includes(say("app_read.spot_iphone")) || t === say("app_read.how", { spot: SPOT })), "step 2 does not say where on the phone's back, nor the sentence that says not to move the card");
   }
   press(say("app_read.tap_card"));
   if (p.thorough) await tapWithPanel({ signs: false });
@@ -657,6 +679,9 @@ const neverAfter = (account: string): string[] => [
   say("done.return_title"),
   say("done.return_note"),
 ];
+
+/** Where IAMREAL_RECORD_SENSE says to keep a recording of step 2's demonstration, played once from its start to its rest (android/README.md). */
+const RECORD_SENSE = process.env.IAMREAL_RECORD_SENSE;
 
 /** Where IAMREAL_RECORD says to keep a recording of step 6's demonstration, played once from its start (android/README.md). */
 const RECORD = process.env.IAMREAL_RECORD;

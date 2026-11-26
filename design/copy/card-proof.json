@@ -264,14 +264,14 @@
     "signed": "卡片簽好了，可以拿開卡片",
     "failed": "沒有完成，請看 app 畫面上的說明。",
     "android_wait_title": "把卡片貼在手機背面",
-    "android_wait": "自然人憑證平貼在手機背面的中間，不要移動。每支手機感應的位置不同，沒反應的話慢慢移動卡片找一下。",
+    "android_wait": "自然人憑證平貼在手機背面。沒有反應就慢慢上下移動卡片，感應到就停住。",
     "android_busy_title": "讀取中",
     "android_done_title": "可以拿開卡片了"
   },
   "app_read": {
     "how": "按「感應卡片」，再把自然人憑證平貼在{spot}，不要移動，直到畫面說可以拿開。",
     "spot_iphone": "手機背面的上方",
-    "spot_android": "手機背面的中間",
+    "spot_android": "手機背面",
     "how_android": "按「感應卡片」，再把自然人憑證平貼在手機背面。每支手機感應的位置不同：沒有反應就慢慢上下移動卡片，畫面變成「讀取中」就停住，直到畫面說可以拿開。",
     "certificate": "感應卡片，讀取卡片上的憑證",
     "tap_card": "感應卡片",
@@ -279,12 +279,7 @@
     "tap_again": "再感應一次",
     "restart": "再感應一次卡片",
     "nfc_retry": "再按一次「感應卡片」",
-    "nfc_settings": "打開 NFC 設定",
-    "figure_flip": "① 翻到有相機的那面",
-    "figure_flip_emphasis": "有相機",
-    "figure_middle": "② 貼在中間，沒反應就上下慢慢移動",
-    "figure_middle_emphasis": "中間",
-    "figure_android": "把手機翻到有相機的那一面，卡片貼在中間，沒反應就上下慢慢移動"
+    "nfc_settings": "打開 NFC 設定"
   },
   "app_demo": {
     "stop": "停止",
