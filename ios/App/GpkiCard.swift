@@ -25,6 +25,11 @@ final class GpkiCard: CardConnection {
     private var connected = false
     /// Whether VERIFY, with the PIN, has been handed to the transport.
     private(set) var pinSent = false
+    /// The card answered that the PIN is its own.
+    private(set) var pinAccepted = false
+
+    /// What has become of the PIN in this connection.
+    var pinFate: PINFate { pinAccepted ? .accepted : pinSent ? .sent : .notSent }
 
     init(_ transport: APDUTransport) {
         self.transport = transport
@@ -69,7 +74,7 @@ final class GpkiCard: CardConnection {
         pinSent = true
         let verify = try await secure(session, cla: 0x00, ins: 0x20, p1: 0x00, p2: 0x01, data: pinBlock, le: 0, encrypt: true)
         switch verify.sw {
-        case 0x9000: break
+        case 0x9000: pinAccepted = true
         case 0x6983, 0x63c0: throw CardFailure.locked
         case 0x63c1...0x63cf: throw CardFailure.pinIncorrect
         default: throw CardFailure.failed(code: "pin_refused")

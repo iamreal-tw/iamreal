@@ -41,6 +41,9 @@ protocol CardConnection {
 enum CardFailure: Error, Equatable {
     /// No card came, or reading is not possible on this device.
     case noTap
+    /// The cardholder closed the panel of the tap before the PIN went to
+    /// the card: nothing was read or signed.
+    case cancelled
     /// The card answered that the PIN is not the one it has.
     case pinIncorrect
     /// The card is locked: it answered that no try of the PIN is left.
@@ -54,13 +57,24 @@ enum CardFailure: Error, Equatable {
     /// The card is not the one read in the first tap. The PIN was not sent.
     case otherCard
     /// The connection to the card was lost during the tap: the card was
-    /// taken away, or the system ended the connection. `pinSent`: whether
-    /// the PIN had gone to the card by then (whether the card received it
-    /// is not known).
-    case dropped(pinSent: Bool)
+    /// taken away, or the system ended the connection; and what had become
+    /// of the PIN by then.
+    case dropped(PINFate)
     /// Anything else the card or the connection did. `code` is a short
     /// fixed word, never a value read from the card.
     case failed(code: String)
+}
+
+/// What had become of the PIN when a tap lost the card (issue #133: what
+/// happens next depends on it).
+enum PINFate: Equatable {
+    /// It had not gone to the card.
+    case notSent
+    /// It had gone to the card, and the card had not answered: whether the
+    /// card received it, and counted a try if it is wrong, is not known.
+    case sent
+    /// The card had accepted it: it is the card's PIN.
+    case accepted
 }
 
 /// The PIN, kept in memory only: from the field on the screen to the last
@@ -69,6 +83,10 @@ enum CardFailure: Error, Equatable {
 /// proof clears it when it is done, cancelled or stopped.
 final class PIN {
     private var bytes: [UInt8]
+    /// The card has accepted this PIN once: it is the card's. From then on
+    /// a tap that loses the card while the PIN goes to it is made again
+    /// with it (issue #133).
+    var accepted = false
 
     init(_ text: String) {
         bytes = Array(text.utf8)

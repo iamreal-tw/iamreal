@@ -29,6 +29,8 @@ final class CardProofTests: XCTestCase {
     private var reminders: Reminders!
     /// How many times the app opened the system's settings at its notifications.
     private var notificationSettingsOpened = 0
+    /// What the lowest version says of the build, when a test changes it under a model.
+    private var minApp: MinApp?
 
     override func setUp() async throws {
         backend = try TestBackend.load()
@@ -624,6 +626,379 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(senseDemonstration(on: model.screen)?.playing, true)
     }
 
+    // Five minutes with the PIN in memory (#133) ---------------------------------------------------
+
+    /// The PIN stays in memory while the cardholder is away in another app, and five minutes after it was
+    /// typed it is dropped with the card proof: step 1 says why, until the card proof starts again.
+    func testThePINIsDroppedFiveMinutesAfterItWasTyped() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await toAccounts(model)
+        XCTAssertTrue(model.holdsPIN)
+        // To another app and back within the five minutes: the PIN and the step are still there.
+        now = now.addingTimeInterval(4 * 60 + 59)
+        model.cameBack()
+        XCTAssertEqual(model.screen.step, 4)
+        XCTAssertTrue(model.holdsPIN)
+        // Past them.
+        now = now.addingTimeInterval(2)
+        model.cameBack()
+        XCTAssertEqual(model.screen.step, 1)
+        XCTAssertFalse(model.holdsPIN)
+        XCTAssertEqual(model.screen.warnings, [Notice(text: "超過 5 分鐘沒有完成，為了不讓 PIN 留在手機上太久，已經回到開頭。請再感應一次卡片。", button: nil)])
+        checkAgainstTheCopy(model.screen, file: #filePath, line: #line)
+        XCTAssertEqual(card.signatures, 1, "the card signed the scope string only")
+        // Starting again: step 1's note is gone, and the card is read again.
+        try await press("下一步", in: model)
+        XCTAssertEqual(model.screen.step, 2)
+        try await press("上一步", in: model)
+        XCTAssertEqual(model.screen.warnings, [])
+    }
+
+    /// The five minutes are over while the cardholder looks at step 5: whatever is pressed, the card is not
+    /// asked to sign, and the card proof is back at its start.
+    func testAfterFiveMinutesTheCardDoesNotSignTheDeclaration() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await toAccounts(model)
+        try await typeBob(in: model)
+        XCTAssertEqual(model.screen.step, 5)
+        now = now.addingTimeInterval(5 * 60)
+        let button = try XCTUnwrap(model.screen.buttons.last)
+        model.perform(button.action)
+        while let work = model.work { await work.value }
+        XCTAssertEqual(model.screen.step, 1)
+        XCTAssertTrue(model.screen.texts.contains("超過 5 分鐘沒有完成，為了不讓 PIN 留在手機上太久，已經回到開頭。請再感應一次卡片。"))
+        XCTAssertEqual(card.taps, [.readCertificates, .sign], "no third tap")
+        XCTAssertFalse(model.holdsPIN)
+    }
+
+    /// The PIN is gone with the last tap: five minutes after it was typed nothing is dropped, and a record
+    /// that could not be sent is still there to send again.
+    func testNothingHappensFiveMinutesAfterTheLastTap() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await toAccounts(model)
+        try await typeBob(in: model)
+        asked.submitFails = true
+        let button = try XCTUnwrap(model.screen.buttons.last?.label)
+        try await press(button, in: model)
+        XCTAssertEqual(model.screen.step, 5)
+        XCTAssertTrue(model.screen.buttons.map(\.label).contains("再試一次"))
+        XCTAssertFalse(model.holdsPIN, "the PIN went with the third tap")
+        now = now.addingTimeInterval(6 * 60)
+        model.cameBack()
+        XCTAssertEqual(model.screen.step, 5)
+        XCTAssertTrue(model.screen.buttons.map(\.label).contains("再試一次"))
+        XCTAssertEqual(model.screen.warnings, [])
+    }
+
+    /// A wrong PIN is dropped, and its five minutes with it: the PIN typed after it has its own.
+    func testAPINThatWasDroppedDoesNotCountAgainstTheNext() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await press("下一步", in: model)
+        try await press("感應卡片", in: model)
+        try await press("下一步", in: model)
+        model.pinText = "000000"
+        try await press("確認卡片", in: model)
+        XCTAssertTrue(model.screen.texts.contains("PIN 不正確。連續輸入錯誤三次，卡片會被鎖住。"))
+        // More than five minutes later the cardholder types the right one.
+        now = now.addingTimeInterval(6 * 60)
+        model.cameBack()
+        XCTAssertEqual(model.screen.step, 3, "no PIN was in memory: nothing to drop")
+        model.pinText = backend.pin
+        try await press("確認卡片", in: model)
+        XCTAssertEqual(model.screen.step, 4)
+        // And that one has five minutes from when it was typed.
+        now = now.addingTimeInterval(5 * 60)
+        model.cameBack()
+        XCTAssertEqual(model.screen.step, 1)
+        XCTAssertFalse(model.holdsPIN)
+    }
+
+    /// A PIN typed and left in the field is in memory too: five minutes later it is gone, with the card proof.
+    func testAPINLeftInTheFieldIsDroppedAfterFiveMinutes() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await press("下一步", in: model)
+        try await press("感應卡片", in: model)
+        try await press("下一步", in: model)
+        model.pinText = backend.pin
+        now = now.addingTimeInterval(5 * 60)
+        model.cameBack()
+        XCTAssertEqual(model.screen.step, 1)
+        XCTAssertEqual(model.pinText, "")
+        XCTAssertFalse(model.holdsPIN)
+        XCTAssertEqual(card.pinsReceived, 0)
+        // The phone's clock set back to before the PIN was typed gives it no more time.
+        try await press("下一步", in: model)
+        try await press("感應卡片", in: model)
+        try await press("下一步", in: model)
+        model.pinText = backend.pin
+        now = now.addingTimeInterval(-3600)
+        model.cameBack()
+        XCTAssertEqual(model.screen.step, 1)
+        XCTAssertFalse(model.holdsPIN)
+        now = now.addingTimeInterval(3600)
+    }
+
+    /// The card accepted the PIN and then left; in the tap made again it leaves while the PIN goes to it. The
+    /// PIN is the card's: it is not dropped, and the tap is made again (#133).
+    func testAPINTheCardAcceptedIsSentAgainWhereverTheNextTapLosesTheCard() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await press("下一步", in: model)
+        try await press("感應卡片", in: model)
+        try await press("下一步", in: model)
+        card.nextTapsFail = [.dropped(.accepted), .dropped(.sent)]
+        model.pinText = backend.pin
+        try await press("確認卡片", in: model)
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["再感應一次"])
+        try await press("再感應一次", in: model)
+        XCTAssertTrue(model.screen.texts.contains("卡片在感應途中離開了手機。PIN 還在，不用再輸入，請再感應一次。"))
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["再感應一次"])
+        XCTAssertTrue(model.holdsPIN)
+        try await press("再感應一次", in: model)
+        XCTAssertEqual(model.screen.step, 4)
+    }
+
+    // The server does not answer --------------------------------------------------------------------
+
+    /// The server does not answer when asked for its config: step 2 stops at its first item, before any card
+    /// is read, and the card is read again once it answers.
+    func testAServerThatDoesNotAnswerStopsBeforeTheFirstTap() async throws {
+        try await onTheSecondDay()
+        let model = makeModel(opened: false)
+        asked.configFails = true
+        values["network"] = "`X`"
+        try await press("下一步", in: model)
+        try await press("感應卡片", in: model)
+        XCTAssertEqual(model.screen.step, 2)
+        XCTAssertEqual(Array(model.screen.texts.dropFirst(4).prefix(3)), ["連上島民證明的伺服器", "停在這裡", "伺服器的回應不正確，現在不能過卡。請稍後再試。（代碼 network）"])
+        XCTAssertEqual(card.taps, [])
+        asked.configFails = false
+        try await press("再感應一次卡片", in: model)
+        try await press("感應卡片", in: model)
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["下一步"])
+    }
+
+    /// From the day, the screen in the place of step 1 is drawn again when the config says otherwise: back in
+    /// the app after the server's lowest version was put back, step 1 is there again.
+    func testTheScreenOfAnOlderBuildGoesWhenTheConfigSaysOtherwise() async throws {
+        try await onTheSecondDay()
+        minApp = .stop("2027-03-01")
+        let model = makeModel()
+        while model.screen.step != 0 { await Task.yield() }
+        minApp = .ok
+        model.cameBack()
+        while model.screen.step != 1 { await Task.yield() }
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["下一步"])
+    }
+
+    // The lowest version, a phone without NFC (ADR-0035) ---------------------------------------------
+
+    /// A build older than the server's lowest, before the day it starts on: said above step 1, with the way
+    /// to the store, and a card proof goes on as usual.
+    func testBeforeTheDayAnOlderBuildSaysSoAndGoesOn() async throws {
+        try await onTheSecondDay()
+        let store = URL(string: "https://apps.apple.com/app/id0000000000")!
+        let model = makeModel(minApp: .okUntil("2027-03-01"), storePage: store)
+        while model.screen.warnings.isEmpty { await Task.yield() }
+        XCTAssertEqual(model.screen.step, 1)
+        XCTAssertEqual(model.screen.warnings, [Notice(
+            text: "這一版的 app 從 2027-03-01 起不能過卡。請在那之前到 App Store 更新。",
+            button: Button(label: "到 App Store 更新", action: .openStore))])
+        checkAgainstTheCopy(model.screen, file: #filePath, line: #line)
+        model.perform(.openStore)
+        XCTAssertEqual(opened.last, store)
+        // Above the reminder's note too.
+        model.openedFromReminder()
+        while model.screen.warnings.isEmpty { await Task.yield() }
+        XCTAssertNotNil(model.screen.notice)
+        XCTAssertEqual(Array(model.screen.texts.prefix(3)), ["這一版的 app 從 2027-03-01 起不能過卡。請在那之前到 App Store 更新。", "到 App Store 更新", "這是過卡的提醒。現在不方便的話，可以晚點再做。"])
+        try await toAccounts(model)
+    }
+
+    /// From that day on: the screen in the place of step 1, with nothing that leads to a card or a PIN.
+    func testFromTheDayAnOlderBuildDoesNotReachTheCard() async throws {
+        try await onTheSecondDay()
+        let store = URL(string: "https://apps.apple.com/app/id0000000000")!
+        let model = makeModel(minApp: .stop("2027-03-01"), storePage: store)
+        while model.screen.step != 0 { await Task.yield() }
+        XCTAssertEqual(model.screen.texts, [
+            "這一版不能過卡了",
+            "從 2027-03-01 起，這一版的島民證明 app 不能過卡。請更新到最新的版本。",
+            "卡片還沒有被讀取，沒有任何東西送出去。",
+            "到 App Store 更新",
+            "也可以用電腦和讀卡機，在 \(try XCTUnwrap(backend.origin.host)) 過卡。",
+        ])
+        checkAgainstTheCopy(model.screen, file: #filePath, line: #line)
+        XCTAssertEqual(model.screen.buttons, [])
+        XCTAssertEqual(model.screen.settings?.label, "設定")
+        // Pressed all the same, as no screen lets: nothing starts.
+        model.perform(.start)
+        model.perform(.readCard)
+        while let work = model.work { await work.value }
+        XCTAssertEqual(model.screen.step, 0)
+        XCTAssertEqual(card.taps, [])
+        try await press("到 App Store 更新", in: model)
+        XCTAssertEqual(opened.last, store)
+    }
+
+    /// The config said the build was new enough when the app opened, and says it must stop by the time the
+    /// card would be read: the card is not read.
+    func testAnOlderBuildStopsBeforeTheFirstTapWhenTheConfigSaysSoThen() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await press("下一步", in: model)
+        minApp = .stop("2027-03-01")
+        model.perform(.readCard)
+        while let work = model.work { await work.value }
+        XCTAssertEqual(model.screen.step, 0)
+        XCTAssertTrue(model.screen.texts.contains("這一版不能過卡了"))
+        XCTAssertEqual(card.taps, [])
+        // A build with no page in the store yet: the sentences without the button.
+        XCTAssertFalse(model.screen.texts.contains("到 App Store 更新"))
+    }
+
+    /// A lowest version the app cannot read: the card proof does not go on, as with a config it cannot read.
+    func testALowestVersionThatCannotBeReadStopsBeforeTheFirstTap() async throws {
+        try await onTheSecondDay()
+        let model = makeModel(minApp: .unreadable)
+        // The document writes the code as `X`.
+        values["malformed_response"] = "`X`"
+        try await press("下一步", in: model)
+        try await press("感應卡片", in: model)
+        XCTAssertEqual(model.screen.step, 2)
+        XCTAssertTrue(model.screen.texts.contains("伺服器的回應不正確，現在不能過卡。請稍後再試。（代碼 malformed_response）"))
+        XCTAssertEqual(card.taps, [])
+    }
+
+    /// A phone that cannot read a card: the screen in the place of step 1, and nothing leads to a tap.
+    func testAPhoneThatCannotReadACardSaysSoInThePlaceOfStepOne() async throws {
+        let model = makeModel(canReadCards: false)
+        XCTAssertEqual(model.screen.step, 0)
+        XCTAssertEqual(model.screen.texts, [
+            "這支手機不能感應卡片",
+            "這支手機沒有 NFC，不能用 app 過卡。",
+            "可以用電腦和讀卡機，在 \(try XCTUnwrap(backend.origin.host)) 過卡。",
+        ])
+        checkAgainstTheCopy(model.screen, file: #filePath, line: #line)
+        XCTAssertEqual(model.screen.buttons, [])
+        model.perform(.start)
+        XCTAssertEqual(model.screen.step, 0)
+        XCTAssertEqual(card.taps, [])
+    }
+
+    // The card leaves, the panel is closed (#172) -------------------------------------------------
+
+    /// The first tap: a card that left, or none that came, is tapped again; a panel the cardholder closed
+    /// leaves the step as it was before the button, with no reason written.
+    func testTheFirstTapIsMadeAgain() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await press("下一步", in: model)
+        card.nextTapsFail = [.dropped(.notSent), .noTap, .cancelled]
+        try await press("感應卡片", in: model)
+        XCTAssertTrue(model.screen.texts.contains("卡片在讀取途中離開了手機。請再感應一次，感應時不要移動卡片。"))
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["再感應一次"])
+        try await press("再感應一次", in: model)
+        XCTAssertTrue(model.screen.texts.contains("沒有感應到卡片。請再感應一次，把卡片平貼在手機背面的上方。"))
+        try await press("再感應一次", in: model)
+        XCTAssertEqual(model.screen.step, 2)
+        XCTAssertFalse(model.screen.texts.contains("停在這裡"), "no reason for a panel that was closed")
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["上一步", "感應卡片"])
+        try await press("感應卡片", in: model)
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["下一步"])
+        XCTAssertEqual(card.pinsReceived, 0)
+    }
+
+    /// The second tap, with the PIN in memory: only that tap is made again, and the PIN is not typed again,
+    /// when the card left before the PIN went to it, when it left after it had accepted the PIN, and when no
+    /// card came. A panel the cardholder closed leaves the step as before the button, the PIN still there.
+    func testTheSecondTapIsMadeAgainWithThePINInMemory() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await press("下一步", in: model)
+        try await press("感應卡片", in: model)
+        try await press("下一步", in: model)
+        let kept = "卡片在感應途中離開了手機。PIN 還在，不用再輸入，請再感應一次。"
+        for (failure, sentence) in [(CardFailure.dropped(.notSent), kept), (.dropped(.accepted), kept), (.noTap, "沒有感應到卡片。請再感應一次，把卡片平貼在手機背面的上方。")] {
+            card.nextTapsFail = [failure]
+            if model.pinText.isEmpty, !model.holdsPIN { model.pinText = backend.pin }
+            let button = try XCTUnwrap(model.screen.buttons.last?.label)
+            try await press(button, in: model)
+            XCTAssertEqual(model.screen.step, 3)
+            XCTAssertTrue(model.screen.texts.contains(sentence), "\(failure): \(model.screen.texts)")
+            XCTAssertEqual(model.screen.buttons.map(\.label), ["再感應一次"])
+            XCTAssertTrue(model.holdsPIN, "the PIN is kept for the tap to be made again")
+            XCTAssertEqual(model.pinText, "", "and not in the field")
+        }
+        // The panel closed: no reason, the screen as before the button; "確認卡片" taps again with the PIN kept.
+        card.nextTapsFail = [.cancelled]
+        try await press("再感應一次", in: model)
+        XCTAssertEqual(model.screen.step, 3)
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["上一步", "確認卡片"])
+        XCTAssertFalse(model.screen.blocks.contains { if case .message = $0 { return true } else { return false } }, "no reason")
+        XCTAssertTrue(model.holdsPIN)
+        try await press("確認卡片", in: model)
+        XCTAssertEqual(model.screen.step, 4, "the same tap again, with the PIN that was in memory")
+        XCTAssertEqual(card.pinsReceived, 1, "the PIN went to the card once")
+    }
+
+    /// The card left while the PIN was going to it, and has never accepted this PIN: whether it counted a try
+    /// is not known. The PIN is not sent again by itself: it is dropped, the screen says so, and it is typed again.
+    func testAPINThatMayHaveReachedTheCardIsNotSentAgainByItself() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await press("下一步", in: model)
+        try await press("感應卡片", in: model)
+        try await press("下一步", in: model)
+        card.nextTapsFail = [.dropped(.sent)]
+        model.pinText = backend.pin
+        try await press("確認卡片", in: model)
+        XCTAssertEqual(model.screen.step, 3)
+        XCTAssertTrue(model.screen.texts.contains("感應在送出 PIN 的時候中斷了，不確定卡片有沒有收到。為了不在你不知道的時候多用掉一次 PIN 的錯誤次數，app 不會自動重送。請再輸入一次 PIN，再感應一次。"))
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["上一步", "確認卡片"])
+        XCTAssertFalse(model.holdsPIN, "the PIN is dropped")
+        // Without a PIN typed again, no tap.
+        let taps = card.taps.count
+        try await press("確認卡片", in: model)
+        XCTAssertTrue(model.screen.texts.contains("請輸入 PIN。"))
+        XCTAssertEqual(card.taps.count, taps)
+        model.pinText = backend.pin
+        try await press("確認卡片", in: model)
+        XCTAssertEqual(model.screen.step, 4)
+    }
+
+    /// The third tap: the card has accepted the PIN before, so wherever this tap loses the card, also while
+    /// the PIN goes to it, only this tap is made again with the PIN in memory. A panel the cardholder closed
+    /// says that the card did not sign. "取消" drops the PIN.
+    func testTheThirdTapIsMadeAgainWithThePINInMemory() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await toAccounts(model)
+        try await typeBob(in: model)
+        let signatures = card.signatures
+        let left = "卡片在感應途中離開了手機。請再感應一次。"
+        var button = try XCTUnwrap(model.screen.buttons.last?.label)
+        for (failure, sentence) in [(CardFailure.dropped(.notSent), left), (.dropped(.sent), left), (.dropped(.accepted), left), (.cancelled, "感應取消了，卡片沒有簽。"), (.noTap, "沒有感應到卡片。請再感應一次，把卡片平貼在手機背面的上方。")] {
+            card.nextTapsFail = [failure]
+            try await press(button, in: model)
+            XCTAssertEqual(model.screen.step, 5)
+            XCTAssertTrue(model.screen.texts.contains(sentence), "\(failure): \(model.screen.texts)")
+            XCTAssertEqual(model.screen.buttons.map(\.label), ["再感應一次"])
+            XCTAssertEqual(model.screen.cancel?.label, "取消")
+            XCTAssertTrue(model.holdsPIN, "the PIN is kept: \(failure)")
+            XCTAssertEqual(card.signatures, signatures, "the card did not sign")
+            button = "再感應一次"
+        }
+        try await press("取消", in: model)
+        XCTAssertEqual(model.screen.step, 1)
+        XCTAssertFalse(model.holdsPIN)
+    }
+
     /// A PIN the card refuses is dropped, and asked for again on the same screen.
     func testAWrongPINIsDroppedAndAskedForAgain() async throws {
         try await onTheSecondDay()
@@ -699,7 +1074,7 @@ final class CardProofTests: XCTestCase {
     /// A model as the app makes its own, with the card and the back end of
     /// this test. `opened`: it has asked for `config`, as the screen makes
     /// it do when it is first drawn.
-    private func makeModel(opened: Bool = true, card: Card? = nil) -> CardProofModel {
+    private func makeModel(opened: Bool = true, card: Card? = nil, canReadCards: Bool = true, minApp: MinApp = .ok, storePage: URL? = nil) -> CardProofModel {
         let backend = self.backend!
         let asked = CountingBackend(HTTPBackend(site: backend.origin, publicFiles: backend.origin))
         self.asked = asked
@@ -725,7 +1100,10 @@ final class CardProofTests: XCTestCase {
             site: backend.origin,
             open: { [unowned self] in self.opened.append($0) },
             copyText: { [unowned self] in self.copied.append($0) },
-            share: { [unowned self] in self.shared.append($0) }))
+            share: { [unowned self] in self.shared.append($0) },
+            canReadCards: { canReadCards },
+            minApp: { [unowned self] _, _ in self.minApp ?? minApp },
+            storePage: storePage))
         if opened { model.open() }
         return model
     }
