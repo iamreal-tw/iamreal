@@ -36,10 +36,20 @@ export const VISITOR_HEADERS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * Sent with the two pages of hanging a proof (/hang, /hang/<short ID>),
+ * besides their other headers: the page differs by the device that asks
+ * (the demonstration shows Android's way or the iPhone's, design/copy/hang.md,
+ * 示範), and it may be kept by a cache for a minute, so a cache is told what
+ * the answer depends on.
+ */
+export const BY_DEVICE: Readonly<Record<string, string>> = { Vary: "User-Agent" };
+
+/**
  * VISITOR_HEADERS with scripts of this origin (`script-src 'self'`): for the
- * pages that load the copy buttons' script, /faq, /verify and
- * /hang/<short ID>. Only scripts of this origin, which is that one file: no
- * inline script, no other site's. The Go backend's `scriptPageHeaders`.
+ * pages that load a script of this site: the copy buttons' (/faq, /verify,
+ * /hang/<short ID>) and the player of the demonstration (/hang,
+ * /hang/<short ID>). Only scripts of this origin, which are those two files:
+ * no inline script, no other site's. The Go backend's `scriptPageHeaders`.
  */
 export const SCRIPT_PAGE_HEADERS: Readonly<Record<string, string>> = {
   ...VISITOR_HEADERS,

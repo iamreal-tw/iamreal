@@ -197,7 +197,17 @@ function hangPictures(): { picture: string[]; told: string[] }[] {
  * part 3, as hang.md writes them with the examples replaced; each picture its title, what a screen reader is
  * told and its pieces hidden from a screen reader; no inline style.
  */
-/** The page of hanging a card's proof without its demonstration and the demonstration's timeline. */
+/**
+ * The words of screens of the demonstration (hang.md, 示範): the code block that starts with `first`, and with
+ * `second` if two start alike (the links' screen, which the Android words start with too).
+ */
+function demoWords(first: string, second?: string): string[] {
+  const found = codeBlocks(copySection("hang.md", "示範")).filter((b) => b[0] === first && (second === undefined || b[1] === second));
+  assert.equal(found.length, 1, `hang.md has one block of the demonstration's words that starts with ${first}${second === undefined ? "" : `, ${second}`}`);
+  return found[0]!;
+}
+
+/** The page of hanging a proof without its demonstration and the demonstration's timeline. */
 function withoutDemo(page: string): string {
   const out = page.replace(/<div class="how">\s*<div class="demo"[\s\S]*?<script type="application\/json" id="hang-timeline">[^<]*<\/script>\s*/, "").replace(/<\/ol>\s*<\/div>/, "</ol>");
   assert.ok(!out.includes('class="demo') && !out.includes("hang-timeline"), "the demonstration is one block of the page");
@@ -280,8 +290,7 @@ describe("hanging a proof on a profile", () => {
     assert.ok(picture !== null, "the picture is one image with a label, its screens hidden from a screen reader");
     assert.equal(unescapeHtml(picture[1]!), told);
     // The words of the five screens, in order, with the card's account and the site's own address.
-    const words = codeBlocks(section).at(-1)!;
-    assert.equal(words[0], "島民證明的畫面");
+    const words = demoWords("島民證明的畫面");
     assert.equal(squash(visibleText(picture[2]!)), squash(copyLines(words, "@alice", "@carol.tw", "iamreal.tw/p/", "test.iamreal.tw/p/").join("")));
     // The four screens of Threads say they are illustrations.
     assert.deepEqual([...picture[2]!.matchAll(/<p class="kick">([^<]*)<\/p>/g)].map((m) => m[1]!.endsWith("（示意）")), [false, true, true, true, true]);
@@ -310,10 +319,21 @@ describe("hanging a proof on a profile", () => {
     assert.match(css, /body\.hang \.shot \.clip \{\s*min-width: 0;\s*overflow: hidden;\s*text-overflow: ellipsis;\s*white-space: nowrap;\s*\}/);
   });
 
-  test("/hang without a proof: the page from the home page, a picture under each step, with no script and no button", async () => {
+  test("/hang without a proof: the page from the home page, a picture under each step, no copy button; its demonstration writes hang.md's examples and says which page its first screen is", async () => {
     await pagesWorld(worker, "2026-11-18", []);
-    const { status, page } = await getPage(worker, "/hang");
+    const { status, page: whole } = await getPage(worker, "/hang");
     assert.equal(status, 200);
+    const page = withoutDemo(whole);
+    // The demonstration: the example account and address, in the site's own domain; no card's.
+    const row = /<div class="demo-row" aria-hidden="true">([\s\S]*)<\/div>\s*<\/div>\s*<p class="demo-control">/.exec(whole)?.[1];
+    assert.ok(row !== undefined, "the demonstration is in the page");
+    const said = /第一個畫面是這一頁自己[^\n]*從首頁點進來時是「([^」]*)」/.exec(copySection("hang.md", "示範"))?.[1];
+    assert.ok(said !== undefined, "hang.md says what is above the first screen on this page");
+    const words = [said, ...demoWords("島民證明的畫面").slice(1)];
+    assert.equal(squash(visibleText(row)), squash(copyLines(words, "iamreal.tw/p/", "test.iamreal.tw/p/").join("")));
+    assert.match(whole, /<div class="demo" data-demo="hang-timeline" data-variant="ios" hidden>/);
+    // The player and nothing else: no copy button, so not its script.
+    assert.deepEqual(whole.match(/<script src="[^"]*"/g), ['<script src="/demo.js"']);
     // The pictures write hang.md's examples, in the site's own domain.
     wantHangPage(page, copyLines(block("hang.md", "2. ", 1)), false, "iamreal.tw/p/", "test.iamreal.tw/p/");
     for (const want of ['<a class="button quiet" href="https://www.threads.com/" target="_blank" rel="noopener noreferrer">打開 Threads</a>', '<a class="button" href="/proof">我要換島民證明</a>']) {
@@ -321,9 +341,53 @@ describe("hanging a proof on a profile", () => {
     }
     // No 複製連結, not the two lines of part 3.
     notOnPage(page, "複製連結", "剛才複製的連結", ...copyLines(block("hang.md", "3. ")));
-    assert.ok(!page.includes("<button"), "no button");
+    assert.ok(!page.includes("<button"), "no button but the demonstration's");
     const { title, site } = previewOf("hang.md", "連結被貼出去時的預覽");
     wantPreview(page, title, site);
+  });
+
+  test("a device that says it is Android gets Android's way back from the links, on both pages; every other gets the iPhone's; the answer says it depends on the device", async () => {
+    await pagesWorld(worker, "2026-11-18", [r("2026-11-06", cardStarting(CARD_A), "threads:carol.tw")]);
+    const agents: [string, string | null, "ios" | "android"][] = [
+      ["an Android phone", "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36", "android"],
+      ["an Android tablet", "Mozilla/5.0 (Linux; Android 13; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36", "android"],
+      ["an iPhone", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1", "ios"],
+      ["a desktop", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36", "ios"],
+      ["a desktop on Linux", "Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0", "ios"],
+      ["one in another case", "android", "ios"],
+      ["one that says nothing", "", "ios"],
+      ["one with no User-Agent", null, "ios"],
+    ];
+    const section = copySection("hang.md", "示範");
+    assert.ok(section.includes("裡面有 `Android` 的給 Android 的版本") && section.includes("`Vary: User-Agent`"), "hang.md says the rule");
+    const timeline = JSON.parse(readFileSync(join(WORKER_DIR, "..", "design", "motion", "hang.json"), "utf8")) as { boxes: Record<string, string>; variants: Record<string, { back: string }> };
+    for (const path of ["/hang", `/hang/${CARD_A}`]) {
+      for (const [who, agent, variant] of agents) {
+        const res = await worker.fetch(path, { headers: agent === null ? {} : { "User-Agent": agent } });
+        const page = await res.text();
+        const what = `${path}, ${who}`;
+        assert.equal(res.status, 200, what);
+        checkVisitorHeaders(what, res, { cache: "public, max-age=60", script: true });
+        assert.match(res.headers.get("vary") ?? "", /\bUser-Agent\b/, `${what}: Vary`);
+        assert.ok(page.includes(`data-variant="${variant}" hidden>`), `${what}: the ${variant} version`);
+        // The boxes of that platform, and not the other's way back.
+        const other = variant === "ios" ? "android" : "ios";
+        const boxes = [...page.matchAll(/data-box="([^"]*)"/g)].map((m) => m[1]!);
+        assert.deepEqual([...boxes].sort(), Object.keys(timeline.boxes).filter((b) => b !== timeline.variants[other]!.back).sort(), `${what}: its boxes`);
+        if (variant === "android") {
+          // The links: ✕ at the left is what to press, 完成 at the right is grey and no box (hang.md, the Android words).
+          const links = /<div class="shot s3" data-box="s3">([\s\S]*?)<\/div>\s*<\/div>\s*<div class="shot s4"/.exec(page)?.[1];
+          assert.ok(links !== undefined, `${what}: the screen of the links`);
+          const address = path === "/hang" ? ["iamreal.tw/p/", "test.iamreal.tw/p/"] : ["iamreal.tw/p/7K2Q9FM4XD", testSiteCardAddress(CARD_A)];
+          assert.equal(squash(visibleText(links)), squash(copyLines(demoWords("按了「連結」之後（示意）", "✕"), ...address).join("")), `${what}: the words of the links`);
+          assert.ok(links.includes('<span class="act dim">完成</span>'), `${what}: 完成 is grey`);
+        }
+      }
+    }
+    // A redirect is the same for every device, and says nothing of one.
+    const moved = await worker.fetch("/hang/7k2q9fm4xd", { redirect: "manual" });
+    assert.equal(moved.status, 301);
+    assert.doesNotMatch(moved.headers.get("vary") ?? "", /User-Agent/i);
   });
 
   test("/hang/<short ID> is the page for one card with an account on Threads only (302 to /hang otherwise); another spelling is redirected (301); one that does not read is answered without the proof log's object", async () => {

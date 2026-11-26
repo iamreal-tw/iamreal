@@ -8,7 +8,8 @@
 // 和島民證明頁面上的寫法相同), so on a test log's site in its own domain
 // (design/copy/test-site.md); the copy buttons' script (/copy.js) shows the
 // button that copies it whole, with https://, hidden without the script.
-// Without one (/hang): part 2 as it is 從首頁點進來時, with no script.
+// Without one (/hang): part 2 as it is 從首頁點進來時, with no copy button
+// and so without that script.
 //
 // Each of the four steps has its picture under its words, and the page of a
 // card has one more under the two lines of part 3: what the profile looks
@@ -17,9 +18,13 @@
 // raspberry. They write the card's account and its address, or hang.md's
 // fixed examples on the page without a proof, in the site's own domain.
 //
-// The page of a card also has the demonstration (hang.md, 示範): the five
+// Both pages have the demonstration (hang.md, 示範): the five
 // screens of design/motion/hang.json in a row, hidden as the page is sent, and
-// that timeline as data the browser does not run. The player (/demo.js)
+// that timeline as data the browser does not run. The page without a proof
+// writes hang.md's fixed examples in it, and says above its first screen that
+// this is the page one has with a proof. The link's last step differs by
+// platform (design/motion/README.md, 框): the Worker reads which from the
+// request (`variantOf`). The player (/demo.js)
 // shows it in place of the pictures and plays it; without the player the
 // page is the one above. Every box the timeline names is a [data-box]; what a
 // change of the screens shows or moves says so in data-on, data-off and
@@ -107,6 +112,17 @@ ${picture}
 </ol>`;
 }
 
+/** The platform whose way back from the links the demonstration shows (the timeline's `variants`). */
+export type Variant = "ios" | "android";
+
+/**
+ * Which one a request gets, by its User-Agent (hang.md, 示範): Android's for a device that says it is Android,
+ * the iPhone's for every other (an iPhone, a desktop, one that says nothing).
+ */
+export function variantOf(userAgent: string | null): Variant {
+  return userAgent !== null && userAgent.includes("Android") ? "android" : "ios";
+}
+
 /** Where the demonstration's timeline is in the page: the id of its data block. */
 const TIMELINE_ID = "hang-timeline";
 
@@ -124,9 +140,10 @@ const row = (words: string, end: Html = html`<span class="blank"></span>`): Html
 
 /**
  * The demonstration for the account `account` (without its @) and the card of `short`, on the platform `variant`
- * ("ios" or "android": what goes back from the links, design/motion/README.md, 框), with its button and its timeline.
+ * (what goes back from the links, design/motion/README.md, 框), with its button and its timeline. `first` is the
+ * small line above the first screen: which page of this site it is.
  */
-function demo(site: Site, account: string, short: string, variant: "ios" | "android"): Html {
+function demo(site: Site, account: string, short: string, variant: Variant, first: string): Html {
   const address = `${site.host}/p/${short}`;
   const link = proofLink(site, short);
   // The links' top: on iOS 完成 at the right is what goes back; on Android it is grey, and ✕ at the left is.
@@ -137,7 +154,7 @@ function demo(site: Site, account: string, short: string, variant: "ios" | "andr
   return html`<div class="demo" data-demo="${TIMELINE_ID}" data-variant="${variant}" hidden>
 <div class="demo-picture" role="img" aria-label="${DEMO_TOLD}">
 <div class="demo-row" aria-hidden="true">
-<div class="shot s0" data-box="s0"><p class="kick">島民證明的畫面</p>
+<div class="shot s0" data-box="s0"><p class="kick">${first}</p>
 <p class="heading"><span>把島民證明掛到</span><span class="cut"><span class="clip">@${account}</span> 的個人檔案</span></p>
 <p class="address">${address}</p>
 <p class="pair"><span class="main" data-box="copy"><span class="swap"><span data-off="copied">複製連結</span><span class="over" data-on="copied">已複製</span></span>${mark()}${PRESS}</span><span class="second" data-box="open">打開 Threads${mark()}${PRESS}</span></p>
@@ -181,19 +198,22 @@ ${linksTop}
 <script type="application/json" id="${TIMELINE_ID}">${new Html(HANG_TIMELINE_JSON.replaceAll("<", "\\u003c"))}</script>`;
 }
 
-/** /hang: the page from the home page, without a proof. */
-export function hangWithout(site: Site): Document {
+/** /hang: the page from the home page, without a proof, for a device of the platform `variant`. */
+export function hangWithout(site: Site, variant: Variant): Document {
   const content = html`<section class="hang">
 <h1 class="title"><span class="line">把島民證明掛到</span> <span class="line">Threads 的個人檔案</span></h1>
 <p class="actions"><a class="button quiet" href="https://www.threads.com/" target="_blank" rel="noopener noreferrer">打開 Threads</a></p>
+<div class="how">
+${demo(site, EXAMPLE_ACCOUNT, EXAMPLE_SHORT, variant, "有了島民證明之後的這一頁")}
 ${steps(site, EXAMPLE_ACCOUNT, EXAMPLE_SHORT, "你的島民證明的連結")}
+</div>
 <p class="none-yet">還沒有島民證明？ <a class="button" href="/proof">我要換島民證明</a></p>
 </section>`;
-  return { title: TITLE, kind: "hang", content };
+  return { title: TITLE, kind: "hang", demo: true, content };
 }
 
-/** /hang/<short ID>: the page for the card of the short ID `short` (in its one spelling), whose account on Threads is `account`. */
-export function hangPage(site: Site, short: string, account: string): Document {
+/** /hang/<short ID>: the page for the card of the short ID `short` (in its one spelling), whose account on Threads is `account`, for a device of the platform `variant`. */
+export function hangPage(site: Site, short: string, account: string, variant: Variant): Document {
   if (!isThreadsUsername(account)) throw new Error("pages: the account is not in the Threads format");
   const address = `${site.host}/p/${short}`;
   const content = html`<section class="hang">
@@ -201,7 +221,7 @@ export function hangPage(site: Site, short: string, account: string): Document {
 <p class="backlink">${address}</p>
 <p class="actions"><button type="button" class="copy button" data-copy-text="${proofLink(site, short)}" data-copied="已複製" hidden>複製連結</button> <a class="button quiet" href="https://www.threads.com/@${account}" target="_blank" rel="noopener noreferrer">打開 Threads</a></p>
 <div class="how">
-${demo(site, account, short, "ios")}
+${demo(site, account, short, variant, "島民證明的畫面")}
 ${steps(site, account, short, "剛才複製的連結")}
 </div>
 <p class="done"><a href="/p/${short}">掛好了嗎？打開你的島民證明看看。</a></p>

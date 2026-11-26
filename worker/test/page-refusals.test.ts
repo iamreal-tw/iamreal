@@ -47,7 +47,7 @@ interface Document {
 }
 const load = async <T>(file: string): Promise<T> => (await import(new URL(`../src/pages/${file}`, import.meta.url).href)) as T;
 const { accountPage } = await load<{ accountPage(username: string, data: { today: number; cards: readonly unknown[] }): Document }>("account.ts");
-const { hangPage } = await load<{ hangPage(site: Site, short: string, account: string): Document }>("hang.ts");
+const { hangPage } = await load<{ hangPage(site: Site, short: string, account: string, variant: "ios" | "android"): Document }>("hang.ts");
 const { proofPage } = await load<{ proofPage(site: Site, shortId: string, data: { today: number; cards: readonly PageCard[] }): Document }>("proof.ts");
 const { proofLogPage } = await load<{
   proofLogPage(v: { counts: { declared: number; recent: number }; rows: readonly (HistoryRow & { seq: number; scopedId: string })[]; more: boolean; after: boolean; badQuery: string | null }): Document;
@@ -86,11 +86,11 @@ describe("the page of an account", () => {
 
 describe("the page to hang a proof", () => {
   test("is written for a Threads username", () => {
-    assert.ok(hangPage(site, SHORT, "alice").content.toString().includes('href="https://www.threads.com/@alice"'));
+    assert.ok(hangPage(site, SHORT, "alice", "ios").content.toString().includes('href="https://www.threads.com/@alice"'));
   });
   for (const name of NOT_NAMES) {
     test(`is not written for ${JSON.stringify(name)}`, () => {
-      assert.throws(() => hangPage(site, SHORT, name), /^Error: pages: the account is not in the Threads format$/);
+      assert.throws(() => hangPage(site, SHORT, name, "ios"), /^Error: pages: the account is not in the Threads format$/);
     });
   }
 });
