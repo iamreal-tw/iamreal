@@ -12,6 +12,7 @@
 | [`workflows/upload-android.yml`](workflows/upload-android.yml) | 營運者手動觸發（`workflow_dispatch`），只在 `main` 上 | 建置 Android 的商店 build（`tw.iamreal.app`）、用上傳金鑰簽章，傳到 Google Play 的內部測試：`build`、`upload` 兩個工作（下面「上傳 Android 的 app」）。金鑰只在 `upload`，它在 environment `app-test` 裡；碰不到快取（`cache-mode: none`） |
 | [`workflows/upload-ios.yml`](workflows/upload-ios.yml) | 只能手動觸發（`workflow_dispatch`），在 `main` 上 | 建置 iPhone 的商店 build、檢查它，再簽章、上傳到 App Store Connect（TestFlight）：`build`、`upload` 兩個工作。`build` 沒有金鑰；`upload` 在 environment `app-test`，不取出程式庫、不跑程式庫的腳本，只有最後一步拿到 App Store Connect 的 API 金鑰（[`ios/README.md`「上傳到 TestFlight」](../ios/README.md#上傳到-testflight)）。碰不到快取（`cache-mode: none`） |
 | [`workflows/cache.yml`](workflows/cache.yml) | 推到 `main` | 編譯 `device-core/`、建置 `android/`，把 cargo 的 registry、`device-core/target/`、Gradle 的依賴和 wrapper 存成快取，給 `checks.yml` 的 `device-core`、`android` 還原：`cache-device-core`、`cache-android` 兩個工作。不引用任何 secret，`GITHUB_TOKEN` 只能讀（`contents: read`）；唯一能存快取的工作流程（`cache-mode: write`） |
+| [`workflows/reverify.yml`](workflows/reverify.yml) | 每天台灣時間 00:30（排程，`schedule`），和手動觸發（`workflow_dispatch`） | 營運者每天的重驗（ADR-0025）：用 Go 的 `iamreal-verify` 和原生的 `bb`，讀公開的網址，把測試的證明紀錄從第 1 筆整份重驗：`test` 一個工作；正式的那一份 `production` 寫好了、還不跑（下面「每天的重驗」）。不引用任何 secret，`GITHUB_TOKEN` 只能讀，碰不到快取（`cache-mode: none`） |
 
 **為什麼 `browser` 分開、只在有關的檔改了才跑**（#123）：這兩套測試在 GitHub 的 runner 上要約 16 分鐘（2026-11-20 在 #119 量的：`browser` 15 分 28 秒，`go` 1 分 56 秒，`typescript` 5 分 11 秒），是一次檢查的三分之二。只動文件、app 或 `server/` 的 PR 和它們無關，不必多等這 16 分鐘（那時這兩套測試配的是 Go 的舊後台，只動 `worker/` 的 PR 也不跑；#69 之後它們對 Worker 跑，`worker/` 有改就跑）。分開的時候程式庫還沒公開，Actions 的用量算在組織免費方案每月含的額度裡，用完就不能再跑；2026-11-21 公開之後，標準的 GitHub-hosted runner 在公開的程式庫不算用量（「The following usage remains free independently and does not reduce the included compute usage: Standard GitHub-hosted runners in public repositories」，[GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)），所以現在分開是為了時間，不是額度。`checks.yml` 的四個必要檢查在 PR 階段也照路徑跳過（#206），但做法不同、在合併佇列裡四項全跑：見下面「必要檢查在 PR 階段照路徑跳過」。
 
@@ -58,7 +59,7 @@
 
 下載的工具都先核對 SHA-256，雜湊都在 `circuits/` 裡、只寫一次：`nargo` 1.0.0（`circuits/fetch-nargo.sh`，照 `circuits/nargo.sha256`）、`circom` 2.2.3（`circuits/fetch-circom.sh`，照 `circuits/circom.sha256`，從 [iden3/circom 的 release](https://github.com/iden3/circom/releases/tag/v2.2.3) 下載 `circom-linux-amd64`）。`bb` 是 `@aztec-foundation/bb.js` 6.0.0 附的，由 `circuits/find-bb.sh` 照 `circuits/bb.sha256` 核對，所以這個工作沒有其他工作那一步 `sha256sum --check`。`build-circom.sh` 照 zkID 那個提交的 `yarn.lock` 安裝它的 JavaScript 套件、不跑安裝腳本，用的 yarn 1.22.22 是它 `package.json` 的 `packageManager` 寫的，由 corepack 照那裡的雜湊核對。另外兩樣是下載了不核對雜湊、但錯了會被比對抓到的：`nargo` 照 `circuits/lib/Nargo.toml` 的標籤抓 Noir 的函式庫（標籤被移到內容不同的提交時，重編的電路檔就不同），`bb` 下載它的通用參數（不同時，寫出的驗證金鑰就不同）。工作整個寫死在 `worker/test/workflows.ts`（`CIRCUITS_JOB_STEPS`），哪一步換了工具的來源、拿掉重建或最後的比對，規則都擋。
 
-**`checks-circuits.yml` 的 `paths`**：`circuits/`；重建比對的對象 `web/circuits/`、`verifier/vk/`，和重建時用的 `web/scripts/strip-circuit.mjs`；電路的測試讀的 `spec/vectors/poseidon2.json`；套件（`pnpm-lock.yaml`、`pnpm-workspace.yaml`，和 workspace 其他三個套件的 `package.json`：這個工作在根目錄跑 `pnpm install --frozen-lockfile`，pnpm 拿 lockfile 和每個套件的 `package.json` 比對）；根目錄那七個檔（`ROOT_FILES_PATHS`，和必要檢查的清單同一份）：例如加一個 `.pnpmfile.cjs` 就能改變 `@aztec-foundation/bb.js` 解析到什麼，`bb` 正是從那裡來的，加一個 `.gitattributes` 就能改變取出來的 `web/circuits/`、`verifier/vk/`，也就是 `rebuild.sh` 逐位元組比對的檔；和這個工作流程檔自己。`workflows.test.ts` 讀 `circuits/` 每個進版本控制的檔，找出寫到 `circuits/` 以外的路徑，確認都在清單裡：JavaScript 的 `join(ROOT, …)`（`ROOT` 是 `circuits/`）、`join(dirname(fileURLToPath(import.meta.url)), …)`、相對路徑的 import，shell 腳本的 `$root/…` 和 `rebuild.sh` 的 `compare "…"`，`Nargo.toml` 的 `path = "…"`。看不到的：用其他方式拼出來的路徑，`nargo`、`bb`、circom 自己讀的東西，和 zkID 那個提交裡的檔。
+**`checks-circuits.yml` 的 `paths`**：`circuits/`；重建比對的對象 `web/circuits/`、`verifier/vk/`，和重建時用的 `web/scripts/strip-circuit.mjs`；電路的測試讀的 `spec/vectors/poseidon2.json`、`spec/vectors/declaration-code.json`；套件（`pnpm-lock.yaml`、`pnpm-workspace.yaml`，和 workspace 其他三個套件的 `package.json`：這個工作在根目錄跑 `pnpm install --frozen-lockfile`，pnpm 拿 lockfile 和每個套件的 `package.json` 比對）；根目錄那七個檔（`ROOT_FILES_PATHS`，和必要檢查的清單同一份）：例如加一個 `.pnpmfile.cjs` 就能改變 `@aztec-foundation/bb.js` 解析到什麼，`bb` 正是從那裡來的，加一個 `.gitattributes` 就能改變取出來的 `web/circuits/`、`verifier/vk/`，也就是 `rebuild.sh` 逐位元組比對的檔；和這個工作流程檔自己。`workflows.test.ts` 讀 `circuits/` 每個進版本控制的檔，找出寫到 `circuits/` 以外的路徑，確認都在清單裡：JavaScript 的 `join(ROOT, …)`（`ROOT` 是 `circuits/`）、`join(dirname(fileURLToPath(import.meta.url)), …)`、相對路徑的 import，shell 腳本的 `$root/…` 和 `rebuild.sh` 的 `compare "…"`，`Nargo.toml` 的 `path = "…"`。看不到的：用其他方式拼出來的路徑，`nargo`、`bb`、circom 自己讀的東西，和 zkID 那個提交裡的檔。
 
 時間：2026-11-21 第一次在 GitHub 上跑（[#262 的這一次](https://github.com/iamreal-tw/iamreal/actions/runs/44914901525/job/136878301995)）：建 circom 約 4 分鐘、含 circom 的 `pnpm test` 約 3 分半，重建並比對、編全部電路、`nargo test` 加起來約 40 秒，整個工作約 8 分半。工作的上限是 30 分鐘，和其他工作相同，約是這次的 3.5 倍；circom 的建置如果慢到接近上限，照 #243 停下來談要不要改放編好的見證產生器。
 
@@ -238,6 +239,64 @@ gh cache list --repo iamreal-tw/iamreal --ref refs/heads/main --limit 100 --sort
 - 上傳金鑰、服務帳號的金鑰在 `app-test` 裡，名稱對得上
 - 第一次手動傳之後，API 開的內部測試版本能不能直接是 `completed`（發給測試者）。不行的話，API 的回答會印在紀錄裡，照它改 `play-upload.sh`
 - 營運者從內部測試裝到手機、打得開
+
+## 每天的重驗（#421）
+
+`workflows/reverify.yml` 是 ADR-0025 說的營運者每天的重驗，測試的證明紀錄也跑一份（ADR-0028）。它和任何人自己做的重驗是同一支指令、同一份公開的檔：建置這個程式庫的 `iamreal-verify`（[`cmd/iamreal-verify/README.md`](../cmd/iamreal-verify/README.md)），用 `@aztec-foundation/bb.js` 6.0.0 附的原生 `bb`（先核對 SHA-256），由同目錄的 [`workflows/reverify.sh`](workflows/reverify.sh) 對公開的網址跑一次：
+
+```
+iamreal-verify -bb <bb> -crs <通用參數目錄> -proof-log test -data https://test-data.iamreal.tw/
+```
+
+**它做什麼。** `iamreal-verify` 預設的讀法一次做完 ADR-0025 的四件事：
+
+| ADR-0025 的 | 這一次跑做的 |
+|---|---|
+| 新增的紀錄 | 每一筆從第 1 筆起檢查寫法、驗證證明、套用紀錄規則；算出來的指紋和雜湊清單，和公布的 `fingerprints.jsonl`、`hashes/` 核對 |
+| 新增的清冊 | 清冊存檔的每一份清冊重新驗章、建樹，重建索引，和 `crl/index.jsonl` 逐行比 |
+| 舊的紀錄檔 | 每一檔每次都重新下載、重算，和公布的雜湊清單、指紋檔核對。沒有進度檔，所以比的不是「自己記著的那一檔結尾的指紋」：紀錄檔、雜湊清單、指紋檔三樣一起被改成彼此一致的另一份，這裡看不出來，要靠另一個地方抄的指紋檔（ADR-0027，[#35](https://github.com/iamreal-tw/iamreal/issues/35)） |
+| 卡片狀態檔 | 指紋檔最後一行那天的 `card-state/<日期>.jsonl`，和從證明紀錄算出來的逐張比 |
+
+- **每次從第 1 筆整份重驗，沒有進度檔，也不碰快取**（[#413](https://github.com/iamreal-tw/iamreal/issues/413)）。驗一筆約 12 ms（[#16](https://github.com/iamreal-tw/iamreal/issues/16)），十萬筆約 20 分鐘。
+- **執行紀錄裡看得到的**：`iamreal-verify` 在標準錯誤印的每一行（讀哪個網址、公布了幾筆、每一份清冊、雜湊清單、指紋檔、卡片狀態檔的結果，和每一個問題）；標準輸出的前三行（證明紀錄成立時是成立、筆數、指紋；不成立時只有一行，寫壞在第幾行、哪一個代碼）和每一筆無效的紀錄（第幾筆、哪一個代碼）。每一筆有效的紀錄和每張卡片的現況不印：它們在公開的證明紀錄裡，印出來只會讓執行紀錄跟著筆數變長。最後一行是結果和這一次跑了幾秒：
+
+  ```
+  reverify: the test proof log at https://test-data.iamreal.tw/ passed: exit code 0, 575 seconds
+  ```
+
+- **什麼時候跑**：排程是 UTC 16:30，台灣時間 00:30。後台在台灣的日期換了之後公布那一天的指紋（[`worker/README.md`「每天換日公布證明紀錄」](../worker/README.md#每天換日公布證明紀錄)）。重驗比公布早跑到時，核對到前一天那一行為止，照樣有結果。GitHub 的排程在尖峰時會延後；公開的程式庫 60 天沒有活動，排程會被停掉（[schedule](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)），要到 Actions 的頁面重新打開。排程只在 `main` 上的那一份工作流程檔跑。手動觸發：Actions 頁面的「Run workflow」，或 `gh workflow run reverify.yml`。
+- **它拿不到什麼**：沒有任何 secret，`GITHUB_TOKEN` 只能讀，沒有快取。它停不了過卡，也改不了後台的任何東西（ADR-0025：停止收過卡由營運者手動做）。套件只裝 `web/` 的（`bb` 在那裡），不跑安裝腳本、不讀 `.pnpmfile.cjs`、只從 npm 的 registry 裝。兩個工作整個寫死在 `worker/test/workflows.ts`（`REVERIFY_JOBS`），觸發的方式、網址、少了核對 `bb`、多了任何一步，規則都擋；`reverify.sh` 的測試在 `workflows.test.ts`，把 `iamreal-verify` 換成一個照樣印字、照樣回結束碼的替身。
+
+**沒過時。** 結束碼不是 0，工作就失敗。照 `reverify.sh` 印的最後一行分：
+
+| 最後一行 | 結束碼 | 營運者做什麼 |
+|---|---|---|
+| `passed` | 0 | 不用做 |
+| `DID NOT PASS` | 1 | 往上看是哪一筆、哪一項，照下一張表 |
+| `could not be checked` | 2 | 下載不到檔這一類：不算沒有通過（ADR-0025），下一次排程會從頭再做一次；連著幾天都這樣才要查 |
+| `did not run to its end` | 其他 | `iamreal-verify` 沒跑完（被停掉、超過工作的上限）：對證明紀錄什麼都還不知道，手動再觸發一次 |
+
+工作在 `reverify.sh` 之前就失敗（裝套件、`bb` 的 SHA-256 不對、編不過）時沒有這一行，那是工作流程自己的問題，和證明紀錄無關。
+
+`DID NOT PASS` 時，照 ADR-0025「沒有通過時」的表：
+
+| 執行紀錄裡看到的 | ADR-0025 的哪一種 | 處理 |
+|---|---|---|
+| `<第幾筆> invalid <代碼>` | 新增的紀錄裡有一筆無效 | 停止收過卡，查原因 |
+| `card-state/<日期>.jsonl: card … is different`、`… is missing`、卡片狀態檔壞掉（`line`、`order`） | 卡片狀態檔和重算的不同 | 停止收過卡，查原因 |
+| `fingerprints.jsonl` 或 `hashes/` 的某一行、某一份和重算的不同 | 公布的指紋或雜湊清單和重算的不同 | 停止收過卡，查原因 |
+| `log file: broken at line …`（紀錄檔少了、切法不對、某一行壞掉） | 紀錄檔本身變了 | 先停止收過卡。沒有進度檔，這一次跑分不出是舊的紀錄檔被動過（ADR-0025：不停止收過卡，從備份換回那一檔）還是後台寫出了壞的紀錄；拿備份或另一份抄本（ADR-0033）比過、確定只是舊檔被動過，才照那一列處理 |
+| `CRL archive: …`（索引和清冊檔不同） | ADR-0025 的表沒有這一種 | 查清冊鏡像；結果照重建的索引算，所以紀錄有沒有因此無效，看上面幾列 |
+
+每一次都開一張公開的 issue：第幾筆、哪個代碼、原因、怎麼修的。**測試的證明紀錄沒通過時**只要營運者知道，不停收過卡、不開公開的 issue（ADR-0028）；現在跑的只有這一份。
+
+現在沒有東西通知營運者（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）：工作失敗時 GitHub 只照各人的通知設定寄信給排程的最後修改者，所以要自己看 Actions 的頁面。
+
+**一次超過一小時，就開票做進度檔。** 最後一行印秒數，超過 3,600 秒時再多印一行提醒。
+
+**時間現在幾乎都花在清冊存檔，不在紀錄。** 2026-11-26 在一台 M1 Max 上照這個工作的做法對測試網站跑了一次：1 筆紀錄、58 份清冊（G2、G3 各 29 份），575 秒，其中驗那一筆證明不到一秒，其餘是下載每一份清冊、重新驗章、建樹（`cmd/iamreal-verify/README.md`：內政部大小的清冊一份 5 到 10 秒）。清冊存檔只會變多，測試網站 2026-11-19 部署到那一天是 58 份，一天約 8 份、一份約 10 秒；照這個速度估，約 360 份時一次就超過一小時，大約在 2027 年 1 月上旬，不必等紀錄變多。到那時候要做的進度檔，先記的是「驗過的清冊」那一項（ADR-0025 的進度檔本來就有它）。GitHub 的 runner 上要多久，看第一次手動觸發的執行紀錄。做進度檔時要一起解的：ADR-0025 寫進度檔放 GitHub Actions 的快取，ADR-0029 之後只有 `cache.yml` 能寫快取（[#413](https://github.com/iamreal-tw/iamreal/issues/413)）。工作的上限是 6 小時，GitHub 給一個工作最長的時間。
+
+**正式的證明紀錄**：`production` 這個工作寫好了，讀 `https://data.iamreal.tw/`，但有一行 `if: false`，不跑。正式網站有了之後，刪掉 `reverify.yml` 裡 `production` 底下的 `if: false` 那一行，和 `worker/test/workflows.ts` 的 `REVERIFY_JOBS` 裡 `production` 的 `if: "false"`（兩邊要一致，測試會擋）。
 
 ## 在本機檢查
 

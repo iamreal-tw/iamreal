@@ -129,7 +129,7 @@ pnpm test                                    # 全部的 JavaScript 測試，含
 `pnpm test` 跑的：
 
 - `tests/equivalence.test.mjs`：**逐案比對**。circom 的每一個測試案例（`tests/cases.mjs`，改用自製的金鑰和憑證），加上這裡新增的案例，同一份位元組同時餵給三個電路：`comparison/` 裡同形狀的部分、正式的電路（其餘部分照實）、circom 的電路。三者要和預期的接受或拒絕相同，有意的差異除外。結果寫到 `out/equivalence.md`；提交的紀錄是 `results/equivalence.md`，表的開頭說明每一欄、每一種差異，和「行為相同」是拿整份證明的判斷來比（circom 那邊是三份證明合起來）。現在是 110 案：29 案是有意的差異（種類檢查，ADR-0013），1 案是單一部分的差異（`part-level difference`，見下面「和 circom 電路不同的地方」），其他 0 案不同。
-- `tests/card_proof.test.mjs`：逐案比對做不到的部分。兩個簽章是不是用憑證裡的公鑰驗的、兩段字能不能互換、換一個題目算出的宣告碼（卡片沒有重簽）會被拒絕、種類的邊界字元、同一個簽章換一種分段、不到 2048 位元的卡片金鑰、有內容的廢止清冊、電路的輸出和電路外算的雜湊相同。
+- `tests/card_proof.test.mjs`：逐案比對做不到的部分。兩個簽章是不是用憑證裡的公鑰驗的、兩段字能不能互換、換一個題目算出的宣告碼（卡片沒有重簽）會被拒絕（兩個宣告碼都是 `spec/vectors/declaration-code.json` 的標準答案，只差題目；這個目錄不算宣告碼）、種類的邊界字元、同一個簽章換一種分段、不到 2048 位元的卡片金鑰、有內容的廢止清冊、電路的輸出和電路外算的雜湊相同。
 - `tests/vectors.test.mjs`：讀 `spec/vectors/poseidon2.json`，和 Go、TypeScript、Rust 的實作讀同一份。其他測試的預期值都是執行時用 bb.js 算的，函式庫改了雜湊的包法時電路和 bb.js 可能一起變，那些測試看不出來；這裡的值寫死在檔案裡，電路和 bb.js 都要算出同一個值。`node tests/vectors/make-poseidon2.mjs` 用 bb.js 重新寫出這個檔；檔案有任何變動，都代表雜湊變了。
 - `tests/library-guarantees.test.mjs`：**函式庫保證的測試**。電路有幾項保證靠函式庫裡的某一行成立（`REVIEW.md`「找到的問題」第 4 項），每一項一個「那一行不見就會失敗」的測試。檔案開頭列了每個測試對應哪一行。
 

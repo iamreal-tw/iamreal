@@ -26,6 +26,9 @@ type Extension struct {
 	IDContent []byte
 	Critical  bool
 	Value     []byte
+	// Raw, when not nil, is written as it is in place of the whole
+	// Extension: for one no library would write.
+	Raw []byte
 }
 
 // Entry is one revoked certificate. Serial is the INTEGER's content bytes,
@@ -40,6 +43,8 @@ type Entry struct {
 	// RevocationDateDER, when not nil, is written as it is in place of
 	// RevocationDate: a whole DER element (see CRL.ThisUpdateDER).
 	RevocationDateDER []byte
+	// Raw, when not nil, is written as it is in place of the whole entry.
+	Raw []byte
 }
 
 // CRL describes the list to write.
@@ -53,6 +58,9 @@ type CRL struct {
 	// are no entries, instead of leaving the field out.
 	EmptyList  bool
 	Extensions []Extension // after authorityKeyIdentifier and cRLNumber
+	// AfterExtensions is written as it is at the end of tbsCertList, after
+	// crlExtensions: elements a CertificateList does not have.
+	AfterExtensions []byte
 	// CriticalAKI and CriticalNumber mark authorityKeyIdentifier and
 	// cRLNumber critical.
 	CriticalAKI, CriticalNumber bool
@@ -100,6 +108,10 @@ func addTime(b *cryptobyte.Builder, t time.Time) {
 func addExtensions(b *cryptobyte.Builder, exts []Extension) {
 	b.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) {
 		for _, x := range exts {
+			if x.Raw != nil {
+				b.AddBytes(x.Raw)
+				continue
+			}
 			b.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) {
 				if x.IDContent != nil {
 					b.AddASN1(cbasn1.OBJECT_IDENTIFIER, func(b *cryptobyte.Builder) { b.AddBytes(x.IDContent) })
@@ -156,6 +168,10 @@ func TBS(c *CRL, keyID []byte) []byte {
 		if len(c.Entries) > 0 || c.EmptyList {
 			b.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) {
 				for _, e := range c.Entries {
+					if e.Raw != nil {
+						b.AddBytes(e.Raw)
+						continue
+					}
 					b.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) {
 						b.AddASN1(cbasn1.INTEGER, func(b *cryptobyte.Builder) { b.AddBytes(e.Serial) })
 						if e.RevocationDateDER != nil {
@@ -189,6 +205,7 @@ func TBS(c *CRL, keyID []byte) []byte {
 		b.AddASN1(cbasn1.Tag(0).Constructed().ContextSpecific(), func(b *cryptobyte.Builder) {
 			addExtensions(b, exts)
 		})
+		b.AddBytes(c.AfterExtensions)
 	})
 	return b.BytesOrPanic()
 }

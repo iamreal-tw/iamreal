@@ -1,0 +1,112 @@
+# The operator's daily re-verification of the published proof logs
+# (ADR-0025; the test proof log too, ADR-0028): every day after the proof
+# log is published at the change of day in Taiwan, and by hand. Each run
+# starts from record 1: there is no progress file, and no cache.
+# .github/README.md has what the operator does when it does not pass;
+# worker/test/workflows.ts holds this file's jobs, exactly, and
+# worker/test/workflows.test.ts checks this file against them.
+#
+# It is the command anyone runs, on the files anyone reads: the job builds
+# iamreal-verify from this repository (Go), takes the native bb 6.0.0 of the
+# package @aztec-foundation/bb.js (pnpm-lock.yaml) after checking its
+# SHA-256, and reverify.sh, beside this file, runs iamreal-verify against
+# the public address of the proof log. It holds no key of the back end and
+# cannot stop card proofs: the operator does that by hand (ADR-0025).
+#
+# Nothing here refers to a secret, the token can only read, no cache is
+# restored or saved, and every action is pinned to a commit. The packages
+# are installed without their install scripts and without a .pnpmfile.cjs,
+# from npm's registry: only web/'s, where bb is.
+#
+# The schedule: 16:30 UTC is 00:30 in Taiwan. The back end publishes once
+# the date in Taiwan has changed (worker/README.md, on the daily
+# publication). A run that comes before that day's line re-verifies up to
+# the line of the day before, and passes or fails on that. GitHub may start a scheduled run
+# late, and stops the schedules of a public repository after 60 days
+# without activity ("Events that trigger workflows", schedule).
+#
+# The production proof log has no site yet: its job is written and does not
+# run. When https://data.iamreal.tw/ is there, delete the one line
+# `if: false` of the job "production".
+name: reverify
+
+on:
+  schedule:
+    - cron: "30 16 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# No cache is restored or saved, by any step (GitHub's "Workflow syntax",
+# cache-mode; .github/README.md).
+cache-mode: none
+
+# One run at a time; a running one is not stopped halfway.
+concurrency:
+  group: reverify
+  cancel-in-progress: false
+
+env:
+  # bb 6.0.0, the native executable that comes in the package
+  # @aztec-foundation/bb.js 6.0.0 (pnpm-lock.yaml), for Linux on x86-64. Each
+  # job checks its SHA-256 before using it (the value: worker/test/workflows.ts).
+  IAMREAL_BB: ${{ github.workspace }}/web/node_modules/@aztec-foundation/bb.js/build/amd64-linux/bb
+
+jobs:
+  # The test proof log (ADR-0028). The limit is 6 hours, the most a job gets;
+  # a run that takes more than one is the sign to make the progress file.
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.23.4
+          package-manager-cache: false
+      - name: Install pnpm
+        run: npm install --global --ignore-scripts --registry=https://registry.npmjs.org/ pnpm@10.16.1
+      - name: Install the packages of web/ (for bb), running no install script
+        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile --registry=https://registry.npmjs.org/ --filter iamreal-web
+      - name: bb is the one of bb.js 6.0.0
+        run: echo "5bbb64800d431c6760a70d8723be4eaf37ed10e8fbfe2842bb85b8436180c130  $IAMREAL_BB" | sha256sum --check --strict
+      - name: Build iamreal-verify
+        run: go build -o "$RUNNER_TEMP/iamreal-verify" ./cmd/iamreal-verify
+      - name: Re-verify the test proof log from record 1
+        run: bash .github/workflows/reverify.sh test https://test-data.iamreal.tw/
+
+  # The production proof log. Not run until its site is there: delete the
+  # line `if: false` then.
+  production:
+    if: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.23.4
+          package-manager-cache: false
+      - name: Install pnpm
+        run: npm install --global --ignore-scripts --registry=https://registry.npmjs.org/ pnpm@10.16.1
+      - name: Install the packages of web/ (for bb), running no install script
+        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile --registry=https://registry.npmjs.org/ --filter iamreal-web
+      - name: bb is the one of bb.js 6.0.0
+        run: echo "5bbb64800d431c6760a70d8723be4eaf37ed10e8fbfe2842bb85b8436180c130  $IAMREAL_BB" | sha256sum --check --strict
+      - name: Build iamreal-verify
+        run: go build -o "$RUNNER_TEMP/iamreal-verify" ./cmd/iamreal-verify
+      - name: Re-verify the production proof log from record 1
+        run: bash .github/workflows/reverify.sh production https://data.iamreal.tw/

@@ -1962,3 +1962,51 @@ describe("a platform of the server's table the page has no definition of", () =>
     assert.equal(status.slots.find((sl) => sl.platform === "test-example")?.current, "A B");
   });
 });
+
+describe("one proof for the card's signatures (spec/device-checks.md)", () => {
+  /** After the flow stopped with `stop`: no step goes on, and the engine is not asked again. */
+  async function assertNoSecondProof(s: Setup, stop: Stop, list: Consequence): Promise<void> {
+    assert.equal(s.proveCalls.length, 1, "one proof was asked for");
+    assert.equal(s.flow.phase, "stopped");
+    assertNothingHeld(s.flow, "the proof failed");
+    for (const again of [() => s.flow.proceed(list.accounts), () => s.flow.resubmit(), () => s.flow.readCard(), () => s.flow.confirmCard(PIN)]) {
+      assert.deepEqual(await stopOf(again()), stop);
+    }
+    assert.equal(s.proveCalls.length, 1, "no second proof");
+    assert.equal(s.backend.submissions.length, 0, "nothing submitted");
+  }
+
+  test("the engine fails: the flow stops and drops both signatures; no step computes another proof", async () => {
+    const s = await setup({ echoPublicInputs: true });
+    const cq = await toChosen(s);
+    const prove = s.prover.prove;
+    s.prover.prove = async (name, inputs) => {
+      await prove(name, inputs);
+      throw new Error("the circuit has no proof for these inputs");
+    };
+    const stop = await stopOf(s.flow.proceed(cq.accounts));
+    assert.deepEqual(stop, { code: "engine", detail: "the circuit has no proof for these inputs" });
+    await assertNoSecondProof(s, stop, cq);
+  });
+
+  test("the proof says something else than the device expects: the same", async () => {
+    // The stub's proof has no public inputs.
+    const s = await setup();
+    const cq = await toChosen(s);
+    const stop = await stopOf(s.flow.proceed(cq.accounts));
+    assert.deepEqual(stop, { code: "proof_check" });
+    await assertNoSecondProof(s, stop, cq);
+  });
+
+  test("the record sent again after a failure of the server is the same proof, not another", async () => {
+    let answer: { status: number; body: unknown } = { status: 500, body: { error: "internal" } };
+    const s = await setup({ echoPublicInputs: true, backend: { submit: () => answer } });
+    const cq = await toChosen(s);
+    assert.deepEqual(await stopOf(s.flow.proceed(cq.accounts)), { code: "server", server: "internal", status: 500 });
+    answer = { status: 201, body: { seq: 7, record_hash: "b".repeat(64), kinds: [{ platform: "threads", kind: "first", username: "alice", account_cards: 1 }] } };
+    await s.flow.resubmit();
+    assert.equal(s.proveCalls.length, 1, "one proof");
+    assert.equal(s.backend.submissions[0]!.proof, s.backend.submissions[1]!.proof);
+    assertNothingHeld(s.flow, "after the proof");
+  });
+});
