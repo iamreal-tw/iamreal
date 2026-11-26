@@ -238,9 +238,32 @@ export class ProofLog extends DeployedProofLog {
    * one before it.
    */
   override alarm(): Promise<void> {
+    // While a test holds the alarm (`testHoldAlarm`), one that rings by itself does nothing: only the test runs the handler.
+    if (this.#alarmHeld()) return Promise.resolve();
+    return this.#runAlarm();
+  }
+
+  #runAlarm(): Promise<void> {
     const run = this.#alarms.then(() => super.alarm());
     this.#alarms = run.catch(() => undefined);
     return run;
+  }
+
+  #alarmHeld(): boolean {
+    const sql = this.ctx.storage.sql;
+    return sql.exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'test_alarm_held'").toArray().length > 0;
+  }
+
+  /**
+   * From now on the alarm's handler runs only when a test runs it
+   * (`testRunAlarm`), or, with false, also when the alarm rings. For a test
+   * that looks at what the object keeps between two runs of work that is due
+   * at once: the object sets its alarm a second ahead for such work, and
+   * that alarm would do the next run before the test looked. Kept in the
+   * object's storage, so that it holds when the object starts again.
+   */
+  testHoldAlarm(hold: boolean): void {
+    this.ctx.storage.sql.exec(hold ? "CREATE TABLE IF NOT EXISTS test_alarm_held (id INTEGER PRIMARY KEY)" : "DROP TABLE IF EXISTS test_alarm_held");
   }
 
   /**
@@ -250,7 +273,7 @@ export class ProofLog extends DeployedProofLog {
    */
   async testRunAlarm(): Promise<void> {
     await this.ctx.storage.deleteAlarm();
-    await this.alarm();
+    await this.#runAlarm();
   }
 
   /** The time the alarm is set for, in milliseconds since the epoch on the runtime's clock, or null. */
@@ -303,6 +326,11 @@ export class ProofLog extends DeployedProofLog {
       ? sql.exec("UPDATE cards SET slots = substr(slots, 9) WHERE scope_string = ? AND scoped_id = ? AND slots LIKE 'not JSON%'", scopeString, scopedId)
       : sql.exec("UPDATE cards SET slots = 'not JSON' || slots WHERE scope_string = ? AND scoped_id = ? AND slots NOT LIKE 'not JSON%'", scopeString, scopedId);
     if (rowsWritten !== 1) throw new Error("no such row");
+  }
+
+  /** Begins the rebuild from the proof log named `token`, as the object does for an operator's (src/proof-log.ts, `beginRebuild`); whether one was begun. */
+  testBeginRebuild(token: string): Promise<boolean> {
+    return this.beginRebuild(token);
   }
 
   /** Drops the tables the API reads, so that the object's methods throw until it starts again. */
@@ -659,6 +687,12 @@ export default {
       return json(await testProofLogOf(env).testRuleState(scope_string, scoped_id));
     }
     if (route === "POST /__test/proof-log/page-plans") return json(await testProofLogOf(env).testPagePlans((await request.json()) as PagePlanQuestion));
+    if (route === "PUT /__test/proof-log/alarm-held") {
+      await testProofLogOf(env).testHoldAlarm((await request.text()) === "true");
+      return done();
+    }
+    if (route === "POST /__test/proof-log/rebuild") return json({ begun: await testProofLogOf(env).testBeginRebuild(((await request.json()) as { token: string }).token) });
+    if (route === "GET /__test/proof-log/rebuild") return json(await testProofLogOf(env).rebuildStatus());
     if (route === "GET /__test/proof-log/stored") return json(await testProofLogOf(env).testStored());
     if (route === "GET /__test/proof-log/kept") return json(await testProofLogOf(env).testKept());
     if (route === "GET /__test/proof-log/tables") return json(await testProofLogOf(env).testTables());

@@ -1,4 +1,4 @@
-// The whole way, with Go's re-verifying command at the end (#70): fake
+// The whole way, with a rebuild from the proof log (#107) and Go's re-verifying command at the end (#70): fake
 // cards write a proof log that crosses 1,000 records twice and the date three
 // times; the back end publishes it day by day, and the mirror fills the CRL
 // archive from a fake MOICA. Then `iamreal-verify`, as it runs by default
@@ -101,6 +101,20 @@ describe("a proof log published over three days, re-verified by Go's iamreal-ver
     await worker.proofLog.setBucketFault(null);
     const records = await checkProofLog(worker);
     assert.equal(records.length, 2005);
+
+    // Then the object is rebuilt from the proof log (src/rebuild.ts; ADR-0033), with a card's row made wrong first and the
+    // card state file of the last date lost: two full files from the bucket, then the records the object keeps. What
+    // Go compares below is therefore the card state file the rebuild wrote, from the states it computed for the last
+    // line's 2,003 records, and every state the back end answers with from here on is a rebuilt one.
+    await worker.proofLog.breakCard(switches);
+    await worker.putFile("proof-log/card-state/2026-11-23.jsonl", "lost\n", MINUTE, "application/x-ndjson");
+    assert.equal(await worker.proofLog.beginRebuild("before-go"), true);
+    for (let step = 1; (await worker.proofLog.rebuildStatus())!.status === "running"; step++) {
+      assert.ok(step <= 3, "two files and the kept records: three steps");
+      await worker.proofLog.runAlarm();
+    }
+    assert.deepEqual(await worker.proofLog.rebuildStatus(), { token: "before-go", status: "swapped", records: 2005, reason: null });
+    assert.equal((await checkProofLog(worker)).length, 2005);
 
     // What the bucket holds: two full files, the third as it was at the last midnight, a card state file a day, three lines.
     const files = await worker.files();

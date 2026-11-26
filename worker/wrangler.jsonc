@@ -72,6 +72,11 @@
         // The operator changes it on Cloudflare's dashboard. The next deploy writes this file's value
         // over the dashboard's: to deploy while it is stopped, write "true" here and deploy that.
         "CARD_PROOFS_PAUSED": "false",
+        // The name of a rebuild from the proof log the operator asks for, or "" for none (ADR-0033;
+        // README.md, "從證明紀錄重建"). A name of the operator's own (1 to 40 of A-Za-z0-9._-); the proof
+        // log's object makes one rebuild for each name, and only while CARD_PROOFS_PAUSED is "true".
+        // Changed on Cloudflare's dashboard, like the one above, and written over by the next deploy.
+        "REBUILD_PROOF_LOG": "",
         // The date the test log was last cleared on, YYYY-MM-DD: every page says it beside the mark
         // of a test log (design/copy/test-site.md). Change it together with PROOF_LOG_OBJECT_NAME when
         // the proof log is cleared (README.md, "清空測試的證明紀錄").
