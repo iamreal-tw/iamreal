@@ -16,7 +16,7 @@
 //    it sends the CRL archive from the Worker's bucket, read-only.
 // 3. Runs a fake component (fake-component.ts) on localhost:61171, the
 //    test build's component address.
-// 4. Clicks through the six steps like a cardholder (real mouse events,
+// 4. Clicks through the seven steps like a cardholder (real mouse events,
 //    cdp.ts; design/copy/card-proof.md): one card proof handles the card's
 //    whole list of accounts (ADR-0017). With one card: a first declaration
 //    of one platform; card proof again with nothing changed; a correction
@@ -363,7 +363,7 @@ async function noLinkOut(label: string): Promise<void> {
   const links = await linksOnScreen();
   check(links.length === 0, `${label}: no link to another page ${JSON.stringify(links)}`);
 }
-const stepLine = (n: number) => fill(C.common.step, { step: n, steps: 6 });
+const stepLine = (n: number) => fill(C.common.step, { step: n, steps: 7 });
 
 /** Step 1's two links, in the question on how to get a card: a map's search, MOICA's site; each in a new tab, nothing else (card-proof.md, step 1). */
 const STEP1_LINKS = [
@@ -650,7 +650,7 @@ async function typeRows(entries: Record<string, string>): Promise<void> {
 /** Step 6, or where step 5 stopped: the reason under its item, or the message of step 5. */
 async function waitDoneOrMessage(): Promise<{ done: boolean; main: string; message: string; item: string }> {
   const r = await page.waitFor<string>(
-    `document.querySelector('[data-step="done"]') ? "done" : (document.querySelector('[data-why]')?.innerText || document.querySelector('[data-message]')?.innerText ? "message" : null)`,
+    `document.querySelector('[data-step="hang"], [data-step="done"]') ? "done" : (document.querySelector('[data-why]')?.innerText || document.querySelector('[data-message]')?.innerText ? "message" : null)`,
     "done or a message",
     120_000,
   );
@@ -744,7 +744,7 @@ async function toRead(o: { screenshots?: string } = {}): Promise<void> {
   }
   await page.clickButton(C.common.next);
   await waitStep("read", "step 2");
-  check((await whereText()).includes(stepLine(2)), "step 2: 第 2 步，共 6 步");
+  check((await whereText()).includes(stepLine(2)), "step 2: 第 2 步，共 7 步");
   const list = await items("read");
   check(JSON.stringify(list.map((i) => i.item)) === JSON.stringify(READ_KEYS) && list.every((i) => i.state === "" && i.st === ""), `step 2: the six items, none started ${JSON.stringify(list.map((i) => i.state))}`);
   if (o.screenshots) await screenshot(`${o.screenshots}-2-read`);
@@ -770,7 +770,7 @@ async function toAccounts(o: { wrongPinFirst?: boolean; blockClicks?: boolean; s
   if (o.screenshots) await screenshot(`${o.screenshots}-2-read-done`);
   await page.clickButton(C.common.next);
   await waitStep("pin", "step 3");
-  check((await whereText()).includes(stepLine(3)), "step 3: 第 3 步，共 6 步");
+  check((await whereText()).includes(stepLine(3)), "step 3: 第 3 步，共 7 步");
   const s3 = await page.text();
   check((await page.text("[data-card-read]")) === [C.pin.card_read, "測試用戶", C.pin.name_note].join("\n"), `step 3: the name, and that it stays here: ${JSON.stringify(await page.text("[data-card-read]"))}`);
   for (const s of [C.pin.purpose, C.pin.stays]) check(s3.includes(s), `step 3, next to the PIN field: "${s}"`);
@@ -799,7 +799,7 @@ async function toAccounts(o: { wrongPinFirst?: boolean; blockClicks?: boolean; s
   await watchWorking();
   await confirmPin(PIN);
   const st = await waitAccounts();
-  check((await whereText()).includes(stepLine(4)), "step 4: 第 4 步，共 6 步");
+  check((await whereText()).includes(stepLine(4)), "step 4: 第 4 步，共 7 步");
   check(await pinGone(), "after the first signature, the PIN is nowhere on the page");
   check(!st.main.includes("測試用戶") && !(await page.eval<boolean>(`document.documentElement.outerHTML.includes("測試用戶")`)), "the name is gone after step 3");
   check(componentCount("MakeSignature") === signs + 1, "the first signature");
@@ -902,23 +902,25 @@ function checkConfirm(label: string, c: ConfirmSeen, want: [platform: string, na
   check(JSON.stringify(c.buttons) === JSON.stringify([C.common.back, button, C.common.cancel]), `${label}: step 5 buttons ${JSON.stringify(c.buttons)}`);
 }
 
-interface DoneSeen {
+/** What step 6 (hang it) shows; null when there is none (everything withdrawn). */
+interface HangSeen {
+  /** Step 6 opened short (a card proof again with one platform). */
+  short: boolean;
+  /** The short step 6: its title, the link, 打開你的島民證明 and why; "" when it was not short. */
+  shortTitle: string;
+  shortLook: string;
+  shortWhy: string;
+  shortLink: string;
+  /** The whole step 6, after 沒有看到連結，重新掛上 when it opened short. */
   title: string;
-  /** The small card's rows: [the platform's name, or "" where the screens speak of one platform; the account]. */
-  card: [string, string][];
   link: string;
-  /** What the QR code holds; "" if there is none. */
+  /** What the QR code holds. */
   qr: string;
-  /** Where 打開你的島民證明 goes; "" if it is not there. */
+  /** Where 打開你的島民證明 goes. */
   openProof: string;
-  /** Under the heading of the last step: done.anyone or done.anyone_single; "" if none. */
-  anyone: string;
+  why: string;
   /** The links to the accounts' profiles: [text, href]. */
   profiles: [string, string][];
-  /** The buttons that share the card's page: [text, href]. */
-  shares: [string, string][];
-  /** What else can be done is there. */
-  optional: boolean;
   record: [string, string, string[], boolean, string][];
   /** The section of what the proof log recorded is there. */
   recordShown: boolean;
@@ -926,47 +928,136 @@ interface DoneSeen {
   withdrawnLink: boolean;
   otherCards: string[];
   kindsUnreadable: boolean;
+  where: string;
+  /** The first line of step 6 itself (under the line of where in the steps). */
+  first: string;
   main: string;
-  /** The card's ordinal as its page on the server writes it (the number of 第 N 張島民證明); "" when the link names no card. */
+}
+
+/** What the last step shows. */
+interface FinishSeen {
+  title: string;
+  /** The small card's rows: [the platform's name, or "" where the screens speak of one platform; the account]. */
+  card: [string, string][];
+  /** The buttons that share the card's page: [text, href]. */
+  shares: [string, string][];
+  /** The call to share: the card's ordinal and the invitation, then the thanks. */
+  invite: string[];
+  /** 記得每三個月回來過卡一次 is there. */
+  comeBack: boolean;
+  /** Everything withdrawn: that the links can come down. */
+  unlink: string;
+  /** Everything withdrawn: what the proof log recorded, when it is shown there. */
+  record: [string, string, string[], boolean, string][];
+  recordShown: boolean;
+  kindsUnreadable: boolean;
+  buttons: string[];
+  where: string;
+  main: string;
+}
+
+interface DoneSeen {
+  hang: HangSeen | null;
+  finish: FinishSeen;
+  /** 上一步 on the last step went back to step 6 as it was left. */
+  backToHang: boolean;
+  /** The card's short ID, from the link (or, everything withdrawn, the record's line). */
+  sid: string;
+  /** The card's ordinal as its page on the server writes it (the number of 第 N 張島民證明); "" when no card is named. */
   pageOrdinal: string;
 }
 
-const doneSeen = async (): Promise<DoneSeen> => ({
-  ...(await page.eval<Omit<DoneSeen, "main">>(`({
-    title: document.querySelector('[data-step="done"] h1').innerText,
-    card: [...document.querySelectorAll('[data-proof] [data-card-row]')].map((r) => [r.querySelector('[data-card-platform]')?.innerText ?? "", r.querySelector('[data-card-account]').innerText]),
+const recordRows = `[...document.querySelectorAll('dt[data-done-row]')].map((dt) => {
+  const dd = dt.nextElementSibling;
+  return [dt.innerText, dd.querySelector('.acct').innerText, [...dd.querySelectorAll('[data-kind]')].map((e) => e.innerText), dd.hasAttribute('data-mismatch'), dd.querySelector('[data-code]')?.innerText ?? ""];
+})`;
+
+const hangNow = () =>
+  page.eval<Omit<HangSeen, "short" | "shortTitle" | "shortLook" | "shortWhy" | "shortLink">>(`({
+    title: document.querySelector('[data-step="hang"] h1').innerText,
     link: document.querySelector('[data-link]')?.innerText ?? "",
     qr: document.querySelector('[data-qr]')?.dataset.qr ?? "",
     openProof: document.querySelector('[data-open-proof]')?.getAttribute("href") ?? "",
-    anyone: document.querySelector('[data-anyone]')?.innerText ?? "",
+    why: document.querySelector('[data-why-hang]')?.innerText ?? "",
     profiles: [...document.querySelectorAll('a[data-profile]')].map((a) => [a.innerText, a.getAttribute("href")]),
-    shares: [...document.querySelectorAll('a[data-share]')].map((a) => [a.innerText, a.getAttribute("href")]),
-    optional: !!document.querySelector('[data-optional]'),
-    record: [...document.querySelectorAll('dt[data-done-row]')].map((dt) => {
-      const dd = dt.nextElementSibling;
-      return [dt.innerText, dd.querySelector('.acct').innerText, [...dd.querySelectorAll('[data-kind]')].map((e) => e.innerText), dd.hasAttribute('data-mismatch'), dd.querySelector('[data-code]')?.innerText ?? ""];
-    }),
+    record: ${recordRows},
     recordShown: !!document.querySelector('[data-record]'),
     newCard: !!document.querySelector('[data-new-card]'),
     withdrawnLink: !!document.querySelector('[data-withdrawn-link]'),
     otherCards: [...document.querySelectorAll('[data-other-cards]')].map((e) => e.innerText),
     kindsUnreadable: !!document.querySelector('[data-kinds-unreadable]'),
-  })`)),
-  main: await page.text(),
-  pageOrdinal: await pageOrdinal(),
-});
+    where: document.querySelector('[data-where]').innerText,
+    first: document.querySelector('[data-step="hang"]').innerText.split("\\n").filter(Boolean)[0],
+    main: document.querySelector('main').innerText,
+  })`);
 
-/** The ordinal the card's page on the server writes, for the card whose link step 6 shows: the proof log's, not the answer's. */
-async function pageOrdinal(): Promise<string> {
-  const link = await page.eval<string>(`document.querySelector('[data-link]')?.innerText ?? ""`);
-  const sid = /^(?:test\.)?iamreal\.tw\/p\/([0-9A-Z]{10})$/.exec(link)?.[1];
-  if (sid === undefined) return "";
+const finishNow = () =>
+  page.eval<FinishSeen>(`({
+    title: document.querySelector('[data-step="done"] h1').innerText,
+    card: [...document.querySelectorAll('[data-proof] [data-card-row]')].map((r) => [r.querySelector('[data-card-platform]')?.innerText ?? "", r.querySelector('[data-card-account]').innerText]),
+    shares: [...document.querySelectorAll('a[data-share]')].map((a) => [a.innerText, a.getAttribute("href")]),
+    invite: [...document.querySelectorAll('.invite')].map((e) => e.innerText),
+    comeBack: !!document.querySelector('[data-return]'),
+    unlink: document.querySelector('[data-unlink]')?.innerText ?? "",
+    record: ${recordRows},
+    recordShown: !!document.querySelector('[data-record]'),
+    kindsUnreadable: !!document.querySelector('[data-kinds-unreadable]'),
+    buttons: [...document.querySelectorAll('main button')].map((b) => b.textContent),
+    where: document.querySelector('[data-where]').innerText,
+    main: document.querySelector('main').innerText,
+  })`);
+
+/**
+ * After the submission, through every screen there is: step 6 (short, then
+ * the whole one after 沒有看到連結，重新掛上), 下一步 to the last step, 上一步
+ * back to step 6 as it was left. Ends on step 6, or on the last step when
+ * everything was withdrawn. `shots`: the screenshots' prefix.
+ */
+async function doneSeen(shots?: string): Promise<DoneSeen> {
+  let hang: HangSeen | null = null;
+  let backToHang = false;
+  if (await page.eval<boolean>(`!!${step("hang")}`)) {
+    const short = await page.eval<boolean>(`document.querySelector('[data-step="hang"]').dataset.short === "true"`);
+    let s = { shortTitle: "", shortLook: "", shortWhy: "", shortLink: "" };
+    if (short) {
+      s = await page.eval<typeof s>(`({
+        shortTitle: document.querySelector('[data-step="hang"] h1').innerText,
+        shortLook: document.querySelector('.look').innerText,
+        shortWhy: document.querySelector('[data-why-hang]').innerText,
+        shortLink: document.querySelector('[data-link]').innerText,
+      })`);
+      if (shots) await screenshot(`${shots}-6-hang-short`);
+      await page.clickButton(C.hang.rehang);
+      await page.waitFor(`document.querySelector('[data-step="hang"]')?.dataset.short === "false" || null`, "沒有看到連結，重新掛上: the whole step 6");
+    }
+    hang = { short, ...s, ...(await hangNow()) };
+    if (shots) await screenshot(`${shots}-6-hang`);
+    await page.clickButton(C.common.next);
+    await waitStep("done", "下一步: the last step");
+  }
+  if (shots) await sleep(1500); // the mark's animation, played out
+  const finish = await finishNow();
+  if (shots) await screenshot(`${shots}-7-done`);
+  if (hang) {
+    await page.clickButton(C.common.back);
+    await waitStep("hang", "上一步: step 6");
+    backToHang = (await page.eval<string>(`document.querySelector('[data-step="hang"]').dataset.short`)) === "false" && (await hangNow()).main === hang.main;
+  }
+  const link = hang?.link ?? "";
+  const sid = /^(?:test\.)?iamreal\.tw\/p\/([0-9A-Z]{10})$/.exec(link)?.[1] ?? (/島民編號開頭是 ([0-9A-Z]{10})。/.exec(hang?.main ?? finish.main)?.[1] ?? "");
+  return { hang, finish, backToHang, sid, pageOrdinal: await pageOrdinal(sid) };
+}
+
+/** The ordinal the card's page on the server writes: the proof log's, not the answer's. */
+async function pageOrdinal(sid: string): Promise<string> {
+  if (sid === "" || !/^[0-9A-Z]{10}$/.test(sid)) return "";
   const html = await (await worker.fetch(`/${cardPath(sid)}`)).text();
   return /<p class="ordinal">第 ([0-9,]+) 張島民證明<\/p>/.exec(html)?.[1] ?? "";
 }
 
 interface DoneExpected {
   label: string;
+  /** The last step's title. */
   title: string;
   /** The card's list after the record: [name, account]; empty when everything was withdrawn. */
   card: [string, string][];
@@ -984,66 +1075,101 @@ interface DoneExpected {
   mismatch?: string[];
   /** The one platform's name, when the screens speak of one platform. */
   single?: string;
+  /** Step 6 is short: a card proof again with one platform. */
+  short?: boolean;
   /** The page has no ordinal to share: the answer was not read, or the record was found in the card's state. */
   unnumbered?: boolean;
 }
 
 function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   if (!check(d !== null, `${o.label}: done ${message}`)) return;
-  const v = d!;
-  check(v.title === o.title, `${o.label}: step 6's title "${v.title}"`);
+  const { hang, finish: fin, sid } = d!;
   const withdrawAll = o.card.length === 0;
-  // With one platform, the small card names no platform.
-  const card = o.single ? o.card.map(([, account]) => ["", account]) : o.card;
-  check(JSON.stringify(v.card) === JSON.stringify(card), `${o.label}: the card lists ${JSON.stringify(v.card)}`);
-  const sid = /^(?:test\.)?iamreal\.tw\/p\/([0-9A-Z]{10})$/.exec(v.link)?.[1] ?? (/島民編號開頭是 ([0-9A-Z]{10})。/.exec(v.main)?.[1] ?? "");
-  check(withdrawAll ? v.link === "" : v.link === `${SITE_DOMAIN}/${cardPath(sid)}`, `${o.label}: the link is the card's page ${v.link}`);
-  check(v.main.includes(fill(C.done.recorded_on, { date: today() }) + C.done.unplug), `${o.label}: step 6, the day it was recorded, unplug`);
-  // Hanging it on the profile, and what else can be done: when the list is not empty.
-  const hangTitle = o.single ? fill(C.done.hang_title_single, { platform: o.single }) : C.done.hang_title;
-  const anyone = withdrawAll ? "" : o.single ? C.done.anyone_single : C.done.anyone;
-  check(v.main.includes(hangTitle) === !withdrawAll && v.anyone === anyone, `${o.label}: the last step ${withdrawAll ? "is not there" : "is there"}: "${v.anyone}"`);
-  check(v.qr === (withdrawAll ? "" : `https://${SITE_DOMAIN}/hang/${sid}`), `${o.label}: the QR code holds the card's page to hang it from ${v.qr}`);
-  check(v.openProof === (withdrawAll ? "" : `/${cardPath(sid)}`), `${o.label}: 打開你的島民證明 goes to the card's page on this site ${v.openProof}`);
-  const profiles = withdrawAll ? [] : o.card.filter(([name]) => name === THREADS_NAME).map(([, account]) => [fill(C.done.open_profile, { account, platform: THREADS_NAME }), `https://www.threads.com/${account}`]);
-  check(JSON.stringify(v.profiles) === JSON.stringify(profiles), `${o.label}: the links to the profiles ${JSON.stringify(v.profiles)}`);
-  // The text suggested: the card's ordinal, the one its page writes; without one, the sentence without a number.
-  if (!withdrawAll && !o.unnumbered) check(/^[1-9][0-9,]*$/.test(v.pageOrdinal), `${o.label}: the card's page writes its ordinal "${v.pageOrdinal}"`);
-  const sentence = o.unnumbered ? C.done.share_text_unnumbered : fill(C.done.share_text, { ordinal: v.pageOrdinal });
-  const text = `${sentence}\nhttps://${SITE_DOMAIN}/${cardPath(sid)}`;
-  const shares = withdrawAll ? [] : [[fill(C.done.share, { platform: THREADS_NAME }), `https://www.threads.com/intent/post?text=${encodeURIComponent(text)}`]];
-  check(JSON.stringify(v.shares) === JSON.stringify(shares), `${o.label}: sharing to Threads, the text${o.unnumbered ? " without a number" : " with the card's ordinal"} and the card's page ${JSON.stringify(v.shares)}`);
-  check(v.optional === !withdrawAll && v.main.includes(C.done.return_note) === !withdrawAll, `${o.label}: what else can be done ${withdrawAll ? "is not there" : "is there"}`);
+  const recorded = fill(C.done.recorded_on, { date: today() }) + C.done.unplug;
   const mismatch = o.mismatch ?? [];
-  check(v.main.includes(C.done.mismatch) === mismatch.length > 0 && v.recordShown === mismatch.length > 0, `${o.label}: what the proof log recorded ${mismatch.length ? "is shown, it differs" : "is not shown: it is what step 5 said"}`);
+  check(fin.title === o.title, `${o.label}: the last step's title "${fin.title}"`);
+  check(fin.where.includes(stepLine(7)), `${o.label}: the last step is 第 7 步，共 7 步 "${fin.where}"`);
+  check(!/[✓✔]/.test((hang?.main ?? "") + fin.main), `${o.label}: no check mark`);
+  // Where the record's rows are: step 6, or everything withdrawn the last step.
+  const where = hang ?? fin;
+  check(where.main.includes(C.done.mismatch) === mismatch.length > 0 && where.recordShown === mismatch.length > 0, `${o.label}: what the proof log recorded ${mismatch.length ? "is shown, it differs" : "is not shown: it is what step 5 said"}`);
   if (o.record === null) {
-    check(v.kindsUnreadable && v.record.length === 0, `${o.label}: the kinds could not be read: that sentence`);
+    check(where.kindsUnreadable && where.record.length === 0, `${o.label}: the kinds could not be read: that sentence`);
   } else if (mismatch.length > 0) {
-    const rows = v.record.map((r) => [r[0], r[1], r[2]]);
+    const rows = where.record.map((r) => [r[0], r[1], r[2]]);
     check(JSON.stringify(rows) === JSON.stringify(o.record), `${o.label}: the record's rows ${JSON.stringify(rows)}`);
     const recordLine = withdrawAll ? C.done.record_withdraw_all : o.single ? C.done.record_single : C.done.record_list;
-    check(v.main.includes(recordLine), `${o.label}: the record's line "${recordLine}"`);
-    const differs = v.record.filter((r) => r[3]).map((r) => r[0]);
+    check(where.main.includes(recordLine), `${o.label}: the record's line "${recordLine}"`);
+    const differs = where.record.filter((r) => r[3]).map((r) => r[0]);
     const want = mismatch.map((p) => (p === THREADS ? THREADS_NAME : p === EXAMPLE ? EXAMPLE_NAME : p));
-    check(JSON.stringify(differs) === JSON.stringify(want) && v.record.every((r) => r[4] === (r[3] ? "kind_mismatch" : "")), `${o.label}: what the server recorded and what step 5 said differ on ${want.join(", ")} (kind_mismatch)`);
+    check(JSON.stringify(differs) === JSON.stringify(want) && where.record.every((r) => r[4] === (r[3] ? "kind_mismatch" : "")), `${o.label}: what the server recorded and what step 5 said differ on ${want.join(", ")} (kind_mismatch)`);
     const sidLine = fill(C.done.short_id, { short_id: sid });
-    check(v.main.includes(sidLine), `${o.label}: ${sidLine}`);
+    check(where.main.includes(sidLine), `${o.label}: ${sidLine}`);
   } else {
-    check(!v.kindsUnreadable, `${o.label}: the kinds were read`);
+    check(!where.kindsUnreadable, `${o.label}: the kinds were read`);
   }
-  check(v.newCard === !!o.newCard, `${o.label}: ${o.newCard ? "says" : "does not say"} a new card has a new link`);
-  check(v.withdrawnLink === !!o.withdrawnLink, `${o.label}: ${o.withdrawnLink ? "says" : "does not say"} the withdrawn account's link can go`);
+  if (withdrawAll) {
+    // Straight from step 5 to the last step: the day, that the links can come down, 完成.
+    check(hang === null, `${o.label}: everything withdrawn, no step 6`);
+    check(fin.main.includes(recorded), `${o.label}: the last step, the day it was recorded, unplug`);
+    const unlink = o.single ? fill(C.finish.unlink_single, { platform: o.single }) : C.done.withdrawn_link;
+    check(fin.unlink === unlink, `${o.label}: everything withdrawn, "${fin.unlink}"`);
+    check(fin.card.length === 0 && fin.shares.length === 0 && !fin.comeBack, `${o.label}: everything withdrawn: no card, no sharing, no coming back`);
+    check(JSON.stringify(fin.buttons) === JSON.stringify([C.finish.done]), `${o.label}: everything withdrawn, the buttons ${JSON.stringify(fin.buttons)}`);
+    doneScreens++;
+    if (sid) shown.push(sid);
+    return;
+  }
+  if (!check(hang !== null, `${o.label}: step 6`)) return;
+  const h = hang!;
+  check(h.where.includes(stepLine(6)), `${o.label}: 第 6 步，共 7 步 "${h.where}"`);
+  check(h.main.includes(recorded), `${o.label}: step 6, the day it was recorded, unplug`);
+  if (mismatch.length > 0) check(h.first === C.done.mismatch, `${o.label}: the difference, first of all "${h.first}"`);
+  // Short for a card proof again with one platform; 沒有看到連結，重新掛上 shows the whole step.
+  check(h.short === !!o.short, `${o.label}: step 6 ${o.short ? "is" : "is not"} short`);
+  if (o.short) {
+    check(h.shortTitle === fill(C.hang.still_there_single, { platform: o.single! }), `${o.label}: the short step 6 asks "${h.shortTitle}"`);
+    check(h.shortLook === fill(C.hang.look, { open_proof: C.done.open_proof }) && h.shortWhy === C.hang.why_single && h.shortLink === h.link, `${o.label}: the short step 6, the link, the card's page, why`);
+  }
+  const hangTitle = o.single ? fill(C.hang.title_single, { platform: o.single }) : C.hang.title;
+  check(h.title === hangTitle, `${o.label}: step 6's title "${h.title}"`);
+  check(h.why === (o.single ? C.hang.why_single : C.done.anyone), `${o.label}: why hang it "${h.why}"`);
+  check(h.link === `${SITE_DOMAIN}/${cardPath(sid)}`, `${o.label}: the link is the card's page ${h.link}`);
+  check(h.qr === `https://${SITE_DOMAIN}/hang/${sid}`, `${o.label}: the QR code holds the card's page to hang it from ${h.qr}`);
+  check(h.openProof === `/${cardPath(sid)}`, `${o.label}: 打開你的島民證明 goes to the card's page on this site ${h.openProof}`);
+  const profiles = o.card.filter(([name]) => name === THREADS_NAME).map(([, account]) => [fill(C.done.open_profile, { account, platform: THREADS_NAME }), `https://www.threads.com/${account}`]);
+  check(JSON.stringify(h.profiles) === JSON.stringify(profiles), `${o.label}: the links to the profiles ${JSON.stringify(h.profiles)}`);
+  check(h.newCard === !!o.newCard, `${o.label}: ${o.newCard ? "says" : "does not say"} a new card has a new link`);
+  check(h.withdrawnLink === !!o.withdrawnLink, `${o.label}: ${o.withdrawnLink ? "says" : "does not say"} the withdrawn account's link can go`);
   const others = (o.otherCards ?? []).map((a) => fill(C.done.other_cards, { account: a }));
-  check(JSON.stringify(v.otherCards) === JSON.stringify(others), `${o.label}: other cards ${JSON.stringify(v.otherCards)}`);
-  check(!/[✓✔]/.test(v.main), `${o.label}: step 6, no check mark`);
-  const lines = v.main.split("\n").filter(Boolean);
-  check(lines.at(-1) === C.done.restart, `${o.label}: step 6 ends with the button "${lines.at(-1)}"`);
+  check(JSON.stringify(h.otherCards) === JSON.stringify(others), `${o.label}: other cards ${JSON.stringify(h.otherCards)}`);
+  const hangLines = h.main.split("\n").filter(Boolean);
+  check(hangLines.at(-1) === C.common.next, `${o.label}: step 6 ends with "${hangLines.at(-1)}"`);
+  // The last step: the card, the call to share, sharing, when to come back; 上一步 and 完成.
+  const card = o.single ? o.card.map(([, account]) => ["", account]) : o.card;
+  check(JSON.stringify(fin.card) === JSON.stringify(card), `${o.label}: the card lists ${JSON.stringify(fin.card)}`);
+  if (!o.unnumbered) check(/^[1-9][0-9,]*$/.test(d!.pageOrdinal), `${o.label}: the card's page writes its ordinal "${d!.pageOrdinal}"`);
+  const invite = [(o.unnumbered ? "" : fill(C.finish.ordinal, { ordinal: d!.pageOrdinal })) + C.finish.invite, C.finish.thanks];
+  check(JSON.stringify(fin.invite) === JSON.stringify(invite), `${o.label}: the call to share ${JSON.stringify(fin.invite)}`);
+  const sentence = o.unnumbered ? C.done.share_text_unnumbered : fill(C.done.share_text, { ordinal: d!.pageOrdinal });
+  const text = `${sentence}\nhttps://${SITE_DOMAIN}/${cardPath(sid)}`;
+  const shares = [[fill(C.done.share, { platform: THREADS_NAME }), `https://www.threads.com/intent/post?text=${encodeURIComponent(text)}`]];
+  check(JSON.stringify(fin.shares) === JSON.stringify(shares), `${o.label}: sharing to Threads, the text${o.unnumbered ? " without a number" : " with the card's ordinal"} and the card's page ${JSON.stringify(fin.shares)}`);
+  check(fin.comeBack && fin.main.includes(C.done.return_title) && fin.main.includes(C.done.return_note), `${o.label}: the last step, when to come back`);
+  check(JSON.stringify(fin.buttons) === JSON.stringify([C.common.back, C.finish.done]), `${o.label}: the last step's buttons ${JSON.stringify(fin.buttons)}`);
+  check(d!.backToHang, `${o.label}: 上一步 goes back to step 6 as it was left`);
   doneScreens++;
-  // Everything withdrawn: no link, and no short ID on the screen unless what was recorded differs.
-  if (sid) shown.push(sid);
+  shown.push(sid);
 }
 
-/** From step 5: the last click, in progress, step 6. */
+/** From step 6, the last step and its 完成: back to step 1. */
+async function doneAndRestart(): Promise<void> {
+  if (await page.eval<boolean>(`!!${step("hang")}`)) await page.clickButton(C.common.next);
+  await waitStep("done", "the last step");
+  await page.clickButton(C.finish.done);
+}
+
+/** From step 5: the last click, in progress, step 6 and the last step. */
 async function finish(o: DoneExpected & { button: string; dropFirstSubmission?: boolean; blockClick?: boolean; screenshots?: string; submissions?: Record<string, unknown>[] }): Promise<void> {
   if (o.blockClick) await blockedClick(o.button, "blocked window, the second signature");
   // The request bodies of the submission, as the page sent them.
@@ -1071,31 +1197,27 @@ async function finish(o: DoneExpected & { button: string; dropFirstSubmission?: 
       if (o.screenshots) await screenshot(`${o.screenshots}-5-submit-failed`);
       await page.clickButton(C.progress.retry);
       const d = await waitDoneOrMessage();
-      checkDone(o, d.done ? await doneSeen() : null, d.message);
+      checkDone(o, d.done ? await doneSeen(o.screenshots) : null, d.message);
     } finally {
       await undo();
     }
   } else {
     await page.clickButton(o.button);
     await waitStep("progress", "in progress");
-    check((await whereText()).includes(stepLine(5)), "in progress: still 第 5 步，共 6 步");
+    check((await whereText()).includes(stepLine(5)), "in progress: still 第 5 步，共 7 步");
     check((await page.text()).includes(C.progress.keep_open), "in progress: keep the page open");
     const labels = (await items("progress")).map((i) => i.label);
     check(labels[2] === C.progress.compute, `in progress: computing, what it makes and how long "${labels[2]}"`);
-    await page.waitFor<boolean>(`document.querySelector('[data-item="compute"]')?.dataset.state === "now" || !!document.querySelector('[data-step="done"]') || null`, "computing", 120_000);
+    await page.waitFor<boolean>(`document.querySelector('[data-item="compute"]')?.dataset.state === "now" || !!document.querySelector('[data-step="hang"], [data-step="done"]') || null`, "computing", 120_000);
     await noLinkOut("in progress");
     const threadsUsed = Number(await page.waitFor<string>(`document.querySelector('[data-list="progress"]')?.dataset.threads`, "the engine's threads", 30_000).catch(() => "0"));
     check(threadsUsed > 1, `in progress: a multithreaded proof (${threadsUsed} threads)`);
     if (o.screenshots) await screenshot(`${o.screenshots}-5-progress`);
     const d = await waitDoneOrMessage();
-    checkDone(o, d.done ? await doneSeen() : null, d.message);
+    checkDone(o, d.done ? await doneSeen(o.screenshots) : null, d.message);
   }
   await undoCapture?.();
   check((await recordCount()) === before + 1, "one record appended");
-  if (o.screenshots) {
-    await sleep(1500); // the mark's animation, played out
-    await screenshot(`${o.screenshots}-6-done`);
-  }
   check(componentCount("MakeSignature") === signs + 1, "the second signature, once");
   const sign2 = component.requests.filter((x) => x.func === "MakeSignature").at(-1)!;
   check(/^D[0-9A-Z]{30}$/.test(sign2.tbs ?? "") && sign2.pin === PIN, "the second signature: a declaration code, with the PIN");
@@ -1171,31 +1293,36 @@ await tryStep("a first declaration of one platform (a wrong PIN first; a blocked
   check(componentCount() === signs && challengeCount() === 0, "step 4's messages: nothing signed, no challenge");
   await typeRows({ [EXAMPLE]: "", [THREADS]: "alice" });
   const c = await waitConfirm();
-  check((await whereText()).includes(stepLine(5)), "step 5: 第 5 步，共 6 步");
+  check((await whereText()).includes(stepLine(5)), "step 5: 第 5 步，共 7 步");
   checkConfirm("first", c, [[THREADS, THREADS_NAME, at("alice"), [K.first]]], C.confirm.button_declare);
   await screenshot("first-5-confirm");
   await finish({
     label: "first",
     button: C.confirm.button_declare,
-    title: C.done.first,
+    title: C.finish.first,
     card: [[THREADS_NAME, at("alice")]],
     record: [[THREADS_NAME, at("alice"), [K.first]]],
     newCard: true,
     blockClick: true,
     screenshots: "first",
   });
-  // 複製連結: the whole https:// address of the card's page, to the clipboard.
-  await page.clickButton(C.done.copy);
+  // 複製證明連結: the whole https:// address of the card's page, to the clipboard.
+  await page.clickButton(C.hang.copy);
   await page.waitFor(`[...document.querySelectorAll('main button')].some((b) => b.textContent === ${JSON.stringify(C.done.copied)}) || null`, "已複製", 5_000).catch(() => undefined);
   const clip = await page.eval<string>(`navigator.clipboard.readText()`).catch((e) => `(${e.message})`);
-  check(clip === `https://${SITE_DOMAIN}/${cardPath(shown.at(-1) ?? "")}`, `複製連結 copied ${clip}`);
+  check(clip === `https://${SITE_DOMAIN}/${cardPath(shown.at(-1) ?? "")}`, `複製證明連結 copied ${clip}`);
   check((await buttons()).some((b) => b.text === C.done.copied), "the button says 已複製");
-  // Every link of the screen opens a new tab: leaving the page would end it.
-  const hrefs = await page.eval<string[]>(`[...document.querySelectorAll('main a')].map((a) => a.target + " " + a.rel)`);
-  check(hrefs.length >= 3 && hrefs.every((h) => h === "_blank noopener noreferrer"), `step 6: every link opens a new tab ${JSON.stringify(hrefs)}`);
-  check(await page.eval<boolean>(`!!document.querySelector('[data-step="done"] [data-proof] svg.logo-animated')`), "step 6: the mark's animation, on the small card");
+  // Every link of both screens opens a new tab: leaving the page would end it.
+  const newTabs = () => page.eval<string[]>(`[...document.querySelectorAll('main a')].map((a) => a.target + " " + a.rel)`);
+  const hrefs6 = await newTabs();
+  check(hrefs6.length >= 2 && hrefs6.every((h) => h === "_blank noopener noreferrer"), `step 6: every link opens a new tab ${JSON.stringify(hrefs6)}`);
   // The QR code is drawn on the page from what it holds, and nothing is asked of another origin for it.
   check(await page.eval<boolean>(`!!document.querySelector('[data-qr] svg path.qr-dark')?.getAttribute("d")`), "step 6: the QR code is an SVG drawn on the page");
+  await page.clickButton(C.common.next);
+  await waitStep("done", "the last step");
+  const hrefs7 = await newTabs();
+  check(hrefs7.length >= 1 && hrefs7.every((h) => h === "_blank noopener noreferrer"), `the last step: every link opens a new tab ${JSON.stringify(hrefs7)}`);
+  check(await page.eval<boolean>(`!!document.querySelector('[data-step="done"] [data-proof] svg.logo-animated')`), "the last step: the mark's animation, on the small card");
 });
 
 // The page's headers and isolation, read from the first load.
@@ -1438,9 +1565,9 @@ await tryStep("everything withdrawn", async () => {
   await typeRows({ [THREADS]: "" });
   checkConfirm("withdraw all", await waitConfirm(), [[THREADS, THREADS_NAME, at("bob"), [K.withdraw]]], C.confirm.button_withdraw_all);
   await screenshot("withdraw-all-5-confirm");
-  await finish({ label: "withdraw all", button: C.confirm.button_withdraw_all, title: C.done.withdraw_all, card: [], record: [[THREADS_NAME, at("bob"), [K.withdraw]]], withdrawnLink: true, screenshots: "withdraw-all" });
+  await finish({ label: "withdraw all", button: C.confirm.button_withdraw_all, title: C.done.withdraw_all, card: [], record: [[THREADS_NAME, at("bob"), [K.withdraw]]], screenshots: "withdraw-all" });
   const v = await doneSeen();
-  check(!(await page.eval<boolean>(`!!document.querySelector('[data-step="done"] [data-proof], [data-qr]')`)) && v.link === "", "everything withdrawn: no card, no QR code, no link");
+  check(!(await page.eval<boolean>(`!!document.querySelector('[data-step="done"] [data-proof], [data-qr], [data-link]')`)) && v.hang === null, "everything withdrawn: no step 6, no card, no QR code, no link");
 });
 
 await tryStep("no account now: an empty list is refused; both declared again (not switches)", async () => {
@@ -1529,7 +1656,7 @@ await tryStep("a change the screen called a correction, recorded as a switch (th
     screenshots: "mismatch",
   });
   const note = await page.text("[data-mismatch-note]");
-  const firstLine = (await page.text("[data-step=\"done\"]")).split("\n").filter(Boolean)[0];
+  const firstLine = (await page.text("[data-step=\"hang\"]")).split("\n").filter(Boolean)[0];
   check(note === C.done.mismatch && firstLine === C.done.mismatch, `the difference, first of all, above the title: "${note}"`);
   const expected = await page.text(`dd[data-done-row="${THREADS}"] [data-expected]`);
   const used = await page.text(`dd[data-done-row="${THREADS}"] [data-switch-used]`);
@@ -1674,10 +1801,10 @@ const crsG1 = "/crs/bn254_g1_compressed_2p18.dat";
 let samePage: { timeOrigin: number; crsFetches: number } | null = null;
 const crsFetchCount = () => browser.requests.filter((r) => r.url.endsWith(crsG1)).length;
 
-await tryStep("回到開頭, then 取消 on step 4", async () => {
+await tryStep("完成, then 取消 on step 4", async () => {
   samePage = { timeOrigin: await page.eval<number>("performance.timeOrigin"), crsFetches: crsFetchCount() };
-  await page.clickButton(C.done.restart);
-  await backAtTheBeginning("回到開頭");
+  await doneAndRestart();
+  await backAtTheBeginning("完成");
   await toAccounts({ samePage: true });
   const signs = componentCount("MakeSignature");
   const challenges = challengeCount();
@@ -2202,7 +2329,7 @@ await tryStep("one card declares @zoe (account_cards 1): no sentence about other
   check(st.state === "never", `a new card: ${st.state}`);
   await typeRows({ [THREADS]: "zoe" });
   await waitConfirm();
-  await finish({ label: "@zoe, one card", button: C.confirm.button_declare, title: C.done.first, card: [[THREADS_NAME, at("zoe")]], record: [[THREADS_NAME, at("zoe"), [K.first]]], newCard: true });
+  await finish({ label: "@zoe, one card", button: C.confirm.button_declare, title: C.finish.first, card: [[THREADS_NAME, at("zoe")]], record: [[THREADS_NAME, at("zoe"), [K.first]]], newCard: true });
 });
 await tryStep("a second card declares @zoe (account_cards 2): the sentence about other cards", async () => {
   component.card = other.spec();
@@ -2212,7 +2339,7 @@ await tryStep("a second card declares @zoe (account_cards 2): the sentence about
   await finish({
     label: "@zoe, a second card",
     button: C.confirm.button_declare,
-    title: C.done.first,
+    title: C.finish.first,
     card: [
       [EXAMPLE_NAME, "z-1"],
       [THREADS_NAME, at("zoe")],
@@ -2358,22 +2485,25 @@ await tryStep("Threads only: a first declaration (the field alone)", async () =>
   await finish({
     label: "one platform",
     button: C.confirm.button_declare_single,
-    title: C.done.first,
+    title: C.finish.first,
     card: [[THREADS_NAME, at("yui")]],
     record: [[THREADS_NAME, at("yui"), [K.first]]],
     newCard: true,
     single: THREADS_NAME,
     screenshots: "single",
   });
-  // The words of design/copy/card-proof.md, step 6, as written there.
-  const hangTitle = await page.text("[data-step=\"done\"] h2.hang-title");
-  check(hangTitle === "最後一步：掛到你的 Threads 個人檔案", `step 6, one platform: the heading "${hangTitle}"`);
-  check(
-    (await page.text("[data-anyone]")) === "任何人都能宣告任何帳號。你把連結掛上個人檔案，別人才知道這個帳號承認這張證明。",
-    `step 6, one platform: "${await page.text("[data-anyone]")}"`,
-  );
-  check((await page.text("[data-new-card]")) === "如果你換了新的自然人憑證：新卡片的島民編號和連結都和舊的不同。請把個人檔案的連結換成這一個。", "step 6: a new card's new link");
-  check((await page.text()).includes("越久沒過卡，說服力越低。每次過卡，島民證明上的日期就會更新成今天。"), "step 6: why come back");
+  // The words of design/copy/card-proof.md, steps 6 and 7, as written there.
+  const hangTitle = await page.text("[data-step=\"hang\"] h1");
+  check(hangTitle === "把證明掛上你的 Threads 個人檔案", `step 6, one platform: the heading "${hangTitle}"`);
+  check((await page.text("[data-why-hang]")) === "在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。", `step 6, one platform: "${await page.text("[data-why-hang]")}"`);
+  check((await page.text("[data-new-card]")) === "如果你換了新的自然人憑證，請把個人檔案的連結換成新的連結。", "step 6: a new card's new link");
+  check((await page.eval<string>("document.title")) === "把證明掛上你的 Threads 個人檔案", "step 6: the page's title");
+  await page.clickButton(C.common.next);
+  await waitStep("done", "the last step");
+  check((await page.text("[data-step=\"done\"] h1")) === "恭喜你完成島民證明", "the last step: 恭喜你完成島民證明");
+  const invite = await page.text("[data-invite]");
+  check(/^這是第 [1-9][0-9,]* 張島民證明。愈多人成為島民，知道彼此都是台灣人，我們能讓台灣的網路討論變得更貼近真實、更有意義。$/.test(invite), `the last step: "${invite}"`);
+  check((await page.text()).includes("越久沒過卡，說服力越低。每次過卡，島民證明上的日期就會更新成今天。"), "the last step: why come back");
 });
 
 await tryStep("Threads only, declared: 更新島民證明 (the list as it is), 上一步 and again", async () => {
@@ -2394,7 +2524,7 @@ await tryStep("Threads only, declared: 更新島民證明 (the list as it is), �
   await page.clickButton(A.refresh);
   checkConfirm("one platform, 更新島民證明 again", await waitConfirm(), want, C.confirm.button_refresh, THREADS_NAME);
   check(componentCount("MakeSignature") === signs, "back and forth: nothing signed");
-  await finish({ label: "one platform, 更新島民證明", button: C.confirm.button_refresh, title: C.done.refresh, card: [[THREADS_NAME, at("yui")]], record: [[THREADS_NAME, at("yui"), [K.unchanged]]], single: THREADS_NAME });
+  await finish({ label: "one platform, 更新島民證明", button: C.confirm.button_refresh, title: C.done.refresh, card: [[THREADS_NAME, at("yui")]], record: [[THREADS_NAME, at("yui"), [K.unchanged]]], single: THREADS_NAME, short: true, screenshots: "single-refresh" });
 });
 
 await tryStep("Threads only: 改成別的帳號 (@yui to @yui.tw): the limit said only then; 不改了; an empty field; 上一步", async () => {
@@ -2431,10 +2561,11 @@ await tryStep("Threads only: 改成別的帳號 (@yui to @yui.tw): the limit sai
   await finish({
     label: "one platform, 改成別的帳號",
     button: C.confirm.button_declare_single,
-    title: C.done.changed,
+    title: fill(C.finish.switched, { account: at("yui.tw") }),
     card: [[THREADS_NAME, at("yui.tw")]],
     record: [[THREADS_NAME, at("yui.tw"), [fill(K.switch, { previous: at("yui") })]]],
     single: THREADS_NAME,
+    screenshots: "single-switch",
   });
 });
 
@@ -2448,7 +2579,7 @@ await tryStep("Threads only: 收回對 @yui.tw 的宣告; the next day, the fiel
   checkConfirm("one platform, withdrawn", await waitConfirm(), [[THREADS, THREADS_NAME, at("yui.tw"), [K.withdraw]]], button, THREADS_NAME);
   await screenshot("single-5-confirm-withdraw");
   const submissions: Record<string, unknown>[] = [];
-  await finish({ label: "one platform, 收回", button, title: C.done.withdraw_all, card: [], record: [[THREADS_NAME, at("yui.tw"), [K.withdraw]]], withdrawnLink: true, single: THREADS_NAME, submissions });
+  await finish({ label: "one platform, 收回", button, title: C.done.withdraw_all, card: [], record: [[THREADS_NAME, at("yui.tw"), [K.withdraw]]], single: THREADS_NAME, submissions, screenshots: "single-withdraw" });
   check(JSON.stringify(submissions.map((s) => s.accounts)) === JSON.stringify([[]]), `收回: the list sent is empty ${JSON.stringify(submissions.map((s) => s.accounts))}`);
   // 3 records today: the next day, step 4 as for a first declaration, with what was withdrawn and the switches left.
   await setDay(day + 1);

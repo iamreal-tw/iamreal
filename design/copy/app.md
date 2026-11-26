@@ -78,11 +78,11 @@ iOS 要讀 NFC 的 app 在 `Info.plist` 寫一句用途說明（`NFCReaderUsageD
 
 ## 過卡提醒
 
-照「[每三個月提醒過卡：app 在手機上存什麼](https://github.com/iamreal-tw/iamreal/issues/93)」。提醒是手機自己排的本機通知，不經過伺服器；手機上只存四樣：開關、間隔、時刻、下次提醒的日子。關掉提醒就四樣一起刪掉，所以關掉之後和從來沒開過一樣。過卡完成的畫面上那一段在 `card-proof.md` 第 6 步的 app 段。
+照「[每三個月提醒過卡：app 在手機上存什麼](https://github.com/iamreal-tw/iamreal/issues/93)」。提醒是手機自己排的本機通知，不經過伺服器；手機上只存四樣：開關、間隔、時刻、下次提醒的日子。關掉提醒就四樣一起刪掉，所以關掉之後和從來沒開過一樣。過卡時問要不要提醒的那一步，在 `card-proof.md` 第 7 步（提醒）。
 
 ### 選間隔和時刻
 
-從完成畫面的「改間隔或時刻」，或設定頁的「更改」打開（`design/screens/app-reminder-2-schedule-phone.png`）：
+從過卡第 7 步的「改提醒間隔或時刻」，或設定頁的「更改」打開（`design/screens/app-reminder-2-schedule-phone.png`）：
 
 ```
 提醒我回來過卡
@@ -160,7 +160,7 @@ Android 的通知要歸在一個類別，類別的名稱顯示在手機的設定
 
 ## 設定
 
-第 1 步和第 6 步的頁首右邊有「設定」（`design/screens/app-settings-phone.png`）：
+第 1 步和第 8 步（完成和分享）的頁首右邊有「設定」（`design/screens/app-settings-phone.png`）：
 
 ```
 設定

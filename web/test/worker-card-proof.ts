@@ -16,7 +16,7 @@
 //    that stands in the place of the data domain (test/e2e/worker-site.ts):
 //    it answers /crl/… from the Worker's bucket, read-only, and hands every
 //    other request to the Worker as it is.
-// 5. Clicks through the six steps like a cardholder (real mouse events,
+// 5. Clicks through the seven steps like a cardholder (real mouse events,
 //    cdp.ts), declaring @alice on Threads.
 // 6. Opens the home page and /p/<short ID>: the page of the card lists the
 //    account just declared, by the sentences of design/copy/proof-page.md.
@@ -126,14 +126,14 @@ try {
   await component.start(COMPONENT_PORT);
   component.card = { certificates: [encryption, signing], signingCertificate: signing, signingKey: cardKey.privateKey, pin: PIN, tries: 3 };
 
-  // 5. The six steps ----------------------------------------------------------------
+  // 5. The seven steps --------------------------------------------------------------
   browser = await Browser.launch({ dir: out, args: ["--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1"] });
   const page = await browser.newPage();
   await page.send("Page.enable");
   await page.send("Runtime.enable");
   const step = (n: string): string => `document.querySelector('[data-step="${n}"]')`;
   const where = (): Promise<string> => page.text("[data-where]");
-  const stepLine = (n: number): string => C.common.step.replace("{step}", String(n)).replace("{steps}", "6");
+  const stepLine = (n: number): string => C.common.step.replace("{step}", String(n)).replace("{steps}", "7");
   const stopped = `(document.querySelector('[data-list] [data-state="halt"] [data-why]')?.innerText || document.querySelector('[data-message]')?.innerText || "")`;
   /** Waits for a step, or stops with what the page says where it stopped. */
   const waitStep = async (n: string, what: string, ms = 60_000): Promise<void> => {
@@ -172,11 +172,14 @@ try {
   await waitStep("confirm", "step 5");
   check((await where()).includes(stepLine(5)), "step 5 (確認)");
   await page.clickButton(C.confirm.button_declare);
-  await waitStep("done", "step 6", 180_000);
-  check((await where()).includes(stepLine(6)), "step 6 (完成): the Worker verified the proof and wrote the record");
-  const done = await page.text();
-  const short = /iamreal\.tw\/p\/([0-9A-Z]{10})/.exec(done)?.[1] ?? "";
-  check(short !== "" && done.includes(C.done.first), `step 6 gives the card's link: iamreal.tw/p/${short}`);
+  await waitStep("hang", "step 6", 180_000);
+  check((await where()).includes(stepLine(6)), "step 6 (掛上去): the Worker verified the proof and wrote the record");
+  const hang = await page.text();
+  const short = /iamreal\.tw\/p\/([0-9A-Z]{10})/.exec(hang)?.[1] ?? "";
+  check(short !== "", `step 6 gives the card's link: iamreal.tw/p/${short}`);
+  await page.clickButton(C.common.next);
+  await waitStep("done", "step 7");
+  check((await where()).includes(stepLine(7)) && (await page.text()).includes(C.finish.first), "step 7 (完成和分享): 恭喜你完成島民證明");
   const records = component.requests.filter((r) => r.func === "MakeSignature").length;
   check(records === 2, `the card signed twice (${records})`);
 
