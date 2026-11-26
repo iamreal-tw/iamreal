@@ -19,7 +19,7 @@ there are the names used here.
 | [`records-response.md`](records-response.md) | The answer to a submission, as the device reads it after the card proof: `seq`, `record_hash`, the card's ordinal, the kinds of the record on each platform, and where they differ from the rows the confirmation screen showed | Draft |
 | [`revocation-tree.md`](revocation-tree.md) | The revocation tree: which CRLs, the tree, which roots a record may use, the mirror | Draft |
 | [`issuers.md`](issuers.md) | MOICA's issuer keys, their sources, and which circuit each uses | Draft |
-| [`device-checks.md`](device-checks.md) | The checks on the device before the card signs: choosing and checking the certificate, which CRL from the mirror it uses and when it refuses one, and the reason codes for answers of the server it does not take | Draft |
+| [`device-checks.md`](device-checks.md) | The checks on the device before the card signs: choosing and checking the certificate, which CRL from the mirror it uses and when it refuses one, and the reason codes for answers of the server it does not take; and, once the card signed, one proof for its signatures | Draft |
 | [`proof-verification.md`](proof-verification.md) | The circuits, the public inputs and their encoding, the checks around `bb verify`, what a proof guarantees | Draft |
 | [`circuit-inputs.md`](circuit-inputs.md) | What the device gives the circuit, from the certificate, the signatures and the path, and the public inputs it expects back | Draft |
 | [`min-app.md`](min-app.md) | The minimum app version in the server's `config`: how an app reads `min_app`, and when it goes on, warns or stops | Draft |

@@ -348,13 +348,17 @@ function find(match: (n: Node) => boolean, what: string): Node {
   let last: Node[] = [];
   for (const scroll of [() => emulator.scrollDown(), () => emulator.scrollUp()]) {
     let before = "";
-    for (let i = 0; i < 12; i++) {
+    let unmoved = 0;
+    for (let i = 0; i < 14; i++) {
       last = visible();
       const node = last.find(match);
       // Not one that only peeks over an edge of the screen.
       if (node && node.bottom < emulator.size().height - 80 && node.top > 80) return node;
       const now = JSON.stringify(last.map((n) => [n.text, n.top]));
-      if (now === before) break;
+      // The end of the step: the screen did not move, twice. Once is not enough: a swipe made while a demonstration is being
+      // drawn (steps 2 and 6) is now and then lost on a busy emulator.
+      unmoved = now === before ? unmoved + 1 : 0;
+      if (unmoved === 2) break;
       before = now;
       scroll();
     }
@@ -389,7 +393,6 @@ function shows(screen: string[], where: string, sentences: string[]): void {
 /** "第 2 步，共 8 步": the same from step 1 on. */
 const step = (n: number): string => say("common.step", { step: n, steps: 8 });
 const THREADS = "Threads";
-const SPOT = say("app_read.spot_android");
 const READ_ITEMS = [say("read.server"), say("app_read.certificate"), say("read.check"), say("read.crl")];
 const PROGRESS_ITEMS = [say("progress.server"), say("app_progress.sign"), say("app_progress.compute", { seconds: 10 }), say("progress.submit")];
 
@@ -500,7 +503,7 @@ async function cardProof(p: Proof): Promise<string> {
     shows(s, "step 2", [say("read.title"), say("app_read.how_android"), say("app_demo.replay"), ...READ_ITEMS, say("common.back"), say("app_read.tap_card")]);
     check(![say("read.component"), say("read.reader"), say("read.certificate")].some((x) => s.includes(x)), "step 2's list has no item of MOICA's component or a card reader");
     // Where on its back differs from one Android phone to another: nothing here says the middle, or not to move the card.
-    check(!s.some((t) => t.includes(say("app_read.spot_iphone")) || t === say("app_read.how", { spot: SPOT })), "step 2 does not say where on the phone's back, nor the sentence that says not to move the card");
+    check(!s.some((t) => t.includes(say("app_read.spot_iphone")) || t === say("app_read.how", { spot: say("app_read.spot_iphone") })), "step 2 does not say where on the phone's back, nor the iPhone's sentence that says not to move the card");
   }
   press(say("app_read.tap_card"));
   if (p.thorough) await tapWithPanel({ signs: false });
@@ -977,7 +980,7 @@ async function interruptions(): Promise<void> {
   // Tap 1: the card leaves while it is read.
   press(say("app_read.tap_card"));
   await hold(leaving("reading"));
-  await waitText(say("app_stops.read_dropped"), "step 2: the sentence for a card that left", 20_000);
+  await waitText(say("app_stops.read_dropped_android"), "step 2: Android's sentence for a card that left", 20_000);
   shows(wholeScreen(), "step 2, the card left,", [say("common.halted"), again]);
   press(again);
   await tap();

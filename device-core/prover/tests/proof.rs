@@ -264,13 +264,29 @@ impl Card {
     /// A session that trusts the vectors' test keys, with the files of
     /// this version of the core, after every step but `skipped`.
     fn session_without(&self, skipped: Option<Step>) -> Session {
+        self.session_with(artifacts::BUILT_IN, &self.files, skipped)
+    }
+
+    /// The same, in a core that has `artifacts` written into it, given `files`.
+    fn session_with(
+        &self,
+        artifacts: artifacts::Artifacts,
+        files: &Files,
+        skipped: Option<Step>,
+    ) -> Session {
         let session = Session(session::open(
             self.proof_log,
             Trust {
                 issuers: self.issuers.clone(),
-                artifacts: artifacts::BUILT_IN,
+                artifacts,
             },
         ));
+        self.check(&session, files, skipped);
+        session
+    }
+
+    /// Every step but `skipped`, on `session`: again, when it made them before.
+    fn check(&self, session: &Session, files: &Files, skipped: Option<Step>) {
         let done = |code: i32, out: IdcBuf| {
             let result = finish(code, out);
             if let Ok(result) = &result {
@@ -321,9 +337,8 @@ impl Card {
             let _ = idc_session_build_tree(session.0);
         }
         if skipped != Some(Step::Artifacts) {
-            let _ = session.check_artifacts(&self.files);
+            let _ = session.check_artifacts(files);
         }
-        session
     }
 
     /// A session that passed every check and took the card's challenge.
@@ -761,10 +776,11 @@ fn the_core_sets_barretenbergs_threads_to_the_number_of_cores() {
         .iter()
         .find(|c| c.circuit == "card_proof_rs2048")
         .unwrap();
-    let session = card.passed();
     // The setting belongs to the thread: a thread that proves for the
     // first time, and one on which Barretenberg was told another number.
     for before in [None, Some(cores + 3)] {
+        // A session makes one proof for the challenge it took.
+        let session = card.passed();
         std::thread::scope(|scope| {
             scope
                 .spawn(|| {
@@ -859,4 +875,116 @@ fn the_proof_is_made_for_the_challenge_taken_on_the_sessions_date_only() {
         Ok(json!({ "ok": true }))
     );
     assert!(on("2026-11-16").is_ok());
+}
+
+/// spec/device-checks.md, "One proof for the card's signatures".
+#[test]
+fn the_cards_signatures_get_one_proof() {
+    let cards = cards();
+    let card = &cards[0];
+    let session = card.passed();
+    assert!(
+        session
+            .records_request(&card.files, &card.declaration())
+            .is_ok()
+    );
+    // Not a second one, as it is.
+    assert_eq!(
+        session.records_request(&card.files, &card.declaration()),
+        Err(IDC_ERR_REFUSED)
+    );
+    // Nor once the challenge is offered again: it is not taken.
+    assert_eq!(
+        session.check_challenge(card.now, &card.challenge),
+        Err(IDC_ERR_REFUSED)
+    );
+    assert_eq!(
+        session.records_request(&card.files, &card.declaration()),
+        Err(IDC_ERR_REFUSED)
+    );
+    // Nor with the checks made again from the start, which is how the
+    // tree's root and the path would be other ones: the same handle goes
+    // through every step again and passes, as a card state request
+    // shows, and still does not take the challenge.
+    card.check(&session, &card.files, None);
+    assert!(
+        session
+            .card_state_request(card.now, &card.scope_signature)
+            .is_ok()
+    );
+    assert_eq!(
+        session.check_challenge(card.now, &card.challenge),
+        Err(IDC_ERR_REFUSED)
+    );
+    assert_eq!(
+        session.records_request(&card.files, &card.declaration()),
+        Err(IDC_ERR_REFUSED)
+    );
+    // Another challenge is taken, also by this session: its declaration
+    // code is another one, which the card has to sign.
+    let another = "2026-11-16.000G40R40M30E209185GR38E20";
+    assert_eq!(
+        session.check_challenge(card.now, another),
+        Ok(json!({ "ok": true }))
+    );
+    assert_eq!(
+        session.records_request(
+            &card.files,
+            &Declaration {
+                challenge: another,
+                ..card.declaration()
+            }
+        ),
+        Err(IDC_ERR_INPUT)
+    );
+    // That signature was not the card's: nothing was computed, and the
+    // challenge is not spent (what_the_card_did_not_sign_gives_no_proof).
+    assert_eq!(
+        session.check_challenge(card.now, another),
+        Ok(json!({ "ok": true }))
+    );
+}
+
+#[test]
+fn after_a_proof_that_failed_there_is_no_second_one() {
+    let cards = cards();
+    let card = &cards[0];
+    // A core with the two circuits the wrong way round: the checks pass,
+    // the signatures are the card's, and the circuit has no proof for
+    // them.
+    let other = if card.circuit == "card_proof_rs2048" {
+        "card_proof_rs4096"
+    } else {
+        "card_proof_rs2048"
+    };
+    let files = files_of(other);
+    let swapped = artifacts::Artifacts {
+        rs2048: artifacts::BUILT_IN.rs4096,
+        rs4096: artifacts::BUILT_IN.rs2048,
+        ..artifacts::BUILT_IN
+    };
+    let session = card.session_with(swapped, &files, None);
+    assert_eq!(
+        session.check_challenge(card.now, &card.challenge),
+        Ok(json!({ "ok": true }))
+    );
+    let failed = session.records_request(&files, &card.declaration());
+    assert!(
+        matches!(failed, Err(code) if code != IDC_ERR_REFUSED),
+        "{failed:?}"
+    );
+    // The same signatures again, the challenge again: refused, before
+    // anything is computed.
+    assert_eq!(
+        session.records_request(&files, &card.declaration()),
+        Err(IDC_ERR_REFUSED)
+    );
+    assert_eq!(
+        session.check_challenge(card.now, &card.challenge),
+        Err(IDC_ERR_REFUSED)
+    );
+    assert_eq!(
+        session.records_request(&files, &card.declaration()),
+        Err(IDC_ERR_REFUSED)
+    );
 }

@@ -9,7 +9,10 @@
 //
 // The answers are those of spec/revocation-tree.md, "Times": only UTCTime
 // YYMMDDHHMMSSZ and GeneralizedTime YYYYMMDDHHMMSSZ, of a time that exists,
-// are read; a file with any other spelling is not DER. crl/, worker/, web/
+// are read; a file with any other spelling is not DER. The files at the end
+// are of "Object identifiers" in the same way: an extension's identifier
+// written as that section says is read, any other is not DER. The last
+// ones have an element with more inside than it has: not DER either. crl/, worker/, web/
 // and device-core/ all run their tests over this directory.
 //
 // The lines are written out below by hand; this program stops if crl/ gives
@@ -69,6 +72,14 @@ type timeCase struct {
 	// noNull writes sha256WithRSAEncryption without NULL parameters, in both
 	// places (spec/revocation-tree.md, "Reason codes", row 2).
 	noNull bool
+	// oid, when not nil, is the content of the OBJECT IDENTIFIER of one
+	// more extension of the CRL, not critical, written as it is.
+	oid []byte
+	// entryOID is the same for an extension of the one entry the file then
+	// has.
+	entryOID []byte
+	// change, when not nil, is given the list before it is written.
+	change func(*crltest.CRL)
 	// What the index line says; all empty if the file is not DER.
 	thisUpdate, nextUpdate, crlDate string
 }
@@ -154,6 +165,62 @@ var cases = []timeCase{
 	{name: "revocation-date-offset", what: "an entry's revocationDate with an offset", revocation: utc("261118000000+0800")},
 	{name: "revocation-date-minutes", what: "an entry's revocationDate without seconds", revocation: utc("2611180000Z")},
 	{name: "revocation-date-no-such-day", what: "an entry's revocationDate on 31 November", revocation: utc("261131000000Z")},
+
+	// Not times: the other thing a reader may draw its own line for, kept
+	// here because only this directory's lines can say "not DER"
+	// (spec/revocation-tree.md, "Object identifiers").
+	{name: "oid-number-largest", what: "an extension of the CRL named 1.2.2147483647: the largest number an OBJECT IDENTIFIER may hold, 2^31 - 1", oid: []byte{0x2a, 0x87, 0xff, 0xff, 0xff, 0x7f}, thisUpdate: usualThis, nextUpdate: usualNext, crlDate: usualDate},
+	{name: "oid-number-too-large", what: "an extension of the CRL named 1.2.2147483648: a number of 2^31", oid: []byte{0x2a, 0x88, 0x80, 0x80, 0x80, 0x00}},
+	{name: "oid-first-number-largest", what: "an extension of the CRL whose OBJECT IDENTIFIER is one number, 2^31 - 1: the first number is bounded as written", oid: []byte{0x87, 0xff, 0xff, 0xff, 0x7f}, thisUpdate: usualThis, nextUpdate: usualNext, crlDate: usualDate},
+	{name: "oid-first-number-too-large", what: "an extension of the CRL whose OBJECT IDENTIFIER is one number, 2^31", oid: []byte{0x88, 0x80, 0x80, 0x80, 0x00}},
+	{name: "oid-not-shortest", what: "an extension of the CRL whose OBJECT IDENTIFIER has a number that begins with the byte 80", oid: []byte{0x2a, 0x80, 0x01}},
+	{name: "oid-unfinished", what: "an extension of the CRL whose OBJECT IDENTIFIER ends in the middle of a number", oid: []byte{0x2a, 0x81}},
+	{name: "oid-empty", what: "an extension of the CRL whose OBJECT IDENTIFIER has no content", oid: []byte{}},
+	{name: "oid-entry-number-largest", what: "an extension of an entry named 1.2.2147483647", entryOID: []byte{0x2a, 0x87, 0xff, 0xff, 0xff, 0x7f}, thisUpdate: usualThis, nextUpdate: usualNext, crlDate: usualDate},
+	{name: "oid-entry-number-too-large", what: "an extension of an entry named 1.2.2147483648", entryOID: []byte{0x2a, 0x88, 0x80, 0x80, 0x80, 0x00}},
+
+	// Nor times: an element with more inside than it has. A reader that
+	// walks the elements one at a time (#410) must still find what is left
+	// over (spec/revocation-tree.md, "Which CRLs": a DER CertificateList).
+	{name: "extension-then-null", what: "an extension of the CRL with a NULL after its value", change: extension(oid123, octets, null)},
+	{name: "extension-two-values", what: "an extension of the CRL with two values", change: extension(oid123, octets, octets)},
+	{name: "extension-critical-twice", what: "an extension of the CRL with its critical BOOLEAN twice", change: extension(oid123, isTrue, isTrue, octets)},
+	{name: "extension-no-value", what: "an extension of the CRL that is its OID alone", change: extension(oid123)},
+	{name: "entry-then-null", what: "an entry with a NULL after its revocationDate", change: entry(serial5, revoked, null)},
+	{name: "entry-extensions-then-null", what: "an entry with a NULL after its extensions", change: entry(serial5, revoked, seq(seq(oid123, octets)), null)},
+	{name: "tbs-then-null", what: "a NULL at the end of tbsCertList, after crlExtensions", change: func(c *crltest.CRL) { c.AfterExtensions = null }},
+}
+
+// Elements written out by hand, for the files with more inside an element
+// than it has.
+var (
+	oid123  = []byte{0x06, 0x02, 0x2a, 0x03}
+	octets  = []byte{0x04, 0x02, 0x05, 0x00}
+	isTrue  = []byte{0x01, 0x01, 0xff}
+	null    = []byte{0x05, 0x00}
+	serial5 = []byte{0x02, 0x01, 0x05}
+	revoked = append([]byte{0x17, 0x0d}, "261118000000Z"...)
+)
+
+// seq is a SEQUENCE of the elements given.
+func seq(elements ...[]byte) []byte {
+	var b cryptobyte.Builder
+	b.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) {
+		for _, e := range elements {
+			b.AddBytes(e)
+		}
+	})
+	return b.BytesOrPanic()
+}
+
+// extension gives the CRL one more extension, made of these elements.
+func extension(elements ...[]byte) func(*crltest.CRL) {
+	return func(c *crltest.CRL) { c.Extensions = []crltest.Extension{{Raw: seq(elements...)}} }
+}
+
+// entry gives the CRL one entry, made of these elements.
+func entry(elements ...[]byte) func(*crltest.CRL) {
+	return func(c *crltest.CRL) { c.Entries = []crltest.Entry{{Raw: seq(elements...)}} }
 }
 
 type expected struct {
@@ -191,6 +258,15 @@ func main() {
 			list.Entries = []crltest.Entry{{Serial: []byte{0x05}, RevocationDateDER: c.revocation.der()}}
 		}
 		list.NoNullTBS, list.NoNullOuter = c.noNull, c.noNull
+		if c.entryOID != nil {
+			list.Entries = []crltest.Entry{{Serial: []byte{0x05}, RevocationDate: usual.Add(-24 * time.Hour), Extensions: []crltest.Extension{{IDContent: c.entryOID, Value: []byte{5, 0}}}}}
+		}
+		if c.change != nil {
+			c.change(list)
+		}
+		if c.oid != nil {
+			list.Extensions = []crltest.Extension{{IDContent: c.oid, Value: []byte{5, 0}}}
+		}
 		der := crltest.Make(list, key)
 		got := crl.IndexFile(der, keys)
 		want := crl.IndexLine{Issuer: "-", CRLNumber: "4660", ThisUpdate: c.thisUpdate, NextUpdate: c.nextUpdate, CRLDate: c.crlDate, SHA256: got.SHA256, Root: "-" + crl.ReasonSignature}

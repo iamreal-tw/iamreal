@@ -3,7 +3,7 @@
 // codes, in the same order, as crl/crl.go; the tests run both against
 // crl/testdata/.
 import { equalBytes } from "iamreal-protocol/bytes.ts";
-import { DerError, TAG, type Tlv, children, content, expectTlv, oidString, readTime, readTlv, whole } from "../der.ts";
+import { DerError, Elements, TAG, type Tlv, checkOid, content, expectTlv, readTime, readTlv, whole } from "../der.ts";
 import { rsaVerify } from "../issuers.ts";
 
 export type UnusableReason =
@@ -28,32 +28,50 @@ export class Unusable extends Error {
 }
 
 interface Extension {
-  oid: string;
+  /** The OID's content bytes, checked (src/der.ts, `checkOid`): the same OID exactly when the same bytes. */
+  oid: Uint8Array;
   critical: boolean;
   value: Uint8Array;
 }
 
-interface Entry {
-  /** The serial number's content bytes, as encoded. */
-  serial: Uint8Array;
-  extensions: Extension[];
+/** What is wrong with the extensions of one entry: the first reason that applies to it. */
+interface EntryProblem {
+  /** Which entry, counted from 0. */
+  index: number;
+  code: UnusableReason;
+  detail: string;
 }
 
+/**
+ * A CertificateList, as far as the checks read it. Nothing here grows with
+ * what an element holds but `serials`, eight bytes an entry: the file is as
+ * long as the mirror stores (32 MiB), and before its signature is checked
+ * its bytes are anyone's who is on the way (README.md, "讀清冊的記憶體").
+ */
 export interface ParsedCrl {
+  /** The whole file: `serials` points into it. */
+  der: Uint8Array;
   tbs: Uint8Array;
   tbsSignatureAlgorithm: Uint8Array;
   signatureAlgorithm: Uint8Array;
   signature: Uint8Array;
   /** thisUpdate, seconds since the epoch. */
   thisUpdate: number;
-  entries: Entry[];
+  /** How many entries `revokedCertificates` has. */
+  entryCount: number;
+  /** Where each entry's serial number is in `der`: the offsets of its first content byte and just past its last, two numbers an entry. */
+  serials: Uint32Array;
+  /** The first entry whose extensions make the CRL not usable, if any; of the later entries nothing is kept. */
+  entryProblem: EntryProblem | undefined;
+  /** The extensions of the CRL: at most MAX_EXTENSIONS + 1 of them. */
   extensions: Extension[];
 }
 
 const SHA256_WITH_RSA_NULL = Uint8Array.from([0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b, 0x05, 0x00]);
-const OID_CRL_NUMBER = "2.5.29.20";
-const OID_DELTA = "2.5.29.27";
-const OID_IDP = "2.5.29.28";
+/** cRLNumber 2.5.29.20, deltaCRLIndicator 2.5.29.27, issuingDistributionPoint 2.5.29.28: the content bytes. */
+const OID_CRL_NUMBER = Uint8Array.from([0x55, 0x1d, 0x14]);
+const OID_DELTA = Uint8Array.from([0x55, 0x1d, 0x1b]);
+const OID_IDP = Uint8Array.from([0x55, 0x1d, 0x1c]);
 const CTX0 = 0xa0;
 
 /** The most extensions the CRL, and each entry, may have (spec/revocation-tree.md, "Which CRLs"). */
@@ -68,26 +86,24 @@ function readExtensions(der: Uint8Array, seq: Tlv): Extension[] {
   if (seq.tag !== TAG.SEQUENCE) throw new DerError("Extensions is not a SEQUENCE");
   if (seq.contentStart === seq.end) throw new DerError("empty Extensions");
   const out: Extension[] = [];
-  for (let p = seq.contentStart; p < seq.end; ) {
-    const e = readTlv(der, p, seq.end);
-    p = e.end;
+  const all = new Elements(der, seq);
+  for (let e = all.next(); e !== undefined; e = all.next()) {
     if (e.tag !== TAG.SEQUENCE) throw new DerError("Extension is not a SEQUENCE");
-    const parts = children(der, e);
-    const oid = parts[0];
+    const parts = new Elements(der, e);
+    const oid = parts.next();
     if (!oid || oid.tag !== TAG.OID) throw new DerError("Extension without OID");
-    let i = 1;
+    checkOid(content(der, oid));
     let critical = false;
-    if (parts[i]?.tag === TAG.BOOLEAN) {
-      const b = content(der, parts[i]!);
+    if (parts.peek()?.tag === TAG.BOOLEAN) {
+      const b = content(der, parts.next()!);
       // An explicit FALSE is not DER, but is accepted, as crl/ (and crypto/x509) do.
       if (b.length !== 1 || (b[0] !== 0x00 && b[0] !== 0xff)) throw new DerError("malformed BOOLEAN");
       critical = b[0] === 0xff;
-      i++;
     }
-    const value = parts[i];
-    if (!value || value.tag !== TAG.OCTET_STRING || i + 1 !== parts.length) throw new DerError("malformed Extension");
-    const extension = { oid: oidString(content(der, oid)), critical, value: content(der, value) };
-    if (out.length <= MAX_EXTENSIONS) out.push(extension);
+    const value = parts.next();
+    // Nothing after the value: found at the element after it, without walking the rest.
+    if (!value || value.tag !== TAG.OCTET_STRING || value.end !== e.end) throw new DerError("malformed Extension");
+    if (out.length <= MAX_EXTENSIONS) out.push({ oid: content(der, oid), critical, value: content(der, value) });
   }
   return out;
 }
@@ -96,74 +112,100 @@ function readExtensions(der: Uint8Array, seq: Tlv): Extension[] {
 export function parseCrl(der: Uint8Array): ParsedCrl {
   const list = expectTlv(der, 0, TAG.SEQUENCE, der.length, "CertificateList");
   if (list.end !== der.length) throw new DerError("bytes after the CertificateList");
-  const [tbsT, algT, sigT, ...more] = children(der, list);
-  if (!tbsT || !algT || !sigT || more.length) throw new DerError("CertificateList is not three elements");
+  const three = new Elements(der, list);
+  const tbsT = three.next();
+  const algT = three.next();
+  const sigT = three.next();
+  if (!tbsT || !algT || !sigT || sigT.end !== list.end) throw new DerError("CertificateList is not three elements");
   if (tbsT.tag !== TAG.SEQUENCE || algT.tag !== TAG.SEQUENCE || sigT.tag !== TAG.BIT_STRING) throw new DerError("CertificateList fields");
   const bits = content(der, sigT);
   if (bits.length < 1 || bits[0] !== 0) throw new DerError("signatureValue has unused bits");
 
-  const f = children(der, tbsT);
-  let i = 0;
+  const f = new Elements(der, tbsT);
   let version = 1;
-  if (f[i]?.tag === TAG.INTEGER) {
-    const v = content(der, f[i]!);
+  if (f.peek()?.tag === TAG.INTEGER) {
+    const v = content(der, f.next()!);
     if (v.length !== 1 || v[0] !== 1) throw new DerError("version is present and not v2");
     version = 2;
-    i++;
   }
-  const tbsAlg = f[i++];
+  const tbsAlg = f.next();
   if (!tbsAlg || tbsAlg.tag !== TAG.SEQUENCE) throw new DerError("signature in tbsCertList");
-  const issuer = f[i++];
+  const issuer = f.next();
   if (!issuer || issuer.tag !== TAG.SEQUENCE) throw new DerError("issuer");
-  const thisUpdateT = f[i++];
+  const thisUpdateT = f.next();
   if (!thisUpdateT) throw new DerError("no thisUpdate");
   const thisUpdate = readTime(der, thisUpdateT);
-  if (f[i] && (f[i]!.tag === TAG.UTC_TIME || f[i]!.tag === TAG.GENERALIZED_TIME)) readTime(der, f[i++]!);
-  const entries: Entry[] = [];
-  if (f[i]?.tag === TAG.SEQUENCE) {
-    for (const e of children(der, f[i++]!)) {
+  const afterThis = f.peek();
+  if (afterThis && (afterThis.tag === TAG.UTC_TIME || afterThis.tag === TAG.GENERALIZED_TIME)) readTime(der, f.next()!);
+
+  // Two numbers an entry, in an array that doubles when it is full.
+  let serials = new Uint32Array(2 * 1024);
+  let entryCount = 0;
+  let entryProblem: EntryProblem | undefined;
+  if (f.peek()?.tag === TAG.SEQUENCE) {
+    const entries = new Elements(der, f.next()!);
+    for (let e = entries.next(); e !== undefined; e = entries.next()) {
       if (e.tag !== TAG.SEQUENCE) throw new DerError("entry is not a SEQUENCE");
-      const ef = children(der, e);
-      const serial = ef[0];
+      const ef = new Elements(der, e);
+      const serial = ef.next();
       if (!serial || serial.tag !== TAG.INTEGER) throw new DerError("userCertificate is not an INTEGER");
-      if (!ef[1]) throw new DerError("no revocationDate");
-      readTime(der, ef[1]);
-      let extensions: Extension[] = [];
-      if (ef[2]) extensions = readExtensions(der, ef[2]);
-      if (ef.length > 3) throw new DerError("unexpected data in entry");
-      entries.push({ serial: content(der, serial), extensions });
+      const revocationDate = ef.next();
+      if (!revocationDate) throw new DerError("no revocationDate");
+      readTime(der, revocationDate);
+      const extensionsT = ef.next();
+      if (extensionsT) {
+        // Nothing after the extensions: found here, without walking the rest.
+        if (extensionsT.end !== e.end) throw new DerError("unexpected data in entry");
+        const problem = extensionProblem(readExtensions(der, extensionsT));
+        if (problem && !entryProblem) entryProblem = { index: entryCount, code: problem.code, detail: `entry ${entryCount}: ${problem.detail}` };
+      }
+      if (2 * entryCount === serials.length) {
+        const longer = new Uint32Array(2 * serials.length);
+        longer.set(serials);
+        serials = longer;
+      }
+      serials[2 * entryCount] = serial.contentStart;
+      serials[2 * entryCount + 1] = serial.end;
+      entryCount++;
     }
   }
   let extensions: Extension[] = [];
-  if (f[i]?.tag === CTX0) {
+  if (f.peek()?.tag === CTX0) {
     if (version !== 2) throw new DerError("crlExtensions in a v1 CRL");
-    const outer = f[i++]!;
-    const inner = children(der, outer);
-    if (inner.length !== 1) throw new DerError("trailing data in crlExtensions");
-    extensions = readExtensions(der, inner[0]!);
+    const outer = f.next()!;
+    const inner = new Elements(der, outer).next();
+    if (!inner || inner.end !== outer.end) throw new DerError("trailing data in crlExtensions");
+    extensions = readExtensions(der, inner);
   }
-  if (i !== f.length) throw new DerError("unexpected data in tbsCertList");
+  if (f.peek() !== undefined) throw new DerError("unexpected data in tbsCertList");
   return {
+    der,
     tbs: whole(der, tbsT),
     tbsSignatureAlgorithm: whole(der, tbsAlg),
     signatureAlgorithm: whole(der, algT),
     signature: bits.subarray(1),
     thisUpdate,
-    entries,
+    entryCount,
+    serials,
+    entryProblem,
     extensions,
   };
 }
 
-function checkExtensions(exts: Extension[], where: string): void {
-  if (exts.length > MAX_EXTENSIONS) throw new Unusable("not_usable_too_many_extensions", `${where}: more than ${MAX_EXTENSIONS} extensions`);
+const hex = (bytes: Uint8Array): string => Array.from(bytes.subarray(0, 32), (b) => b.toString(16).padStart(2, "0")).join("") + (bytes.length > 32 ? "…" : "");
+
+/** Of at most MAX_EXTENSIONS + 1 extensions: too many, then one twice, then a critical one; or nothing. */
+function extensionProblem(exts: Extension[]): { code: UnusableReason; detail: string } | undefined {
+  if (exts.length > MAX_EXTENSIONS) return { code: "not_usable_too_many_extensions", detail: `more than ${MAX_EXTENSIONS} extensions` };
   for (let i = 0; i < exts.length; i++) {
     for (let j = 0; j < i; j++) {
-      if (exts[i]!.oid === exts[j]!.oid) throw new Unusable("not_usable_duplicate_extension", `${where}: ${exts[i]!.oid} twice`);
+      if (equalBytes(exts[i]!.oid, exts[j]!.oid)) return { code: "not_usable_duplicate_extension", detail: `the extension ${hex(exts[i]!.oid)} twice` };
     }
   }
   for (const x of exts) {
-    if (x.critical) throw new Unusable("not_usable_critical_extension", `${where}: critical ${x.oid}`);
+    if (x.critical) return { code: "not_usable_critical_extension", detail: `critical extension ${hex(x.oid)}` };
   }
+  return undefined;
 }
 
 /** The most content bytes a cRLNumber may have, a leading 00 included (RFC 5280 section 5.2.3). */
@@ -224,43 +266,76 @@ export async function checkCrl(c: ParsedCrl, issuerKey: CryptoKey, bits: number)
   if (!(await rsaVerify(issuerKey, bits, c.signature, c.tbs))) {
     throw new Unusable("not_usable_signature", "the signature does not verify under the issuer key");
   }
-  checkExtensions(c.extensions, "CRL");
+  const problem = extensionProblem(c.extensions);
+  if (problem) throw new Unusable(problem.code, `CRL: ${problem.detail}`);
   for (const x of c.extensions) {
-    if (x.oid === OID_DELTA) throw new Unusable("not_usable_delta", "delta CRL");
-    if (x.oid === OID_IDP) throw new Unusable("not_usable_partitioned", "partitioned CRL");
+    if (equalBytes(x.oid, OID_DELTA)) throw new Unusable("not_usable_delta", "delta CRL");
+    if (equalBytes(x.oid, OID_IDP)) throw new Unusable("not_usable_partitioned", "partitioned CRL");
   }
-  const numberExt = c.extensions.find((x) => x.oid === OID_CRL_NUMBER);
+  const numberExt = c.extensions.find((x) => equalBytes(x.oid, OID_CRL_NUMBER));
   if (!numberExt) throw new Unusable("not_usable_crl_number", "no cRLNumber");
   const crlNumber = readCrlNumber(numberExt.value);
   if (crlNumber === null) throw new Unusable("not_usable_crl_number", "malformed cRLNumber, or longer than 20 bytes");
 
-  const keys = new Uint32Array(c.entries.length * KEY_WORDS);
+  // From here on the bytes are MOICA's: the signature verified. What follows may cost what a CRL MOICA signs costs.
+  // One more key than there are entries: the place a key is written to before it is known to be new.
+  const keys = new Uint32Array((c.entryCount + 1) * KEY_WORDS);
   let count = 0;
-  const seen = new Set<string>();
-  const low127 = new Map<string, number>();
-  const firstEntry: number[] = [];
-  for (let i = 0; i < c.entries.length; i++) {
-    const e = c.entries[i]!;
-    checkExtensions(e.extensions, `entry ${i}`);
-    const k = keyFromSerial(e.serial);
+  const seen = emptySlots(c.entryCount);
+  /** Which entry each key first came from. */
+  const firstEntry = new Uint32Array(c.entryCount);
+  for (let i = 0; i < c.entryCount; i++) {
+    // Entries in order: the first with a problem decides, its extensions before its serial number.
+    if (c.entryProblem?.index === i) throw new Unusable(c.entryProblem.code, c.entryProblem.detail);
+    const k = keyFromSerial(c.der.subarray(c.serials[2 * i]!, c.serials[2 * i + 1]!));
     if (typeof k === "string") throw new Unusable("not_usable_serial", `entry ${i}: ${k}`);
-    const full = Array.from(k).join(",");
-    if (seen.has(full)) continue; // the same serial number again: one key
-    seen.add(full);
     keys.set(k, count * KEY_WORDS);
-    firstEntry.push(i);
+    if (earlierOrAdd(seen, keys, count, KEY_WORDS, 0xffffffff) >= 0) continue; // the same serial number again: one key
+    firstEntry[count] = i;
     count++;
   }
+  const low127 = emptySlots(count);
   for (let n = 0; n < count; n++) {
-    const w = keys.subarray(n * KEY_WORDS, n * KEY_WORDS + 4);
-    const id = `${w[0]},${w[1]},${w[2]},${w[3]! & 0x7fffffff}`;
-    const other = low127.get(id);
-    if (other !== undefined) {
-      throw new Unusable("not_usable_collision", `entries ${firstEntry[other]} and ${firstEntry[n]} share their lowest 127 bits`);
-    }
-    low127.set(id, n);
+    // The lowest 127 bits: the first three words and all but the highest bit of the fourth.
+    const other = earlierOrAdd(low127, keys, n, 4, 0x7fffffff);
+    if (other >= 0) throw new Unusable("not_usable_collision", `entries ${firstEntry[other]} and ${firstEntry[n]} share their lowest 127 bits`);
   }
   return { crlNumber, thisUpdate: c.thisUpdate, keys: keys.slice(0, count * KEY_WORDS), count };
+}
+
+/**
+ * An empty table for `earlierOrAdd`, for up to `n` keys: a power of two of
+ * slots, at least twice as many as keys, each 0 or the number of a key plus
+ * one. Four bytes a slot, where a set of strings took some hundred a key
+ * (README.md, "讀清冊的記憶體").
+ */
+function emptySlots(n: number): Uint32Array {
+  let size = 16;
+  while (size < 2 * n) size *= 2;
+  return new Uint32Array(size);
+}
+
+/**
+ * Looks key `n` of `keys` up in the table by its first `words` words, the
+ * last of them under `lastMask`. Returns the number of an earlier key that
+ * is the same there; otherwise puts `n` in and returns -1.
+ */
+function earlierOrAdd(slots: Uint32Array, keys: Uint32Array, n: number, words: number, lastMask: number): number {
+  const at = n * KEY_WORDS;
+  const last = words - 1;
+  let h = 0;
+  for (let w = 0; w < words; w++) h = Math.imul(h ^ (w === last ? keys[at + w]! & lastMask : keys[at + w]!), 0x9e3779b1) ^ (h >>> 15);
+  for (let slot = (h ^ (h >>> 16)) & (slots.length - 1); ; slot = (slot + 1) & (slots.length - 1)) {
+    const held = slots[slot]!;
+    if (held === 0) {
+      slots[slot] = n + 1;
+      return -1;
+    }
+    const other = (held - 1) * KEY_WORDS;
+    let same = true;
+    for (let w = 0; same && w < words; w++) same = w === last ? ((keys[at + w]! ^ keys[other + w]!) & lastMask) === 0 : keys[at + w] === keys[other + w];
+    if (same) return held - 1;
+  }
 }
 
 /** Parse and check in one step; a file that is not DER is `not_usable_der`. */
