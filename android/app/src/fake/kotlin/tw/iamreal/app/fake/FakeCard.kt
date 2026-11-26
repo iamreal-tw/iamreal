@@ -70,8 +70,13 @@ internal class TestSide(private val origin: String) {
  */
 internal class FakeCard(private val side: TestSide) : Card {
     override val hasNfc: Boolean by lazy {
-        val phone = try { side.get("/__test/phone") } catch (e: IOException) { null }
-        phone == null || JSONObject(String(phone, Charsets.UTF_8)).optBoolean("nfc", true)
+        try {
+            side.get("/__test/phone")?.let { JSONObject(String(it, Charsets.UTF_8)).optBoolean("nfc", true) } ?: true
+        } catch (e: IOException) {
+            true
+        } catch (e: org.json.JSONException) {
+            true
+        }
     }
 
     override fun <T> tap(cancel: TapCancel, use: (CardConnection) -> T): T {

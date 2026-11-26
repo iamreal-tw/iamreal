@@ -88,6 +88,8 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
                     // What stands in the place of step 1 has no step bar and nothing above it (design/screens/app-update-required-phone.png, app-no-nfc-phone.png).
                     val gate = if (m.step == Step.BEFORE) m.gate else null
                     if (m.step == Step.BEFORE && gate == null) {
+                        // Why the card proof came back to step 1: at the very top (design/copy/card-proof.md, "1. 開始之前", app).
+                        m.notice?.let { Problem(it) }
                         // The minimum version's sentence is above everything of step 1, the reminder's too (design/screens/app-update-soon-phone.png).
                         (m.minApp as? MinApp.Until)?.let { UpdateSoon(m, it.from, outside) }
                         // Opened from the reminder's notification (design/screens/app-reminder-4-from-notification-phone.png).
@@ -136,6 +138,9 @@ private const val MOICA = "https://moica.nat.gov.tw/"
 private const val STORE = "Google Play"
 internal const val STORE_PAGE = "https://play.google.com/store/apps/details?id=tw.iamreal.app"
 
+/** The room above a screen that stands in the place of step 1, where the step bar is not (design/screens/app-update-required-phone.png). */
+private val GATE_TOP = 56.dp
+
 /** Above step 1 while this version still does card proofs and will not from [from] on (design/copy/card-proof.md, "1. 開始之前", app). */
 @Composable
 private fun UpdateSoon(m: Model, from: String, outside: Outside) {
@@ -153,6 +158,7 @@ private fun UpdateSoon(m: Model, from: String, outside: Outside) {
 @Composable
 private fun TooOld(m: Model, from: String, outside: Outside) {
     val c = m.copy
+    Spacer(Modifier.height(GATE_TOP))
     Title(c.say("app_before.too_old_title"))
     Body(c.say("app_before.too_old", "min_app_from" to from))
     Body(c.say("app_before.nothing_sent"))
@@ -164,6 +170,7 @@ private fun TooOld(m: Model, from: String, outside: Outside) {
 @Composable
 private fun NoNfc(m: Model) {
     val c = m.copy
+    Spacer(Modifier.height(GATE_TOP))
     Title(c.say("app_before.no_nfc_title"))
     Body(c.say("app_before.no_nfc"))
     Body(c.say("app_before.no_nfc_reader", "domain" to m.domain))
@@ -172,7 +179,6 @@ private fun NoNfc(m: Model) {
 @Composable
 private fun Before(m: Model, outside: Outside) {
     val c = m.copy
-    m.notice?.let { Problem(it) }
     Title(c.say("before.title"))
     Body(c.say("before.prepare_card"), strong = true)
     Body(c.say("before.citizens_only"))

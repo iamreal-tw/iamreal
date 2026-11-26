@@ -453,6 +453,8 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
 
     /** "再感應一次卡片": a new card proof, and its tap at once. */
     fun readAgain() {
+        // A new card proof asks the server again: the answer the last one stopped at may have been the reason.
+        askConfigAgain()
         toRead()
         tapToRead()
     }
