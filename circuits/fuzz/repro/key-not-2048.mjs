@@ -5,12 +5,13 @@
 // BigNumParams::new requires the modulus to be exactly 2048 bits.
 //
 //   ZKID_CIRCOM_BUILD=... node repro/key-not-2048.mjs
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { bigToBytes, FUZZ, loadPool, rngFor, signStd } from "../lib/common.mjs";
 import { genChain, genMessage, manualSpki } from "../lib/gen.mjs";
 import { Runners, prepareChain } from "../lib/exec.mjs";
 import { walk } from "../lib/oracle.mjs";
+import { CODE } from "../../tests/cases.mjs";
 
 const pool = loadPool();
 const rn = new Runners();
@@ -30,8 +31,8 @@ for (const group of ["user2047", "user1024"]) {
     if (p.certOk) break;
   }
   const scope = Buffer.from("iamreal-test:threads:0_________");
-  // A standard answer of spec/vectors/declaration-code.json: the example of spec/declaration-code.md.
-  const code = Buffer.from(JSON.parse(readFileSync(new URL("../../../spec/vectors/declaration-code.json", import.meta.url), "utf8")).cases[0].declaration_code);
+  // The tests' declaration code: a standard answer of spec/vectors/declaration-code.json.
+  const code = CODE;
   const ss = signStd(key, scope), cs = signStd(key, code);
   const certNoir = await rn.runNoir("cert_chain_rs2048", { ...p.noir, pk_blind: "0x3039" });
   const certCircom = await rn.runCircom("certChainRS2048", p.circom);

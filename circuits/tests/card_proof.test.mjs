@@ -72,8 +72,8 @@ describe("card proof", () => {
     const resigned = await run(pass({ code: otherCode }));
     assert.equal(resigned.ok, true, resigned.error);
     assert.equal(BigInt(resigned.returnValue.declaration_code_packed), packed(otherCode));
-    // The circuit's output is the packed value the standard answers give for this code.
-    assert.equal(packed(otherCode), other.packed);
+    // The packed value the standard answers give for this code.
+    assert.equal(BigInt(resigned.returnValue.declaration_code_packed), other.packed);
   });
 
   it("rejects the two messages swapped", async () => {
