@@ -16,6 +16,10 @@
 # - the two circuits, the two verification keys, the two files of sentences
 #   and the typeface in the app are the files of this repository, and the
 #   CRS has the SHA-256 of device-core/crs.sha256;
+# - the app carries its privacy manifest, PrivacyInfo.xcprivacy, as
+#   App/PrivacyInfo.xcprivacy writes it; it says the app does not track;
+#   and the required reason APIs it declares are the ones the app uses, no
+#   more and no fewer (issue #445; the list below);
 # - nothing in the app links AdSupport or AppTrackingTransparency, the app
 #   embeds no framework and the project names no Swift package;
 # - the sources (App/) do not read identifierForVendor and write nothing to
@@ -156,6 +160,51 @@ while read -r want name; do
   got=$( (shasum -a 256 "$app/$name" 2>/dev/null || true) | cut -d ' ' -f 1)
   [ "$got" = "$want" ] || problem "$name in the app does not have the SHA-256 of device-core/crs.sha256"
 done < "$repo/device-core/crs.sha256"
+
+# The privacy manifest (issue #445). Apple's list of required reason APIs
+# has five categories ("Describing use of required reason API",
+# https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api);
+# for each, what counts here as the app using it:
+#   UserDefaults     the sources (App/) name UserDefaults
+#   FileTimestamp    an executable of the app refers to stat, fstat, fstatat,
+#                    lstat or one of the getattrlist functions (device-core/
+#                    links them in: Barretenberg and Rust's standard library),
+#                    or the sources name a file's creation or modification date
+#   SystemBootTime   an executable refers to mach_absolute_time, or the
+#                    sources name systemUptime
+#   DiskSpace        an executable refers to statfs, statvfs, fstatfs or
+#                    fstatvfs, or the sources name a volume's capacity or
+#                    the file system's size
+#   ActiveKeyboards  the sources name activeInputModes
+# getattrlist counts for FileTimestamp only: nothing here asks it for disk
+# space. What this does not see: an API reached in a way these names do not
+# show, and whether the reason written for a category is the true one.
+manifest=$app/PrivacyInfo.xcprivacy
+written=$sources/PrivacyInfo.xcprivacy
+if [ ! -f "$manifest" ]; then
+  problem "the app has no PrivacyInfo.xcprivacy, its privacy manifest"
+elif [ "$(plutil -convert xml1 -o - "$manifest" 2>/dev/null)" != "$(plutil -convert xml1 -o - "$written" 2>/dev/null)" ]; then
+  problem "PrivacyInfo.xcprivacy in the app is not App/PrivacyInfo.xcprivacy"
+else
+  [ "$(plutil -extract NSPrivacyTracking raw -o - "$manifest" 2>/dev/null)" = false ] || problem "PrivacyInfo.xcprivacy does not say NSPrivacyTracking is false"
+  [ "$(plutil -extract NSPrivacyTrackingDomains raw -o - "$manifest" 2>/dev/null)" = 0 ] || problem "PrivacyInfo.xcprivacy names tracking domains"
+  declared=$(plutil -convert xml1 -o - "$manifest" | sed -n 's|.*<string>NSPrivacyAccessedAPICategory\([A-Za-z]*\)</string>.*|\1|p' | sort | tr '\n' ' ')
+  imported=$(echo "$binaries" | while read -r f; do xcrun nm -u "$f" 2>/dev/null; done | sed -e 's/^ *//' -e 's/\$.*//' | sort -u)
+  imports() {
+    printf '%s\n' "$imported" | grep -q -x -E "_($1)"
+  }
+  names() {
+    grep -r -q -E "(^|[^A-Za-z0-9_])($1)([^A-Za-z0-9_]|\$)" --include='*.swift' "$sources"
+  }
+  used=
+  if names "UserDefaults"; then used="$used UserDefaults"; fi
+  if imports "stat|fstat|fstatat|lstat|getattrlist|getattrlistbulk|fgetattrlist|getattrlistat" || names "creationDate|modificationDate|fileModificationDate|contentModificationDateKey|creationDateKey"; then used="$used FileTimestamp"; fi
+  if imports "mach_absolute_time" || names "systemUptime"; then used="$used SystemBootTime"; fi
+  if imports "statfs|statvfs|fstatfs|fstatvfs" || names "volumeAvailableCapacity[A-Za-z]*Key|volumeTotalCapacityKey|systemFreeSize|systemSize"; then used="$used DiskSpace"; fi
+  if names "activeInputModes"; then used="$used ActiveKeyboards"; fi
+  used=$(printf '%s\n' $used | sort | tr '\n' ' ')
+  [ "$declared" = "$used" ] || problem "PrivacyInfo.xcprivacy declares the required reason APIs [ $declared], and the app uses [ $used]"
+fi
 
 # No advertising identifier, no third-party code.
 links=$(echo "$binaries" | while read -r f; do
