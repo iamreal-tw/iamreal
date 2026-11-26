@@ -14,8 +14,9 @@
 //    encryption certificate, and a CRL of each issuer (test/fixtures/).
 // 2. Starts the Worker's test build (worker/test/harness.ts) with those
 //    keys, and has its schedule mirror the two CRLs.
-// 3. Puts a small server in front of it (worker-front.ts), in the place of
-//    both hosts an app talks to: the site and the data domain. It also
+// 3. Puts a small server in front of it (e2e/worker-site.ts, the one the
+//    browser tests use), in the place of both hosts an app talks to: the
+//    site and the data domain. It also
 //    takes `PUT /__app-test/clock` (an ISO time): from then on the Worker's
 //    clock shows that time. The tests move it to the next day between card
 //    proofs, as a card may have 3 records a day and a switch on the day of
@@ -48,13 +49,13 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createPrivateKey } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import type { IncomingMessage } from "node:http";
 import { fileURLToPath } from "node:url";
-import { startWorker } from "../../worker/test/harness.ts";
 import { AUTHORITY_KEY_ID, KEY_USAGE_ENCRYPTION, SUBJECT_KEY_ID, buildTbs, certificate, name } from "./fixtures/certs.ts";
 import { makeCrl } from "./fixtures/crls.ts";
 import { hex, makeKey } from "./fixtures/der-build.ts";
 import { randomSerials, testIssuerKeys } from "./fixtures/world.ts";
-import { startFront } from "./worker-front.ts";
+import { startWorkerSite } from "./e2e/worker-site.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const web = join(here, "..");
@@ -113,23 +114,36 @@ const crls = {
 // 2. The Worker and its mirror -----------------------------------------------------
 
 console.log("starting the Worker (test build)");
-const worker = await startWorker({ issuers });
 /** The latest time the Worker's clock was set to. */
 let clock = start;
-const front = await startFront(worker, async (req, body) => {
-  if (req.method === "PUT" && req.url === "/__app-test/paused") {
-    const paused = body.toString();
-    if (paused !== "true" && paused !== "false") return 400;
-    await worker.setSettings(paused === "true" ? { CARD_PROOFS_PAUSED: "true" } : {});
+/** The body of a request the test answers itself. */
+const bodyOf = async (req: IncomingMessage): Promise<string> => {
+  const chunks: Buffer[] = [];
+  for await (const c of req) chunks.push(c as Buffer);
+  return Buffer.concat(chunks).toString();
+};
+/** The two paths of the tests' own (3.): the status to answer with, no body. */
+const own = async (path: string, body: string): Promise<number> => {
+  if (path === "/__app-test/paused") {
+    if (body !== "true" && body !== "false") return 400;
+    await worker.setSettings(body === "true" ? { CARD_PROOFS_PAUSED: "true" } : {});
     return 204;
   }
-  if (req.method !== "PUT" || req.url !== "/__app-test/clock") return undefined;
-  const time = new Date(body.toString());
+  const time = new Date(body);
   if (Number.isNaN(time.getTime())) return 400;
   await worker.setClock(time);
   if (time > clock) clock = time;
   return 204;
+};
+const front = await startWorkerSite({
+  issuers,
+  own: async (req, res, path) => {
+    if (req.method !== "PUT" || (path !== "/__app-test/clock" && path !== "/__app-test/paused")) return false;
+    res.writeHead(await own(path, await bodyOf(req))).end();
+    return true;
+  },
 });
+const worker = front.worker;
 
 try {
   await worker.setClock(start);
@@ -190,7 +204,6 @@ try {
   check(false, e instanceof Error ? (e.stack ?? e.message) : String(e));
 } finally {
   await front.close();
-  await worker.close();
 }
 
 console.log(failures === 0 ? "\nall passed" : `\n${failures} failed`);

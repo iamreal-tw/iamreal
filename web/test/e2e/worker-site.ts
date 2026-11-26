@@ -1,7 +1,8 @@
-// The back end of the headless browser tests: the Worker (worker/) in the
-// local workerd, its test build (worker/test/harness.ts: the test's issuer
-// keys, a fake MOICA, a clock the test sets), and in front of it a small
-// server in the place of the data domain.
+// The back end of the headless browser tests, and of the apps' card proof
+// tests (test/app-backend.ts): the Worker (worker/) in the local workerd,
+// its test build (worker/test/harness.ts: the test's issuer keys, a fake
+// MOICA, a clock the test sets), and in front of it a small server in the
+// place of the data domain.
 //
 // On this computer and in CI there is no data domain. The Worker writes the
 // CRL archive and the proof log's files to a simulated R2 bucket and has no
@@ -10,8 +11,9 @@
 // its own origin (test/e2e/target.ts, DATA_ORIGIN), so the server here
 // answers /crl/… and /proof-log/… from the bucket, read-only, and hands every
 // other request to the Worker as it is. A test that serves a page of its
-// own (the engine's test page, run.ts) answers those requests before either
-// (`own`).
+// own (the engine's test page, run.ts) or has paths of its own (the apps'
+// clock and the operator's stop, app-backend.ts) answers those requests
+// before either (`own`).
 //
 // The Worker's test clock shows the time it was last set to and does not
 // run. `setClockAhead` has the server set it, before every request it hands
