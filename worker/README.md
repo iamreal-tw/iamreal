@@ -11,7 +11,7 @@
 | 清冊鏡像（[排程做什麼](#排程做什麼)）：每小時抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl`，驗章、建樹，寫清冊存檔的索引 `crl/index.jsonl`。`crl/testdata/` 的每一案和 Go 的 `crl/` 比對過 | |
 | 證明紀錄的 Durable Object：題目表、紀錄、卡片狀態表、證明紀錄的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | |
 | 限流（[限流](#限流)）：照 IP 的上限，題目、卡片現況、送出、公開的讀取、計數、頁面六類分開算，IPv4 照單一位址、IPv6 照 /64，超過回 `429` 和 `Retry-After`，訪客頁面回一頁說明；全站的總量上限，只數開始過卡的那一次 `config?start`；Durable Object 撐不住時介面回 `503` `busy`、頁面回人太多的那一頁 | 兩個 app 對 `429`、`busy` 的處理；WAF 的那一條規則和挑戰頁還沒有在測試網站設過 |
-| 收計數（[計數](#計數)，ADR-0032、ADR-0039）：`POST /api/v1/counts` 照 `spec/counts.md` 的表收，不合的整筆丟掉；收下的交給專門收計數的 Durable Object，每分鐘寫成不公開的儲存桶裡 `count-events/` 底下的一個檔，裡面沒有 IP，留 31 天；每分鐘的明細有上限；每小時公布最舊一檔的日期。送計數的客戶端現在只有網頁版的過卡。加總（[計數的加總](#計數的加總)）：每天的、每月的、每張島民證明每月一筆、每月送出好幾張卡片的裝置，永久存在 `count-totals/`，裡面沒有 IP 和編號；每小時公布最早一天的加總的日期 | 營運者看數字的那一頁（[#436](https://github.com/iamreal-tw/iamreal/issues/436)）、訪客頁面和兩個 app 送計數（[#275](https://github.com/iamreal-tw/iamreal/issues/275)、[#433](https://github.com/iamreal-tw/iamreal/issues/433)、[#434](https://github.com/iamreal-tw/iamreal/issues/434)）；讀最舊日期、最早一天加總的外部檢查還沒打開；這個物件一秒收得了多少還沒量；手機型號的加總（表上還沒有這個欄位） |
+| 收計數（[計數](#計數)，ADR-0032、ADR-0039）：`POST /api/v1/counts` 照 `spec/counts.md` 的表收，不合的整筆丟掉；收下的交給專門收計數的 Durable Object，每分鐘寫成不公開的儲存桶裡 `count-events/` 底下的一個檔，裡面沒有 IP，留 31 天；每分鐘的明細有上限；每小時公布最舊一檔的日期。送計數的客戶端現在只有網頁版的過卡。加總（[計數的加總](#計數的加總)）：每天的、每月的、每張島民證明每月一筆、每月送出好幾張卡片的裝置，永久存在 `count-totals/`，裡面沒有 IP 和編號；每小時公布最早一天的加總的日期。營運者在自己的電腦上產生看數字的那一頁（[營運者看數字的那一頁](#營運者看數字的那一頁)） | 訪客頁面和兩個 app 送計數（[#275](https://github.com/iamreal-tw/iamreal/issues/275)、[#433](https://github.com/iamreal-tw/iamreal/issues/433)、[#434](https://github.com/iamreal-tw/iamreal/issues/434)）；讀最舊日期、最早一天加總的外部檢查還沒打開；這個物件一秒收得了多少還沒量；手機型號的加總（表上還沒有這個欄位） |
 | 連線紀錄（[連線紀錄](#連線紀錄)）：被算了一次的送出一筆各記一個 R2 物件（請求編號、時間、結果、IP、國家代碼、網路業者的編號、過卡裝置編號；成功的加第幾筆，沒成功的加錯誤代碼和內文），留 31 天，靠儲存桶的生命週期規則；每小時公布最舊一筆的日期，讓外面看得出規則有沒有在刪。其他的請求不記。營運者查詢的指令和收到查詢、刪除請求時的做法（[查連線紀錄](#查連線紀錄)） | 讀那個日期的外部檢查（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）；帶過卡裝置編號的客戶端現在只有網頁版，兩個 app 還沒有 |
 | API 的七個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`、`GET /api/v1/rebuild`、`POST /api/v1/counts`；存著的規則版本和程式不同時、營運者停止收過卡時（[停止和恢復收過卡](#停止和恢復收過卡)），`challenges` 和 `records` 回 `paused` | 限流見上面那一列 |
 | 寫滿 1,000 筆的紀錄檔和它的雜湊清單搬到 R2，讀回來核對過才刪掉 Durable Object 裡的那 1,000 筆（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)） | |
@@ -1649,6 +1649,38 @@ node --experimental-strip-types scripts/connection-log.ts --from 2026-11-20 --to
 - 一天的明細滿載時（每分鐘 600 筆，一天 1,440 個檔）一次排程讀完要多久、用多少 CPU 和記憶體
 - 每天的送出很多時（一筆一個連線紀錄的物件），一次排程的子請求數：付費方案每次執行預設 10,000 個（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)「Subrequests」，2026-11-27 讀的）；一天約是 1,500 個明細的檔加上那一天的送出筆數
 
+### 營運者看數字的那一頁
+
+後台沒有統計頁，也沒有營運者的登入（ADR-0032，[#436](https://github.com/iamreal-tw/iamreal/issues/436)）。營運者在自己的電腦上跑一支指令，產生一個 HTML 檔，用瀏覽器打開。指令是 [`scripts/operator-page.ts`](scripts/operator-page.ts)：
+
+```sh
+cd worker
+node --experimental-strip-types scripts/operator-page.ts [--days 30] [--out <檔名>]
+```
+
+- `--days`：最近幾天的加總，預設 30；每月的檔讀最近 3 個月
+- `--out`：寫到哪裡，預設系統暫存目錄的 `iamreal-operator-page.html`（權限 600）。不要寫進程式庫的目錄
+- **要哪一種權限**：只要讀不公開的儲存桶裡的 `count-totals/`。用的是[查連線紀錄](#查連線紀錄)的同一把權杖、同一個金鑰檔（`~/.config/iamreal/connection-log.env`）：R2 的「Object Read only」，只限 `iamreal-test-logs` 一個儲存桶。不要為這一頁建別的權杖，也不要用讀得到整個帳號的。照那一節的做法，要看的時候才建、看完刪。這把權杖也讀得到連線紀錄（有 IP），一樣當敏感的東西保管；這支指令只列出、讀取 `count-totals/day/` 和 `count-totals/month/` 底下的檔
+- 營運的狀況讀公開的東西，不用權杖：公開資料網域的 `proof-log/fingerprints.jsonl`（最後 14 行）、`crl/index.jsonl`（兩把發證金鑰各自最新的一行），和 GitHub 公開的 API 上 `reverify.yml`、`watch-test.yml` 最近一次跑完的結果（沒有登入，一小時 60 次的上限）
+
+頁面上有什麼（第一版，營運者看了再調）：
+
+| 段落 | 內容 |
+|---|---|
+| 營運的狀況 | 指紋檔每天的筆數；清冊存檔兩把發證金鑰最新一行的編號和時間；每天的重驗、外部檢查最近一次的結果和執行紀錄的連結 |
+| 過卡 | 每個客戶端：每天開始和完成的嘗試、完成的比例、趨勢線；這幾天加起來的漏斗（走到每一步的嘗試） |
+| 停下來和重試的原因 | 每個客戶端這幾天加起來的各原因，次數多的在前 |
+| 花了多久 | 每個客戶端、每個計時的步驟，各級的次數 |
+| 各客戶端的計數 | 每天每個客戶端的計數筆數，每分鐘的檔有幾個、超過上限沒留下幾筆 |
+| 型號、版本、讀卡機 | 每月的檔：每個客戶端每一種分法，嘗試最多的 20 個值，和沒帶這個值的、`other`：嘗試、完成、最多的停下原因。手機型號等 `spec/counts.md` 有這個欄位再加 |
+| 頁面瀏覽和來源 | 每天各種頁面被打開的次數、趨勢線；這幾天加起來前 20 個來源 |
+| 每張島民證明 | 最後一天證明紀錄裡的張數和被打開次數的分布；每月被打開最多的 20 張：打開、下載 app、從它開始過卡 |
+| 送出好幾張卡片的裝置 | 每月 2 張、3 張以上的裝置數；月份還沒結束時沒有 |
+
+**頁面不對外送任何東西**：樣式寫在檔裡，沒有程式，`Content-Security-Policy` 是 `default-src 'none'`，什麼都不載入；只有按了執行紀錄的連結才會連出去。頁面上的字（標題、欄名）寫在指令裡，不在 `design/copy/`：這不是網站的頁面，不用網站的字型。
+
+**測試**：[`test/operator-page.test.ts`](test/operator-page.test.ts) 對一批固定的加總檔（[`test/operator-page-fixture.ts`](test/operator-page-fixture.ts)）產生頁面，逐表比對頁面上的數字和檔裡的；檢查頁面沒有程式、沒有要載入的東西、連結只連到頁面自己和 GitHub 的執行紀錄；網域、讀卡機名稱裡的 HTML 只當文字；讀不到檔時頁面照樣產生、寫明讀不到。另外對本機 workerd 上的整個 Worker 放進計數、跑一次排程，用同一支指令讀它寫出的加總，數字相同：加總的格式改了，這一頁的讀法跟著要改時測試會失敗。[`test/operator-page-browser.ts`](test/operator-page-browser.ts)（不在 `pnpm test` 裡，要 Chrome）用無頭的 Chrome 打開固定的那一頁，記下所有的請求，除了檔案本身有任何一個就失敗，再照桌機寬度截圖到 `design/screens/operator-page-desktop.png`。
+
 ## 停止和恢復收過卡
 
 營運者改 Worker 的一個設定值 `CARD_PROOFS_PAUSED`，就停止或恢復收過卡（ADR-0033，[#105](https://github.com/iamreal-tw/iamreal/issues/105)）：`"true"` 停止，`"false"` 收。在 Cloudflare 的儀表板改，不經過 Actions；Worker 沒有營運者專用的入口。
@@ -1934,12 +1966,15 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `src/poseidon2.ts` | Poseidon2 的雜湊 |
 | `src/circuits.ts` | 接受的電路：名稱、哪一把發證金鑰、公開輸入的個數、驗證金鑰的 SHA-256。`worker/` 裡電路的清單只有這一份 |
 | `src/engine.ts`、`src/barretenberg.ts` | Barretenberg 的實例（丟例外或答覆不對就換）、WASM 的載入程式 |
+| `scripts/operator-page.ts` | 營運者在自己的電腦上產生看數字的那一頁（[營運者看數字的那一頁](#營運者看數字的那一頁)） |
 | `scripts/engine-files.ts` | 建置的第一步：核對 WASM 檔和驗證金鑰的 SHA-256，寫進 `generated/` |
 | `test-build/` | 測試專用的建置換上的那一份 |
 | `test/harness.ts`、`test/build.ts`、`test/proofs.ts` | 測試的工具、兩種建置、`verifier/testdata/` 的測試證明和驗證的測試共用的小工具 |
 | `test/clearing.test.ts` | 清空測試的證明紀錄，照[清空測試的證明紀錄](#清空測試的證明紀錄)的步驟在本機做一次：新的證明紀錄是空的、鏡像下一輪之後收得下紀錄、隔天公布的只有新的證明紀錄；被換掉的物件啟動時寫一行、不再設 alarm、alarm 響了什麼都不寫；晚了才清儲存桶時清掉就恢復；`wrangler.jsonc` 的清空日期不在今天之後 |
 | `test/site-check.ts`、`test/site-check.test.ts` | 部署之後不插卡的檢查（[部署之後不插卡的檢查](#部署之後不插卡的檢查)），和在本機的 Worker 上確認它每一項都擋得到的測試 |
 | `test/crls.ts` | 測試的發證金鑰、用它們簽的清冊 |
+| `test/operator-page.test.ts`、`test/operator-page-fixture.ts` | 營運者的那一頁：固定的加總檔產生的頁面，數字和檔相符、不載入任何東西；Worker 自己寫的加總讀起來一樣 |
+| `test/operator-page-browser.ts` | 用 Chrome 打開營運者的那一頁：除了檔案本身沒有任何請求；截圖（不在 `pnpm test` 裡） |
 | `test/count-totals.test.ts` | 計數的加總（[計數的加總](#計數的加總)）：已知的計數和送出放進去，跑一次排程，每一種加總逐欄比對；加總裡沒有 IP 和編號；跑兩次不變；送出好幾張卡片的裝置和 31 天的刪除 |
 | `test/crl-testdata.test.ts` | 清冊鏡像和 Go 的 `crl/` 逐案比對（第三項要有 `go`） |
 | `test/mirror-invariant.test.ts` | 寫索引出錯時，鏡像交給 Durable Object 的樹根仍然都列在索引裡（在 Node 裡，用假的儲存桶和假的雜湊） |
