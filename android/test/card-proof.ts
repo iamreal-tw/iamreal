@@ -997,6 +997,26 @@ async function interruptions(): Promise<void> {
   press(say("common.next"));
   await waitText(step(3), "step 3");
   check(field("pin").text === "", "after the 5 minutes: the PIN is typed again");
+  // The 5 minutes count from the PIN's first character: a PIN left in the field that long is not handed to a card.
+  emulator.tap(field("pin"));
+  emulator.type(PIN);
+  {
+    const at = emulatorNow();
+    const since = Date.now();
+    handed = pinsHanded;
+    emulator.shell(`date @${at + 6 * 60}`);
+    press(say("pin.confirm_card"));
+    await waitText(say("app_before.idle"), "step 1 with the sentence of the 5 minutes, from a PIN left in the field", 20_000);
+    check(waitingTaps.length === 0 && pinsHanded === handed, "a PIN left in the field for 5 minutes: 確認卡片 waits for no card, no PIN handed over");
+    emulator.shell(`date @${at + Math.round((Date.now() - since) / 1000)}`);
+  }
+  press(say("common.next"));
+  await waitText(step(2), "step 2");
+  press(say("app_read.tap_card"));
+  await tap();
+  await waitText(say("app_read.lift"), "step 2's list to end", 120_000);
+  press(say("common.next"));
+  await waitText(step(3), "step 3");
   emulator.tap(field("pin"));
   emulator.type(PIN);
   press(say("pin.confirm_card"));
@@ -1101,13 +1121,14 @@ async function oldVersionAndNoNfc(): Promise<void> {
   await waitText(say("app_read.lift"), "step 2's list to end, before the start date", 120_000);
   press(say("common.next"));
   await waitText(step(3), "step 3");
-  emulator.tap(field("pin"));
-  emulator.type(PIN);
   {
     const at = emulatorNow();
     const since = Date.now();
     const handedBefore = pinsHanded;
+    // Before the PIN is typed: its own 5 minutes are not what stops this tap.
     emulator.shell(`date @${Math.floor(Date.parse(`${tomorrow}T00:00:30+08:00`) / 1000)}`);
+    emulator.tap(field("pin"));
+    emulator.type(PIN);
     press(say("pin.confirm_card"));
     await waitText(say("app_before.too_old_title"), "the screen in place of step 1, from step 3", 20_000);
     check(waitingTaps.length === 0 && pinsHanded === handedBefore, "from the start date: step 3 stops before it waits for a card, no PIN handed over");

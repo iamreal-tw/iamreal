@@ -85,23 +85,35 @@ internal fun progressButtonAfter(stop: Stop): ProgressButton {
  * never a String of the app's. It is in memory only: not in the saved
  * state of the activity, not in any file.
  */
-internal class PinField {
+internal class PinField(private val onFirst: () -> Unit = {}) {
     private val chars = CharArray(MAX)
     var length by mutableIntStateOf(0)
         private set
 
+    /** When the first character of the PIN that is here came, on the phone's clock in milliseconds; null while the field is empty. */
+    var since: Long? = null
+        private set
+
     fun append(c: Char) {
         // What a card's PIN can be made of: printable ASCII.
-        if (length < MAX && c in '!'..'~') chars[length++] = c
+        if (length < MAX && c in '!'..'~') {
+            chars[length++] = c
+            if (length == 1) {
+                since = System.currentTimeMillis()
+                onFirst()
+            }
+        }
     }
 
     fun removeLast() {
         if (length > 0) chars[--length] = 0.toChar()
+        if (length == 0) since = null
     }
 
     fun clear() {
         chars.fill(0.toChar())
         length = 0
+        since = null
     }
 
     /** The PIN as the card takes it; the caller overwrites the bytes. */
@@ -186,7 +198,20 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
     /** The name on the card: shown before the PIN, sent nowhere. */
     var name by mutableStateOf("")
         private set
-    val pin = PinField()
+    val pin = PinField(onFirst = { main.postDelayed({ checkIdle() }, CardProof.IDLE_MS) })
+
+    /** When the PIN the flow keeps for the last tap was first typed: its 5 minutes go on from the field to the flow. */
+    private var keptPinSince: Long? = null
+
+    /**
+     * The PIN, in the field or kept for the last tap, has been on the phone [CardProof.IDLE_MS] since its first character came
+     * (issue #133: 5 minutes at most). A clock that was set back does not make it longer.
+     */
+    private fun pinExpired(): Boolean {
+        val since = keptPinSince ?: pin.since ?: return false
+        val now = System.currentTimeMillis()
+        return now - since >= CardProof.IDLE_MS || now < since
+    }
     var pinBusy by mutableStateOf<String?>(null)
         private set
     var pinMessage by mutableStateOf<String?>(null)
@@ -449,6 +474,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
 
     fun toPin() {
         pin.clear()
+        keptPinSince = null
         pinBusy = null
         pinMessage = null
         pinEnded = false
@@ -463,6 +489,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
 
     fun confirmCard() {
         val f = flow ?: return
+        if (pinExpired()) return stopped(Stop("idle"))
         if (pin.length == 0) {
             // Never sent without a PIN: no panel.
             pinMessage = copy.say("app_pin.need_pin")
@@ -490,6 +517,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
                 }
             },
             { status ->
+                keptPinSince = pin.since
                 pin.clear()
                 pinBusy = null
                 showAccounts(status)
@@ -653,6 +681,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
     /** The button of step 5, and "再感應一次" under its list: the challenge, the last tap, the proof, the submission. */
     fun declare() {
         val f = flow ?: return
+        if (pinExpired()) return stopped(Stop("idle"))
         var doneCount = 0
         progressItems = items(4, 0, true)
         progressMessage = null
@@ -755,9 +784,13 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         return true
     }
 
-    /** The PIN has waited [CardProof.IDLE_MS] for the last tap: dropped, back to step 1, with the reason. */
+    /**
+     * The PIN has been on the phone for [CardProof.IDLE_MS], typed or waiting for the last tap: dropped with the card proof, back
+     * to step 1, with the reason. Not in the middle of a tap that began in time: that tap is made.
+     */
     fun checkIdle() {
-        if (flow?.idleExpired() == true) stopped(Stop("idle"))
+        if (panel != null) return
+        if (flow?.idleExpired() == true || pinExpired()) stopped(Stop("idle"))
     }
 
     private fun dropAll(keepDone: Boolean = false) {
@@ -765,6 +798,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         flow = null
         panel = null
         pin.clear()
+        keptPinSince = null
         pinBusy = null
         pinMessage = null
         name = ""
