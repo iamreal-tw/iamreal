@@ -348,8 +348,15 @@ struct ScreenView: View {
                 Text(text).font(Theme.body(Theme.sizeKicker))
             }
             .padding(.top, 16)
-        case .figure(let figure):
-            CardFigure(figure: figure).padding(.top, 22)
+        case .senseDemo(let demo):
+            // Without the timeline there is no picture; the sentence above it says where the card goes.
+            if let timeline = SenseTimeline.bundled {
+                VStack(spacing: 12) {
+                    SenseDemoView(demo: demo, timeline: timeline, perform: perform)
+                    self.button(demo.control, main: false)
+                }
+                .padding(.top, 22)
+            }
         }
     }
 

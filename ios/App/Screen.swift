@@ -96,8 +96,8 @@ enum Block: Equatable {
     case action(Button)
     /// What the app is doing, beside a spinner.
     case busy(String)
-    /// The picture of where the card goes on the phone, and its captions.
-    case figure(Figure)
+    /// The demonstration of where the card goes on the phone (step 2), and its one button.
+    case senseDemo(SenseDemo)
 
     var texts: [String] {
         switch self {
@@ -118,22 +118,24 @@ enum Block: Equatable {
         case .button(let button, _), .action(let button): return [button.label]
         case .sideBySide(let buttons): return buttons.map(\.label)
         case .demo(let demo): return [demo.description, demo.control.label]
-        case .figure(let figure): return figure.captions.map(\.text) + [figure.description]
+        case .senseDemo(let demo): return [demo.description, demo.control.label]
         }
     }
 }
 
-/// A picture with a caption under each part: where the card goes.
-struct Figure: Equatable {
-    struct Caption: Equatable {
-        var text: String
-        /// The words of `text` written in ink and bold.
-        var emphasis: String
-    }
-
-    var captions: [Caption]
-    /// What the picture shows, for VoiceOver, which reads it in the place of the picture and the captions.
+/// The demonstration of step 2 (design/copy/card-proof.md, the section on
+/// the demonstrations; design/motion/README.md): the phone, which does not
+/// move, and the card that goes behind the top of it. What moves and when
+/// is the timeline's (TeachingAnimation).
+struct SenseDemo: Equatable {
+    /// What VoiceOver reads in the place of the whole picture.
     var description: String
+    /// The one button beside it: it stops while the demonstration plays, and plays it again otherwise.
+    var control: Button
+    var playing: Bool
+    /// It has played, or is playing, since step 2 came up: not playing, it
+    /// is then at rest with the card in place; before, the phone alone.
+    var played: Bool
 }
 
 /// The small card of the last step (design/DESIGN.md, the components:
@@ -309,7 +311,7 @@ enum Action: Equatable {
     /// The picture of step 6's demonstration has come onto the screen: it
     /// plays, the first time in a card proof.
     case showDemo
-    /// The demonstration of step 6 from its start: its button.
+    /// The demonstration of the step (2 or 6) from its start: its button.
     case playDemo
     /// The demonstration at its last frame: its button, or its end.
     case stopDemo

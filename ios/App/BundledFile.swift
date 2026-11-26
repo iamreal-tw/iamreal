@@ -41,3 +41,11 @@ extension HangTimeline {
         return try? JSONDecoder().decode(HangTimeline.self, from: data)
     }()
 }
+
+extension SenseTimeline {
+    /// design/motion/sense.json, as the app carries it.
+    static let bundled: SenseTimeline? = {
+        guard let url = Bundle.main.url(forResource: "sense", withExtension: "json"), let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(SenseTimeline.self, from: data)
+    }()
+}

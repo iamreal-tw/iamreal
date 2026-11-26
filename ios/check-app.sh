@@ -150,6 +150,7 @@ card-proof.json design/copy/card-proof.json
 app.json design/copy/app.json
 GenRyuMin2TW-B.otf design/fonts/GenRyuMin2TW-B.otf
 hang.json design/motion/hang.json
+sense.json design/motion/sense.json
 LIST
 while read -r want name; do
   got=$( (shasum -a 256 "$app/$name" 2>/dev/null || true) | cut -d ' ' -f 1)

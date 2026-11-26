@@ -121,6 +121,13 @@ final class BuildTests: XCTestCase {
         XCTAssertEqual(bundled.duration, 20.7)
     }
 
+    /// The timeline of step 2's demonstration is design/motion/sense.json, as it is in the repository.
+    func testTheBundledTimelineOfTheCardsPlaceIsTheOneOfTheRepository() throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "sense", withExtension: "json"))
+        XCTAssertEqual(try Data(contentsOf: url), try Repository.data("design/motion/sense.json"))
+        XCTAssertEqual(try XCTUnwrap(SenseTimeline.bundled), try JSONDecoder().decode(SenseTimeline.self, from: Repository.data("design/motion/sense.json")))
+    }
+
     /// The headings' typeface is the subset of design/fonts/, as it is in the repository.
     func testTheBundledTypefaceIsTheOneOfTheRepository() throws {
         let url = try XCTUnwrap(Bundle.main.url(forResource: "GenRyuMin2TW-B", withExtension: "otf"))

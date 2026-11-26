@@ -75,8 +75,10 @@ struct Screens {
     // Step 2: reading the card ------------------------------------------------------------------
 
     /// `reached`: how many items of the list are done (0 to 4). `stop`:
-    /// why it stopped at the next one.
-    func read(reached: Int, running: Bool, stop: Flow.Stop?) -> Screen {
+    /// why it stopped at the next one. `demoPlaying`: the demonstration of
+    /// where the card goes is playing; `demoPlayed`: it has played since
+    /// the step came up.
+    func read(reached: Int, running: Bool, stop: Flow.Stop?, demoPlaying: Bool = false, demoPlayed: Bool = false) -> Screen {
         let labels = [copy("read.server"), copy("app_read.certificate"), copy("read.check"), copy("read.crl")]
         let done = reached == labels.count
         let spot = copy("app_read.spot_iphone")
@@ -84,14 +86,16 @@ struct Screens {
             .title(copy("read.title")),
             .text(done ? copy("app_read.lift") : copy("app_read.how", ["spot": spot])),
         ]
-        // Where the card goes, until it is read; the system's panel covers it while it is.
+        // Where the card goes, until it is read; the system's panel covers it while it is, and it does
+        // not play then: its button waits for the tap to end.
         if !done {
-            blocks.append(.figure(Figure(
-                captions: [
-                    Figure.Caption(text: copy("app_read.figure_flip"), emphasis: copy("app_read.figure_flip_emphasis")),
-                    Figure.Caption(text: copy("app_read.figure_top"), emphasis: copy("app_read.figure_top_emphasis")),
-                ],
-                description: copy("app_read.figure_iphone"))))
+            let playing = demoPlaying && !running
+            var control = playing
+                ? Button(label: copy("app_demo.stop"), action: .stopDemo)
+                : Button(label: copy("app_demo.replay"), action: .playDemo)
+            control.enabled = !running
+            blocks.append(.senseDemo(SenseDemo(
+                description: copy("app_demo.sense_iphone"), control: control, playing: playing, played: playing || demoPlayed || running)))
         }
         blocks.append(.items(items(labels, reached: reached, running: running, why: stop.map { message($0, tap: 1) })))
         var buttons: [Button]
