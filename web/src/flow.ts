@@ -671,6 +671,8 @@ export class CardProofFlow {
       let builder: TreeBuilder | null = null;
       try {
         const config = await this.timed("config", requestConfig(this.deps.fetch));
+        // The operator stopped taking card proofs since step 1 asked (docs/api/card-proof.md, `paused`): before the PIN.
+        if (config.paused) throw new FlowStop({ code: "server", server: "paused", status: 200 });
         progress("config");
         const maxAgeDays = crlMaxAge(config.crlMaxAgeDays);
         const crl = await this.timed("crl", loadCrl({ fetch: this.deps.dataFetch, issuer, today, maxAgeDays, store: this.deps.store }));
@@ -984,8 +986,9 @@ export class CardProofFlow {
       this.live();
       // Transient: no answer, rate limited, or a server failure. `crl_stale`
       // (503) is the server refusing every card proof until MOICA's CRL is
-      // fresh again: not something a resubmission fixes.
-      if (e instanceof ServerError && (e.code === "network" || e.status === 429 || (e.status >= 500 && e.code !== "crl_stale"))) {
+      // fresh again, and `paused` (503) the server taking none until the
+      // operator resumes: not something a resubmission fixes.
+      if (e instanceof ServerError && (e.code === "network" || e.status === 429 || (e.status >= 500 && e.code !== "crl_stale" && e.code !== "paused"))) {
         // The record can be sent again as it is (up to 5 submissions per challenge).
         this.phaseValue = "submit_failed";
         throw new FlowStop({ code: "server", server: e.code, status: e.status });

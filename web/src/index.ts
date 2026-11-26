@@ -5,7 +5,7 @@
 // domain), the clock, the one storage key.
 // The screen (src/ui/) calls startEngine() once when the page opens, then
 // createCardProof() with that engine for each card proof (ADR-0013).
-import { dataOriginFetch, sameOriginFetch } from "./api.ts";
+import { dataOriginFetch, requestConfig, sameOriginFetch } from "./api.ts";
 import { BASE } from "./base.ts";
 import type { Card } from "./card/card.ts";
 import { startTreeBuilder, treeWorkerCount } from "./crl/parallel.ts";
@@ -54,6 +54,20 @@ export function createCardProof(opts: {
     onProgress: opts.onProgress,
     idleMs: IDLE_LIMIT_MS,
   });
+}
+
+/**
+ * Whether the operator stopped taking card proofs (`config`'s `paused`), for
+ * step 1 to say so before a card is read. Null when the server did not
+ * answer or its answer was not read: step 1 then goes on, and step 2 asks
+ * again (CardProofFlow.readCard).
+ */
+export async function cardProofsPaused(): Promise<boolean | null> {
+  try {
+    return (await requestConfig(sameOriginFetch)).paused;
+  } catch {
+    return null;
+  }
 }
 
 export {
