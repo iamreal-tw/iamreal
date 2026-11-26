@@ -177,6 +177,29 @@ describe("a proof log with full files in the data bucket", () => {
     assert.equal((await rebuildToItsEnd()).status, "swapped");
     assert.deepEqual(await computed(some), before);
   });
+
+  test("a bucket that does not answer does not end the rebuild: the step is made again a minute later, and the rebuild is put in place", async () => {
+    await freshProofLog(worker);
+    const root = await publishG3(worker);
+    const cards = await fillTo(root, LINES_PER_FILE + 2);
+    await worker.proofLog.runAlarm();
+    const some = [cards[0]!, cards.at(-1)!];
+    const before = await computed(some);
+    const started = new Date("2026-11-20T13:00:00+08:00");
+    await worker.setClock(started);
+    await worker.proofLog.setBucketFault({ key: `proof-log/${proofLogFileName(0)}`, how: "get fails" });
+    assert.equal(await worker.proofLog.beginRebuild("no-answer"), true);
+    await worker.proofLog.runAlarm();
+    assert.deepEqual(await worker.proofLog.rebuildStatus(), { token: "no-answer", status: "running", records: 0, reason: null });
+    assert.ok(worker.logLines().some((l) => l.includes('"event":"rebuild_step_failed"')));
+    // Not again before the minute is over, whatever rings the alarm.
+    await worker.proofLog.setBucketFault(null);
+    await worker.proofLog.runAlarm();
+    assert.equal((await worker.proofLog.rebuildStatus())!.records, 0);
+    await worker.setClock(new Date(started.getTime() + 61_000));
+    assert.deepEqual(await rebuildToItsEnd(), { steps: 2, status: "swapped", reason: null, records: LINES_PER_FILE + 2 });
+    assert.deepEqual(await computed(some), before);
+  });
 });
 
 describe("an object that has nothing", () => {

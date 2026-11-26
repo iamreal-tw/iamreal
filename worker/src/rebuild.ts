@@ -41,7 +41,7 @@ import { EMPTY_FINGERPRINT, type FingerprintLine, LINES_PER_FILE, fingerprintLin
 import { RULES_VERSION, applyList, newCard } from "iamreal-protocol/record-rules.ts";
 import { sha256Hex } from "iamreal-protocol/bytes.ts";
 import { CARD_TABLE, readCard, writeCard } from "./card-table.ts";
-import { FINGERPRINT_FILE, type FileBucket, PROOF_LOG_DIRECTORY, readFullFile } from "./proof-log-files.ts";
+import { FINGERPRINT_FILE, type FileBucket, PROOF_LOG_DIRECTORY } from "./proof-log-files.ts";
 import type { ProofLogKind } from "./settings.ts";
 import { VIEW_TABLES, viewOf, writeView } from "./views.ts";
 
@@ -281,13 +281,14 @@ async function nextRun(sql: SqlStorage, bucket: FileBucket, source: string, appl
   }
   const file = sql.exec<{ file_sha256: string; fingerprint_after: string }>("SELECT file_sha256, fingerprint_after FROM full_files WHERE records_before = ?", applied).toArray()[0];
   if (file !== undefined) {
-    let lines: string[];
-    try {
-      lines = await readFullFile(bucket, applied, file.file_sha256);
-    } catch (e) {
-      // The file is not there, or is not the bytes this object wrote: what the operator has to look at.
-      throw new RebuildRefused(e instanceof Error ? e.message : "a full log file could not be read");
-    }
+    // A bucket that does not answer throws here, and the step is tried again; a file that is not the one this object
+    // wrote ends the rebuild, with what the operator has to look at.
+    const stored = await fileOfBucket(bucket, applied);
+    const key = PROOF_LOG_DIRECTORY + proofLogFileName(applied);
+    if (stored === null) throw new RebuildRefused(`${key} is not in the bucket`);
+    if (stored.sha256 !== file.file_sha256) throw new RebuildRefused(`${key} is not the bytes that were written`);
+    if (stored.lines.length !== LINES_PER_FILE) throw new RebuildRefused(`${key} is not ${LINES_PER_FILE} lines`);
+    const lines = stored.lines;
     return { lines, fileSha256: null, last: false, ownFingerprintAfter: file.fingerprint_after };
   }
   const kept = sql.exec<{ seq: number; line: string; fingerprint: string }>("SELECT seq, line, fingerprint FROM records ORDER BY seq").toArray();
