@@ -375,6 +375,22 @@ export interface TestWorker {
     /** The names of the tables of the object's SQLite, in byte order (test build, `GET /__test/proof-log/tables`). */
     tables(): Promise<string[]>;
     /**
+     * Begins the rebuild from the proof log named `token` (src/rebuild.ts;
+     * test build, `POST /__test/proof-log/rebuild`); whether one was begun: not
+     * if the last one the object began has that name. Its steps are the
+     * alarm's: `runAlarm()` makes one.
+     */
+    beginRebuild(token: string): Promise<boolean>;
+    /**
+     * From now on the object's alarm does its work only when the test runs
+     * it (`runAlarm`), or, with false, also when it rings by itself (test
+     * build, `PUT /__test/proof-log/alarm-held`). Kept with the object: it
+     * holds across `restart()`, and a new object starts without it.
+     */
+    holdAlarm(hold: boolean): Promise<void>;
+    /** What the object knows of the last rebuild it began, or null (test build, `GET /__test/proof-log/rebuild`). */
+    rebuildStatus(): Promise<{ token: string; status: "running" | "swapped" | "refused"; records: number; reason: string | null } | null>;
+    /**
      * From now on the object waits this many milliseconds before it hashes
      * a record it is asked to write (test build,
      * `PUT /__test/proof-log/hash-delay`): other requests run during the wait,
@@ -687,6 +703,20 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         const res = await server.fetch("/__test/proof-log/kept");
         if (res.status !== 200) throw new Error(`reading what the proof log keeps: HTTP ${res.status} ${await res.text()}`);
         return (await res.json()) as KeptRecords;
+      },
+      async beginRebuild(token) {
+        const res = await server.fetch("/__test/proof-log/rebuild", { method: "POST", body: JSON.stringify({ token }) });
+        if (res.status !== 200) throw new Error(`beginning a rebuild: HTTP ${res.status} ${await res.text()}`);
+        return ((await res.json()) as { begun: boolean }).begun;
+      },
+      async holdAlarm(hold) {
+        const res = await server.fetch("/__test/proof-log/alarm-held", { method: "PUT", body: String(hold) });
+        if (res.status !== 204) throw new Error(`holding the alarm: HTTP ${res.status}`);
+      },
+      async rebuildStatus() {
+        const res = await server.fetch("/__test/proof-log/rebuild");
+        if (res.status !== 200) throw new Error(`reading the rebuild: HTTP ${res.status} ${await res.text()}`);
+        return (await res.json()) as Awaited<ReturnType<TestWorker["proofLog"]["rebuildStatus"]>>;
       },
       async tables() {
         const res = await server.fetch("/__test/proof-log/tables");

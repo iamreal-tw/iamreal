@@ -190,7 +190,8 @@ private fun Pin(m: Model) {
     // What was read from the card, shown only here: a box of its own.
     Column(Modifier.fillMaxWidth().padding(top = 8.dp).background(Colours.soft, RoundedCornerShape(Type.radiusPanel)).padding(horizontal = 20.dp, vertical = 18.dp)) {
         Small(c.say("pin.card_read"))
-        BasicText(m.name, Modifier.testTag("card-name"), style = TextStyle(color = Colours.ink, fontSize = Type.sizeH3, lineHeight = Type.leadingH3, fontWeight = Type.weightHeading, fontFamily = Type.display))
+        // The system's typeface, not the headings': that one is a subset of the words of design/copy/, and a name has others (design/DESIGN.md, "字").
+        BasicText(m.name, Modifier.testTag("card-name"), style = TextStyle(color = Colours.ink, fontSize = Type.sizeH3, lineHeight = Type.leadingH3, fontWeight = Type.weightHeading))
         Small(c.say("pin.name_note"))
     }
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
