@@ -54,6 +54,15 @@ async function rebuildToItsEnd(): Promise<{ steps: number; status: string; reaso
   throw new Error(`the rebuild is still running after 20 steps: ${worker.logLines().filter((l) => l.includes("rebuild")).slice(-3).join(" | ")}`);
 }
 
+/**
+ * Begins a rebuild whose steps only this test makes: the object sets its alarm a second ahead for a rebuild that is
+ * running, and that alarm would make the next step by itself before the test looked at what is there between two.
+ */
+async function begin(name: string): Promise<boolean> {
+  await worker.proofLog.holdAlarm(true);
+  return worker.proofLog.beginRebuild(name);
+}
+
 const stagedTables = async (): Promise<string[]> => (await worker.proofLog.tables()).filter((name) => name.startsWith("rebuild_") && name !== "rebuild_state");
 
 /** A proof log of a few cards over two dates, published once: first card proofs, a refresh, a switch, a withdrawal, and records after the published line. */
@@ -78,7 +87,7 @@ describe("a proof log the object keeps whole", () => {
     const { cards, last } = await smallProofLog();
     const before = await computed(cards);
     assert.equal(await worker.proofLog.rebuildStatus(), null, "no rebuild yet");
-    assert.equal(await worker.proofLog.beginRebuild("first"), true);
+    assert.equal(await begin("first"), true);
     assert.deepEqual(await worker.proofLog.rebuildStatus(), { token: "first", status: "running", records: 0, reason: null });
     assert.deepEqual(await rebuildToItsEnd(), { steps: 1, status: "swapped", reason: null, records: 6 });
     assert.deepEqual(await computed(cards), before);
@@ -87,8 +96,8 @@ describe("a proof log the object keeps whole", () => {
     // The challenge of the last record was used: submitted again, it is refused as used, as before the rebuild.
     await wantError(worker, last, 400, "challenge_used");
     // The same name again begins nothing; another name does.
-    assert.equal(await worker.proofLog.beginRebuild("first"), false);
-    assert.equal(await worker.proofLog.beginRebuild("second"), true);
+    assert.equal(await begin("first"), false);
+    assert.equal(await begin("second"), true);
     assert.equal((await rebuildToItsEnd()).status, "swapped");
     assert.deepEqual(await computed(cards), before);
   });
@@ -99,7 +108,7 @@ describe("a proof log the object keeps whole", () => {
     await worker.proofLog.breakCard(cards[1]!);
     // The broken row is not a state: the back end fails for that card.
     assert.equal((await worker.fetch("/api/v1/card-state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope_string: "iamreal-test:public:0__________", scoped_id: cards[1] }) })).status, 500);
-    assert.equal(await worker.proofLog.beginRebuild("mend"), true);
+    assert.equal(await begin("mend"), true);
     assert.equal((await rebuildToItsEnd()).status, "swapped");
     assert.deepEqual(await computed(cards), before);
     // And the proof log goes on from the rebuilt state: the card that was broken makes its next card proof.
@@ -110,7 +119,7 @@ describe("a proof log the object keeps whole", () => {
     const { root, cards } = await smallProofLog();
     const waiting = await sub(worker, newCard(), root, "threads:erin");
     const before = await computed(cards);
-    assert.equal(await worker.proofLog.beginRebuild("busy"), true);
+    assert.equal(await begin("busy"), true);
     assert.equal((await worker.fetch("/api/v1/challenges", { method: "POST" })).status, 503);
     await wantError(worker, waiting, 503, "paused");
     assert.deepEqual(await computed(cards), before);
@@ -137,7 +146,7 @@ describe("a proof log with full files in the data bucket", () => {
     const before = await computed(some);
     await worker.proofLog.breakCard(cards[500]!);
 
-    assert.equal(await worker.proofLog.beginRebuild("two-steps"), true);
+    assert.equal(await begin("two-steps"), true);
     await worker.proofLog.runAlarm();
     assert.deepEqual(await worker.proofLog.rebuildStatus(), { token: "two-steps", status: "running", records: LINES_PER_FILE, reason: null });
     // Broken off here: the object is stopped. What it answers from has not changed (the broken row is still broken), and the pages answer.
@@ -164,7 +173,7 @@ describe("a proof log with full files in the data bucket", () => {
     // One digit of the first record's proof.
     changed[changed.length - 20] = changed[changed.length - 20] === 0x41 ? 0x42 : 0x41;
     await worker.putFile(key, changed, file.cacheControl, file.contentType);
-    assert.equal(await worker.proofLog.beginRebuild("changed-file"), true);
+    assert.equal(await begin("changed-file"), true);
     const ended = await rebuildToItsEnd();
     assert.equal(ended.status, "refused");
     assert.ok(ended.reason?.includes(key), ended.reason ?? "");
@@ -173,7 +182,7 @@ describe("a proof log with full files in the data bucket", () => {
     // No challenge is held back by a rebuild that is over.
     assert.equal((await worker.fetch("/api/v1/challenges", { method: "POST" })).status, 200);
     await worker.putFile(key, file.bytes, file.cacheControl, file.contentType);
-    assert.equal(await worker.proofLog.beginRebuild("file-back"), true);
+    assert.equal(await begin("file-back"), true);
     assert.equal((await rebuildToItsEnd()).status, "swapped");
     assert.deepEqual(await computed(some), before);
   });
@@ -188,7 +197,7 @@ describe("a proof log with full files in the data bucket", () => {
     const started = new Date("2026-11-20T13:00:00+08:00");
     await worker.setClock(started);
     await worker.proofLog.setBucketFault({ key: `proof-log/${proofLogFileName(0)}`, how: "get fails" });
-    assert.equal(await worker.proofLog.beginRebuild("no-answer"), true);
+    assert.equal(await begin("no-answer"), true);
     await worker.proofLog.runAlarm();
     assert.deepEqual(await worker.proofLog.rebuildStatus(), { token: "no-answer", status: "running", records: 0, reason: null });
     assert.ok(worker.logLines().some((l) => l.includes('"event":"rebuild_step_failed"')));
@@ -227,7 +236,7 @@ describe("an object that has nothing", () => {
 
     await emptyObject();
     assert.equal((await worker.proofLog.stored()).proofLog.count, 0, "the new object has no record");
-    assert.equal(await worker.proofLog.beginRebuild("from-bucket"), true);
+    assert.equal(await begin("from-bucket"), true);
     assert.deepEqual(await rebuildToItsEnd(), { steps: 2, status: "swapped", reason: null, records: LINES_PER_FILE + 5 });
     assert.deepEqual(await computed(some), before);
     assert.deepEqual(await worker.proofLog.stored(), stored);
@@ -258,14 +267,14 @@ describe("an object that has nothing", () => {
     // The file without its last record: every line is a record, and it is not the six records the line of the fingerprint file is of.
     await worker.putFile(key, `${lines.slice(0, 5).join("\n")}\n`, file.cacheControl, file.contentType);
     await emptyObject();
-    assert.equal(await worker.proofLog.beginRebuild("short"), true);
+    assert.equal(await begin("short"), true);
     let ended = await rebuildToItsEnd();
     assert.equal(ended.status, "refused");
     assert.match(ended.reason ?? "", /has 5 records, fewer than the 6 of the last line of the fingerprint file/);
     assert.equal((await worker.proofLog.stored()).proofLog.count, 0);
     // Two records in the other order: six well-formed lines, but record 5 is not at its place.
     await worker.putFile(key, `${[...lines.slice(0, 4), lines[5], lines[4]].join("\n")}\n`, file.cacheControl, file.contentType);
-    assert.equal(await worker.proofLog.beginRebuild("swapped-lines"), true);
+    assert.equal(await begin("swapped-lines"), true);
     ended = await rebuildToItsEnd();
     assert.equal(ended.status, "refused");
     assert.match(ended.reason ?? "", /record 5 is not a well-formed line of the proof log/);
@@ -273,7 +282,7 @@ describe("an object that has nothing", () => {
     assert.deepEqual(await stagedTables(), []);
     // With the file as it was published, the object is rebuilt.
     await worker.putFile(key, file.bytes, file.cacheControl, file.contentType);
-    assert.equal(await worker.proofLog.beginRebuild("as-published"), true);
+    assert.equal(await begin("as-published"), true);
     assert.deepEqual(await rebuildToItsEnd(), { steps: 1, status: "swapped", reason: null, records: 6 });
   });
 });
@@ -286,7 +295,7 @@ describe("after the swap", () => {
     // The file in the bucket is changed behind the object's back: the rebuild writes the one of the line again.
     await worker.putFile(key, "not the card state file\n", published.cacheControl, published.contentType);
     await worker.proofLog.breakCard(cards[0]!);
-    assert.equal(await worker.proofLog.beginRebuild("card-state-file"), true);
+    assert.equal(await begin("card-state-file"), true);
     assert.equal((await rebuildToItsEnd()).status, "swapped");
     const again = (await worker.files("proof-log/")).find((f) => f.key === key)!;
     // The states after the line's 2 records, not after all 6: two cards, as first published.
@@ -301,7 +310,7 @@ describe("after the swap", () => {
     await worker.proofLog.setStoredRulesVersion("another");
     await worker.proofLog.restart();
     assert.equal((await worker.fetch("/api/v1/challenges", { method: "POST" })).status, 503);
-    assert.equal(await worker.proofLog.beginRebuild("new-rules"), true);
+    assert.equal(await begin("new-rules"), true);
     assert.equal((await rebuildToItsEnd()).status, "swapped");
     assert.deepEqual(await computed(cards), before);
     await mustSubmit(worker, await sub(worker, cards[0]!, root, "threads:alice"), "threads refresh");
@@ -329,7 +338,7 @@ describe("what the review of the rebuild found", () => {
     assert.equal(await cardStateRows("2026-11-21"), 0);
     await fillTo(root, 2);
     await worker.putFile("proof-log/card-state/2026-11-21.jsonl", "lost\n", "public, max-age=60", "application/x-ndjson");
-    assert.equal(await worker.proofLog.beginRebuild("line-of-none"), true);
+    assert.equal(await begin("line-of-none"), true);
     assert.deepEqual(await rebuildToItsEnd(), { steps: 1, status: "swapped", reason: null, records: 2 });
     assert.equal(await cardStateRows("2026-11-21"), 0);
   });
@@ -342,7 +351,7 @@ describe("what the review of the rebuild found", () => {
     const started = new Date("2026-11-21T13:00:00+08:00");
     await worker.setClock(started);
     await worker.proofLog.setBucketFault({ key, how: "put fails" });
-    assert.equal(await worker.proofLog.beginRebuild("file-later"), true);
+    assert.equal(await begin("file-later"), true);
     await worker.proofLog.runAlarm();
     assert.deepEqual(await worker.proofLog.rebuildStatus(), { token: "file-later", status: "swapped", records: 6, reason: null });
     assert.deepEqual(await computed(cards), before);
@@ -363,7 +372,7 @@ describe("what the review of the rebuild found", () => {
     await worker.proofLog.runAlarm();
     await midnight("2026-11-21");
     assert.equal(await fingerprintLines(), 1);
-    assert.equal(await worker.proofLog.beginRebuild("over-midnight"), true);
+    assert.equal(await begin("over-midnight"), true);
     await worker.proofLog.runAlarm();
     assert.equal((await worker.proofLog.rebuildStatus())!.status, "running");
     // Midnight, between the rebuild's two steps: the alarm makes the second step, and no line of the new date before it.
@@ -383,7 +392,7 @@ describe("what the review of the rebuild found", () => {
     await midnight("2026-11-21");
     await worker.deleteFile("proof-log/fingerprints.jsonl");
     await worker.switchProofLog({ PROOF_LOG_KIND: "test", PROOF_LOG_OBJECT_NAME: "test-rebuilt-no-lines" });
-    assert.equal(await worker.proofLog.beginRebuild("no-lines"), true);
+    assert.equal(await begin("no-lines"), true);
     const ended = await rebuildToItsEnd();
     assert.equal(ended.status, "refused");
     assert.match(ended.reason ?? "", /log files and no line of the fingerprint file/);
@@ -400,8 +409,9 @@ describe("the operator asks for a rebuild by a setting (REBUILD_PROOF_LOG)", () 
   };
 
   test("only while card proofs are stopped: with the name alone nothing begins; stopped, the object begins when it starts, once for the name; GET /api/v1/rebuild says how far it is and how it ended; afterwards card proofs stay stopped until the operator takes them again", async () => {
-    await freshProofLog(worker);
     const name = await freshProofLog(worker);
+    // The rebuild's steps are this test's to make (`begin`, above, says why).
+    await worker.proofLog.holdAlarm(true);
     const root = await publishG3(worker);
     const cards = await fillTo(root, 4);
     const before = await computed(cards);

@@ -381,6 +381,13 @@ export interface TestWorker {
      * alarm's: `runAlarm()` makes one.
      */
     beginRebuild(token: string): Promise<boolean>;
+    /**
+     * From now on the object's alarm does its work only when the test runs
+     * it (`runAlarm`), or, with false, also when it rings by itself (test
+     * build, `PUT /__test/proof-log/alarm-held`). Kept with the object: it
+     * holds across `restart()`, and a new object starts without it.
+     */
+    holdAlarm(hold: boolean): Promise<void>;
     /** What the object knows of the last rebuild it began, or null (test build, `GET /__test/proof-log/rebuild`). */
     rebuildStatus(): Promise<{ token: string; status: "running" | "swapped" | "refused"; records: number; reason: string | null } | null>;
     /**
@@ -701,6 +708,10 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         const res = await server.fetch("/__test/proof-log/rebuild", { method: "POST", body: JSON.stringify({ token }) });
         if (res.status !== 200) throw new Error(`beginning a rebuild: HTTP ${res.status} ${await res.text()}`);
         return ((await res.json()) as { begun: boolean }).begun;
+      },
+      async holdAlarm(hold) {
+        const res = await server.fetch("/__test/proof-log/alarm-held", { method: "PUT", body: String(hold) });
+        if (res.status !== 204) throw new Error(`holding the alarm: HTTP ${res.status}`);
       },
       async rebuildStatus() {
         const res = await server.fetch("/__test/proof-log/rebuild");
