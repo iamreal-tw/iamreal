@@ -2619,7 +2619,8 @@ await tryStep("card proofs stopped: step 1 says so before a card is read; stoppe
     await page.clickButton(C.common.next);
     await waitStep("read", "step 2");
     const r = await readCard();
-    check(!r.done && r.item === "server" && r.message.startsWith(C.stops.paused), `step 2, stopped on the way: under 連上島民證明的伺服器 "${r.message}" (${r.item})`);
+    check(!r.done && r.item === "server" && r.why.startsWith(C.stops.paused), `step 2, stopped on the way: under 連上島民證明的伺服器 "${r.why}" (${r.item})`);
+    check((await buttonTexts()).includes(C.read.read_again), `step 2, stopped: 再讀一次卡片, as every stop of step 2 ${JSON.stringify(await buttonTexts())}`);
     check(!(await page.eval<boolean>(`!!document.querySelector('#pin')`)), "step 2, stopped: no PIN field");
     await screenshot("paused-2-read");
 
