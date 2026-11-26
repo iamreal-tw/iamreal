@@ -44,6 +44,12 @@ struct HTTPBackend: Backend {
     init(site: URL, publicFiles: URL) {
         self.site = site
         self.publicFiles = publicFiles
+        session = Self.newSession()
+    }
+
+    /// A session of its own: no cookie, no cache, nothing stored, and no
+    /// connection kept from any other session.
+    private static func newSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
@@ -52,7 +58,7 @@ struct HTTPBackend: Backend {
         configuration.timeoutIntervalForRequest = 30
         // A CRL is tens of megabytes.
         configuration.timeoutIntervalForResource = 5 * 60
-        session = URLSession(configuration: configuration)
+        return URLSession(configuration: configuration)
     }
 
     func config() async throws -> Data {
@@ -79,15 +85,19 @@ struct HTTPBackend: Backend {
     /// answer did not come (#404): the connection the app kept from an
     /// earlier request may have gone dead while the cardholder was on steps
     /// 4 and 5, and asking again costs nothing but a challenge the server
-    /// issued for no one. The only request that is: a submission is never
-    /// sent twice by itself.
+    /// issued for no one. The second time on a session of its own, so on a
+    /// connection that is new: the first session may still hold the dead
+    /// one (a time limit that ran out does not always close it). The only
+    /// request that is asked twice: a submission is never sent again by itself.
     func challenge() async throws -> String {
         let body: Data
         do {
-            body = try await challengeOnce()
+            body = try await challengeOnce(on: session)
         } catch is Unanswered {
+            let fresh = Self.newSession()
+            defer { fresh.invalidateAndCancel() }
             do {
-                body = try await challengeOnce()
+                body = try await challengeOnce(on: fresh)
             } catch is Unanswered {
                 throw BackendFailure(code: "network", requestID: nil)
             }
@@ -109,7 +119,7 @@ struct HTTPBackend: Backend {
     /// `POST /api/v1/challenges`, once: the body of a 200. The head first,
     /// then the body, so that a failure before the head (`Unanswered`) is
     /// told from one after it.
-    private func challengeOnce() async throws -> Data {
+    private func challengeOnce(on session: URLSession) async throws -> Data {
         var request = URLRequest(url: site.appendingPathComponent("api/v1/challenges"))
         request.httpMethod = "POST"
         let bytes: URLSession.AsyncBytes
@@ -123,6 +133,10 @@ struct HTTPBackend: Backend {
         } catch let error as URLError where Self.notReached.contains(error.code) {
             throw BackendFailure(code: "network", requestID: nil)
         } catch {
+            // Given up, not unanswered: whoever stopped waiting for it is not asked for a second request.
+            if Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled {
+                throw BackendFailure(code: "network", requestID: nil)
+            }
             throw Unanswered()
         }
         var data = Data()
@@ -174,7 +188,7 @@ struct HTTPBackend: Backend {
         return data
     }
 
-    /// The most the app reads of the answer to a submission: 1 MiB.
+    /// The most the app reads of the answer to a submission or to the request for a challenge: 1 MiB.
     private static let mostOfAnAnswer = 1 << 20
 
     private func api(_ method: String, _ path: String, body: Data?, expecting status: Int) async throws -> Data {

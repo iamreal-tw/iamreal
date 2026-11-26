@@ -36,9 +36,11 @@ final class ChallengeAgainTests: XCTestCase {
                 connection.start(queue: .global())
                 Server.readRequest(connection, Data()) { head in
                     guard let self else { return connection.cancel() }
+                    // A connection that brought no request (opened and left, as a second try of `localhost` may be) is none of the answers' turns.
+                    guard let first = head.split(separator: "\r\n").first, first.hasSuffix("HTTP/1.1") else { return connection.cancel() }
                     let answer: String? = self.lock.withLock {
                         defer { self.served += 1 }
-                        if let first = head.split(separator: "\r\n").first { self.lines.append(String(first)) }
+                        self.lines.append(String(first))
                         return self.served < self.answers.count ? self.answers[self.served] : nil
                     }
                     guard let answer else { return connection.cancel() }
@@ -123,6 +125,71 @@ final class ChallengeAgainTests: XCTestCase {
             XCTAssertEqual(failure.code, "rate_limited")
         }
         XCTAssertEqual(server.requests, [post])
+    }
+
+    func testAnAnswerCutShortAfterItsHeadIsNoAnswerAndNotAskedForAgain() async throws {
+        // The head says 500 bytes; 10 come, and the connection is closed.
+        let cut = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 500\r\nConnection: close\r\n\r\n" + String(repeating: " ", count: 10)
+        let server = try Server([cut, Self.ok])
+        let site = try await server.start()
+        await assertNetwork("a body cut short") { _ = try await HTTPBackend(site: site, publicFiles: site).challenge() }
+        XCTAssertEqual(server.requests, [post])
+    }
+
+    func testAChallengeGivenUpIsNotAskedForAgain() async throws {
+        // A server that reads the request and says nothing: the task that waits is cancelled.
+        final class Silent {
+            let listener: NWListener
+            private let lock = NSLock()
+            private var count = 0
+            private var held: [NWConnection] = []
+            var requests: Int { lock.withLock { count } }
+            init() throws { listener = try NWListener(using: .tcp, on: .any) }
+            func start() async throws -> URL {
+                listener.newConnectionHandler = { [weak self] connection in
+                    connection.start(queue: .global())
+                    connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { data, _, _, _ in
+                        guard let self, let data, !data.isEmpty else { return connection.cancel() }
+                        self.lock.withLock {
+                            self.count += 1
+                            self.held.append(connection)
+                        }
+                    }
+                }
+                let port: UInt16 = try await withCheckedThrowingContinuation { done in
+                    var resumed = false
+                    listener.stateUpdateHandler = { [listener] state in
+                        guard !resumed else { return }
+                        if case .ready = state {
+                            resumed = true
+                            done.resume(returning: listener.port!.rawValue)
+                        } else if case let .failed(error) = state {
+                            resumed = true
+                            done.resume(throwing: error)
+                        }
+                    }
+                    listener.start(queue: .global())
+                }
+                return URL(string: "http://localhost:\(port)")!
+            }
+            deinit { listener.cancel() }
+        }
+        let server = try Silent()
+        let site = try await server.start()
+        let asking = Task { try await HTTPBackend(site: site, publicFiles: site).challenge() }
+        // Until the request has come; then the cardholder's side gives it up.
+        for _ in 0..<200 where server.requests == 0 { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertEqual(server.requests, 1)
+        asking.cancel()
+        do {
+            _ = try await asking.value
+            XCTFail("a challenge from a server that said nothing")
+        } catch let failure as BackendFailure {
+            XCTAssertEqual(failure.code, "network")
+        }
+        // No second request follows the one given up.
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(server.requests, 1)
     }
 
     func testASubmissionAndTheCardsStateAreSentOnceAnswerOrNone() async throws {
