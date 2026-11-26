@@ -200,6 +200,7 @@ test("the settings do not reach the files: with settings the Worker answers 500 
   checkProofHeaders("/proof", await worker.fetch("/proof"));
   checkVisitorHeaders("/pages.css", await worker.fetch("/pages.css"), { cache: "no-cache" });
   checkVisitorHeaders("/copy.js", await worker.fetch("/copy.js"), { cache: "no-cache" });
+  checkVisitorHeaders("/demo.js", await worker.fetch("/demo.js"), { cache: "no-cache" });
   await freshProofLog(worker);
 });
 
@@ -212,6 +213,7 @@ test("a production log's site: the same files, the same headers without noindex"
   checkProofHeaders("/proof/nothing", await production.fetch("/proof/nothing"), { test: false });
   checkVisitorHeaders("/pages.css", await production.fetch("/pages.css"), { cache: "no-cache", noindex: false });
   checkVisitorHeaders("/copy.js", await production.fetch("/copy.js"), { cache: "no-cache", noindex: false });
+  checkVisitorHeaders("/demo.js", await production.fetch("/demo.js"), { cache: "no-cache", noindex: false });
 });
 
 test("a Worker without a build of web/ among its files: /proof and everything under it is 404, with the same headers and without the Worker", async () => {
@@ -223,5 +225,6 @@ test("a Worker without a build of web/ among its files: /proof and everything un
   }
   assert.equal((await bare.fetch("/pages.css")).status, 200);
   assert.equal((await bare.fetch("/copy.js")).status, 200);
+  assert.equal((await bare.fetch("/demo.js")).status, 200);
   assert.deepEqual(await bare.seen(), []);
 });

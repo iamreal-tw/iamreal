@@ -23,12 +23,20 @@
 // `checkSiteFiles`), and test/proof-files.test.ts that the local workerd
 // sends what they say.
 //
-// `node --experimental-strip-types scripts/site-files.ts` writes all four again,
+//   site/demo.js     the player of the demonstration on the page of hanging a
+//                    proof, from src/teaching-animation.ts and demo/player.js
+//                    (`demoScript`).
+//
+// And one file of the Worker's own code, src/pages/hang-timeline.ts: its copy
+// of design/motion/hang.json, which that page writes into itself.
+//
+// `node --experimental-strip-types scripts/site-files.ts` writes all of them again,
 // after a change of src/headers.ts, of the subset or of the image.
 //
 // Static Assets also sends site/favicon.ico, the site's icon, which
 // scripts/favicon.ts draws and this script does not touch (`FAVICON_FILE`).
-import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { stripTypeScriptTypes } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EVERY_RESPONSE, VISITOR_FILE_CACHE, TEST_SITE_HEADERS, VISITOR_HEADERS, proofPageHeaders } from "../src/headers.ts";
@@ -44,7 +52,7 @@ const SITE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "site");
  * "Static Assets"). The Worker cannot send a file either way: it has no
  * binding to them.
  */
-export const RUN_WORKER_FIRST: readonly string[] = ["/*", "!/copy.js", "!/favicon.ico", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"];
+export const RUN_WORKER_FIRST: readonly string[] = ["/*", "!/copy.js", "!/demo.js", "!/favicon.ico", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"];
 
 /**
  * The headings' typeface under site/, where the style sheet loads it from
@@ -68,6 +76,49 @@ export const OG_IMAGE_FILE = "og-image.png";
 export const OG_IMAGE_SOURCE = join(SITE_DIR, "..", "..", "design", "screens", "og-image.png");
 
 /**
+ * The player of the demonstration on the page of hanging a proof
+ * (design/copy/hang.md, 示範) under site/, loaded by /hang/<short ID>: written
+ * by this script from the two files of `demoScript`, and in the repository as
+ * written, like the copy buttons' script. test/demo.test.ts checks that it is
+ * the one those two files give.
+ */
+export const DEMO_FILE = "demo.js";
+
+/** What DEMO_FILE is made of: the states of the teaching animations, which the answers of spec/vectors/ are for, and the player that draws them. */
+export const DEMO_SOURCES: readonly string[] = [join(SITE_DIR, "..", "src", "teaching-animation.ts"), join(SITE_DIR, "..", "demo", "player.js")];
+
+/**
+ * The text of site/demo.js: src/teaching-animation.ts with its types taken
+ * off (Node's own stripping, which puts spaces where they were), then
+ * demo/player.js, in one function of their own so that nothing of them is a
+ * name of the page. The lines the stripping left empty are taken out, and
+ * `export`, which a script that is not a module cannot say.
+ */
+export function demoScript(): string {
+  const [states, player] = DEMO_SOURCES.map((file) => readFileSync(file, "utf8")) as [string, string];
+  const stripped = stripTypeScriptTypes(states).replace(/^export /gm, "");
+  const lines = `${stripped}\n${player}`.split("\n").map((line) => line.trimEnd());
+  const body = lines.filter((line, i) => line !== "" || (i > 0 && lines[i - 1] !== "")).join("\n").trim();
+  return `// Written by scripts/site-files.ts from src/teaching-animation.ts and demo/player.js: change those, not this file.\n"use strict";\n(() => {\n${body}\n})();\n`;
+}
+
+/** The timeline the demonstration plays: design/motion/hang.json (design/motion/README.md). */
+export const HANG_TIMELINE_SOURCE = join(SITE_DIR, "..", "..", "design", "motion", "hang.json");
+
+/** Where the Worker has it from: its code imports nothing outside worker/ and protocol/, so this script writes it a copy. */
+export const HANG_TIMELINE_FILE = join(SITE_DIR, "..", "src", "pages", "hang-timeline.ts");
+
+/**
+ * The text of src/pages/hang-timeline.ts: design/motion/hang.json as one
+ * line of JSON, which the page of hanging a proof writes into itself as data
+ * (src/pages/hang.ts). test/demo.test.ts checks that it is that file's.
+ */
+export function hangTimelineModule(): string {
+  const json = JSON.stringify(JSON.parse(readFileSync(HANG_TIMELINE_SOURCE, "utf8")));
+  return `// Written by scripts/site-files.ts from design/motion/hang.json: change that file, not this one.\n\n/** design/motion/hang.json, as one line of JSON. */\nexport const HANG_TIMELINE_JSON = ${JSON.stringify(json)};\n`;
+}
+
+/**
  * The site's icon under site/, at the address a browser or a link preview
  * asks for by itself, and the one every page links to (src/pages/layout.ts,
  * #356): the mark, drawn by scripts/favicon.ts. Committed as it is, like
@@ -77,13 +128,13 @@ export const FAVICON_FILE = "favicon.ico";
 
 /**
  * Every file of site/ a deploy uploads besides the card proof page's, by
- * its path under site/, sorted: the copy buttons' script, the icon, the typeface, the
+ * its path under site/, sorted: the copy buttons' script, the demonstration's player, the icon, the typeface, the
  * link preview's image, the style sheet and the two files of rules. The page's files are under site/proof/, which
  * is not in the repository (.gitignore): a deploy builds them there
  * (deploy.ts, `buildSite`) and checks what the directory then holds
  * (proof-page.ts).
  */
-export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "copy.js", FAVICON_FILE, FONT_FILE, OG_IMAGE_FILE, "pages.css"];
+export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "copy.js", DEMO_FILE, FAVICON_FILE, FONT_FILE, OG_IMAGE_FILE, "pages.css"];
 
 /** Which proof log a site is of (wrangler.jsonc, `PROOF_LOG_KIND`). */
 export type ProofLogKind = "test" | "production";
@@ -102,7 +153,7 @@ const visitorFile = (path: string, every: Readonly<Record<string, string>>): str
  *   not there is a file, so a 404, a redirect and a 405 under /proof have
  *   them too. On Cloudflare the 404 and the redirect were seen to; the
  *   405 needs a file to be there (README.md, "Static Assets").
- * - /pages.css, /copy.js, /favicon.ico, /fonts/* and /og-image.png: the visitors' pages' headers
+ * - /pages.css, /copy.js, /demo.js, /favicon.ico, /fonts/* and /og-image.png: the visitors' pages' headers
  *   (`VISITOR_HEADERS`), and `VISITOR_FILE_CACHE` in place of the
  *   Cache-Control Static Assets sends by itself (taken off with "!", then
  *   set: two values would be joined). The script's policy has no
@@ -123,6 +174,8 @@ export function siteHeaders(kind: ProofLogKind): string {
     visitorFile("/pages.css", every),
     "",
     visitorFile("/copy.js", every),
+    "",
+    visitorFile(`/${DEMO_FILE}`, every),
     "",
     visitorFile(`/${FAVICON_FILE}`, every),
     "",
@@ -154,5 +207,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   mkdirSync(join(SITE_DIR, "fonts"), { recursive: true });
   copyFileSync(FONT_SOURCE, join(SITE_DIR, FONT_FILE));
   copyFileSync(OG_IMAGE_SOURCE, join(SITE_DIR, OG_IMAGE_FILE));
-  console.log(`Wrote _headers, _redirects, ${FONT_FILE} and ${OG_IMAGE_FILE} in ${SITE_DIR}, for a test log's site.`);
+  writeFileSync(join(SITE_DIR, DEMO_FILE), demoScript());
+  writeFileSync(HANG_TIMELINE_FILE, hangTimelineModule());
+  console.log(`Wrote _headers, _redirects, ${DEMO_FILE}, ${FONT_FILE} and ${OG_IMAGE_FILE} in ${SITE_DIR}, for a test log's site, and ${HANG_TIMELINE_FILE}.`);
 }

@@ -40,7 +40,7 @@ import { ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WASM_FILE, WASM_SHA256, vkFile } from "./engine-files.ts";
 import { moduliInSpec } from "./issuers-in-spec.ts";
 import { PROOF_DIR, type ProofPage, checkProofPage, readProofPage } from "./proof-page.ts";
-import { FAVICON_FILE, FONT_FILE, FONT_SOURCE, OG_IMAGE_FILE, OG_IMAGE_SOURCE, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
+import { DEMO_FILE, FAVICON_FILE, FONT_FILE, FONT_SOURCE, OG_IMAGE_FILE, OG_IMAGE_SOURCE, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -304,6 +304,10 @@ export interface ConfiguredSite {
   readonly scriptSha256: string | null;
   /** The SHA-256 of `copy.js` there as the commit checked out holds it; null if there is none to read. */
   readonly committedScriptSha256: string | null;
+  /** The SHA-256 of `demo.js` there (`DEMO_FILE`); null if the file is not there. */
+  readonly demoSha256: string | null;
+  /** The SHA-256 of `demo.js` there as the commit checked out holds it; null if there is none to read. */
+  readonly committedDemoSha256: string | null;
   /** The SHA-256 of the icon there (`FAVICON_FILE`); null if the file is not there. */
   readonly faviconSha256: string | null;
   /** The SHA-256 of the icon there as the commit checked out holds it; null if there is none to read. */
@@ -372,6 +376,8 @@ export function configuredSites(): Record<string, ConfiguredSite> {
       committedStyleSheetSha256: committedSha256Of("pages.css"),
       scriptSha256: sha256Of("copy.js"),
       committedScriptSha256: committedSha256Of("copy.js"),
+      demoSha256: sha256Of(DEMO_FILE),
+      committedDemoSha256: committedSha256Of(DEMO_FILE),
       faviconSha256: sha256Of(FAVICON_FILE),
       committedFaviconSha256: committedSha256Of(FAVICON_FILE),
       fontSha256: sha256Of(FONT_FILE),
@@ -424,6 +430,7 @@ export function checkSiteFiles(sites: Readonly<Record<string, ConfiguredSite>>):
     for (const [name, there, committed] of [
       ["pages.css", site.styleSheetSha256, site.committedStyleSheetSha256],
       ["copy.js", site.scriptSha256, site.committedScriptSha256],
+      [DEMO_FILE, site.demoSha256, site.committedDemoSha256],
       [FAVICON_FILE, site.faviconSha256, site.committedFaviconSha256],
     ] as const) {
       const message = `${name} of the ${env} environment is the one of HEAD, byte for byte: commit it before a deploy, and have nothing change it after`;

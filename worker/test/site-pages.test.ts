@@ -197,6 +197,13 @@ function hangPictures(): { picture: string[]; told: string[] }[] {
  * part 3, as hang.md writes them with the examples replaced; each picture its title, what a screen reader is
  * told and its pieces hidden from a screen reader; no inline style.
  */
+/** The page of hanging a card's proof without its demonstration and the demonstration's timeline. */
+function withoutDemo(page: string): string {
+  const out = page.replace(/<div class="how">\s*<div class="demo"[\s\S]*?<script type="application\/json" id="hang-timeline">[^<]*<\/script>\s*/, "").replace(/<\/ol>\s*<\/div>/, "</ol>");
+  assert.ok(!out.includes('class="demo') && !out.includes("hang-timeline"), "the demonstration is one block of the page");
+  return out;
+}
+
 function wantHangPage(page: string, lines: readonly string[], withResult: boolean, ...replace: string[]): void {
   const pictures = hangPictures().map((p) => ({ picture: copyLines(p.picture, ...replace), told: copyLines(p.told, ...replace).join("") }));
   const shown = withResult ? pictures : pictures.slice(0, 4);
@@ -227,13 +234,15 @@ function wantHangPage(page: string, lines: readonly string[], withResult: boolea
 describe("hanging a proof on a profile", () => {
   test("/hang/<short ID>: part 2 and part 3 of hang.md for the card's account, a picture under each step and one of the result, the link written in the site's own domain, its copy button shown by the one script; the preview", async () => {
     await pagesWorld(worker, "2026-11-18", [r("2026-11-06", cardStarting(CARD_A), "threads:carol.tw")]);
-    const { status, page } = await getPage(worker, `/hang/${CARD_A}`);
+    const { status, page: whole } = await getPage(worker, `/hang/${CARD_A}`);
     assert.equal(status, 200);
     const onTestSite = ["@alice", "@carol.tw", "iamreal.tw/p/", "test.iamreal.tw/p/"];
+    // Without the demonstration (hidden as the page is sent, the next test's), the page is the one it was: what a browser shows when the player does not run.
+    const page = withoutDemo(whole);
     wantHangPage(page, [...copyLines(block("hang.md", "2. ", 0), ...onTestSite), ...copyLines(block("hang.md", "3. "))], true, ...onTestSite);
     // The pictures write the card's account, not the example's.
     assert.ok(!page.includes("alice"), "no @alice on the page of @carol.tw");
-    assert.equal([...page.matchAll(/<script\b/g)].length, 1, "one script: the copy buttons'");
+    assert.equal([...page.matchAll(/<script\b/g)].length, 2, "two scripts, both files of this site: the copy buttons' and the demonstration's player");
     // The link is the one the page of the card writes (hang.md, part 2: 和島民證明頁面上的寫法相同): on a test
     // log's site, its own domain (design/copy/test-site.md). 複製連結 copies it whole, with https://.
     const address = testSiteCardAddress(CARD_A);
@@ -254,6 +263,51 @@ describe("hanging a proof on a profile", () => {
     notOnPage(page.replace(/<figure class="sketch press">[\s\S]*?<\/figure>/g, ""), "還沒有島民證明？", "https://");
     const { title, site } = previewOf("hang.md", "連結被貼出去時的預覽");
     wantPreview(page, title, site);
+  });
+
+  test("/hang/<short ID> has the demonstration of hang.md, hidden until its player shows it: the five screens with the card's account and address, the timeline of design/motion/ as data, the one sentence for a screen reader, the button's two words", async () => {
+    await pagesWorld(worker, "2026-11-18", [r("2026-11-06", cardStarting(CARD_A), "threads:carol.tw")]);
+    const { page } = await getPage(worker, `/hang/${CARD_A}`);
+    const demo = /<div class="demo" data-demo="hang-timeline" data-variant="ios" hidden>([\s\S]*?)<script type="application\/json" id="hang-timeline">([^<]*)<\/script>/.exec(page);
+    assert.ok(demo !== null, "the demonstration is in the page, hidden, with its timeline after it");
+    // The timeline is design/motion/hang.json, whole, and nothing a browser runs.
+    assert.deepEqual(JSON.parse(demo[2]!), JSON.parse(readFileSync(join(WORKER_DIR, "..", "design", "motion", "hang.json"), "utf8")));
+    const section = copySection("hang.md", "示範");
+    // One element for a screen reader, told the one sentence; everything in it hidden.
+    const told = /\| 畫面寫 \|\n\|---\|\n\| (.*) \|/.exec(section)?.[1];
+    assert.ok(told !== undefined && told.startsWith("示範："), "hang.md has the sentence for a screen reader");
+    const picture = /<div class="demo-picture" role="img" aria-label="([^"]*)">\s*<div class="demo-row" aria-hidden="true">([\s\S]*)<\/div>\s*<\/div>\s*<p class="demo-control">/.exec(demo[1]!);
+    assert.ok(picture !== null, "the picture is one image with a label, its screens hidden from a screen reader");
+    assert.equal(unescapeHtml(picture[1]!), told);
+    // The words of the five screens, in order, with the card's account and the site's own address.
+    const words = codeBlocks(section).at(-1)!;
+    assert.equal(words[0], "島民證明的畫面");
+    assert.equal(squash(visibleText(picture[2]!)), squash(copyLines(words, "@alice", "@carol.tw", "iamreal.tw/p/", "test.iamreal.tw/p/").join("")));
+    // The four screens of Threads say they are illustrations.
+    assert.deepEqual([...picture[2]!.matchAll(/<p class="kick">([^<]*)<\/p>/g)].map((m) => m[1]!.endsWith("（示意）")), [false, true, true, true, true]);
+    // Every box the timeline names for this platform is in the page once; the other platform's is not.
+    const timeline = JSON.parse(demo[2]!) as { boxes: Record<string, string>; variants: Record<string, Record<string, string>> };
+    const boxes = [...picture[2]!.matchAll(/data-box="([^"]*)"/g)].map((m) => m[1]!);
+    assert.deepEqual([...boxes].sort(), Object.keys(timeline.boxes).filter((b) => b !== timeline.variants.android!.back).sort());
+    // What a change of the screens shows or moves is one of the timeline's six.
+    const changes = [...picture[2]!.matchAll(/data-(?:on|off)="([^"]*)"|data-shift="([^"]*)"/g)].flatMap((m) => (m[1] !== undefined ? [m[1]] : m[2]!.split(" ").map((s) => s.split(":")[0]!)));
+    assert.deepEqual([...new Set(changes)].sort(), ["copied", "linkListed", "linkOnProfile", "pasteMenu", "pasted", "resultLabel"]);
+    // The button's two words are hang.md's; as sent it says the one that plays.
+    const [stop, replay] = [/\| 示範還在動 \| (.*) \|/.exec(section)?.[1], /\| 停了或動完了 \| (.*) \|/.exec(section)?.[1]];
+    assert.deepEqual([stop, replay], ["停止", "再看一次"]);
+    assert.ok(demo[1]!.includes(`<button type="button" class="button quiet" data-demo-button data-stop="${stop}" data-replay="${replay}">${replay}</button>`));
+    // Each of the four steps says which it is, for the player to mark.
+    assert.deepEqual([...page.matchAll(/<li data-step="(\d)">/g)].map((m) => m[1]), ["1", "2", "3", "4"]);
+    assert.doesNotMatch(page, /\sstyle=/, "no inline style");
+  });
+
+  test("an account of 30 characters is written whole in the demonstration, on lines the style sheet cuts at their end", async () => {
+    const long = "abcdefghij.klmnopqrst_uvwxyz12";
+    await pagesWorld(worker, "2026-11-18", [r("2026-11-06", cardStarting(CARD_A), `threads:${long}`)]);
+    const { page } = await getPage(worker, `/hang/${CARD_A}`);
+    assert.ok(page.includes(`<span class="clip">@${long}</span>`) && page.includes(`<span class="handle clip">@${long}</span>`));
+    const css = readFileSync(join(WORKER_DIR, "site", "pages.css"), "utf8");
+    assert.match(css, /body\.hang \.shot \.clip \{\s*min-width: 0;\s*overflow: hidden;\s*text-overflow: ellipsis;\s*white-space: nowrap;\s*\}/);
   });
 
   test("/hang without a proof: the page from the home page, a picture under each step, with no script and no button", async () => {
@@ -321,6 +375,24 @@ describe("hanging a proof on a profile", () => {
       await worker.proofLog.setStoredSchemaVersion("the build's");
       await worker.proofLog.restart();
     }
+  });
+});
+
+describe("the demonstration's player", () => {
+  test("/demo.js: sent by Static Assets without the Worker, with the pages' headers; it is the file of the repository, and nothing in it reaches another site or asks for anything", async () => {
+    await pagesWorld(worker, "2026-11-18", []);
+    await worker.seen();
+    const res = await worker.fetch("/demo.js");
+    assert.deepEqual([res.status, res.headers.get("content-type")], [200, "text/javascript; charset=utf-8"]);
+    checkVisitorHeaders("/demo.js", res, { cache: "no-cache" });
+    const script = await res.text();
+    assert.equal(script, readFileSync(join(WORKER_DIR, "site", "demo.js"), "utf8"));
+    // Without its comments: no address, no request, no code made from text, no HTML written, no other page gone to.
+    const code = script.replace(/^\s*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const s of ["http", "fetch", "XMLHttpRequest", "sendBeacon", "WebSocket", "import", "eval", "Function(", "innerHTML", "location", "cookie", "localStorage", ".style"]) assert.ok(!code.includes(s), `demo.js has ${s}`);
+    assert.doesNotMatch(script, /[^\x00-\x7f]/, "ASCII only: Static Assets sends no charset on Cloudflare");
+    for (const method of ["POST", "PUT", "DELETE"]) assert.equal((await worker.fetch("/demo.js", { method })).status, 405, `${method} /demo.js`);
+    assert.deepEqual(await worker.seen(), [], "the Worker's code ran for none of these requests");
   });
 });
 
