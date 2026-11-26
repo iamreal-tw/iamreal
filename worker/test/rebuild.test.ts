@@ -178,3 +178,112 @@ describe("a proof log with full files in the data bucket", () => {
     assert.deepEqual(await computed(some), before);
   });
 });
+
+describe("an object that has nothing", () => {
+  /** The settings name another object, new and empty, and the bucket stays as it is: the object's storage is gone, or the proof log was moved (ADR-0033). */
+  let objects = 0;
+  const emptyObject = (): Promise<void> => worker.switchProofLog({ PROOF_LOG_KIND: "test", PROOF_LOG_OBJECT_NAME: `test-rebuilt-${++objects}` });
+
+  test("rebuilt from the data bucket alone, it is the object that published it: the states, the views, the count and the fingerprint, the records of the last file, the full files, the published lines; it then takes records and publishes the next date", async () => {
+    await freshProofLog(worker);
+    const root = await publishG3(worker);
+    const cards = await fillTo(root, LINES_PER_FILE + 3);
+    // A refresh and a switch among them, so that the states are not all alike.
+    await midnight("2026-11-21");
+    await day(worker, 1);
+    await mustSubmit(worker, await sub(worker, cards[0]!, root, "threads:alice"), "threads refresh");
+    await mustSubmit(worker, await sub(worker, cards[1]!, root, "threads:bob"), "threads switch");
+    await midnight("2026-11-22");
+    await day(worker, 2);
+    const some = [cards[0]!, cards[1]!, cards[999]!, cards.at(-1)!];
+    const before = await computed(some);
+    const stored = await worker.proofLog.stored();
+    const kept = await worker.proofLog.kept();
+    const published = await (await worker.fetch("/api/v1/fingerprint")).json();
+    assert.equal(stored.proofLog.count, LINES_PER_FILE + 5);
+
+    await emptyObject();
+    assert.equal((await worker.proofLog.stored()).proofLog.count, 0, "the new object has no record");
+    assert.equal(await worker.proofLog.beginRebuild("from-bucket"), true);
+    assert.deepEqual(await rebuildToItsEnd(), { steps: 2, status: "swapped", reason: null, records: LINES_PER_FILE + 5 });
+    assert.deepEqual(await computed(some), before);
+    assert.deepEqual(await worker.proofLog.stored(), stored);
+    assert.deepEqual(await worker.proofLog.kept(), kept);
+    assert.deepEqual(await (await worker.fetch("/api/v1/fingerprint")).json(), published);
+    assert.deepEqual(await stagedTables(), []);
+    await checkProofLog(worker);
+    // Which CRLs are the newest is not computed from the proof log: the new object learns it from the mirror's next round, and takes no record before.
+    await wantError(worker, await sub(worker, cards[2]!, root, "threads:alice"), 503, "crl_stale");
+    // (The round ends as failed here, the fake MOICA having no CRL of the other issuer key; it has told the object by then, as in `publishCrl`.)
+    await worker.runSchedule();
+    // It goes on as the proof log's object: a record, and the next date's line after the two it found.
+    await mustSubmit(worker, await sub(worker, cards[2]!, root, "threads:alice"), "threads refresh");
+    await midnight("2026-11-23");
+    const lines = new TextDecoder().decode((await worker.files("proof-log/")).find((f) => f.key === "proof-log/fingerprints.jsonl")!.bytes).split("\n").filter((l) => l !== "");
+    assert.equal(lines.length, 3);
+    assert.equal((JSON.parse(lines[2]!) as { count: number }).count, LINES_PER_FILE + 6);
+  });
+
+  test("a log file of the bucket that is not the proof log of the fingerprint file's last line: refused with the reason, and the object stays empty", async () => {
+    await freshProofLog(worker);
+    const root = await publishG3(worker);
+    await fillTo(root, 6);
+    await midnight("2026-11-21");
+    const key = `proof-log/${proofLogFileName(0)}`;
+    const file = (await worker.files("proof-log/")).find((f) => f.key === key)!;
+    const lines = new TextDecoder().decode(file.bytes).split("\n").filter((l) => l !== "");
+    // The file without its last record: every line is a record, and it is not the six records the line of the fingerprint file is of.
+    await worker.putFile(key, `${lines.slice(0, 5).join("\n")}\n`, file.cacheControl, file.contentType);
+    await emptyObject();
+    assert.equal(await worker.proofLog.beginRebuild("short"), true);
+    let ended = await rebuildToItsEnd();
+    assert.equal(ended.status, "refused");
+    assert.match(ended.reason ?? "", /has 5 records, fewer than the 6 of the last line of the fingerprint file/);
+    assert.equal((await worker.proofLog.stored()).proofLog.count, 0);
+    // Two records in the other order: six well-formed lines, but record 5 is not at its place.
+    await worker.putFile(key, `${[...lines.slice(0, 4), lines[5], lines[4]].join("\n")}\n`, file.cacheControl, file.contentType);
+    assert.equal(await worker.proofLog.beginRebuild("swapped-lines"), true);
+    ended = await rebuildToItsEnd();
+    assert.equal(ended.status, "refused");
+    assert.match(ended.reason ?? "", /record 5 is not a well-formed line of the proof log/);
+    assert.equal((await worker.proofLog.stored()).proofLog.count, 0);
+    assert.deepEqual(await stagedTables(), []);
+    // With the file as it was published, the object is rebuilt.
+    await worker.putFile(key, file.bytes, file.cacheControl, file.contentType);
+    assert.equal(await worker.proofLog.beginRebuild("as-published"), true);
+    assert.deepEqual(await rebuildToItsEnd(), { steps: 1, status: "swapped", reason: null, records: 6 });
+  });
+});
+
+describe("after the swap", () => {
+  test("the card state file of the last published date is written again from the states at that line's count, also when a row was wrong when it was first written and records came after the line", async () => {
+    const { cards } = await smallProofLog();
+    const key = "proof-log/card-state/2026-11-21.jsonl";
+    const published = (await worker.files("proof-log/")).find((f) => f.key === key)!;
+    // The file in the bucket is changed behind the object's back: the rebuild writes the one of the line again.
+    await worker.putFile(key, "not the card state file\n", published.cacheControl, published.contentType);
+    await worker.proofLog.breakCard(cards[0]!);
+    assert.equal(await worker.proofLog.beginRebuild("card-state-file"), true);
+    assert.equal((await rebuildToItsEnd()).status, "swapped");
+    const again = (await worker.files("proof-log/")).find((f) => f.key === key)!;
+    // The states after the line's 2 records, not after all 6: two cards, as first published.
+    assert.deepEqual(new TextDecoder().decode(again.bytes), new TextDecoder().decode(published.bytes));
+    assert.equal(new TextDecoder().decode(again.bytes).split("\n").filter((l) => l !== "").length, 2);
+    assert.deepEqual((await worker.proofLog.tables()).filter((name) => name.startsWith("rebuilt_") || name === "cards_copy"), []);
+  });
+
+  test("a proof log paused because its states were computed by another version of the record rules takes card proofs again once it is rebuilt", async () => {
+    const { root, cards } = await smallProofLog();
+    const before = await computed(cards);
+    await worker.proofLog.setStoredRulesVersion("another");
+    await worker.proofLog.restart();
+    assert.equal((await worker.fetch("/api/v1/challenges", { method: "POST" })).status, 503);
+    assert.equal(await worker.proofLog.beginRebuild("new-rules"), true);
+    assert.equal((await rebuildToItsEnd()).status, "swapped");
+    assert.deepEqual(await computed(cards), before);
+    await mustSubmit(worker, await sub(worker, cards[0]!, root, "threads:alice"), "threads refresh");
+    // And it stays so when the object starts again: the version it stores is the build's.
+    await worker.proofLog.restart();
+    assert.equal((await worker.fetch("/api/v1/challenges", { method: "POST" })).status, 200);
+  });
+});
