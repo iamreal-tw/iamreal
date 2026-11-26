@@ -48,7 +48,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
 import { ISSUER_NAMES } from "../src/issuers.ts";
-import { FONT_FILE, OG_IMAGE_FILE } from "../scripts/site-files.ts";
+import { FAVICON_FILE, FONT_FILE, OG_IMAGE_FILE } from "../scripts/site-files.ts";
 import { testProofLogLine } from "./copy.ts";
 import { newestCrls, readIndex } from "../src/crl-index.ts";
 import { EVERY_RESPONSE, PROOF_LOG_PAGE_CACHE, SCRIPT_PAGE_HEADERS, VISITOR_FILE_CACHE, TEST_SITE_HEADERS, VISITOR_HEADERS } from "../src/headers.ts";
@@ -140,7 +140,7 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
 
   // The files Static Assets sends.
   const fileHeaders = { ...EVERY_RESPONSE, ...VISITOR_HEADERS, ...TEST_SITE_HEADERS, "Cache-Control": VISITOR_FILE_CACHE };
-  for (const path of ["/pages.css", "/copy.js", "/demo.js", `/${FONT_FILE}`, `/${OG_IMAGE_FILE}`]) {
+  for (const path of ["/pages.css", "/copy.js", "/demo.js", `/${FAVICON_FILE}`, `/${FONT_FILE}`, `/${OG_IMAGE_FILE}`]) {
     await check(`GET ${path}`, async () => {
       const res = await file(path);
       await res.arrayBuffer();

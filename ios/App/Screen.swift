@@ -4,7 +4,7 @@ import Foundation
 /// it and every button. CardProofModel makes it; CardProofView draws it
 /// and nothing else, so what a test reads here is what the screen says.
 struct Screen: Equatable {
-    /// 1 to 6: which of the six steps (design/copy/card-proof.md).
+    /// 1 to 8: which of the app's eight steps (design/copy/card-proof.md).
     var step: Int
     var blocks: [Block]
     /// The buttons under the blocks, in their order; the last is the way
@@ -13,20 +13,21 @@ struct Screen: Equatable {
     /// The last of `buttons` is the screen's main button (design/DESIGN.md,
     /// the components: one main button on a screen).
     var mainButton = true
-    /// Under the buttons, as a link: the way back to the screen this one
-    /// was opened from ("不改了" of step 4).
-    var secondary: Button?
+    /// Under the buttons, as links, in their order: the way back to the
+    /// screen this one was opened from ("不改了" of step 4), what else can
+    /// be done on step 7.
+    var links: [Button] = []
     /// The way out at the very bottom: drops the PIN and goes back to step 1.
     var cancel: Button?
     /// Above the step: the note of a reminder the app was opened from.
     var notice: Notice?
-    /// On the right of the header: the settings (steps 1 and 6).
+    /// On the right of the header: the settings (steps 1 and 8).
     var settings: Button?
 
     /// Every sentence on the screen, in its order: for tests. The
     /// header's are not among them: they are not card-proof.md's.
     var texts: [String] {
-        (notice?.texts ?? []) + blocks.flatMap(\.texts) + buttons.map(\.label) + (secondary.map { [$0.label] } ?? []) + (cancel.map { [$0.label] } ?? [])
+        (notice?.texts ?? []) + blocks.flatMap(\.texts) + buttons.map(\.label) + links.map(\.label) + (cancel.map { [$0.label] } ?? [])
     }
 }
 
@@ -57,9 +58,8 @@ enum Block: Equatable {
     case small(String)
     /// The words above a part of the screen that is not needed.
     case kicker(String)
-    /// The box on top of the done screen: the small card (none when every
-    /// account was withdrawn), the title, and the lines beside it.
-    case doneHead(ProofCard?, title: String, lines: [String])
+    /// The small card of the last step: the accounts the card declares now.
+    case proofCard(ProofCard)
     /// Steps to follow, numbered from 1.
     case steps([String])
     /// A sentence with a link in it: the words before, the link, the words after.
@@ -99,7 +99,7 @@ enum Block: Equatable {
         case .title(let text), .heading(let text), .subheading(let text), .text(let text), .strong(let text),
              .lead(let text), .small(let text), .kicker(let text), .message(let text), .link(let text), .busy(let text), .declared(let text):
             return [text]
-        case .doneHead(let card, let title, let lines): return (card?.texts ?? []) + [title] + lines
+        case .proofCard(let card): return card.texts
         case .steps(let lines), .sentences(let lines): return lines
         case .linked(let before, let link, let after): return [before + link.label + after]
         case .points(let points, _): return points
@@ -129,7 +129,7 @@ struct Figure: Equatable {
     var description: String
 }
 
-/// The small card of the done screen (design/DESIGN.md, the components:
+/// The small card of the last step (design/DESIGN.md, the components:
 /// the proof card): the service's name, the card's accounts, its short ID.
 struct ProofCard: Equatable {
     struct Row: Equatable {
@@ -227,7 +227,15 @@ enum Action: Equatable {
     /// The page of the account typed on a platform.
     case preview(String)
     case openSettings
-    /// The reminder, as the done screen offers it.
+    /// "沒有看到連結，重新掛上": the whole of step 6 in the place of the short one.
+    case rehang
+    /// From step 6 to step 7.
+    case toRemind
+    /// From step 7 to step 8.
+    case toFinish
+    /// The system's settings, at this app's notifications.
+    case openNotificationSettings
+    /// The reminder, as step 7 offers it.
     case turnOnReminder
     /// The screen to choose the reminder's interval and time.
     case adjustReminder

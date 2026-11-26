@@ -130,7 +130,7 @@ const site = await startWorkerSite({
       const bytes = readFileSync(file);
       res.writeHead(200, { "Content-Type": TYPES[extname(file)] ?? "application/octet-stream" }).end(bytes);
     } catch {
-      // The browser asks for a favicon by itself; the page does not.
+      // The site's icon, which the page links to (index.html) and the Worker's Static Assets send; this server has none.
       if (path !== "/favicon.ico") cfg.unknown.push(`${req.method} ${path}`);
       res.writeHead(404).end();
     }

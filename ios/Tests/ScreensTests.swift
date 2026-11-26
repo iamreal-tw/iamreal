@@ -58,6 +58,15 @@ final class ScreensTests: XCTestCase {
         return Flow.Consequence(accounts: kind == "withdraw" ? [] : [Flow.Account(platform: "threads", username: username)], rows: [row], firstRecord: false, today: "2026-11-16")
     }
 
+    /// A later card proof of the card that declares @alice, recorded as step 5 said.
+    private func recorded(_ kind: String, _ username: String) -> Flow.Done {
+        let shown = consequence(kind, username, switchesLeft: kind == "switch" ? 3 : nil)
+        return Flow.Done(
+            date: "2026-11-16", shortID: "7K2Q9FM4XD", accounts: shown.accounts, expected: shown.rows,
+            answer: Flow.Answer(seq: 139, recordHash: String(repeating: "3f", count: 32), ordinal: 128, kinds: [Flow.Recorded(platform: "threads", kind: kind, username: username, accountCards: kind == "withdraw" ? 0 : 1)], mismatches: []),
+            firstRecord: false)
+    }
+
     private func declaration() -> (Flow.Consequence, Flow.Done) {
         let row = Flow.ConsequenceRow(platform: "threads", known: true, kind: "first", username: "alice", current: nil, previous: nil, switchesLeft: nil)
         let accounts = [Flow.Account(platform: "threads", username: "alice")]
@@ -79,7 +88,9 @@ final class ScreensTests: XCTestCase {
             ("card-proof-app-4-accounts-phone", screens.accounts(newCard, typed: ["threads": "alice"], errors: [:], message: nil)),
             ("card-proof-app-5-confirm-phone", screens.confirm(newCard, consequence)),
             ("card-proof-app-5-progress-phone", screens.progress(reached: 2, stop: nil)),
-            ("card-proof-app-6-done-phone", screens.done(done, single: "Threads", copied: false, reminder: .ask(threeMonths))),
+            ("card-proof-app-6-hang-phone", screens.hang(done, single: "Threads", copied: false)),
+            ("card-proof-app-7-reminder-phone", screens.remind(.ask(threeMonths), notAfter: nil)),
+            ("card-proof-app-8-done-phone", screens.finish(done, single: "Threads")),
         ]
     }
 
@@ -97,6 +108,11 @@ final class ScreensTests: XCTestCase {
             ("card-proof-app-5-confirm-refresh-phone", screens.confirm(card(), consequence("refresh", "alice"))),
             ("card-proof-app-5-confirm-switch-phone", screens.confirm(card(), consequence("switch", "carol.tw", switchesLeft: 3))),
             ("card-proof-app-5-confirm-withdraw-phone", screens.confirm(card(), consequence("withdraw", "alice"))),
+            ("card-proof-app-6-hang-short-phone", screens.hang(recorded("refresh", "alice"), single: "Threads", copied: false)),
+            ("card-proof-app-7-reminder-on-phone", screens.remind(.on(threeMonths, counted: true), notAfter: nil)),
+            ("card-proof-app-7-reminder-refused-phone", screens.remind(.refused, notAfter: nil)),
+            ("card-proof-app-8-done-switch-phone", screens.finish(recorded("switch", "carol.tw"), single: "Threads")),
+            ("card-proof-app-8-withdraw-phone", screens.finish(recorded("withdraw", "alice"), single: "Threads")),
         ]
     }
 
@@ -211,7 +227,7 @@ final class ScreensTests: XCTestCase {
             "不改了",
             "取消",
         ])
-        XCTAssertEqual(screen.secondary, Button(label: "不改了", action: .keep))
+        XCTAssertEqual(screen.links, [Button(label: "不改了", action: .keep)])
         // What it costs, by the switches left.
         func cost(_ status: Flow.CardStatus) -> String? {
             for case .sentences(let sentences) in screens.accounts(status, mode: .switching, typed: [:], errors: [:], message: nil).blocks { return sentences.last }
@@ -415,7 +431,7 @@ final class ScreensTests: XCTestCase {
         XCTAssertEqual(Array(asked.texts.dropFirst(2)), screens.before().texts)
         let snoozed = reminderScreens.fromNotification(snoozed: ReminderSettings(interval: .weeks12, time: .evening, next: Day(2027, 2, 15)))
         XCTAssertEqual(snoozed, Notice(text: "會在 2027-02-15（星期一）晚上 9:00 再提醒你。", button: nil))
-        // The settings are on steps 1 and 6 only.
+        // The settings are on steps 1 and 8 only.
         XCTAssertEqual(screens.before().settings, Button(label: "設定", action: .openSettings))
         XCTAssertNil(screens.read(reached: 0, running: false, stop: nil).settings)
     }
@@ -479,11 +495,9 @@ final class ScreensTests: XCTestCase {
             XCTAssertEqual(image.size.width, 390)
             try Self.save(image, as: name)
         }
-        // The reminder's: the done screen asking, step 1 from the
-        // notification, the schedule screen, the settings with the reminder on.
-        let (_, done) = declaration()
+        // The reminder's: step 1 from the notification, the schedule
+        // screen, the settings with the reminder on. Step 7 is among the steps above.
         let reminderScreens: [(String, Screen)] = [
-            ("app-reminder-1-done-phone", screens.done(done, single: "Threads", copied: false, reminder: .ask(threeMonths))),
             ("app-reminder-4-from-notification-phone", screens.before(notice: ReminderScreens(appCopy: appCopy).fromNotification(snoozed: nil))),
         ]
         for (name, screen) in reminderScreens {
