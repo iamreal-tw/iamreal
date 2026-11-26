@@ -194,7 +194,7 @@ private fun Before(m: Model, outside: Outside) {
         Problem(c.say("before.paused"))
     } else {
         // Too many people now: above common.next, which stays to be pressed again (card-proof.md, step 1, 人太多的時候).
-        if (m.turnedAway) Problem(c.say("before.busy"))
+        if (m.startTurnedAway) Problem(c.say("before.busy"))
         Actions { Button(c.say("common.next"), Modifier.fillMaxWidth(), primary = true, enabled = !m.starting) { m.start() } }
     }
     Questions {

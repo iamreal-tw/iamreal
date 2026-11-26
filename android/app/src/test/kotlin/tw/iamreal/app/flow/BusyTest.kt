@@ -217,15 +217,43 @@ class BusyTest {
     }
 
     @Test
-    fun `the start answered - the card is read with that answer, and config is not asked again`() {
+    fun `the start answered - the reading asks config again without the mark, and the card is read`() {
         val server = server()
         val card = VectorCard()
         val f = flow(server, card)
         f.begin()
         assertTrue(f.readCard(events).name.isNotEmpty())
         assertEquals(1, card.taps)
-        assertEquals(listOf("GET /api/v1/config?start", "GET /crl/index.jsonl", "GET /crl/$crlSha256.crl"), server.lines)
+        assertEquals(listOf("GET /api/v1/config?start", "GET /api/v1/config", "GET /crl/index.jsonl", "GET /crl/$crlSha256.crl"), server.lines)
         f.cancel()
+    }
+
+    @Test
+    fun `the reading's config turned away after the start - the card proof goes on with the start's`() {
+        for ((status, code) in listOf(429 to "rate_limited", 503 to "busy")) {
+            val server = server()
+            server.away("GET /api/v1/config", status, code)
+            val card = VectorCard()
+            val f = flow(server, card)
+            f.begin()
+            f.readCard(events)
+            assertEquals("$status", 1, card.taps)
+            assertEquals("$status", listOf("GET /api/v1/config?start", "GET /api/v1/config"), server.lines.take(2))
+            f.cancel()
+        }
+    }
+
+    @Test
+    fun `a start answered with what cannot be read is nothing to fall back on`() {
+        val server = server()
+        server.turnAway.getOrPut("GET /api/v1/config?start") { ConcurrentLinkedQueue() }.add(Answer(200, """{"paused":false}"""))
+        server.away("GET /api/v1/config", 429, "rate_limited")
+        val card = VectorCard()
+        val f = flow(server, card)
+        f.begin()
+        assertNull(f.startedWith)
+        assertTrue(stopOf { f.readCard(events) }.tooMany)
+        assertEquals(0, card.taps)
     }
 
     @Test
@@ -281,6 +309,8 @@ class BusyTest {
         val card = VectorCard()
         val f = flow(server, card)
         f.begin()
+        // The reading's config turned away too: the card proof goes on with the start's, and goes through.
+        server.away("GET /api/v1/config", 429, "rate_limited")
         f.readCard(events)
         // Nothing to ask again before something was turned away.
         assertEquals("state", stopOf { f.retryCardState() }.code)

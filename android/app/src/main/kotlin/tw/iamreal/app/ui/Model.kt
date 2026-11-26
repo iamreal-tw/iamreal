@@ -74,9 +74,10 @@ internal fun readButtonAfter(stop: Stop): ReadButton {
 }
 
 /**
- * Step 5's button after a stop. Too many people: 再試一次. The tap did not get to a signature: the PIN is still there, and the tap is made again. A PIN
- * the card refused, a card that is locked, a card the secure channel cannot be made with: the flow dropped the PIN with
- * everything else, and the only way on is back to the beginning; so for any stop of the server, `paused` among them.
+ * Step 5's button after a stop. Too many people: 再試一次. The tap did not get to a signature: the PIN is still there, and the
+ * tap is made again. A PIN the card refused, a card that is locked, a card the secure channel cannot be made with: the flow
+ * dropped the PIN with everything else, and the only way on is back to the beginning; so for any other stop of the server,
+ * `paused` among them.
  */
 internal fun progressButtonAfter(stop: Stop): ProgressButton {
     // Too many people: the challenge, or the record, is asked for or sent again (design/copy/card-proof.md, "5. 確認", 進行中).
@@ -202,7 +203,7 @@ internal class Model(
      * The server turned the start away as too many (`config?start`, docs/api/card-proof.md): step 1 says so above its 下一步,
      * which stays, to be pressed again (design/copy/card-proof.md, "1. 開始之前", 人太多的時候).
      */
-    var turnedAway by mutableStateOf(false)
+    var startTurnedAway by mutableStateOf(false)
         private set
 
     /**
@@ -447,10 +448,10 @@ internal class Model(
     fun start() {
         // Nothing of a card proof from a screen that stands in the place of step 1.
         if (gate != null || starting) return
-        notice = null
-        turnedAway = false
-        starting = true
         dropAll()
+        notice = null
+        startTurnedAway = false
+        starting = true
         val f = newFlow(null)
         step(
             f,
@@ -458,12 +459,14 @@ internal class Model(
             {
                 starting = false
                 startConfig = f.startedWith
+                // The reading asks config again, without the mark (CardProof.readCard): asked now, while step 2 comes up.
+                askConfigAgain()
                 toRead(f)
             },
             { stop ->
                 starting = false
                 when {
-                    stop.tooMany -> turnedAway = true
+                    stop.tooMany -> startTurnedAway = true
                     stop.code == "server" && stop.values["code"] == "paused" -> paused = true
                 }
             },
@@ -935,6 +938,8 @@ internal class Model(
         pinMessage = null
         pinRetry = false
         submitTurnedAway = false
+        // A start whose answer will not be told any more (step() tells only the card proof that is there): 下一步 is pressed again.
+        starting = false
         name = ""
         status = null
         accountsMode = AccountsMode.OPEN

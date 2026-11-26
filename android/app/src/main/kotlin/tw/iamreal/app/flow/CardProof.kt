@@ -22,7 +22,8 @@ import kotlin.concurrent.thread
  *
  *   begin()            step 1's 下一步: the server's config, asked with the
  *                      mark of a start; turned away as too many, nothing more
- *   readCard()         that config, or the one asked for when the app opened;
+ *   readCard()         the server's config, asked without the mark (the
+ *                      start's when that one is turned away as too many);
  *                      tap 1: the certificates, no PIN. The core checks
  *                      them; the CRL is downloaded and checked; the tree is
  *                      built in the background
@@ -242,7 +243,7 @@ class CardProof(
     private var config: ByteArray? = null
     private var startConfig: ByteArray? = started
 
-    /** [begin] has been called: its answer, if one came, is this card proof's config. */
+    /** [begin] has been called. */
     private var begun = false
     private var platformsJson: ByteArray? = null
     private var session = 0L
@@ -332,8 +333,8 @@ class CardProof(
      * The start of the card proof, before a card is read: `config` asked with the mark of a start, the one request of a card
      * proof the server counts against its site-wide limit (docs/api/card-proof.md, `config`; ADR-0026). Turned away as too
      * many (`429`, `503` `busy`), the card proof ends here: no card is read, and step 1 says so. Card proofs stopped
-     * (`paused`): the same. No answer, or another refusal: it goes on, and [readCard] asks again. The answer is the config
-     * [readCard] uses, and [startedWith] for a card proof that follows this one.
+     * (`paused`): the same. No answer, another refusal, or an answer that cannot be read: it goes on, and [readCard] asks
+     * again. An answer that can be read is what [readCard] falls back on, and [startedWith] for a card proof that follows this one.
      */
     fun begin() {
         if (begun || session != 0L || ended) throw Stop("state")
@@ -346,7 +347,8 @@ class CardProof(
         }
         live()
         if (answer != null && pausedIn(answer) == true) fail(Stop("server", mapOf("code" to "paused")))
-        startConfig = answer
+        // Only an answer that can be read is one to fall back on: the reading asks again in any case.
+        startConfig = answer?.takeIf { pausedIn(it) != null && RawJson.member(it, "platforms") != null }
     }
 
     /** What `config` answered at the start ([begin], or the card proof's before it): for the card proof that follows this one. */
@@ -356,9 +358,9 @@ class CardProof(
 
     fun readCard(events: Events): CardRead {
         if (session != 0L || ended) throw Stop("state")
-        // The start's answer ([begin]), or the config asked without the mark: when that one is turned away as too many, the
-        // card proof goes on with the start's (docs/api/card-proof.md, `config`).
-        val config = startConfig.takeIf { begun } ?: try {
+        // Asked again without the mark: when it is turned away as too many, the card proof goes on with the start's
+        // (docs/api/card-proof.md, `config`; design/copy/card-proof.md, step 1, 人太多的時候).
+        val config = try {
             deps.config()
         } catch (e: ServerException) {
             if (!e.tooMany) throw Stop.server(e)
@@ -565,7 +567,7 @@ class CardProof(
             live()
             if (!e.tooMany) fail(Stop.server(e))
             checkIdle()
-            cardStateTurnedAway = true
+            keep { cardStateTurnedAway = true }
             throw Stop.server(e)
         }
         live()

@@ -74,8 +74,9 @@
 //    (429 rate_limited or 503 busy, Retry-After). The config of step 1 that
 //    has no mark turned away: step 1 goes on as it was. The start
 //    (config?start) turned away, busy then rate limited: step 1 stays and
-//    says so above 下一步, and the app does not wait for a card. Then the
-//    card's state (step 3), the challenge and the submission (step 5)
+//    says so above 下一步, and the app does not wait for a card. The config
+//    the reading asks again, without the mark, turned away: the card is
+//    read all the same. Then the card's state (step 3), the challenge and the submission (step 5)
 //    turned away: 再試一次 sends the same request again, and the card is
 //    held to the phone no more than in any card proof.
 import { execFileSync } from "node:child_process";
@@ -1881,11 +1882,14 @@ async function turnedAwayAtStart(): Promise<void> {
       await designShot("card-proof-app-1-busy-phone.png");
     }
   }
+  // The start goes through below; the config the reading asks again, without the mark, is turned away: the card proof goes on.
+  away("GET /api/v1/config", 429, "rate_limited");
 }
 
 /** Step 3: the card signed, its state turned away; 再試一次 asks again, the card not held to the phone again, and on to step 4. */
 async function turnedAwayAtCardState(): Promise<void> {
   console.log("too many people: step 3");
+  check((turnAway.get("GET /api/v1/config") ?? []).length === 0, "step 2: the reading's config was turned away, and the card was read all the same");
   await waitText(say("stops.too_many"), "step 3: the card's state turned away", 60_000);
   const s = wholeScreen();
   shows(s, "step 3, the card's state turned away,", [step(3), say("stops.too_many"), say("progress.retry"), say("common.back")]);
