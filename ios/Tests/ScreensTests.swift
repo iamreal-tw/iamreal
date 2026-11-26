@@ -518,23 +518,53 @@ final class ScreensTests: XCTestCase {
         try Self.save(splash, as: "app-splash-phone")
     }
 
+    /// The demonstration of step 6 at moments of its timeline, drawn as the
+    /// app draws it, 350 points wide (a phone's screen less the margins),
+    /// to web/test-output/app/screens-ios/demo/: what each of its five
+    /// screens looks like, with the longest account there is. Every
+    /// fifteenth of a second when IAMREAL_DEMO_FRAMES is set, for a film of it.
+    func testTheDemonstrationAsTheAppDrawsIt() async throws {
+        guard #available(iOS 16.4, *) else { throw XCTSkip("pictures are drawn on iOS 16.4 or later") }
+        let timeline = try XCTUnwrap(HangTimeline.bundled)
+        let (_, done) = declaration()
+        let demo = try XCTUnwrap(screens.hangDemo(done, playing: false))
+        var long = demo
+        long.account = "@" + String(repeating: "abcdefghij", count: 3)
+        var moments: [(String, HangDemo, Double)] = [
+            ("copy", demo, 1.7), ("profile", demo, 5.1), ("edit", demo, 7.3), ("links", demo, 9.5), ("paste", demo, 12.7),
+            ("pasted", demo, 14.4), ("listed", demo, 16.7), ("result", demo, timeline.duration),
+            ("long-own", long, 0), ("long-profile", long, 4.0), ("long-result", long, timeline.duration),
+        ]
+        if ProcessInfo.processInfo.environment["IAMREAL_DEMO_FRAMES"] != nil {
+            moments = stride(from: 0, through: timeline.duration, by: 1.0 / 15).enumerated().map { (String(format: "frame-%04d", $0.offset), demo, $0.element) }
+        }
+        for (name, demo, seconds) in moments {
+            let view = HangDemoView(demo: demo, timeline: timeline, perform: { _ in }, step: .constant(0), moment: seconds).frame(width: 350)
+            let drawn = await Self.draw(view, width: 350, height: nil, settle: 150_000_000)
+            let image = try XCTUnwrap(drawn)
+            // The picture is 4 wide to 5 high.
+            XCTAssertEqual(image.size.height / image.size.width, 1.25, accuracy: 0.01, name)
+            try Self.save(image, as: "demo/\(name)")
+        }
+    }
+
     // ---------------------------------------------------------------------------
 
     /// `view` 390 points wide, as tall as it is (or `height`), one pixel a
     /// point, once the done screen's mark has stood up.
     @available(iOS 16.4, *)
-    private static func draw<V: View>(_ view: V, height: CGFloat?) async -> UIImage? {
+    private static func draw<V: View>(_ view: V, width: CGFloat = 390, height: CGFloat?, settle: UInt64 = 1_500_000_000) async -> UIImage? {
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return nil }
         let host = UIHostingController(rootView: view)
         host.safeAreaRegions = []
-        let size = CGSize(width: 390, height: height ?? host.sizeThatFits(in: CGSize(width: 390, height: CGFloat.greatestFiniteMagnitude)).height.rounded(.up))
+        let size = CGSize(width: width, height: height ?? host.sizeThatFits(in: CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)).height.rounded(.up))
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(origin: .zero, size: size)
         window.rootViewController = host
         window.isHidden = false
         host.view.frame = window.bounds
         host.view.layoutIfNeeded()
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        try? await Task.sleep(nanoseconds: settle)
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         let image = UIGraphicsImageRenderer(size: size, format: format).image { _ in
@@ -546,7 +576,8 @@ final class ScreensTests: XCTestCase {
 
     private static func save(_ image: UIImage, as name: String) throws {
         let directory = Repository.root.appendingPathComponent("web/test-output/app/screens-ios")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try XCTUnwrap(image.pngData()).write(to: directory.appendingPathComponent("\(name).png"))
+        let file = directory.appendingPathComponent("\(name).png")
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try XCTUnwrap(image.pngData()).write(to: file)
     }
 }

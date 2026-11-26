@@ -255,7 +255,7 @@ export const BROWSER_PATHS: readonly string[] = [
  * test/workflows.test.ts checks that every path the tests of ios/Tests/ and
  * ios/check-app.sh name is under one of them.
  */
-export const IOS_PATHS: readonly string[] = ["ios/**", "device-core/**", "spec/vectors/**", "design/copy/**", "design/fonts/**", "design/tokens.json", "web/circuits/**", "verifier/vk/**", "web/scripts/fetch-crs.mjs", ".github/workflows/checks-ios.yml"];
+export const IOS_PATHS: readonly string[] = ["ios/**", "device-core/**", "spec/vectors/**", "design/copy/**", "design/fonts/**", "design/motion/**", "design/tokens.json", "web/circuits/**", "verifier/vk/**", "web/scripts/fetch-crs.mjs", ".github/workflows/checks-ios.yml"];
 /**
  * The paths whose change runs the circuits' check (checks-circuits.yml),
  * exactly (#247): the circuits' source, scripts and tests (circuits/, its

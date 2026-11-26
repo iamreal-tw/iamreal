@@ -33,7 +33,9 @@ struct Screens {
     // Step 1: before starting ------------------------------------------------------------------
 
     /// `notice`: on top, when the app was opened from the reminder.
-    func before(notice: Notice? = nil) -> Screen {
+    /// `paused`: the operator stopped taking card proofs, as the server's
+    /// config said: said in place of common.next (card-proof.md, step 1).
+    func before(notice: Notice? = nil, paused: Bool = false) -> Screen {
         // No platform table yet: by the platforms the app has its own definition of.
         var blocks: [Block] = [
             .title(copy("before.title")),
@@ -44,6 +46,7 @@ struct Screens {
         if Platform.known.count != 1 {
             blocks += [.text(copy("before.one_proof")), .strong(copy("before.listed_together"))]
         }
+        let questions = blocks.count
         blocks += [
             .question(copy("before.why_physical"), [.text(copy("before.why_physical_card")), .text(copy("before.why_physical_mobile"))]),
             // The two ways out of the card proof's screens: a person without a card cannot go on (card-proof.md, step 1).
@@ -53,6 +56,7 @@ struct Screens {
                 .action(Button(label: copy("before.how_to_get_moica"), action: .howToApply)),
             ]),
         ]
+        if paused { return Screen(step: 1, blocks: Array(blocks[..<questions]) + [.message(copy("before.paused"))] + blocks[questions...], notice: notice, settings: settingsButton) }
         return Screen(step: 1, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .start)], notice: notice, settings: settingsButton)
     }
 
@@ -449,8 +453,9 @@ struct Screens {
                 buttons: [Button(label: copy("app_read.tap_again"), action: .signAgain)],
                 cancel: cancel)
         }
-        // The PIN is gone, and the phone could not talk to the card: back to the start.
-        if stop == .dateChanged || stop == .card(.channel) {
+        // The PIN is gone, and the phone could not talk to the card: back to the start. So when the server takes no card
+        // proof for now (docs/api/card-proof.md, `paused`): the same record would be refused again.
+        if stop == .dateChanged || stop == .card(.channel) || Self.isPaused(stop) {
             return Screen(step: 5, blocks: blocks, buttons: [Button(label: copy("accounts.restart"), action: .restart)])
         }
         var buttons = [Button(label: copy("app_read.restart"), action: .readAgain)]
@@ -564,9 +569,12 @@ struct Screens {
     /// the whole step also where the short one would do ("沒有看到連結，
     /// 重新掛上" was pressed). The same parts as the web page's, but for
     /// what only the page has: the QR code, and "現在可以拔出卡片。" (the
-    /// panel said the card can be taken away when it signed). The four
-    /// steps stand where the demonstration will (#375).
-    func hang(_ done: Flow.Done, single: String?, copied: Bool, whole: Bool = false) -> Screen {
+    /// panel said the card can be taken away when it signed). In the
+    /// order of the page a phone opens to hang it: the link, the two
+    /// buttons side by side, the demonstration, the four steps.
+    /// `demoPlaying`: the demonstration is playing; `demoPlayed`: it has
+    /// played in this card proof.
+    func hang(_ done: Flow.Done, single: String?, copied: Bool, whole: Bool = false, demoPlaying: Bool = false, demoPlayed: Bool = false) -> Screen {
         let kinds = done.answer.kinds
         let link = Block.link("\(host)/p/\(done.shortID)")
         var blocks = mismatch(done)
@@ -587,16 +595,20 @@ struct Screens {
             .title(single.map { copy("hang.title_single", ["platform": $0]) } ?? copy("hang.title")),
             .text(single != nil ? copy("hang.why_single") : copy("done.anyone")),
             link,
-            .button(Button(label: copied ? copy("done.copied") : copy("hang.copy"), action: .copyLink), main: true),
         ]
-        // The public page of each account of the card, on a platform the app knows.
-        blocks += done.accounts.compactMap { account in
+        // Copying the link, and beside it the public page of each account of the card on a platform the app
+        // knows: the order of the demonstration's first screen, which is this one.
+        let profiles = done.accounts.compactMap { account in
             Platform.of(account.platform).map { platform in
-                Block.button(Button(
-                    label: copy("done.open_profile", ["account": Platform.handle(account.platform, account.username), "platform": platform.name]),
-                    action: .openProfile(account.platform)), main: false)
+                // The short words, so that the two fit side by side; VoiceOver reads whose profile it opens.
+                Button(
+                    label: copy("hang.open_threads", ["platform": platform.name]),
+                    action: .openProfile(account.platform),
+                    spoken: copy("done.open_profile", ["account": Platform.handle(account.platform, account.username), "platform": platform.name]))
             }
         }
+        blocks.append(.sideBySide([Button(label: copied ? copy("done.copied") : copy("hang.copy"), action: .copyLink)] + profiles))
+        if let demo = hangDemo(done, playing: demoPlaying, played: demoPlayed) { blocks.append(.demo(demo)) }
         blocks.append(.steps([copy("done.step_edit"), copy("done.step_link"), copy("done.step_add"), copy("done.step_paste")]))
         // A new card's new link, a withdrawn account's link, the other cards that declare an account.
         if done.firstRecord { blocks.append(.small(copy("hang.new_card"))) }
@@ -611,6 +623,52 @@ struct Screens {
         blocks += record(done, single: single)
         // One main button a screen (design/DESIGN.md): copying the link, here.
         return Screen(step: 6, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toRemind)], mainButton: false)
+    }
+
+    /// The demonstration of hanging the link, for the card's account on
+    /// Threads (card-proof.md, the demonstrations); none for a card
+    /// without one. Its first screen is this step's own, with this step's
+    /// words; the other four are the sketches of Threads.
+    func hangDemo(_ done: Flow.Done, playing: Bool, played: Bool = false) -> HangDemo? {
+        let threads = Platform.threads
+        guard let account = done.accounts.first(where: { $0.platform == threads.id }) else { return nil }
+        let handle = Platform.handle(threads.id, account.username)
+        let link = "\(host)/p/\(done.shortID)"
+        let words = HangDemo.Words(
+            kickOwn: copy("app_demo_hang.kick_own"),
+            title: copy("hang.title_single", ["platform": threads.name]),
+            copy: copy("hang.copy"),
+            copied: copy("done.copied"),
+            open: copy("hang.open_threads", ["platform": threads.name]),
+            kickProfile: copy("app_demo_hang.kick_profile"),
+            edit: copy("app_demo_hang.edit"),
+            found: copy("app_demo_hang.found"),
+            kickEdit: copy("app_demo_hang.kick_edit"),
+            rows: [copy("app_demo_hang.row_name"), copy("app_demo_hang.row_username"), copy("app_demo_hang.row_bio"), copy("app_demo_hang.row_interests")],
+            links: copy("app_demo_hang.row_links"),
+            featured: copy("app_demo_hang.row_featured"),
+            kickLinks: copy("app_demo_hang.kick_links"),
+            add: copy("app_demo_hang.add"),
+            kickAdd: copy("app_demo_hang.kick_add"),
+            done: copy("app_demo_hang.done"),
+            url: copy("app_demo_hang.url"),
+            paste: copy("app_demo_hang.paste"),
+            linkTitle: copy("app_demo_hang.link_title"),
+            press: copy("app_demo_hang.press"),
+            pressAgain: copy("app_demo_hang.press_again"),
+            pressThen: copy("app_demo_hang.press_then"),
+            pasteHere: copy("app_demo_hang.paste_here"))
+        return HangDemo(
+            description: copy("app_demo.hang"),
+            control: playing
+                ? Button(label: copy("app_demo.stop"), action: .stopDemo)
+                : Button(label: copy("app_demo.replay"), action: .playDemo),
+            playing: playing,
+            played: playing || played,
+            account: handle,
+            link: link,
+            address: "https://" + link,
+            words: words)
     }
 
     /// Step 7: the reminder to come back (card-proof.md, step 7), by what
@@ -763,6 +821,8 @@ struct Screens {
             case "challenge_unknown": sentence = copy("stops.challenge_expired")
             case "crl_stale": sentence = copy("stops.server_crl_stale")
             case "daily_limit": sentence = copy("stops.daily_limit")
+            // The server takes no card proof for now (docs/api/card-proof.md, `paused`): not a failure to send again.
+            case "paused": sentence = copy("stops.paused")
             case "switch_limit": sentence = copy("stops.switch_limit")
             case "empty": sentence = copy("stops.empty")
             case "switch_restricted": sentence = copy("stops.switch_restricted")
@@ -772,6 +832,11 @@ struct Screens {
             }
             return [sentence] + (failure.requestID.map { [copy("stops.request_id", ["request_id": $0])] } ?? [])
         }
+    }
+
+    private static func isPaused(_ stop: Flow.Stop) -> Bool {
+        if case .server(let failure) = stop { return failure.code == "paused" }
+        return false
     }
 
     /// A certificate's time, YYMMDDHHMMSS (UTC), as its date in Taiwan.
