@@ -3,7 +3,10 @@ package tw.iamreal.app.backend
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.net.ConnectException
 import java.net.HttpURLConnection
+import java.net.NoRouteToHostException
+import java.net.UnknownHostException
 import java.net.URL
 
 /**
@@ -23,9 +26,14 @@ class Backend(private val site: String, private val data: String) {
     /** `POST /api/v1/card-state` with [body], the core's: the body of the answer. */
     fun cardState(body: ByteArray): ByteArray = request("POST", "$site/api/v1/card-state", body, API_TIMEOUT_MS, MAX_ANSWER)
 
-    /** `POST /api/v1/challenges`: the challenge, as the server issued it. */
+    /**
+     * `POST /api/v1/challenges`: the challenge, as the server issued it. Sent once more when the first went out and
+     * the first line of an answer did not come (issue #404): the connection the app kept from an earlier
+     * request may have gone dead while the cardholder was on steps 4 and 5, and asking again costs nothing but a
+     * challenge the server issued for no one. The only request that is: a submission is never sent twice by itself.
+     */
     fun challenge(): String {
-        val answer = request("POST", "$site/api/v1/challenges", null, API_TIMEOUT_MS, MAX_ANSWER)
+        val answer = request("POST", "$site/api/v1/challenges", null, API_TIMEOUT_MS, MAX_ANSWER, again = true)
         return try {
             JSONObject(String(answer, Charsets.UTF_8)).getString("challenge")
         } catch (e: org.json.JSONException) {
@@ -49,7 +57,26 @@ class Backend(private val site: String, private val data: String) {
         return request("GET", "$data/crl/$sha256.crl", null, FILE_TIMEOUT_MS, MAX_CRL)
     }
 
-    private fun request(method: String, url: String, body: ByteArray?, timeoutMs: Int, most: Int, created: Boolean = false): ByteArray {
+    /**
+     * [again]: a request that went out and got no first line of an answer is made once more. The system's client has
+     * dropped the connection that failed, so the second goes on another: a new one, unless it kept a second one to the server.
+     */
+    private fun request(method: String, url: String, body: ByteArray?, timeoutMs: Int, most: Int, created: Boolean = false, again: Boolean = false): ByteArray =
+        try {
+            once(method, url, body, timeoutMs, most, created)
+        } catch (e: Unanswered) {
+            if (!again) throw ServerException(NETWORK, 0, null)
+            try {
+                once(method, url, body, timeoutMs, most, created)
+            } catch (e: Unanswered) {
+                throw ServerException(NETWORK, 0, null)
+            }
+        }
+
+    /** The request went out, or may have, and the first line of an answer did not come: the connection was closed, or the time limit ran out. */
+    private class Unanswered : Exception()
+
+    private fun once(method: String, url: String, body: ByteArray?, timeoutMs: Int, most: Int, created: Boolean): ByteArray {
         val connection = try {
             URL(url).openConnection() as HttpURLConnection
         } catch (e: IOException) {
@@ -67,9 +94,25 @@ class Backend(private val site: String, private val data: String) {
                 connection.doOutput = true
                 if (body != null) connection.setRequestProperty("Content-Type", "application/json")
                 connection.setFixedLengthStreamingMode(body?.size ?: 0)
-                connection.outputStream.use { if (body != null) it.write(body) }
             }
-            val status = connection.responseCode
+            // Up to the answer's first line. A connection kept from an earlier request may be one the server, or something on the
+            // way, has closed: the request then goes out and nothing comes back, at once or when the time limit runs out. The
+            // body is sent as it is written and not kept, so the system's own client does not send it again by itself
+            // (AOSP's external/okhttp, StreamAllocation.recover). Where in these calls that client fails for such a connection
+            // is its own affair, so they are taken together; only a server that could not be connected to at all is told
+            // apart, by what the system says of it: then nothing was sent.
+            val status = try {
+                if (method == "POST") connection.outputStream.use { if (body != null) it.write(body) }
+                connection.responseCode
+            } catch (e: ConnectException) {
+                throw ServerException(NETWORK, 0, null)
+            } catch (e: UnknownHostException) {
+                throw ServerException(NETWORK, 0, null)
+            } catch (e: NoRouteToHostException) {
+                throw ServerException(NETWORK, 0, null)
+            } catch (e: IOException) {
+                throw Unanswered()
+            }
             val requestId = connection.getHeaderField("X-Request-Id")?.takeIf { id -> id.length in 1..64 && id.all { it.isLetterOrDigit() || it == '-' } }
             if (status !in 200..299) throw ServerException(errorCode { connection.errorStream } ?: "http_$status", status, requestId)
             if (created) {

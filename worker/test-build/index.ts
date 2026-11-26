@@ -61,7 +61,20 @@ import { now, setTestClock } from "./target.ts";
 let testSettings: TestSettings = {};
 
 /** The environment with the settings the test replaced. */
-const testEnv = (env: Env): Env => ({ ...env, ...testSettings });
+/** Whether every write to the connection log's bucket fails, as the test chose (`PUT /__test/connection-log-fault`). */
+let connectionLogFails = false;
+
+/** The connection log's bucket with every `put` failing: a bucket that cannot be written to. */
+const failingBucket = (real: R2Bucket): R2Bucket =>
+  new Proxy(real, {
+    get: (target, name) => {
+      if (name === "put") return () => Promise.reject(new Error("the test makes this write fail"));
+      const value = Reflect.get(target, name) as unknown;
+      return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+    },
+  });
+
+const testEnv = (env: Env): Env => ({ ...env, ...testSettings, ...(connectionLogFails && { CONNECTION_LOG: failingBucket(env.CONNECTION_LOG) }) });
 
 /**
  * The stand-in verifier: it looks at nothing but the proof's first byte. 0
@@ -579,6 +592,8 @@ export default {
    * - `GET /__test/newest-crls` answers what the proof log's object knows of
    *   the CRL archive (src/proof-log.ts, `newestCrls`).
    *
+   * - `PUT /__test/connection-log-fault` with `true` or `false`: from now on
+   *   every write to the connection log's bucket fails, or none does.
    * - `GET /__test/seen` answers the method and path of every request that
    *   reached this code since it was last asked, the doors aside: what
    *   Static Assets answers by itself is not among them.
@@ -604,6 +619,10 @@ export default {
       const which = await request.text();
       if (which !== "real" && which !== "stand-in") return new Response(null, { status: 400 });
       standIn = which === "stand-in";
+      return done();
+    }
+    if (route === "PUT /__test/connection-log-fault") {
+      connectionLogFails = (await request.text()) === "true";
       return done();
     }
     const env = testEnv(deployedEnv);
@@ -725,7 +744,7 @@ export default {
       return json({ verified: await proofVerifier.verify(circuit, bytesOfHex(proof), publicInputs.map(bytesOfHex)) });
     }
     if (route === "GET /__test/newest-crls") return json(await proofLogOf(env).newestCrls());
-    if (standIn && isApiPath(pathname)) return api(request, env, STAND_IN);
+    if (standIn && isApiPath(pathname)) return api(request, env, STAND_IN, (work) => ctx.waitUntil(work));
     return worker.fetch(request, env, ctx);
   },
   /** The schedule, with the settings the test replaced. */

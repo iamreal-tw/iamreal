@@ -39,10 +39,12 @@ interface Expected {
   /** Whether the name of the proof log's object starts with `test-`: a test log's does, the production log's does not. */
   readonly objectNamedAsTest: boolean;
   readonly bucket: string;
+  /** The bucket the connection log is written to (ADR-0022): another one than the public data's. */
+  readonly logs: string;
 }
 
 const ENVIRONMENTS: Readonly<Record<string, Expected>> = {
-  test: { kind: "test", objectNamedAsTest: true, bucket: "iamreal-test-data" },
+  test: { kind: "test", objectNamedAsTest: true, bucket: "iamreal-test-data", logs: "iamreal-test-logs" },
 };
 
 /** The part of an environment's configuration this file looks at. */
@@ -60,7 +62,8 @@ function problems(settings: Settings, expected: Expected): string[] {
     out.push(`PROOF_LOG_OBJECT_NAME ${expected.objectNamedAsTest ? "does not start" : "starts"} with test-`);
   }
   const buckets = settings.r2_buckets.map((b) => `${b.binding}=${b.bucket_name}`);
-  if (buckets.length !== 1 || buckets[0] !== `DATA=${expected.bucket}`) out.push(`the only bucket is not DATA=${expected.bucket}`);
+  const wanted = [`DATA=${expected.bucket}`, `CONNECTION_LOG=${expected.logs}`];
+  if (buckets.length !== 2 || buckets[0] !== wanted[0] || buckets[1] !== wanted[1]) out.push(`the buckets are not ${wanted.join(" and ")}`);
   return out;
 }
 
@@ -90,14 +93,18 @@ test("altered copies of the test environment's settings are turned away, each fo
   const real = read("test");
   const expected = ENVIRONMENTS.test!;
   const withVars = (vars: Record<string, unknown>): Settings => ({ ...real, vars: { ...real.vars, ...vars } });
+  const BUCKETS = "the buckets are not DATA=iamreal-test-data and CONNECTION_LOG=iamreal-test-logs";
   const cases: [string, Settings, string[]][] = [
     ["the production log", withVars({ PROOF_LOG_KIND: "production" }), ["PROOF_LOG_KIND is not test"]],
     ["no kind", { ...real, vars: { PROOF_LOG_OBJECT_NAME: real.vars.PROOF_LOG_OBJECT_NAME } }, ["PROOF_LOG_KIND is not test"]],
     ["an object not named as a test one", withVars({ PROOF_LOG_OBJECT_NAME: "proof-log-1" }), ["PROOF_LOG_OBJECT_NAME does not start with test-"]],
     ["an object named in another case", withVars({ PROOF_LOG_OBJECT_NAME: "Test-1" }), ["PROOF_LOG_OBJECT_NAME does not start with test-"]],
     ["an object named `test-` and nothing more", withVars({ PROOF_LOG_OBJECT_NAME: "test-" }), ["PROOF_LOG_OBJECT_NAME does not start with test-"]],
-    ["another bucket", { ...real, r2_buckets: [{ binding: "DATA", bucket_name: "iamreal-data" }] }, ["the only bucket is not DATA=iamreal-test-data"]],
-    ["a second bucket", { ...real, r2_buckets: [...real.r2_buckets, { binding: "OTHER", bucket_name: "iamreal-data" }] }, ["the only bucket is not DATA=iamreal-test-data"]],
+    ["another bucket", { ...real, r2_buckets: [{ binding: "DATA", bucket_name: "iamreal-data" }, real.r2_buckets[1]!] }, [BUCKETS]],
+    ["a third bucket", { ...real, r2_buckets: [...real.r2_buckets, { binding: "OTHER", bucket_name: "iamreal-data" }] }, [BUCKETS]],
+    ["no bucket for the connection log", { ...real, r2_buckets: [real.r2_buckets[0]!] }, [BUCKETS]],
+    ["the connection log in the bucket of the public data", { ...real, r2_buckets: [real.r2_buckets[0]!, { binding: "CONNECTION_LOG", bucket_name: "iamreal-test-data" }] }, [BUCKETS]],
+    ["the connection log in a production bucket", { ...real, r2_buckets: [real.r2_buckets[0]!, { binding: "CONNECTION_LOG", bucket_name: "iamreal-logs" }] }, [BUCKETS]],
     ["the production log on its own object", withVars({ PROOF_LOG_KIND: "production", PROOF_LOG_OBJECT_NAME: "proof-log-1" }), ["PROOF_LOG_KIND is not test", "PROOF_LOG_OBJECT_NAME does not start with test-"]],
   ];
   for (const [name, settings, want] of cases) assert.deepEqual(problems(settings, expected), want, name);
