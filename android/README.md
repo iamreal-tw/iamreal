@@ -4,7 +4,7 @@
 
 現在有過卡能通的路：八步（開始之前、讀取卡片、輸入 PIN、你的帳號、確認，送出之後是掛上去、提醒、完成和分享；網頁沒有提醒那一步，共七步；[#362](https://github.com/iamreal-tw/iamreal/issues/362)），卡片感應三次，PIN 輸入一次（[#133](https://github.com/iamreal-tw/iamreal/issues/133)、[#134](https://github.com/iamreal-tw/iamreal/issues/134)）。畫面照 `design/screens/card-proof-app-*` 和 `design/DESIGN.md`（[#295](https://github.com/iamreal-tw/iamreal/issues/295)），用 Jetpack Compose，文字逐字來自 `design/copy/card-proof.json`；打開 app 先是啟動畫面（`app-splash-phone.png`，字來自 `design/copy/app.json`）。顏色、字級、間距照 `design/tokens.json`，寫在 `app/src/main/kotlin/tw/iamreal/app/ui/Theme.kt`；標題用包進安裝檔的源流明體 TW（「內建的檔案」），內文和等寬字用系統的。只有亮色，和網頁一樣。在模擬器上用假卡片對著本機的 Worker 過得完（「模擬器上過一次卡」）。手機上用 NFC 讀真的自然人憑證（[#173](https://github.com/iamreal-tw/iamreal/issues/173)，「讀卡」）。
 
-過卡的提醒和設定頁（[#297](https://github.com/iamreal-tw/iamreal/issues/297)，「過卡提醒」）：第 7 步問要不要提醒，手機自己排本機通知；第 1 步和送出之後的三步，頁首有「設定」。字來自 `design/copy/app.json` 和 `card-proof.json`。
+過卡的提醒和設定頁（[#297](https://github.com/iamreal-tw/iamreal/issues/297)，「過卡提醒」）：第 7 步問要不要提醒，手機自己排本機通知；第 1 步和第 8 步的頁首有「設定」。字來自 `design/copy/app.json` 和 `card-proof.json`。
 
 還沒有的：
 

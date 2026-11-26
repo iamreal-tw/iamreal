@@ -666,6 +666,7 @@ async function hangStep(o: { name: string; shortId: string; account: string; dat
   if (o.design !== undefined) await designShot(o.design);
   const s = wholeScreen();
   shows(s, "step 6", [step(6), recorded, ...wholeHang(o.account), WHY, link, say("common.next"), ...(o.newCard ? [say("hang.new_card")] : [])]);
+  check(!s.includes(app("settings.open")), "step 6 has no 設定 in its header");
   const absent = [say("common.back"), say("hang.rehang"), say("done.withdrawn_link"), say("done.share", { platform: THREADS }), say("app_done.reminder_title"), say("finish.done"), ...(o.newCard ? [] : [say("hang.new_card")]), ...neverAfter(o.account)];
   for (const a of absent) check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);
   if (o.buttons) {
@@ -691,6 +692,7 @@ async function remindOn(name: string, date: string, design?: string): Promise<vo
   if (design !== undefined) await designShot(design);
   const s = wholeScreen();
   shows(s, "step 7, the reminder on,", [step(7), ...reminderSays(date), say("common.next"), say("common.back"), say("app_reminder.adjust")]);
+  check(!s.includes(app("settings.open")), "step 7 has no 設定 in its header");
   for (const a of [say("app_done.reminder_turn_on"), say("app_reminder.skip"), say("app_reminder.denied"), say("app_reminder.settings")]) check(!s.includes(a), `step 7, the reminder on, does not say "${a.slice(0, 30)}"`);
   check(storedDay() === weeksAfter(date, 12), `the card proof set the reminder again, 12 weeks on: ${storedDay()}`);
 }
@@ -763,7 +765,7 @@ const storedDay = (): string | undefined => /<string name="day">([0-9-]+)<\/stri
 /**
  * Step 7 of the first card proof, which offers the reminder (design/copy/card-proof.md, "7. 提醒"): 這次不要 stores nothing and goes on;
  * back from step 8, the screen of its interval and time, left without saving; 開啟提醒 sets the defaults and goes on; back again, step 7
- * shows the reminder that is on, and the settings. Leaves step 7 on the screen, the reminder on.
+ * shows the reminder that is on. Leaves step 7 on the screen, the reminder on.
  */
 async function reminderOffered(shortId: string): Promise<void> {
   console.log("\nstep 7: the reminder, offered");
@@ -824,6 +826,11 @@ async function reminderOffered(shortId: string): Promise<void> {
   check(JSON.stringify(kept) === JSON.stringify(["day", "interval", "on", "time"]), `the phone stores the reminder's four things and nothing else: ${JSON.stringify(kept)}`);
   check(!reminderStored().includes(shortId) && !reminderStored().includes("alice"), "the reminder's file has no short ID and no account");
 
+}
+
+/** The settings, from step 8's header (design/copy/app.md, "設定"), with the reminder on. Back at step 8. */
+async function settingsFromLastStep(): Promise<void> {
+  check(textsOf(visible()).includes(app("settings.open")), "step 8 has 設定 in its header");
   // The settings.
   await pressBar(app("settings.open"));
   await waitText(app("settings.back"), "the settings");
@@ -843,8 +850,8 @@ async function reminderOffered(shortId: string): Promise<void> {
   check(onTop().includes(`dat=http://${SITE}/faq`), "the settings: 常見問題 opens the site's /faq in the browser");
   emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
   await pressBar(app("settings.back"));
-  await waitText(step(7), "step 7 again, from the settings", 10_000);
-  check(true, "the settings: 返回 goes back to step 7");
+  await waitText(step(8), "step 8 again, from the settings", 10_000);
+  check(true, "the settings: 返回 goes back to step 8");
 }
 
 /**
@@ -991,6 +998,7 @@ try {
   await reminderOffered(shortId);
   press(say("common.next"));
   const ordinal = await finishStep({ name: "first", shortId, account: HANDLE.alice, title: say("finish.first"), design: "card-proof-app-8-done-phone.png" });
+  await settingsFromLastStep();
   const page = await fetch(`${backend.origin}/p/${shortId}`);
   const html = await page.text();
   check(page.status === 200 && html.includes("@alice"), `the Worker's page of the card, /p/${shortId}, lists @alice`);

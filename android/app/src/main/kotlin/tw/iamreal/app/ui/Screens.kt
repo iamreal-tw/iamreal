@@ -75,8 +75,8 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
     // The tags below are the names a test finds the fields by.
     Box(Modifier.fillMaxSize().background(Colours.bg).safeDrawingPadding().imePadding().semantics { testTagsAsResourceId = true }) {
         Column(Modifier.fillMaxSize()) {
-            // The settings from the first step and from the ones after the submission: not while a card proof is under way.
-            val settings = m.step == Step.BEFORE || m.step.submitted
+            // The settings from the first and the last step (design/copy/app.md, "設定"): not while a card proof is under way.
+            val settings = m.step == Step.BEFORE || m.step == Step.DONE
             Header(m.copy.say("common.service_name"), if (settings) r.app.say("settings.open") else null) { r.openSettings() }
             // Each step starts at its top.
             key(m.step) {
@@ -507,9 +507,10 @@ private fun Hang(m: Model, outside: Outside) {
         ProofLink(link)
         OpensProof(view.look, openProof) { outside.open(url) }
         Body(view.why)
+        // In the copy's order: the way to the whole step first, the way on under it.
         Actions {
-            Button(c.say("common.next"), wide, primary = true) { m.toRemind() }
             Button(c.say("hang.rehang"), wide) { m.hangAgain() }
+            Button(c.say("common.next"), wide, primary = true) { m.toRemind() }
         }
         return
     }
