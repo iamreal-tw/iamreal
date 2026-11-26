@@ -12,7 +12,7 @@
 |---|---|
 | `App/DeviceCore.swift` | `device-core/` 的 C 函式包成 Swift：位元組進、位元組出；核心交出來的每一塊緩衝區複製後立刻還給核心（核心會先蓋成零）。一次過卡的 session 是 `DeviceCore.Session`，放掉時核心把憑證和算出來的東西蓋成零 |
 | `App/Card.swift` | 「卡片」這一層：一次感應（`tap`）裡讀憑證、帶 PIN 簽章，和一次感應停下來的原因（`CardFailure`）。`PIN` 也在這裡：只在記憶體，`clear()` 蓋成零 |
-| `App/NFCCard.swift` | 用 Core NFC 讀卡：一次感應是一個 `NFCTagReaderSession`，系統的面板中間那一句照 `design/copy/card-proof.md`「app：感應的面板」；同時只開一個；卡片中途離開時說 PIN 送出了沒有 |
+| `App/NFCCard.swift` | 用 Core NFC 讀卡：一次感應是一個 `NFCTagReaderSession`，系統的面板中間那一句照 `design/copy/card-proof.md`「app：感應的面板」；感應沒有完成時帶著「沒有完成，請看 app 畫面上的說明。」把面板收成失敗的樣子，不然系統會播完成的勾（[#367](https://github.com/iamreal-tw/iamreal/issues/367)）；同時只開一個；卡片中途離開時說 PIN 送出了沒有 |
 | `App/GpkiCard.swift` | 對卡片送的指令：讀 PKCS #15 的目錄和每一張憑證（不用 PIN）；建立安全通道、驗 PIN、簽章；認出第一代的卡片 |
 | `App/CardChannel.swift` | `spec/card-channel.md`：卡片的靜態金鑰、安全通道的金鑰和每一道指令的加密與 MAC、PIN 和要簽的區塊。三個讀卡的檔（這個、`GpkiCard.swift`、`NFCCard.swift`）第一行寫出處：上游 `mctea01/my-Bonds-fork-android` 的 `GpkiCard.kt`，釘 commit `a8696253`（Apache-2.0，`NOTICE`） |
 | `App/Backend.swift` | 「後台」這一層：`config`、清冊鏡像的兩種檔、查現況、題目、送出。位元組進出，請求和回應的內容由核心寫和讀 |
@@ -191,6 +191,7 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 - `Tests/ReminderTests.swift`：下次提醒的日子（一個月、三個月、六個月、跨月跨年、同一個星期幾、選日期只管這一次、能選的日子、一週後再提醒、每次過卡重排）和手機上存的東西，不靠系統真的發通知（換成記下被叫做什麼的假通知）；關掉提醒後，偏好設定裡沒有留下任何一樣；系統不允許通知時什麼都不存
 - `Tests/CardProofTests.swift`：用假卡片過卡（上面那一節）
 - `Tests/CardChannelTests.swift`：安全通道對 `spec/vectors/card-channel.json` 的每一案：靜態金鑰、卡片識別碼、金鑰資訊、卡片的挑戰、安全通道的金鑰和 EXTERNAL AUTHENTICATE、一連串指令的加密、MAC 和計數器（沒有資料的指令也加一）、PIN 的區塊、要簽的區塊
+- `Tests/NFCCardTests.swift`：`NFCCard` 怎麼收起系統的面板，面板換成記下被叫做什麼的假面板、卡片是模擬的第二代卡片：讀到、簽好時不帶錯誤訊息，面板寫可以拿開卡片；卡片接上之後每一種停下來的原因（PIN 不正確、鎖卡、安全通道、第一代、不是同一張、中途離開、其他錯誤）和 Core NFC 回報的中斷，都帶「沒有完成，請看 app 畫面上的說明。」收一次，面板上的每一句從 `card-proof.json` 讀，那一句在 `card-proof.md` 裡；在面板上按「取消」（PIN 送出之前或之後）、等不到卡片、手機不能讀卡時 app 不再收面板
 - `Tests/GpkiCardTests.swift`：`GpkiCard` 對一張模擬的第二代卡片（`Tests/SimulatedGpkiCard.swift`：照卡片的做法解密、檢查 MAC 和它自己的計數器，有 PIN 的錯誤次數和簽章的金鑰）：讀憑證不用 PIN、不建安全通道；簽章用簽章的那一把；PIN 錯兩次是 PIN 不正確、第三次鎖卡；卡片收不了的 PIN 不送；卡片的驗證碼不對、金鑰不是 16 個位元組時不送 PIN；第一代的卡片什麼都不讀、不送 PIN；卡片中途離開時知道 PIN 送出了沒有
 - `Tests/ThemeTests.swift`：`App/Theme.swift` 的每一個數值和 `design/tokens.json` 同名的那一個相同；標題的字型是 `--font-display` 的第一個，而且就是包進 app 的那一份
 - `Tests/ScreensTests.swift`：不用後台，拿 `design/copy/card-proof.md` 的例子（`@alice`、`7K2Q9FM4XD`、2026-11-16、王小明）做出第一次宣告的每一個畫面，和已經宣告 `@alice` 的卡片的第 4、5 步（目前宣告的帳號、改成別的帳號、再次過卡、更換、收回的確認）：每一句都在文字檔裡、沒有「了解更多」；第 1 步、第 3 步、第 4 步的每一種（沒有宣告、全部收回過、已經有宣告、改成別的帳號和它依次數換掉的那一句、不能再更換、今天已經過卡 3 次、卡片在 app 不認得的平台上有帳號）、第 5 步的每一種逐句照文字檔；選間隔和時刻、設定、從通知點進來的第 1 步，每一句照 `design/copy/app.md`；系統不允許通知時選間隔的畫面留著並說為什麼；設定打開的網址；照 app 畫的樣子拍成 390 點寬的整頁截圖，連同啟動畫面和提醒的畫面寫到 `web/test-output/app/screens-ios/`，檔名就是 `design/screens/` 裡對應的那一張（下面「截圖」）
@@ -252,6 +253,7 @@ agent 不碰卡片；這一節由營運者用自己的卡片和 iPhone 照著做
    - 填帳號、確認，按「宣告這個帳號」（或「再次過卡」）：第三次感應的面板同上，接著算證明、送出，到完成的畫面
    - `https://test.iamreal.tw/p/<短編號>` 看得到這一筆
 2. **中途拿開卡片**
+   - 前兩種（面板寫「讀取中」「卡片簽章中」時拿開）：系統的面板收起來之前是失敗的樣子，不是藍色的勾，寫「沒有完成，請看 app 畫面上的說明。」（[#367](https://github.com/iamreal-tw/iamreal/issues/367)）。後兩種是自己按面板的「取消」，面板直接收起來，沒有這一句
    - 第 1 次感應，面板寫「讀取中」時拿開：第 2 步停在「感應卡片，讀取卡片上的憑證」，寫「卡片在讀取途中離開了手機。請再感應一次，感應時不要移動卡片。」，按鈕「再感應一次」；再感應一次就接著做
    - 第 2 次感應，面板寫「卡片簽章中」時拿開：第 3 步寫「讀卡時發生錯誤（代碼 `connection_lost`）。請重新插卡再試一次。」，PIN 丟掉，按鈕「再感應一次卡片」回到第 2 步（這一段的句子和按鈕照 `card-proof.md` 改是 [#172](https://github.com/iamreal-tw/iamreal/issues/172)）。重新來一次，過得了卡
    - 拿開得太快，卡片還沒接上就離開時，面板會繼續等卡片；按面板的「取消」，畫面寫「沒有感應到卡片……」
