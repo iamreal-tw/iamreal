@@ -2,8 +2,8 @@
 // page's own origin, except the CRL archive's, which is on the data domain
 // (dataOriginFetch). Each response is read strictly, and what the device then
 // does with each value is in the README's table. Nothing here reports a
-// failure of the device's own checks to the server (ADR-0016): there is no
-// request for that.
+// failure of the device's own checks to the server: what is told of one is
+// a code of a fixed table, sent by counts.ts (ADR-0032).
 //
 // Every request has a time limit, the response's body included. A request
 // that runs out of it is aborted and counts as no answer (`network`), the
@@ -380,8 +380,12 @@ function readKinds(x: unknown): AcceptedKind[] | null {
   return out;
 }
 
-/** `POST /api/v1/records`. */
-export async function submitRecord(fetchFn: Fetch, s: Submission): Promise<Accepted> {
+/**
+ * `POST /api/v1/records`. `deviceId` is the card proof device ID (counts.ts;
+ * ADR-0039), which the request carries beside the record: the server keeps
+ * it with the request in its connection log, and not in the record.
+ */
+export async function submitRecord(fetchFn: Fetch, s: Submission, deviceId: string | null = null): Promise<Accepted> {
   // Keys in the order of spec/record.md; an account's keys platform, then username.
   const body = JSON.stringify({
     scope_string: s.scope_string,
@@ -392,6 +396,7 @@ export async function submitRecord(fetchFn: Fetch, s: Submission): Promise<Accep
     smt_root: s.smt_root,
     circuit: s.circuit,
     proof: s.proof,
+    ...(deviceId !== null && { device_id: deviceId }),
   });
   let b: Record<string, unknown>;
   try {

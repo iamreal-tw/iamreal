@@ -198,7 +198,7 @@ describe("a request that is turned away leaves nothing", () => {
 });
 
 describe("the limits are settings", () => {
-  test("the Worker above runs with the numbers it was started with, not wrangler.jsonc's; the repository's file has the five, each once", () => {
+  test("the Worker above runs with the numbers it was started with, not wrangler.jsonc's; the repository's file has the six, each once", () => {
     const config = readFileSync(join(WORKER_DIR, "wrangler.jsonc"), "utf8");
     const limitOf = (text: string, name: string): number => Number(new RegExp(`"name": "${name}", "namespace_id": "[0-9]+", "simple": \\{ "limit": ([0-9]+), "period": 60 \\}`).exec(text)?.[1]);
     const changed = withRateLimits(config, LIMITS);
@@ -211,7 +211,7 @@ describe("the limits are settings", () => {
     assert.throws(() => withRateLimits(config.replace("RATE_PAGES", "RATE_OTHER"), { RATE_PAGES: 1 }));
     // Each counter is its own: no two bindings share a namespace.
     const namespaces = [...config.matchAll(/"namespace_id": "([0-9]+)"/g)].map((m) => m[1]);
-    assert.deepEqual([namespaces.length, new Set(namespaces).size], [5, 5]);
+    assert.deepEqual([namespaces.length, new Set(namespaces).size], [6, 6]);
   });
 
   test("another Worker, started with another number for one class, stops that class at that number", async () => {

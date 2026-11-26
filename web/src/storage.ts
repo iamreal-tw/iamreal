@@ -1,7 +1,8 @@
-// The only thing web/ writes into the browser's storage: per issuer key, the
-// highest CRL number the device has used (spec/revocation-tree.md, "Who
-// checks what"; ADR-0015). Nothing else is stored: no certificate, signature,
-// PIN, scoped ID or username.
+// What web/ writes into the browser's storage, besides the card proof
+// device ID (counts.ts; ADR-0039): per issuer key, the highest CRL number
+// the device has used (spec/revocation-tree.md, "Who checks what";
+// ADR-0015). Nothing else is stored: no certificate, signature, PIN, scoped
+// ID or username.
 import type { IssuerName } from "./issuers.ts";
 
 export interface CrlNumberStore {

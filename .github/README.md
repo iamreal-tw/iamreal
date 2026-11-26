@@ -311,6 +311,7 @@ iamreal-verify -bb <bb> -crs <通用參數目錄> -proof-log test -data https://
 | 清冊存檔的索引裡，G2、G3 最新的可用清冊，日期不早於昨天 | 鏡像停了，或內政部的清冊沒有更新 |
 | 資料網域有今天的卡片狀態檔 `proof-log/card-state/<日期>.jsonl` | 同上，今天沒有公布 |
 | 資料網域的 `connection-log/oldest.json` 讀得懂，`checked` 在 2 小時內，`oldest` 是 `null` 或不早於今天（UTC）的 33 天前（#20；還沒打開，見下面） | 後台沒有在看連線紀錄，或有超過期限還沒刪的 |
+| 資料網域的 `count-events/oldest.json`，同一種讀法、同樣的門檻（#54；還沒打開） | 後台沒有在看計數的明細，或有超過期限還沒刪的 |
 
 門檻和時間：
 
@@ -328,7 +329,7 @@ cd worker
 node --experimental-strip-types test/outside-check.ts
 ```
 
-**連線紀錄那一項（#20）還沒打開。**
+**連線紀錄那一項（#20）和計數那一項（#54）還沒打開。** 計數那一項和連線紀錄的做法相同：後台每小時看計數明細最舊一檔的日期，寫成 `count-events/oldest.json`；由 `COUNT_EVENTS_CHECKED` 關著，等 #54 部署、檔案出現之後打開。下面講連線紀錄的幾點，計數都一樣。
 
 - 後台每小時看一次最舊的連線紀錄，把結果寫成資料網域上的 `connection-log/oldest.json`：`{"checked":"<UTC 的時間>","oldest":"<UTC 的日期>"}`，一筆都沒有時 `oldest` 是 `null`。
 - 這個檢查只讀那一個公開的檔，不讀儲存桶，不握讀 R2 的權杖。

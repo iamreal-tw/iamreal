@@ -9,7 +9,11 @@
 //     against verifier/vk/, with public inputs rebuilt here from the record
 //     (spec/proof-verification.md);
 //   - no Content-Security-Policy violation, no request nothing answers;
-//   - the browser's storage holds the CRL number and nothing else.
+//   - the browser's storage holds the CRL number, the card proof device ID
+//     with its date, and nothing else;
+//   - the submissions carried that device ID (the Worker's connection log),
+//     and the Worker took the page's counts: every step of each card proof,
+//     each a count of the table, under that device ID.
 //
 //   IAMREAL_BB=/path/to/bb node test/e2e/run.ts [config ...]
 //
@@ -34,6 +38,8 @@ import { currentTime, parseChallenge } from "iamreal-protocol/challenge.ts";
 import { declarationCode } from "iamreal-protocol/declaration-code.ts";
 import { fieldBytes, pack31 } from "iamreal-protocol/field.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
+import { readCount } from "iamreal-protocol/counts.ts";
+import { DEVICE_ID_KEY } from "../../src/counts.ts";
 import { STORAGE_KEY_PREFIX } from "../../src/storage.ts";
 import { makeCrl } from "../fixtures/crls.ts";
 import { makeWorld, randomSerials, testIssuerKeys } from "../fixtures/world.ts";
@@ -147,6 +153,8 @@ try {
   const index = new TextDecoder().decode((await worker.files("crl/index.jsonl"))[0]?.bytes ?? new Uint8Array());
   check(round.outcome === "ok" && index.split("\n").filter(Boolean).length === 2, `the Worker's schedule mirrored the two CRLs (${round.outcome})`);
 
+  /** The card proof device ID of each config's browser profile. */
+  const devices: string[] = [];
   for (const cfg of configs) {
     console.log(`\n== ${cfg.label}`);
     const world = await makeWorld({ issuer: cfg.issuer });
@@ -193,12 +201,17 @@ try {
     check(report.violations.length === 0, `no CSP violation ${JSON.stringify(report.violations)}`);
     check(unknown.length === 0, `no request that neither the test page's server nor the Worker has an answer for ${JSON.stringify(unknown)}`);
 
-    // Storage: the CRL number of the issuer, nothing else.
+    // Storage: the CRL number of the issuer and the card proof device ID with the date it was made on, nothing else.
     const st = report.storage;
+    const device = /^([0-9a-f]{32})\.\d{4}-\d{2}-\d{2}$/.exec(String(st.localStorage?.[DEVICE_ID_KEY]))?.[1] ?? null;
     check(
-      JSON.stringify(st.localStorage) === JSON.stringify({ [STORAGE_KEY_PREFIX + cfg.issuer]: String(CRL_NUMBER) }),
-      `localStorage holds only the CRL number: ${JSON.stringify(st.localStorage)}`,
+      device !== null && JSON.stringify({ ...st.localStorage, [DEVICE_ID_KEY]: undefined }) === JSON.stringify({ [STORAGE_KEY_PREFIX + cfg.issuer]: String(CRL_NUMBER) }),
+      `localStorage holds only the CRL number and the card proof device ID: ${JSON.stringify(st.localStorage)}`,
     );
+    if (device !== null) devices.push(device);
+    // The submissions carried it: the connection log's entries of this config's records (ADR-0039).
+    const submitted = (await worker.connectionLog()).filter((o) => o.key.startsWith("connection/") && typeof o.entry.seq === "number" && o.entry.seq > before);
+    check(submitted.length === RUNS.length && submitted.every((o) => o.entry.device_id === device), `each submission carried the card proof device ID (${submitted.length} entries of the connection log)`);
     check(st.sessionStorage === 0 && st.indexedDB.length === 0 && st.caches.length === 0 && st.cookies === "", `nothing else stored: ${JSON.stringify({ ...st, localStorage: undefined })}`);
 
     // The record of each card proof: the proof verifies with the native bb.
@@ -263,6 +276,21 @@ try {
         `tree ${t("tree_build")} / ${t("tree_build", 1)}, proof ${t("proof")} / ${t("proof", 1)}, ` +
         `card proof ${report.results.map((r: any) => r.ms).join(" / ")}; cores ${report.cores}`,
     );
+  }
+  // The counts (ADR-0032): the Worker writes a minute's counts when the minute is over, so wait for the clock's next one.
+  await new Promise((r) => setTimeout(r, 61_000 - (Date.now() % 60_000)));
+  await worker.ringCounts();
+  const counted = (await worker.connectionLog()).filter((o) => o.key.startsWith("count-events/")).flatMap((o) => (o.entry as { counts: Record<string, string>[] }).counts);
+  check(counted.length > 0 && counted.every((c) => JSON.stringify(readCount(c)) === JSON.stringify(c) && c.client === "web"), `the Worker took ${counted.length} counts, each one of the table's`);
+  for (const device of devices) {
+    const own = counted.filter((c) => c.device_id === device);
+    const attempts = [...new Set(own.map((c) => c.attempt_id!))];
+    const stepsOf = (attempt: string): string[] => own.filter((c) => c.attempt_id === attempt && c.event === "step").map((c) => c.step!);
+    check(
+      attempts.length === RUNS.length && attempts.every((a) => ["read", "certificates", "certificate", "config", "circuit", "engine", "crl", "tree", "checked", "pin", "scope_signed", "state", "chosen", "confirmed", "challenge", "code_signed", "proved", "done"].every((s) => stepsOf(a).includes(s))),
+      `a device's counts: ${attempts.length} card proofs, each with every step up to done (${attempts.map((a) => stepsOf(a).length).join(" / ")} steps)`,
+    );
+    check(own.every((c) => c.event === "step"), "no card proof stopped: every count is a step");
   }
 } finally {
   await site.close();
