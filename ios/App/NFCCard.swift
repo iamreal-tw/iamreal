@@ -8,7 +8,9 @@ import Foundation
 /// sentence is design/copy/card-proof.md's ("app：感應的面板"): where to
 /// hold the card while it waits, reading or signing while the commands go,
 /// and that the card can be taken away when the tap is done. When a tap
-/// stops the panel closes without a sentence: the step's screen says why.
+/// stops, the panel closes as a failure, with the one sentence that sends
+/// the cardholder to the step's screen, which says why: closed without a
+/// sentence, the system shows the tick of a tap that was done (issue #367).
 ///
 /// What a tap does with the card is GpkiCard's; what this file adds is the
 /// session around it:
@@ -24,25 +26,36 @@ import Foundation
 ///   hands the card over.
 final class NFCCard: Card {
     private let copy: Copy
+    private let available: () -> Bool
+    private let open: () -> CardPanel
     private let lock = NSLock()
     private var reading = false
 
-    init(copy: Copy) {
+    convenience init(copy: Copy) {
+        self.init(copy: copy, available: { NFCTagReaderSession.readingAvailable }, open: { TagReader() })
+    }
+
+    /// `available`: whether this phone can read a card now. `open`: a new
+    /// panel for one tap; the system's, or a test's.
+    init(copy: Copy, available: @escaping () -> Bool, open: @escaping () -> CardPanel) {
         self.copy = copy
+        self.available = available
+        self.open = open
     }
 
     func tap<T>(_ purpose: TapPurpose, _ body: (CardConnection) async throws -> T) async throws -> T {
-        guard NFCTagReaderSession.readingAvailable else { throw CardFailure.noTap }
+        guard available() else { throw CardFailure.noTap }
         guard claim() else { throw CardFailure.failed(code: "busy") }
         defer { release() }
 
         let (busy, done) = purpose == .readCertificates
             ? (copy("app_panel.reading"), copy("app_panel.read"))
             : (copy("app_panel.signing"), copy("app_panel.signed"))
-        let reader = TagReader()
-        let tag = try await reader.waitForCard(copy("app_panel.iphone_wait"))
+        let reader = open()
+        // No card came: the system closed the panel itself.
+        let transport = try await reader.waitForCard(copy("app_panel.iphone_wait"))
         reader.say(busy)
-        let card = GpkiCard(TagTransport(tag: tag))
+        let card = GpkiCard(transport)
         do {
             let result = try await body(card)
             reader.finish(done)
@@ -50,7 +63,8 @@ final class NFCCard: Card {
         } catch {
             // Read before the session is ended here, which the system may also report as cancelled.
             let cancelled = reader.cancelled
-            reader.stop()
+            // Whatever stopped the tap, the panel closes as a failure. Cancelled on the panel, the system has closed it.
+            if !cancelled { reader.fail(copy("app_panel.failed")) }
             // Cancelled on the panel once the card was there, before the
             // PIN went out: as before it came. After, the card may have
             // counted the PIN: that is a dropped tap (#172).
@@ -101,9 +115,26 @@ private struct TagTransport: APDUTransport {
     }
 }
 
-/// One reader session: the system's panel, from waiting for a card to the
-/// end of the tap. The delegate's calls come on a queue of its own.
-private final class TagReader: NSObject, NFCTagReaderSessionDelegate {
+/// The panel over the app for one tap, from waiting for a card to the end
+/// of the tap: the system's (TagReader), or a test's.
+protocol CardPanel {
+    /// Whether the panel closed because it was cancelled on the panel itself.
+    var cancelled: Bool { get }
+    /// Shows the panel with `message` and returns the way to send the card
+    /// commands once it is connected. Throws `CardFailure.noTap` when the
+    /// panel closes without a card.
+    func waitForCard(_ message: String) async throws -> APDUTransport
+    /// The panel's middle sentence, while the tap goes on.
+    func say(_ message: String)
+    /// The tap is done: the panel says so as it closes.
+    func finish(_ message: String)
+    /// The tap stopped: the panel closes as a failure, with `message`.
+    func fail(_ message: String)
+}
+
+/// One reader session: the system's panel. The delegate's calls come on a
+/// queue of its own.
+private final class TagReader: NSObject, NFCTagReaderSessionDelegate, CardPanel {
     private let queue = DispatchQueue(label: "tw.iamreal.app.nfc")
     private var session: NFCTagReaderSession?
     /// Waiting for a card; resumed once, with the card or why none came.
@@ -113,11 +144,10 @@ private final class TagReader: NSObject, NFCTagReaderSessionDelegate {
     /// Whether the session ended because "取消" was pressed on the panel.
     var cancelled: Bool { queue.sync { cancelledOnPanel } }
 
-    /// Shows the panel with `message` and returns the card once it is
-    /// connected. Throws `CardFailure.noTap` when the session ends without
-    /// one: cancelled, timed out, the app went to the background.
-    func waitForCard(_ message: String) async throws -> NFCISO7816Tag {
-        try await withCheckedThrowingContinuation { continuation in
+    /// Throws `CardFailure.noTap` when the session ends without a card:
+    /// cancelled, timed out, the app went to the background.
+    func waitForCard(_ message: String) async throws -> APDUTransport {
+        let tag: NFCISO7816Tag = try await withCheckedThrowingContinuation { continuation in
             queue.async {
                 guard let session = NFCTagReaderSession(pollingOption: .iso14443, delegate: self, queue: self.queue) else {
                     continuation.resume(throwing: CardFailure.noTap)
@@ -129,14 +159,14 @@ private final class TagReader: NSObject, NFCTagReaderSessionDelegate {
                 session.begin()
             }
         }
+        return TagTransport(tag: tag)
     }
 
-    /// The panel's middle sentence, while the tap goes on.
     func say(_ message: String) {
         queue.async { self.session?.alertMessage = message }
     }
 
-    /// The tap is done: the panel says so as it closes.
+    /// Closed without an error message: the system shows its tick.
     func finish(_ message: String) {
         queue.async {
             self.session?.alertMessage = message
@@ -144,9 +174,9 @@ private final class TagReader: NSObject, NFCTagReaderSessionDelegate {
         }
     }
 
-    /// The tap stopped: the panel closes; the step's screen says why.
-    func stop() {
-        queue.async { self.session?.invalidate() }
+    /// Closed with an error message: the system shows a failure, and the message.
+    func fail(_ message: String) {
+        queue.async { self.session?.invalidate(errorMessage: message) }
     }
 
     func tagReaderSessionDidBecomeActive(_ session: NFCTagReaderSession) {}
