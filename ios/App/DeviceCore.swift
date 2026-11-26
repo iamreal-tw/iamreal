@@ -85,6 +85,16 @@ enum DeviceCore {
         }
     }
 
+    /// What the lowest app version of the server's `config` says of the
+    /// build `build` of the iOS app on the date of `now` in Taiwan
+    /// (idc_min_app, spec/min-app.md): JSON with a `verdict`, and `from`
+    /// where it has a day. Whatever `config` holds is read, never an error.
+    static func minApp(config: Data, build: UInt32, now: Date) throws -> Data {
+        try config.withUnsafeBytes { c in
+            try output { idc_min_app(c.bytes, c.count, UInt32(IDC_CLIENT_IOS), build, seconds(now), $0) }
+        }
+    }
+
     /// The short ID of a scoped ID: its first 10 characters.
     static func shortID(of scopedID: String) throws -> String {
         let text = Data(scopedID.utf8)

@@ -32,7 +32,8 @@ internal class Messages(private val c: Copy) {
             CardException.Reason.PIN_MAYBE_SENT.name -> if (at == At.DECLARE) c.say("app_stops.dropped") else c.say("app_stops.pin_maybe_received")
             CardException.Reason.PIN_INCORRECT.name -> c.say("pin.pin_incorrect")
             CardException.Reason.LOCKED.name -> c.say("stops.card_locked")
-            CardException.Reason.NFC_OFF.name -> if (at == At.READ) c.say("app_stops.nfc_off") else null
+            // At step 2 the sentence names its button; later the tap is made again once NFC is back on.
+            CardException.Reason.NFC_OFF.name -> if (at == At.READ) c.say("app_stops.nfc_off") else c.say("app_stops.nfc_off_tap")
             CardException.Reason.CHANNEL.name -> c.say("app_stops.channel")
             CardException.Reason.FIRST_GENERATION.name -> c.say("app_stops.first_generation")
             // On the panels of reading and of the PIN, cancelling says nothing.
@@ -379,6 +380,12 @@ internal class Messages(private val c: Copy) {
     )
 
     /**
+     * A button of step 6 that opens an account's profile: it says the short [label] ("打開 Threads"), so that it fits beside
+     * "複製證明連結"; a screen reader is [told] the whole of it ("打開 @alice 的 Threads 個人檔案"). [address] is the profile's.
+     */
+    data class OpensProfile(val label: String, val told: String, val address: String)
+
+    /**
      * What the steps after the submission say (design/copy/card-proof.md, "6. 掛上去" and "8. 完成和分享", each with its part
      * marked app). The same choices as doneView of web/src/ui/messages.ts.
      */
@@ -403,8 +410,8 @@ internal class Messages(private val c: Copy) {
         val stillThere: String?,
         /** "打開你的島民證明看看。", the short step 6's line that opens the card's page. */
         val look: String,
-        /** "打開 @alice 的 Threads 個人檔案" and the address it opens: one per account on a platform the app knows. */
-        val profiles: List<Pair<String, String>>,
+        /** The buttons that open a profile: one per account on a platform the app knows. */
+        val profiles: List<OpensProfile>,
         /** The four steps on the platform, until the demonstration takes their place (card-proof.md, "示範"). */
         val steps: List<String>,
         /** Under the steps: a new card's new link (the card's first record), a withdrawn account's link (the list not empty), the other cards that declare an account. */
@@ -480,7 +487,7 @@ internal class Messages(private val c: Copy) {
             look = c.say("hang.look", "open_proof" to openProof),
             profiles = d.accounts.mapNotNull { (platform, username) ->
                 val p = if (knownOf(platform)) Platforms.of(platform) else null
-                p?.let { c.say("done.open_profile", "account" to account(platform, username), "platform" to it.name) to it.profileUrl(username) }
+                p?.let { OpensProfile(c.say("hang.open_threads", "platform" to it.name), c.say("done.open_profile", "account" to account(platform, username), "platform" to it.name), it.profileUrl(username)) }
             },
             steps = listOf(c.say("done.step_edit"), c.say("done.step_link"), c.say("done.step_add"), c.say("done.step_paste")),
             notes = listOfNotNull(

@@ -20,9 +20,12 @@
 //    card (its certificates, its key, its PIN).
 // 2. Puts a small server between the app and that back end. It hands every
 //    request on as it is, and notes what each called itself (User-Agent).
-//    Three paths are the test's own, for the fake build of the app:
+//    Four paths are the test's own, for the fake build of the app:
 //    /__test/issuers (the issuer keys), /__test/tap (which card is held to
-//    the phone, src/fake/) and /__test/pin (a card was handed a PIN).
+//    the phone, src/fake/), /__test/pin (a card was handed a PIN) and
+//    /__test/phone (whether the phone has NFC). For the minimum app version
+//    it can also change the `min_app` of the back end's config on its way
+//    to the app, or leave the config unanswered.
 // 3. Builds the app's build type `fake` (the fake card, the library of the
 //    tests, this server as its site), installs it on the emulator, turns
 //    the emulator's network off and forwards its port 18169 to the server
@@ -52,15 +55,20 @@
 //    storage holds nothing of it. Every sentence is read from
 //    design/copy/app.json and card-proof.json.
 //
-// 6. The operator stops taking card proofs, and takes them again (#394, #402;
+// 6. What interrupts a card proof (issue #171), before any record is made: a
+//    card that leaves at each tap, a wrong PIN, the PIN on its way when the
+//    card leaves (never sent again by itself), NFC turned off after step 2,
+//    the app in the background and back, the 5 minutes (the emulator's clock
+//    is moved), the app ended by the system. Then the minimum app version
+//    (the sentence above step 1 before its start date, the screen in place
+//    of step 1 from it on, a field that cannot be read, a config that does
+//    not come) and a phone without NFC.
+// 7. The operator stops taking card proofs, and takes them again (#394, #402;
 //    app-backend.ts's PUT /__app-test/paused), before the first declaration:
 //    the app opened while stopped (step 1's sentence in place of 下一步);
 //    stopped after step 1, so that challenges answers paused, then records
 //    does (stops.paused, and only 回到開頭); taken again, the first
 //    declaration goes through.
-//
-// What stops a card proof (a card that left, a wrong PIN, the 5 minutes, an
-// old version) is not here: issue #171.
 import { execFileSync } from "node:child_process";
 import { createPrivateKey } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -159,6 +167,13 @@ const otherCard = JSON.stringify({ certificates: [...backend.certificates].rever
 /** The card that was read, but the secure channel cannot be made with it: it stops before any PIN goes (card/GpkiCard.kt makes the channel while it reads). */
 const cardWithoutChannel = JSON.stringify({ certificates: backend.certificates, key, pin: PIN, pause_ms: 0, no_channel: true });
 
+/** The card that was read, leaving the phone at `where` (src/fake/…/FakeCard.kt): while it is read, while the PIN is on its way, or after it took the PIN. */
+const leaving = (where: "reading" | "pin" | "signing"): string => JSON.stringify({ certificates: backend.certificates, key, pin: PIN, pause_ms: 0, leaves: where });
+/** In place of a card: the phone's NFC is turned off, or the phone has none. */
+const nfc = (what: "off" | "none"): string => JSON.stringify({ nfc: what });
+/** A PIN the card does not take, as long as the card's. */
+const WRONG_PIN = /^0+$/.test(PIN) ? "1".repeat(PIN.length) : "0".repeat(PIN.length);
+
 /** The date in Taiwan `days` after the day the back end's clock starts on. */
 const dayAfter = (days: number): string => new Date(Date.parse(backend.now) + 8 * 3600_000 + days * 86_400_000).toISOString().slice(0, 10);
 const today = dayAfter(0);
@@ -177,6 +192,13 @@ const waitingTaps: ServerResponse[] = [];
 let taps = 0;
 /** How many times a card was handed a PIN (src/fake/…/FakeCard.kt tells). */
 let pinsHanded = 0;
+/** Whether the phone the app is on has NFC (src/fake/…/FakeCard.kt asks once, when the app opens). */
+let phoneHasNfc = true;
+/**
+ * What the app gets as the config's `min_app` in place of the back end's: a value, or "unanswered" for a config that does not
+ * come. Undefined: the back end's own.
+ */
+let minApp: { value: unknown } | "unanswered" | undefined;
 /** What the app's requests called themselves (User-Agent), each once. */
 const userAgents = new Set<string>();
 /** Holds a card to the phone: answers the tap the app is waiting with. */
@@ -192,6 +214,8 @@ const front = createServer(async (req, res) => {
   try {
     const path = (req.url ?? "/").split("?")[0]!;
     if (path === "/__test/issuers") return void res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(backend.issuers));
+    if (path === "/__test/phone") return void res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ nfc: phoneHasNfc }));
+    if (path === "/api/v1/config" && minApp === "unanswered") return void req.socket.destroy();
     if (path === "/__test/pin") {
       pinsHanded++;
       return void res.writeHead(200).end();
@@ -217,7 +241,10 @@ const front = createServer(async (req, res) => {
       // The body is sent as this server has it, whatever the back end's server did to send it.
       if (!["content-encoding", "transfer-encoding", "content-length", "connection"].includes(name)) sent[name] = value;
     });
-    res.writeHead(answer.status, sent).end(Buffer.from(await answer.arrayBuffer()));
+    let body = Buffer.from(await answer.arrayBuffer());
+    const given = minApp;
+    if (path === "/api/v1/config" && typeof given === "object" && answer.status === 200) body = Buffer.from(JSON.stringify({ ...(JSON.parse(body.toString("utf8")) as object), min_app: given.value }));
+    res.writeHead(answer.status, sent).end(body);
   } catch (e) {
     res.writeHead(502).end(String(e));
   }
@@ -303,6 +330,17 @@ function wholeScreen(): string[] {
     emulator.scrollDown();
   }
   return [...seen];
+}
+
+/** Scrolls the step back to its top. */
+function toTop(): void {
+  let before = "";
+  for (let i = 0; i < 12; i++) {
+    const now = JSON.stringify(visible().map((n) => [n.text, n.top]));
+    if (now === before) break;
+    before = now;
+    emulator.scrollUp();
+  }
 }
 
 /** Finds a node, scrolling for it: down to the end of the step, then back up to its top. */
@@ -630,11 +668,13 @@ const backToApp = async (n: number): Promise<void> => {
 const HUNG = say("done.hung", { open_proof: say("done.open_proof") });
 const LOOK = say("hang.look", { open_proof: say("done.open_proof") });
 const WHY = say("hang.why_single");
+/** The button of step 6 that opens the profile: its short words, beside 複製證明連結. A screen reader reads done.open_profile, with the account. */
+const OPEN = say("hang.open_threads", { platform: THREADS });
 /** What only the whole step 6 has. */
-const wholeHang = (account: string): string[] => [
+const wholeHang = (_account: string): string[] => [
   say("hang.title_single", { platform: THREADS }),
   say("hang.copy"),
-  say("done.open_profile", { account, platform: THREADS }),
+  OPEN,
   say("done.step_edit"),
   say("done.step_link"),
   say("done.step_add"),
@@ -657,12 +697,47 @@ const neverAfter = (account: string): string[] => [
   say("done.return_note"),
 ];
 
+/** Where IAMREAL_RECORD says to keep a recording of step 6's demonstration, played once from its start (android/README.md). */
+const RECORD = process.env.IAMREAL_RECORD;
+
+/**
+ * The demonstration of step 6 (design/copy/card-proof.md, "示範"): to a screen reader one element with its one sentence; under it one
+ * button, 停止 while it plays and 再看一次 otherwise. It plays by itself once it is on the screen; 停止 goes straight to its last frame.
+ * Leaves it stopped, at its last frame. `record`: with IAMREAL_RECORD set, it is played once more from its start and recorded.
+ */
+async function demonstration(record: boolean): Promise<void> {
+  const picture = find((n) => n.id === "hang-demo", "the demonstration of step 6");
+  check(picture.description === say("app_demo.hang"), `step 6's demonstration reads as its one sentence of the copy ("${picture.description.slice(0, 20)}…")`);
+  const [stop, replay] = [say("app_demo.stop"), say("app_demo.replay")];
+  // On the screen it has started; a test that got here late finds it played out, and plays it again.
+  field("hang-demo-button");
+  const says = (label: string): boolean => textsOf(visible()).includes(label);
+  if (says(replay)) {
+    press(replay);
+    await waitText(stop, "the demonstration playing again", 10_000);
+  }
+  check(says(stop) && !says(replay), "step 6: while the demonstration plays its button says 停止");
+  press(stop);
+  await waitText(replay, "the demonstration stopped", 10_000);
+  check(says(replay) && !says(stop), "step 6: 停止 stops the demonstration, and its button says 再看一次");
+  if (record && RECORD !== undefined) {
+    // The emulator's own recording, from the host: the one inside it cannot read the screen (no hardware encoder).
+    emulator.adb("emu", "screenrecord", "start", "--fps", "60", "--bit-rate", "12M", "--time-limit", "40", RECORD);
+    await sleep(1_000);
+    press(replay);
+    await sleep(23_000);
+    emulator.adb("emu", "screenrecord", "stop");
+    await waitText(replay, "the demonstration played to its end", 10_000);
+    check(true, `step 6: the demonstration played to its end by itself, recorded as ${RECORD}`);
+  }
+}
+
 /**
  * Step 6 (design/copy/card-proof.md, "6. 掛上去", app). `short`: a card proof again, asked only whether the link is still there, then
  * 沒有看到連結，重新掛上 for the whole of it. `newCard`: the card's first record. `buttons`: presses what opens something outside the app.
  * Leaves the whole step 6 on the screen.
  */
-async function hangStep(o: { name: string; shortId: string; account: string; date: string; short: boolean; newCard: boolean; buttons?: boolean; design?: string }): Promise<void> {
+async function hangStep(o: { name: string; shortId: string; account: string; date: string; short: boolean; newCard: boolean; buttons?: boolean; design?: string; record?: boolean }): Promise<void> {
   const link = `${SITE}/p/${o.shortId}`;
   const recorded = say("done.recorded_on", { date: o.date });
   if (o.short) {
@@ -678,10 +753,29 @@ async function hangStep(o: { name: string; shortId: string; account: string; dat
     press(say("hang.rehang"));
     await waitText(say("hang.copy"), "the whole step 6, after 沒有看到連結，重新掛上", 10_000);
   }
+  await demonstration(o.record === true);
+  toTop();
   shot(`step-6-${o.name}`);
   if (o.design !== undefined) await designShot(o.design);
   const s = wholeScreen();
-  shows(s, "step 6", [step(6), recorded, ...wholeHang(o.account), WHY, link, say("common.next"), ...(o.newCard ? [say("hang.new_card")] : [])]);
+  shows(s, "step 6", [step(6), recorded, ...wholeHang(o.account), WHY, link, say("app_demo.replay"), say("common.next"), ...(o.newCard ? [say("hang.new_card")] : [])]);
+  // The words drawn in the demonstration are not read: a screen reader gets its one sentence, and the four steps in words.
+  check(!s.includes(say("app_demo_hang.kick_profile")) && !s.includes(say("app_demo_hang.press")), "step 6: what is drawn in the demonstration is not read");
+  {
+    // The two buttons side by side, above the demonstration.
+    // All three as one look at the screen has them, from the step's top: the picture starts under the buttons, and may go on below the screen.
+    toTop();
+    const now = visible();
+    const copy = now.find((n) => n.text === say("hang.copy"));
+    const open = now.find((n) => n.text === OPEN);
+    const picture = now.find((n) => n.id === "hang-demo");
+    if (check(copy !== undefined && open !== undefined && picture !== undefined, "step 6: the two buttons and the top of the demonstration are on the screen together")) {
+      check(Math.abs(copy!.y - open!.y) < 40 && copy!.x < open!.x, `step 6: 複製證明連結 and 打開 Threads are side by side (${copy!.x},${copy!.y} and ${open!.x},${open!.y})`);
+      check(copy!.bottom < picture!.top && open!.bottom < picture!.top, "step 6: the two buttons are above the demonstration");
+      const told = say("done.open_profile", { account: o.account, platform: THREADS });
+      check(open!.description === told, `step 6: 打開 Threads reads to a screen reader as "${told}" ("${open!.description}")`);
+    }
+  }
   check(!s.includes(app("settings.open")), "step 6 has no 設定 in its header");
   const absent = [say("common.back"), say("hang.rehang"), say("done.withdrawn_link"), say("done.share", { platform: THREADS }), say("app_done.reminder_title"), say("finish.done"), ...(o.newCard ? [] : [say("hang.new_card")]), ...neverAfter(o.account)];
   for (const a of absent) check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);
@@ -689,7 +783,7 @@ async function hangStep(o: { name: string; shortId: string; account: string; dat
     press(say("hang.copy"));
     await waitText(say("done.copied"), "the button after the link was copied", 10_000);
     check(true, "step 6: 複製證明連結 turns into 已複製");
-    press(say("done.open_profile", { account: o.account, platform: THREADS }));
+    press(OPEN);
     await sleep(2_000);
     check(onTop().includes(`dat=https://www.threads.com/${o.account}`), `step 6: 打開 ${o.account} 的 Threads 個人檔案 opens https://www.threads.com/${o.account} outside the app`);
     await backToApp(6);
@@ -760,8 +854,9 @@ async function anotherCardThenCancel(): Promise<void> {
   await hold(otherCard);
   await waitText(say("app_stops.other_card"), "step 3: the sentence for another card", 20_000);
   check(pinsHanded === 0, "step 3: the other card was not handed the PIN");
-  // The PIN is still in the field: the same tap again, with the card that was read.
-  press(say("pin.confirm_card"));
+  // The PIN is kept: the same tap again, with the card that was read.
+  check(!textsOf(visible()).includes(say("pin.confirm_card")), "step 3, another card: the button is 再感應一次, not 確認卡片");
+  press(say("app_read.tap_again"));
   await tap();
   await waitText(step(4), "step 4", 120_000);
   check(pinsHanded === 1, "step 3: the card that was read was handed the PIN, once");
@@ -829,6 +924,356 @@ async function noSecureChannel(): Promise<void> {
   press(say("accounts.restart"));
   await waitText(step(1), "step 1 again, after 回到開頭", 20_000);
   check(waitingTaps.length === 0, "step 5, no secure channel: 回到開頭 goes back to step 1, with no tap waiting");
+  taps = 0;
+}
+
+/** The app out of sight and back in front, where it was left. */
+async function awayAndBack(): Promise<void> {
+  emulator.shell("input keyevent KEYCODE_HOME");
+  await sleep(1_500);
+  emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
+  await sleep(1_000);
+}
+
+/** The emulator's clock alone, in seconds since 1970: the back end's is left as it is. */
+const emulatorNow = (): number => Number(emulator.shell("date +%s").trim());
+
+/**
+ * What interrupts a card proof, before any record (issue #171; design/copy/card-proof.md, the app's stops of steps 2, 3 and 5): each
+ * tap is made again alone, and the PIN is sent again only when the card took it once.
+ */
+async function interruptions(): Promise<void> {
+  console.log("\na card that leaves, a wrong PIN, NFC turned off, the background, the 5 minutes, the app ended");
+  const again = say("app_read.tap_again");
+  await waitText(step(1), "step 1");
+  press(say("common.next"));
+  await waitText(step(2), "step 2");
+
+  // Tap 1: the card leaves while it is read.
+  press(say("app_read.tap_card"));
+  await hold(leaving("reading"));
+  await waitText(say("app_stops.read_dropped"), "step 2: the sentence for a card that left", 20_000);
+  shows(wholeScreen(), "step 2, the card left,", [say("common.halted"), again]);
+  press(again);
+  await tap();
+  await waitText(say("app_read.lift"), "step 2's list to end, at the tap made again", 120_000);
+  press(say("common.next"));
+  await waitText(step(3), "step 3");
+
+  // A PIN the card does not take: gone, typed again.
+  let handed = pinsHanded;
+  emulator.tap(field("pin"));
+  emulator.type(WRONG_PIN);
+  press(say("pin.confirm_card"));
+  await tap();
+  await waitText(say("pin.pin_incorrect"), "step 3: the sentence for a wrong PIN", 20_000);
+  check(field("pin").text === "" && pinsHanded === handed + 1, "step 3, a wrong PIN: the field is empty, the card was handed it once");
+  check(!textsOf(visible()).includes(again), "step 3, a wrong PIN: no 再感應一次");
+
+  // The card leaves while the PIN is on its way, and never took a PIN before: not sent again, typed again.
+  handed = pinsHanded;
+  emulator.tap(field("pin"));
+  emulator.type(PIN);
+  press(say("pin.confirm_card"));
+  await hold(leaving("pin"));
+  await waitText(say("app_stops.pin_maybe_received"), "step 3: the sentence for a PIN that may have reached the card", 20_000);
+  await sleep(2_000);
+  {
+    const s = textsOf(visible());
+    check(pinsHanded === handed + 1 && waitingTaps.length === 0, "step 3, the PIN on its way: handed once, and the app waits for no card by itself");
+    check(field("pin").text === "" && !s.includes(again), "step 3, the PIN on its way: the field is empty, no 再感應一次");
+  }
+  press(say("pin.confirm_card"));
+  await waitText(say("app_pin.need_pin"), "step 3: the sentence for an empty PIN, after the PIN was dropped", 10_000);
+  check(waitingTaps.length === 0, "step 3, the PIN on its way: 確認卡片 without a PIN brings no tap");
+
+  // The card took the PIN, then left: the PIN is kept, the tap is made again.
+  emulator.tap(field("pin"));
+  emulator.type(PIN);
+  press(say("pin.confirm_card"));
+  await hold(leaving("signing"));
+  await waitText(say("app_stops.dropped_pin_kept"), "step 3: the sentence for a card that left after the PIN", 20_000);
+  {
+    const s = wholeScreen();
+    shows(s, "step 3, the card left after the PIN,", [again, say("common.back")]);
+    check(!s.includes(say("pin.confirm_card")), "step 3, the card left after the PIN: 再感應一次 in the place of 確認卡片");
+  }
+  // In the background and back within the 5 minutes: as it was left.
+  await awayAndBack();
+  await waitText(again, "step 3 again, after the background, with 再感應一次", 20_000);
+  // 取消 on the panel of the tap made again: the PIN stays kept, 確認卡片 and an open field do not come back.
+  press(again);
+  await waitText(say("app_panel.android_wait_title"), "the panel of the tap made again");
+  press(say("common.cancel"));
+  for (let i = 0; i < 50 && waitingTaps.length > 0; i++) await sleep(100);
+  await waitText(again, "step 3 again, after 取消 on the panel", 10_000);
+  check(!textsOf(visible()).includes(say("pin.confirm_card")), "step 3, the PIN kept, 取消 on the panel: still 再感應一次, not 確認卡片");
+  // NFC turned off since step 2: no PIN goes, the tap is made again.
+  handed = pinsHanded;
+  press(again);
+  await hold(nfc("off"));
+  await waitText(say("app_stops.nfc_off_tap"), "step 3: the sentence for NFC turned off", 20_000);
+  press(again);
+  await hold(otherCard);
+  await waitText(say("app_stops.other_card"), "step 3: the sentence for another card, at the tap made again", 20_000);
+  check(pinsHanded === handed, "step 3: with NFC off, and with another card, no PIN was handed over");
+  // The card leaves while the PIN is on its way again; it took this PIN before, so the PIN is kept.
+  press(again);
+  await hold(leaving("pin"));
+  await waitText(say("app_stops.dropped_pin_kept"), "step 3: a PIN the card took before is kept when the card leaves as it is sent", 20_000);
+  check(textsOf(visible()).includes(again), "step 3: 再感應一次 again");
+  press(again);
+  await tap();
+  await waitText(step(4), "step 4, with the PIN typed once since it was last dropped", 120_000);
+  check(pinsHanded === handed + 2, "step 3: the PIN in memory was handed to the card at each tap made again");
+
+  // Tap 3.
+  emulator.tap(field("account-threads"));
+  emulator.type("alice");
+  hideKeyboard();
+  press(say("common.next"));
+  await waitText(say("confirm.title"), "step 5");
+  press(say("confirm.button_declare_single"));
+  await waitText(say("progress.title"), "step 5, in progress");
+  await hold(leaving("signing"));
+  await waitText(say("app_stops.dropped"), "step 5: the sentence for a card that left", 20_000);
+  shows(wholeScreen(), "step 5, the card left,", [step(5), say("common.halted"), again, say("common.cancel")]);
+  handed = pinsHanded;
+  press(again);
+  await hold(otherCard);
+  await waitText(say("app_stops.other_card_declare"), "step 5: the sentence for another card", 20_000);
+  press(again);
+  await hold(nfc("off"));
+  await waitText(say("app_stops.nfc_off_tap"), "step 5: the sentence for NFC turned off", 20_000);
+  check(pinsHanded === handed, "step 5: with another card, and with NFC off, no PIN was handed over");
+  press(again);
+  await hold(leaving("pin"));
+  await waitText(say("app_stops.dropped"), "step 5: the card leaving as the PIN is sent is a card that left", 20_000);
+  {
+    const s = wholeScreen();
+    check(s.includes(again) && !s.includes(say("accounts.restart")), "step 5, the card left as the PIN was sent: 再感應一次, the PIN is kept");
+  }
+
+  // More than 5 minutes since the second tap: the PIN is dropped, back to step 1, which says why.
+  const before = emulatorNow();
+  const started = Date.now();
+  emulator.shell(`date @${before + 6 * 60}`);
+  await awayAndBack();
+  await waitText(say("app_before.idle"), "step 1 with the sentence of the 5 minutes", 20_000);
+  {
+    const nodes = visible();
+    const top = (text: string): number => nodes.find((n) => n.text === text)?.top ?? Number.NaN;
+    check(top(say("app_before.idle")) < top(step(1)), "step 1, after the 5 minutes: the sentence is above everything of the step");
+  }
+  shot("step-1-idle");
+  emulator.shell(`date @${before + Math.round((Date.now() - started) / 1000)}`);
+  press(say("common.next"));
+  await waitText(step(2), "step 2");
+  press(say("app_read.tap_card"));
+  await tap();
+  await waitText(say("app_read.lift"), "step 2's list to end", 120_000);
+  press(say("common.next"));
+  await waitText(step(3), "step 3");
+  check(field("pin").text === "", "after the 5 minutes: the PIN is typed again");
+  // The 5 minutes count from the PIN's first character: a PIN left in the field that long is not handed to a card.
+  emulator.tap(field("pin"));
+  emulator.type(PIN);
+  {
+    const at = emulatorNow();
+    const since = Date.now();
+    handed = pinsHanded;
+    emulator.shell(`date @${at + 6 * 60}`);
+    press(say("pin.confirm_card"));
+    await waitText(say("app_before.idle"), "step 1 with the sentence of the 5 minutes, from a PIN left in the field", 20_000);
+    check(waitingTaps.length === 0 && pinsHanded === handed, "a PIN left in the field for 5 minutes: 確認卡片 waits for no card, no PIN handed over");
+    emulator.shell(`date @${at + Math.round((Date.now() - since) / 1000)}`);
+  }
+  press(say("common.next"));
+  await waitText(step(2), "step 2");
+  press(say("app_read.tap_card"));
+  await tap();
+  await waitText(say("app_read.lift"), "step 2's list to end", 120_000);
+  press(say("common.next"));
+  await waitText(step(3), "step 3");
+  emulator.tap(field("pin"));
+  emulator.type(PIN);
+  press(say("pin.confirm_card"));
+  await tap();
+  await waitText(step(4), "step 4", 120_000);
+
+  // In the background and back within the 5 minutes of the PIN: step 4 as it was left, and the last tap is made with the PIN in memory.
+  await awayAndBack();
+  await waitText(step(4), "step 4 again, after the background", 20_000);
+  check(!textsOf(visible()).includes(say("app_before.idle")), "step 4, back within the 5 minutes: nothing dropped");
+  emulator.tap(field("account-threads"));
+  emulator.type("alice");
+  hideKeyboard();
+  press(say("common.next"));
+  await waitText(say("confirm.title"), "step 5");
+  // The last tap, with a card that does not take this PIN (its PIN was changed since the second tap): the card proof is over.
+  handed = pinsHanded;
+  press(say("confirm.button_declare_single"));
+  await waitText(say("progress.title"), "step 5, in progress");
+  await hold(JSON.stringify({ certificates: backend.certificates, key, pin: WRONG_PIN, pause_ms: 0 }));
+  await waitText(say("pin.pin_incorrect"), "step 5: the sentence for a PIN the card refuses", 20_000);
+  {
+    const s = wholeScreen();
+    check(pinsHanded === handed + 1, "step 5, back from the background: the PIN in memory was handed to the card");
+    check(s.includes(say("accounts.restart")) && !s.includes(again), "step 5, a PIN the card refuses: only 回到開頭");
+  }
+  press(say("accounts.restart"));
+  await waitText(step(1), "step 1 again, after 回到開頭", 20_000);
+  press(say("common.next"));
+  await waitText(step(2), "step 2");
+  press(say("app_read.tap_card"));
+  await tap();
+  await waitText(say("app_read.lift"), "step 2's list to end", 120_000);
+  press(say("common.next"));
+  await waitText(step(3), "step 3");
+  emulator.tap(field("pin"));
+  emulator.type(PIN);
+  press(say("pin.confirm_card"));
+  await tap();
+  await waitText(step(4), "step 4", 120_000);
+
+  // The app ended by the system, with a PIN in memory: from step 1, with nothing said.
+  emulator.shell(`am force-stop ${APP}`);
+  emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
+  await waitText(step(1), "step 1, after the app was ended", 20_000);
+  check(!textsOf(visible()).includes(say("app_before.idle")), "the app ended and opened again: step 1, without the sentence of the 5 minutes");
+  check(waitingTaps.length === 0, "the app ended and opened again: it waits for no card");
+  taps = 0;
+}
+
+/** Android's store, as the copy's {store} (design/copy/card-proof.md). */
+const STORE = "Google Play";
+const STORE_PAGE = "dat=https://play.google.com/store/apps/details?id=tw.iamreal.app";
+
+/**
+ * The minimum app version and a phone without NFC (issue #171; ADR-0035; design/copy/card-proof.md, "1. 開始之前", app). The fake
+ * build is build 1; the test writes the `min_app` the app is given.
+ */
+async function oldVersionAndNoNfc(): Promise<void> {
+  console.log("\nthe minimum app version, a config that cannot be read or does not come, a phone without NFC");
+  const bound = (from: string): { value: unknown } => ({ value: { android: { build: 2, from }, ios: { build: 1, from: today } } });
+  const soon = say("app_before.update_soon", { min_app_from: tomorrow, store: STORE });
+  const update = say("app_before.update", { store: STORE });
+  const domain = `127.0.0.1:${DEVICE_PORT}`;
+  await waitText(step(1), "step 1");
+  check(!textsOf(visible()).includes(update), "step 1, a build the config takes: nothing about updating");
+
+  // Older than the minimum, before its start date: said above step 1, and the card proof goes on.
+  minApp = bound(tomorrow);
+  await awayAndBack();
+  await waitText(soon, "step 1 with the sentence of the minimum version", 20_000);
+  {
+    const nodes = visible();
+    const top = (text: string): number => nodes.find((n) => n.text === text)?.top ?? Number.NaN;
+    check(top(soon) < top(step(1)), "step 1, before the start date: the sentence is above everything of the step");
+    shows(wholeScreen(), "step 1, before the start date,", [soon, update, step(1), say("before.title"), say("common.next")]);
+  }
+  shot("step-1-update-soon");
+  press(update);
+  await sleep(2_000);
+  check(onTop().includes(STORE_PAGE), "step 1, before the start date: the button opens the app's page of Google Play outside the app");
+  await backToApp(1);
+
+  // The start date comes with step 1 on the screen: the tap of step 2 is not made, and step 1 is replaced.
+  const before = emulatorNow();
+  const started = Date.now();
+  emulator.shell(`date @${Math.floor(Date.parse(`${tomorrow}T00:00:30+08:00`) / 1000)}`);
+  press(say("common.next"));
+  await waitText(step(2), "step 2");
+  press(say("app_read.tap_card"));
+  await waitText(say("app_before.too_old_title"), "the screen in place of step 1, from step 2", 20_000);
+  check(waitingTaps.length === 0, "from the start date: step 2 stops before it waits for a card");
+  emulator.shell(`date @${before + Math.round((Date.now() - started) / 1000)}`);
+  await awayAndBack();
+  await waitText(soon, "step 1 again, the clock back before the start date", 20_000);
+
+  // The start date comes after the card was read: step 3 asks no card for the PIN.
+  press(say("common.next"));
+  await waitText(step(2), "step 2");
+  press(say("app_read.tap_card"));
+  await tap();
+  await waitText(say("app_read.lift"), "step 2's list to end, before the start date", 120_000);
+  press(say("common.next"));
+  await waitText(step(3), "step 3");
+  {
+    const at = emulatorNow();
+    const since = Date.now();
+    const handedBefore = pinsHanded;
+    // Before the PIN is typed: its own 5 minutes are not what stops this tap.
+    emulator.shell(`date @${Math.floor(Date.parse(`${tomorrow}T00:00:30+08:00`) / 1000)}`);
+    emulator.tap(field("pin"));
+    emulator.type(PIN);
+    press(say("pin.confirm_card"));
+    await waitText(say("app_before.too_old_title"), "the screen in place of step 1, from step 3", 20_000);
+    check(waitingTaps.length === 0 && pinsHanded === handedBefore, "from the start date: step 3 stops before it waits for a card, no PIN handed over");
+    emulator.shell(`date @${at + Math.round((Date.now() - since) / 1000)}`);
+  }
+  await awayAndBack();
+  await waitText(soon, "step 1 again, the clock back before the start date", 20_000);
+
+  // From the start date on: step 1 is replaced, nothing of a card proof can be reached.
+  minApp = bound(today);
+  await awayAndBack();
+  await waitText(say("app_before.too_old_title"), "the screen in place of step 1", 20_000);
+  {
+    const s = wholeScreen();
+    shows(s, "an old version", [say("app_before.too_old", { min_app_from: today }), say("app_before.nothing_sent"), update, say("app_before.or_reader", { domain })]);
+    check(![step(1), say("before.title"), say("common.next"), say("app_read.tap_card")].some((x) => s.includes(x)), "an old version: no step, no 下一步");
+  }
+  shot("step-1-too-old");
+  press(update);
+  await sleep(2_000);
+  check(onTop().includes(STORE_PAGE), "an old version: the button opens the app's page of Google Play outside the app");
+  emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
+  await waitText(say("app_before.too_old_title"), "the app again, still replaced", 20_000);
+
+  // A minimum version the app cannot read: step 1 as usual, and step 2 stops before the card, as for any config it cannot read.
+  minApp = { value: "2" };
+  await awayAndBack();
+  await waitText(step(1), "step 1, with a minimum version that cannot be read", 20_000);
+  press(say("common.next"));
+  await waitText(step(2), "step 2");
+  press(say("app_read.tap_card"));
+  await waitText(say("stops.server_unreadable", { code: "malformed_response" }), "step 2: the sentence for a config that cannot be read", 20_000);
+  check(waitingTaps.length === 0, "a minimum version that cannot be read: step 2 stops before it waits for a card");
+  // A config that does not come.
+  minApp = "unanswered";
+  press(say("app_read.restart"));
+  await waitText(say("stops.server_unreadable", { code: "network" }), "step 2: the sentence for a server that does not answer", 40_000);
+  check(waitingTaps.length === 0, "a config that does not come: step 2 stops before it waits for a card");
+  // The back end's own again: the card is read.
+  minApp = undefined;
+  press(say("app_read.restart"));
+  await tap();
+  await waitText(say("app_read.lift"), "step 2's list to end, with the back end's own config", 120_000);
+  press(say("common.back"));
+  await waitText(step(1), "step 1");
+
+  // A phone whose NFC is not there when the card is asked for: step 1 is replaced.
+  press(say("common.next"));
+  await waitText(step(2), "step 2");
+  press(say("app_read.tap_card"));
+  await hold(nfc("none"));
+  await waitText(say("app_before.no_nfc_title"), "the screen in place of step 1, from step 2", 20_000);
+  // A phone without NFC, as the app opens.
+  phoneHasNfc = false;
+  emulator.shell(`am force-stop ${APP}`);
+  emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
+  await waitText(say("app_before.no_nfc_title"), "the screen in place of step 1, as the app opens", 20_000);
+  {
+    const s = wholeScreen();
+    shows(s, "a phone without NFC", [say("app_before.no_nfc"), say("app_before.no_nfc_reader", { domain })]);
+    check(![step(1), say("before.title"), say("common.next"), say("app_read.tap_card")].some((x) => s.includes(x)), "a phone without NFC: no step, no 下一步");
+  }
+  shot("step-1-no-nfc");
+  phoneHasNfc = true;
+  emulator.shell(`am force-stop ${APP}`);
+  emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
+  await waitText(step(1), "step 1, on a phone with NFC", 20_000);
   taps = 0;
 }
 
@@ -1057,6 +1502,8 @@ try {
 
   await anotherCardThenCancel();
   await noSecureChannel();
+  await interruptions();
+  await oldVersionAndNoNfc();
   // Card proofs stopped and taken again (#394, #402): the first declaration below is the card proof that goes through after.
   await stoppedTakingCardProofs();
 
@@ -1073,7 +1520,7 @@ try {
   });
 
   // Step 6, the whole of it: the card's first record. Then the reminder, offered; then step 8.
-  await hangStep({ name: "first", shortId, account: HANDLE.alice, date: today, short: false, newCard: true, buttons: true, design: "card-proof-app-6-hang-phone.png" });
+  await hangStep({ name: "first", shortId, account: HANDLE.alice, date: today, short: false, newCard: true, buttons: true, design: "card-proof-app-6-hang-phone.png", record: true });
   press(say("common.next"));
   await reminderOffered(shortId);
   press(say("common.next"));
@@ -1217,7 +1664,7 @@ try {
 console.log(failures === 0 ? "\nall passed" : `\n${failures} failed`);
 process.exit(failures === 0 ? 0 : 1);
 
-// 6. Card proofs stopped ---------------------------------------------------------------
+// 7. Card proofs stopped ---------------------------------------------------------------
 // (Called in section 4, before the first declaration.)
 
 /** The operator stops taking card proofs, or takes them again: the back end's setting (app-backend.ts, PUT /__app-test/paused). */

@@ -6,9 +6,17 @@
 
 過卡的提醒和設定頁（[#297](https://github.com/iamreal-tw/iamreal/issues/297)，「過卡提醒」）：第 7 步問要不要提醒，手機自己排本機通知；第 1 步和第 8 步的頁首有「設定」。字來自 `design/copy/app.json` 和 `card-proof.json`。
 
+過卡被打斷時（[#171](https://github.com/iamreal-tw/iamreal/issues/171)），句子都在 `design/copy/card-proof.md` 各步的「app」，哪一個原因說哪一句在 `ui/Messages.kt`：
+
+- **卡片離開、NFC 被關掉、換了卡**：只重做那一次感應（「再感應一次」）。第 3 步這時 PIN 欄位不能改，用的是記憶體裡的 PIN
+- **送 PIN 時掉線**：卡片從來沒有接受過這個 PIN 時，app 不重送，清掉 PIN，請持卡人再輸入。卡片回了 app 不認得的答覆時也一樣。卡片接受過（之後才掉線）的，PIN 是對的，留著重送：`card/Card.kt` 的 `pinAccepted`，`flow/CardProof.kt` 的 `sign`
+- **PIN 不正確**：清掉 PIN，第 3 步重新輸入；發生在第三次感應時回到開頭
+- **PIN 在手機上滿 5 分鐘**：從 PIN 的第一個字進到欄位算起（還在欄位裡的也算），清掉 PIN 和做到一半的過卡，回到第 1 步，最上面寫原因。app 切到背景再回來時、按「確認卡片」和最後一次感應之前各看一次時間；已經在等卡片的那一次感應會做完。手機的時鐘往回調不會延長
+- **最低版本**（`config` 的 `min_app`，ADR-0035、`spec/min-app.md`）：怎麼判斷在核心（`idc_min_app`），拿 app 自己的 `versionCode` 和手機的時鐘去問。打開 app、每次回到第 1 步都看：比最低版本舊、還沒到起算日，第 1 步最上面提醒，照常過卡；起算日當天起整個第 1 步換掉，只剩開 Google Play 的按鈕。三次感應之前各再看一次（`flow/CardProof.kt` 的 `checkMinApp`）：過卡做到一半到了起算日，也在等卡片之前停下。這一欄讀不懂時不往下，和平台表讀不懂相同
+- **沒有 NFC 的手機**：整個第 1 步換掉。NFC 只是關著的，在按了「感應卡片」之後說，給開系統設定的按鈕
+
 還沒有的：
 
-- **中斷和錯誤**（[#171](https://github.com/iamreal-tw/iamreal/issues/171)）：掉線重來、送 PIN 時掉線、換了卡、PIN 不正確、5 分鐘的各種回來的路、最低版本（`min_app`）和沒有 NFC 的畫面。現在遇到這些會停下來並寫出 `design/copy/` 已經有的那一句；app 的句子還沒寫的情況只寫「停在這裡」。`config` 的 `min_app` 現在還沒有讀
 - 正式的圖示（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。現在是暫時的：一整片網站的青色（`#226977`，`web/src/ui/style.css` 的 `--teal`），沒有字、沒有圖案，和 iOS 的暫時圖示相同（`app/src/main/res/mipmap-anydpi/ic_launcher.xml`）
 - 第 2 步示意圖的位置還沒有在真手機上實測過（[#153](https://github.com/iamreal-tw/iamreal/issues/153)）：卡片貼在背面的中間，是設計交接時定的
 
@@ -50,6 +58,19 @@
 - **接收器不讓別的 app 叫**（`exported="false"`）：鬧鐘到了、通知上的「一週後再提醒我」、系統的三種廣播。打開 app 的畫面是對外開放的（主畫面要叫得到它），所以別的 app 也能用通知的那個方式打開它：得到的只有第 1 步上方那一段字
 - **測試**：日子怎麼算、存什麼、關掉後留下什麼，是單元測試（`app/src/test/…/reminder/`，假的鬧鐘和記憶體裡的儲存）；第 7 步說哪幾句是 `RemindViewTest`，第 6、第 8 步是 `DoneViewTest`。模擬器上的過卡測試走過第 7 步的「這次不要」「開啟提醒」和提醒已經開著的樣子、選間隔和時刻、設定頁，把模擬器的時鐘撥到提醒的時刻，看通知的字、按「一週後再提醒我」、點通知進第 1 步，最後關掉提醒，確認 app 的儲存裡不剩提醒的東西
 
+## 第 6 步的示範
+
+第 6 步「複製證明連結」和打開個人檔案的按鈕下面，是一段會動的示範（[#373](https://github.com/iamreal-tw/iamreal/issues/373)，`design/copy/card-proof.md`「示範」）：五個示意畫面排成一列，鏡頭從按「複製證明連結」一路帶到個人檔案多出來的那一行，帳號和網址是這張島民證明自己的。和網頁 `/hang/<短編號>`、iOS 播的是同一段。
+
+- **時間表是 `design/motion/hang.json`**，建置時原樣包進安裝檔（`raw/hang_motion.json`），app 不另外抄一份。Android 播的是回程按左上角 ✕ 的那一版（`variants.android`）
+- **算法是純函式**（`ui/demo/HangMotion.kt` 的 `hangStateAt`）：給時間表和秒數，算出那一刻鏡頭在哪、哪個框被標出來、哪一顆被按著、六個畫面變化各走了幾成、現在是四步裡的哪一步。不計時、不碰畫面。`HangMotionTest` 讀 `spec/vectors/teaching-animation.json` 的每一個答案，和網頁、iOS 對的是同一份
+- **畫面**（`ui/demo/HangDemo.kt`）用 Compose 自己的元件畫，不加程式庫：整列一個 `graphicsLayer`（位移加縮放），計時用系統給的每一格（`withFrameNanos`）。五個畫面上的每個框都回報過位置之後才算鏡頭，在那之前整列看不見。示意畫面裡的長度和字級是固定的 dp，不跟系統的字級：帳號最長 30 個字時留在一行，放不下的在尾端截掉
+- **什麼時候播**：大半張圖進到畫面時自己播一次，停在最後一格。下面一顆按鈕，播的時候是「停止」（直接到最後一格），停了或播完是「再看一次」。到第 7 步再回來不會從頭重播：播到一半離開的，回來接著播；app 切到背景的那段時間不算。播到哪一步，下面四步的字裡那一步標出來
+- **系統關掉動畫時照樣播**（[#369](https://github.com/iamreal-tw/iamreal/issues/369) 維護者 2026-11-26 的留言）：這段動畫是自己照每一格的時間算的，系統的那個設定本來就管不到它，app 也不去問；看的人用「停止」停下來
+- **對報讀器**整段示範是一個元素，唸 `app_demo.hang` 那一句；裡面畫的字不唸，四步的字照常唸
+- **兩顆按鈕左右並排**，在示範上面，和示範的第一個畫面相同：「複製證明連結」和「打開 Threads」。第二顆寫短的字才排得進一行，它照舊打開這個帳號的個人檔案；對報讀器唸完整的「打開 @alice 的 Threads 個人檔案」。並排時每一顆只有一半寬，按鈕得長高才放得下字的時候（系統字級放大），改成上下排（`ui/Widgets.kt` 的 `SideBySide`）
+- 模擬器上的過卡測試檢查：示範給報讀器的那一句、按鈕的兩個字樣和 `design/copy/` 逐字相同，按「停止」後變成「再看一次」，兩顆按鈕左右並排而且在示範上面，「打開 Threads」給報讀器的是帶帳號的那一句。加上 `IAMREAL_RECORD=<檔名>.webm` 時，另外把示範從頭播一次、用模擬器主機這一側的錄影存下來（模擬器裡的 `screenrecord` 讀不到畫面）
+
 ## 兩種 build
 
 同一個 app 有兩種 build（ADR-0037），識別碼不同，可以同時裝在一支手機上：
@@ -80,7 +101,7 @@
 
 | 東西 | 在哪裡 | 什麼時候清掉 |
 |---|---|---|
-| PIN | 輸入時在 `ui/Model.kt` 的 `PinField`（一個字元陣列，不是字串；輸入欄位裡只有圓點）。第二次感應成功後，`flow/CardProof.kt` 留一份位元組，等第三次感應。感應時 `card/GpkiCard.kt` 把它補成卡片要的 10 個位元組，在安全通道裡加密後送給卡片；補好的那一份送出後就蓋成零 | 第三次感應送出後、取消、停下來、卡片回 PIN 不正確、安全通道建立不起來、第二次感應後滿 5 分鐘；都是蓋成零。5 分鐘的計時在 app 的行程裡：行程在背景被系統凍結時不會跑，回到 app 的那一刻補查 |
+| PIN | 輸入時在 `ui/Model.kt` 的 `PinField`（一個字元陣列，不是字串；輸入欄位裡只有圓點）。第二次感應成功後，`flow/CardProof.kt` 留一份位元組，等第三次感應。感應時 `card/GpkiCard.kt` 把它補成卡片要的 10 個位元組，在安全通道裡加密後送給卡片；補好的那一份送出後就蓋成零 | 第三次感應送出後、取消、停下來、卡片回 PIN 不正確、安全通道建立不起來、PIN 的第一個字輸入後滿 5 分鐘；都是蓋成零。5 分鐘的計時在 app 的行程裡：行程在背景被系統凍結時不會跑，回到 app 的那一刻補查 |
 | 憑證 | 第一次感應讀到的幾張交給核心；選中的那一張 `CardProof` 留一份，第二、第三次感應拿來比對是不是同一張卡，**比對相同才把 PIN 交給卡片** | 算完證明、取消、停下來 |
 | 卡片上的姓名 | 核心回給畫面，只顯示在輸入 PIN 的畫面 | 離開過卡時 |
 | 兩個簽章 | `CardProof`，到算完證明為止 | 算完證明、取消、停下來 |
@@ -159,12 +180,13 @@ $NDK/llvm-readelf -lW app/build/intermediates/merged_native_libs/release/mergeRe
 
 `bundled.sha256` 和 `device-core/crs.sha256` 列出每一個的 SHA-256，數字和 `web/circuits/README.md`、`web/src/prover/artifacts.ts` 相同。建置時每個檔案先核對再複製（`bundleFiles`），做出安裝檔後再核對一次裡面的檔案（`checkApk`）。app 用它們之前，核心還會照寫死在 `device-core/` 的 SHA-256 再核對一次（ADR-0035）：讀完卡之後一次，算證明之前再一次。
 
-`design/` 的三個檔建置時原樣複製進安裝檔的資源（`copyDesign`，清單是 `app/build.gradle.kts` 的 `designResources`），app 的程式裡沒有給人看的句子：
+`design/` 的四個檔建置時原樣複製進安裝檔的資源（`copyDesign`，清單是 `app/build.gradle.kts` 的 `designResources`），app 的程式裡沒有給人看的句子：
 
 | 資源 | 來源 |
 |---|---|
 | `raw/card_proof_copy.json` | `design/copy/card-proof.json`：過卡畫面上的每一句話 |
 | `raw/app_copy.json` | `design/copy/app.json`：只在 app 上、不屬於過卡的字 |
+| `raw/hang_motion.json` | `design/motion/hang.json`：第 6 步示範的時間表（「第 6 步的示範」） |
 | `font/genryumin2tw_b.otf` | `design/fonts/GenRyuMin2TW-B.otf`：標題用的源流明體 TW 的子集 |
 
 做出安裝檔後 `checkApk`、`checkBundle` 確認每一個都在 `res/` 裡，而且和程式庫裡的逐位元組相同。release 的 APK 把資源換成短的名稱（例如 `res/c7.otf`），所以照內容找，不照路徑。
@@ -253,6 +275,9 @@ cd device-core && rustup target add aarch64-linux-android x86_64-linux-android &
 - 畫面用 `uiautomator dump` 讀，預期的每一句從 `design/copy/card-proof.json` 讀，逐字比對
 - 第二、第三次感應各貼一次「該放簽章憑證的位置是另一張憑證」的卡：畫面說不是同一張卡，假卡片沒有被交到 PIN
 - 第二、第三次感應各貼一次「安全通道建立不起來」的卡（[#365](https://github.com/iamreal-tw/iamreal/issues/365)）：假卡片沒有被交到 PIN。第 3 步 PIN 欄位清空，按鈕是「上一步」「確認卡片」，沒有重新輸入就按不會出現面板；第 5 步只有「回到開頭」
+- 過卡被打斷的每一種（[#171](https://github.com/iamreal-tw/iamreal/issues/171)），都在第一筆紀錄之前：假卡片在讀取途中、送 PIN 的那一刻、接受 PIN 之後離開；錯的 PIN；第 2 步之後 NFC 被關掉；切到背景再回來；把模擬器的時鐘調快 6 分鐘再回到 app（回到第 1 步，最上面寫原因，PIN 要重新輸入）；`am force-stop` 之後重開（從第 1 步來）。每一種都數假卡片被交到幾次 PIN：送 PIN 時掉線之後 app 不會自己再送
+- 最低版本：測試改寫後台 `config` 的 `min_app` 再交給 app（測試的 build 是 1）。起算日是明天時第 1 步最上面有提醒和開 Google Play 的按鈕，照常能往下；畫面停在第 1 步、把模擬器的時鐘調到起算日，第 2 步在等卡片之前就換成「這一版不能過卡了」；起算日是今天時一打開就是那個畫面，沒有「下一步」。`min_app` 讀不懂、`config` 沒有回應：第 2 步在等卡片之前停下，寫網頁版的那一句
+- 沒有 NFC 的手機：假卡片在感應時說沒有 NFC，和 app 一打開就問到沒有，兩條路都換成「這支手機不能感應卡片」
 - 隔天的兩次：把後台的時鐘和模擬器的時鐘都調到明天（測試結束時把模擬器的調回來）
 - 停止收過卡（[#394](https://github.com/iamreal-tw/iamreal/issues/394)、[#402](https://github.com/iamreal-tw/iamreal/issues/402)），在新宣告之前：`app-backend.ts` 的 `PUT /__app-test/paused` 切換後台的 `CARD_PROOFS_PAUSED`。停止時打開 app，第 1 步是 `before.paused` 那一句、沒有「下一步」；恢復後回到 app，「下一步」回來了。走到第 5 步才停止：拿題目回 `paused`（卡片沒有被交到 PIN），和題目拿到了、卡片簽了才停止而送出回 `paused`，兩次都停在那一項，寫 `stops.paused` 和請求編號，只有「回到開頭」，回到的第 1 步寫停止的那一句。恢復之後的新宣告就是「恢復之後走得完」，所以證明紀錄還是那四筆
 - 這裡的測試全過之後，`app-backend.ts` 讓 Worker 在下一個午夜公布證明紀錄，抄下資料桶，用 Go 的 `iamreal-verify`（帶 `iamrealtest` 標籤建置，才收測試的發證金鑰）和原生的 `bb` 重驗：四筆紀錄都有效，每一筆的種類是新宣告、再次過卡、更換、收回

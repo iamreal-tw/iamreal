@@ -75,6 +75,23 @@ A device clock that is wrong can make the app stop a day early or late
 around `from`. A challenge whose date is not the device's today does not
 start a card proof anyway ([`challenge.md`](challenge.md)).
 
+## Outside these rules
+
+As in [`list-consequence.md`](list-consequence.md), "Outside these rules":
+the server never sends a `config` that is not UTF-8 or begins with a byte
+order mark, an object with a key twice (anywhere in the body, the members
+that are ignored included), a string with an unpaired surrogate, a number
+beyond the range of a 64-bit float or with more digits than one holds, or
+arrays and objects nested more than 128 deep. How a client reads one is not
+defined here and the vectors have none: a JavaScript client's parser reads
+them, `device-core/` reads such a body as unreadable. Either way the app
+never goes on with a bound it did not read.
+
+A device clock outside the years 2000 to 2049 in Taiwan has no date these
+rules can compare `from` with ([`challenge.md`](challenge.md)): the app does
+not go on. `device-core/` answers such a clock as a wrong input, not as a
+verdict.
+
 ## Test vectors
 
 [`vectors/min-app.json`](vectors/min-app.json): each case is the parsed body

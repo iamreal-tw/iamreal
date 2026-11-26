@@ -14,6 +14,11 @@ struct Screens {
     let appCopy: Copy
     /// The site of this build, as a link on the screen writes it: its host.
     let host: String
+    /// The build has a page in the store that a button can open.
+    var storePage = false
+
+    /// The store the app is updated from, as the copy's `{store}` (design/copy/card-proof.md: App Store on an iPhone).
+    private static let store = "App Store"
 
     typealias Flow = CardProofFlow
 
@@ -32,10 +37,48 @@ struct Screens {
 
     // Step 1: before starting ------------------------------------------------------------------
 
+    /// The way to the app's page in the store; none in a build that has no such page yet.
+    private var update: Button? {
+        storePage ? Button(label: copy("app_before.update", ["store": Self.store]), action: .openStore) : nil
+    }
+
+    /// In the place of step 1 from the day the server's lowest version
+    /// starts on, for a build older than it (card-proof.md, step 1, "app";
+    /// ADR-0035): nothing leads to a card or a PIN. `from`: that day.
+    func tooOld(from: String) -> Screen {
+        var blocks: [Block] = [
+            .title(copy("app_before.too_old_title")),
+            .text(copy("app_before.too_old", ["min_app_from": from])),
+            .text(copy("app_before.nothing_sent")),
+        ]
+        if let update { blocks.append(.button(update, main: true)) }
+        blocks.append(.small(copy("app_before.or_reader", ["domain": host])))
+        return Screen(step: 0, blocks: blocks, settings: settingsButton)
+    }
+
+    /// In the place of step 1 on a phone that cannot read a card
+    /// (card-proof.md, step 1, "app"): nothing leads to a tap.
+    func noNFC() -> Screen {
+        Screen(
+            step: 0,
+            blocks: [.title(copy("app_before.no_nfc_title")), .text(copy("app_before.no_nfc")), .text(copy("app_before.no_nfc_reader", ["domain": host]))],
+            settings: settingsButton)
+    }
+
     /// `notice`: on top, when the app was opened from the reminder.
     /// `paused`: the operator stopped taking card proofs, as the server's
     /// config said: said in place of common.next (card-proof.md, step 1).
-    func before(notice: Notice? = nil, paused: Bool = false) -> Screen {
+    /// `updateFrom`: the day from which this version can no longer do a
+    /// card proof, for a build older than the server's lowest: said above
+    /// everything, and a card proof goes on as usual. `idle`: the card
+    /// proof came back here after five minutes.
+    func before(notice: Notice? = nil, paused: Bool = false, updateFrom: String? = nil, idle: Bool = false) -> Screen {
+        // The lowest version first, above the reminder's note too.
+        var warnings: [Notice] = []
+        if let updateFrom {
+            warnings.append(Notice(text: copy("app_before.update_soon", ["min_app_from": updateFrom, "store": Self.store]), button: update))
+        }
+        if idle { warnings.append(Notice(text: copy("app_before.idle"), button: nil)) }
         // No platform table yet: by the platforms the app has its own definition of.
         var blocks: [Block] = [
             .title(copy("before.title")),
@@ -56,8 +99,8 @@ struct Screens {
                 .action(Button(label: copy("before.how_to_get_moica"), action: .howToApply)),
             ]),
         ]
-        if paused { return Screen(step: 1, blocks: Array(blocks[..<questions]) + [.message(copy("before.paused"))] + blocks[questions...], notice: notice, settings: settingsButton) }
-        return Screen(step: 1, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .start)], notice: notice, settings: settingsButton)
+        if paused { return Screen(step: 1, blocks: Array(blocks[..<questions]) + [.message(copy("before.paused"))] + blocks[questions...], warnings: warnings, notice: notice, settings: settingsButton) }
+        return Screen(step: 1, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .start)], warnings: warnings, notice: notice, settings: settingsButton)
     }
 
     private var settingsButton: Button { Button(label: appCopy("settings.open"), action: .openSettings) }
@@ -79,8 +122,10 @@ struct Screens {
     // Step 2: reading the card ------------------------------------------------------------------
 
     /// `reached`: how many items of the list are done (0 to 4). `stop`:
-    /// why it stopped at the next one.
-    func read(reached: Int, running: Bool, stop: Flow.Stop?) -> Screen {
+    /// why it stopped at the next one. `demoPlaying`: the demonstration of
+    /// where the card goes is playing; `demoPlayed`: it has played since
+    /// the step came up.
+    func read(reached: Int, running: Bool, stop: Flow.Stop?, demoPlaying: Bool = false, demoPlayed: Bool = false) -> Screen {
         let labels = [copy("read.server"), copy("app_read.certificate"), copy("read.check"), copy("read.crl")]
         let done = reached == labels.count
         let spot = copy("app_read.spot_iphone")
@@ -88,14 +133,16 @@ struct Screens {
             .title(copy("read.title")),
             .text(done ? copy("app_read.lift") : copy("app_read.how", ["spot": spot])),
         ]
-        // Where the card goes, until it is read; the system's panel covers it while it is.
+        // Where the card goes, until it is read; the system's panel covers it while it is, and it does
+        // not play then: its button waits for the tap to end.
         if !done {
-            blocks.append(.figure(Figure(
-                captions: [
-                    Figure.Caption(text: copy("app_read.figure_flip"), emphasis: copy("app_read.figure_flip_emphasis")),
-                    Figure.Caption(text: copy("app_read.figure_top"), emphasis: copy("app_read.figure_top_emphasis")),
-                ],
-                description: copy("app_read.figure_iphone"))))
+            let playing = demoPlaying && !running
+            var control = playing
+                ? Button(label: copy("app_demo.stop"), action: .stopDemo)
+                : Button(label: copy("app_demo.replay"), action: .playDemo)
+            control.enabled = !running
+            blocks.append(.senseDemo(SenseDemo(
+                description: copy("app_demo.sense_iphone"), control: control, playing: playing, played: playing || demoPlayed || running)))
         }
         blocks.append(.items(items(labels, reached: reached, running: running, why: stop.map { message($0, tap: 1) })))
         var buttons: [Button]
@@ -103,7 +150,7 @@ struct Screens {
             buttons = [Button(label: copy("common.next"), action: .toPIN)]
         } else if let stop {
             // No card came, or it left: the same tap again. Anything else: the card is read again from the start.
-            let again = stop == .card(.noTap) || stop == .card(.dropped(pinSent: false))
+            let again = Self.tapsAgain(stop)
             buttons = [again ? Button(label: copy("app_read.tap_again"), action: .readCard) : Button(label: copy("app_read.restart"), action: .readAgain)]
         } else {
             buttons = [Button(label: copy("common.back"), action: .back, enabled: !running), Button(label: copy("app_read.tap_card"), action: .readCard, enabled: !running)]
@@ -120,8 +167,9 @@ struct Screens {
         case tapping
         /// The card signed; the card's state is being asked for.
         case signed
-        /// Another card than the one read: the PIN is kept, the tap can be made again.
-        case otherCard(String)
+        /// The tap ended and the PIN is kept (another card than the one read, no card, the card left before
+        /// the PIN went or after it was accepted): why, and the same tap again.
+        case tapAgain(String)
         /// The card proof stopped here.
         case stopped([String])
     }
@@ -141,7 +189,7 @@ struct Screens {
         case .signed:
             blocks.append(.busy(copy("app_pin.signed")))
             buttons = buttons.map { Button(label: $0.label, action: $0.action, enabled: false) }
-        case .otherCard(let message):
+        case .tapAgain(let message):
             blocks.append(.message(message))
             buttons = [Button(label: copy("app_read.tap_again"), action: .confirmCard)]
         case .stopped(let why):
@@ -446,7 +494,7 @@ struct Screens {
         let why = stop.map { submitFailed ? [copy("stops.submit_failed")] : message($0, tap: 3) }
         blocks.append(.items(items(labels, reached: reached, running: stop == nil, why: why)))
         guard let stop else { return Screen(step: 5, blocks: blocks) }
-        if stop == .card(.otherCard) {
+        if Self.tapsAgain(stop) {
             // The PIN is still there: only this tap again.
             return Screen(
                 step: 5, blocks: blocks,
@@ -569,9 +617,12 @@ struct Screens {
     /// the whole step also where the short one would do ("沒有看到連結，
     /// 重新掛上" was pressed). The same parts as the web page's, but for
     /// what only the page has: the QR code, and "現在可以拔出卡片。" (the
-    /// panel said the card can be taken away when it signed). The four
-    /// steps stand where the demonstration will (#375).
-    func hang(_ done: Flow.Done, single: String?, copied: Bool, whole: Bool = false) -> Screen {
+    /// panel said the card can be taken away when it signed). In the
+    /// order of the page a phone opens to hang it: the link, the two
+    /// buttons side by side, the demonstration, the four steps.
+    /// `demoPlaying`: the demonstration is playing; `demoPlayed`: it has
+    /// played in this card proof.
+    func hang(_ done: Flow.Done, single: String?, copied: Bool, whole: Bool = false, demoPlaying: Bool = false, demoPlayed: Bool = false) -> Screen {
         let kinds = done.answer.kinds
         let link = Block.link("\(host)/p/\(done.shortID)")
         var blocks = mismatch(done)
@@ -592,16 +643,20 @@ struct Screens {
             .title(single.map { copy("hang.title_single", ["platform": $0]) } ?? copy("hang.title")),
             .text(single != nil ? copy("hang.why_single") : copy("done.anyone")),
             link,
-            .button(Button(label: copied ? copy("done.copied") : copy("hang.copy"), action: .copyLink), main: true),
         ]
-        // The public page of each account of the card, on a platform the app knows.
-        blocks += done.accounts.compactMap { account in
+        // Copying the link, and beside it the public page of each account of the card on a platform the app
+        // knows: the order of the demonstration's first screen, which is this one.
+        let profiles = done.accounts.compactMap { account in
             Platform.of(account.platform).map { platform in
-                Block.button(Button(
-                    label: copy("done.open_profile", ["account": Platform.handle(account.platform, account.username), "platform": platform.name]),
-                    action: .openProfile(account.platform)), main: false)
+                // The short words, so that the two fit side by side; VoiceOver reads whose profile it opens.
+                Button(
+                    label: copy("hang.open_threads", ["platform": platform.name]),
+                    action: .openProfile(account.platform),
+                    spoken: copy("done.open_profile", ["account": Platform.handle(account.platform, account.username), "platform": platform.name]))
             }
         }
+        blocks.append(.sideBySide([Button(label: copied ? copy("done.copied") : copy("hang.copy"), action: .copyLink)] + profiles))
+        if let demo = hangDemo(done, playing: demoPlaying, played: demoPlayed) { blocks.append(.demo(demo)) }
         blocks.append(.steps([copy("done.step_edit"), copy("done.step_link"), copy("done.step_add"), copy("done.step_paste")]))
         // A new card's new link, a withdrawn account's link, the other cards that declare an account.
         if done.firstRecord { blocks.append(.small(copy("hang.new_card"))) }
@@ -616,6 +671,52 @@ struct Screens {
         blocks += record(done, single: single)
         // One main button a screen (design/DESIGN.md): copying the link, here.
         return Screen(step: 6, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toRemind)], mainButton: false)
+    }
+
+    /// The demonstration of hanging the link, for the card's account on
+    /// Threads (card-proof.md, the demonstrations); none for a card
+    /// without one. Its first screen is this step's own, with this step's
+    /// words; the other four are the sketches of Threads.
+    func hangDemo(_ done: Flow.Done, playing: Bool, played: Bool = false) -> HangDemo? {
+        let threads = Platform.threads
+        guard let account = done.accounts.first(where: { $0.platform == threads.id }) else { return nil }
+        let handle = Platform.handle(threads.id, account.username)
+        let link = "\(host)/p/\(done.shortID)"
+        let words = HangDemo.Words(
+            kickOwn: copy("app_demo_hang.kick_own"),
+            title: copy("hang.title_single", ["platform": threads.name]),
+            copy: copy("hang.copy"),
+            copied: copy("done.copied"),
+            open: copy("hang.open_threads", ["platform": threads.name]),
+            kickProfile: copy("app_demo_hang.kick_profile"),
+            edit: copy("app_demo_hang.edit"),
+            found: copy("app_demo_hang.found"),
+            kickEdit: copy("app_demo_hang.kick_edit"),
+            rows: [copy("app_demo_hang.row_name"), copy("app_demo_hang.row_username"), copy("app_demo_hang.row_bio"), copy("app_demo_hang.row_interests")],
+            links: copy("app_demo_hang.row_links"),
+            featured: copy("app_demo_hang.row_featured"),
+            kickLinks: copy("app_demo_hang.kick_links"),
+            add: copy("app_demo_hang.add"),
+            kickAdd: copy("app_demo_hang.kick_add"),
+            done: copy("app_demo_hang.done"),
+            url: copy("app_demo_hang.url"),
+            paste: copy("app_demo_hang.paste"),
+            linkTitle: copy("app_demo_hang.link_title"),
+            press: copy("app_demo_hang.press"),
+            pressAgain: copy("app_demo_hang.press_again"),
+            pressThen: copy("app_demo_hang.press_then"),
+            pasteHere: copy("app_demo_hang.paste_here"))
+        return HangDemo(
+            description: copy("app_demo.hang"),
+            control: playing
+                ? Button(label: copy("app_demo.stop"), action: .stopDemo)
+                : Button(label: copy("app_demo.replay"), action: .playDemo),
+            playing: playing,
+            played: playing || played,
+            account: handle,
+            link: link,
+            address: "https://" + link,
+            words: words)
     }
 
     /// Step 7: the reminder to come back (card-proof.md, step 7), by what
@@ -715,6 +816,16 @@ struct Screens {
             mainButton: false, settings: settingsButton)
     }
 
+    /// The tap ended in a way that leaves it to be made again as it is:
+    /// no card came or the panel was closed, another card than the one
+    /// read, the card left.
+    static func tapsAgain(_ stop: Flow.Stop) -> Bool {
+        switch stop {
+        case .card(.noTap), .card(.cancelled), .card(.otherCard), .card(.dropped): return true
+        default: return false
+        }
+    }
+
     // Why a step stopped -------------------------------------------------------------
 
     /// The sentence for a stop, and after it the server's request ID when
@@ -730,8 +841,16 @@ struct Screens {
         case .card(.locked): return [copy("stops.card_locked")]
         case .card(.channel): return [copy("app_stops.channel")]
         case .card(.firstGeneration): return [copy("app_stops.first_generation")]
-        // Taps 2 and 3: what follows depends on whether the PIN was sent (#172).
-        case .card(.dropped): return [tap == 1 ? copy("app_stops.read_dropped") : copy("stops.card_error", ["code": "connection_lost"])]
+        // The card left: in tap 1 nothing is lost. In tap 2 the PIN is kept, but for a PIN that went to the card
+        // and was never accepted: that one is typed again. In tap 3 the card has accepted it before (#133).
+        case .card(.dropped(let pin)):
+            switch tap {
+            case 1: return [copy("app_stops.read_dropped")]
+            case 2: return [pin == .sent ? copy("app_stops.pin_maybe_received") : copy("app_stops.dropped_pin_kept")]
+            default: return [copy("app_stops.dropped")]
+            }
+        // The panel closed by the cardholder: said only where the card would have signed the declaration.
+        case .card(.cancelled): return tap == 3 ? [copy("app_stops.tap_cancelled")] : []
         case .card(.failed(let code)): return [copy("stops.card_error", ["code": code])]
         case .certificate(let problem, let date):
             let day = date.flatMap(Self.dateOfCertificateTime)

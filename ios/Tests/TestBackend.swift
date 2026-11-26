@@ -90,6 +90,10 @@ final class CountingBackend: Backend {
     private(set) var configRequests = 0
     /// Done before a record is sent on: for a test to change the back end between the challenge and the record.
     var beforeSubmit: (() async throws -> Void)?
+    /// The record does not reach the server: as a phone that lost the network.
+    var submitFails = false
+    /// The server does not answer when asked for its config.
+    var configFails = false
 
     init(_ backend: Backend) {
         self.backend = backend
@@ -97,6 +101,7 @@ final class CountingBackend: Backend {
 
     func config() async throws -> Data {
         configRequests += 1
+        if configFails { throw BackendFailure(code: "network", requestID: nil) }
         return try await backend.config()
     }
 
@@ -106,6 +111,7 @@ final class CountingBackend: Backend {
     func challenge() async throws -> String { try await backend.challenge() }
     func submit(_ body: Data) async throws -> Data {
         try await beforeSubmit?()
+        if submitFails { throw BackendFailure(code: "network", requestID: nil) }
         return try await backend.submit(body)
     }
 }

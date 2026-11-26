@@ -232,7 +232,8 @@
     "new_card": "如果你換了新的自然人憑證，請把個人檔案的連結換成新的連結。",
     "still_there_single": "你的 {platform} 個人檔案上，還有這個連結嗎？",
     "look": "{open_proof}看看。",
-    "rehang": "沒有看到連結，重新掛上"
+    "rehang": "沒有看到連結，重新掛上",
+    "open_threads": "打開 {platform}"
   },
   "finish": {
     "first": "恭喜你完成島民證明",
@@ -281,9 +282,6 @@
     "nfc_settings": "打開 NFC 設定",
     "figure_flip": "① 翻到有相機的那面",
     "figure_flip_emphasis": "有相機",
-    "figure_top": "② 卡片貼住上方",
-    "figure_top_emphasis": "上方",
-    "figure_iphone": "把手機翻到有相機的那一面，卡片貼住上方",
     "figure_middle": "② 貼在中間，沒反應就上下慢慢移動",
     "figure_middle_emphasis": "中間",
     "figure_android": "把手機翻到有相機的那一面，卡片貼在中間，沒反應就上下慢慢移動"
@@ -321,6 +319,7 @@
   },
   "app_stops": {
     "nfc_off": "手機的 NFC 關著。請打開 NFC，再按一次「感應卡片」。",
+    "nfc_off_tap": "手機的 NFC 關著。請打開 NFC，再感應一次。",
     "read_dropped": "卡片在讀取途中離開了手機。請再感應一次，感應時不要移動卡片。",
     "no_tap": "沒有感應到卡片。請再感應一次，把卡片平貼在{spot}。",
     "no_certificate": "這張卡片上讀不到憑證。請確認感應的是自然人憑證。",

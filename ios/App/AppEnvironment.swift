@@ -12,6 +12,11 @@ enum AppEnvironment {
     static let publicFiles = URL(string: "https://test-data.iamreal.tw")!
     /// The test log: the card signs `iamreal-test:public:0`.
     static let proofLog = DeviceCore.ProofLog.test
+    /// The app's page in the App Store, which "到 App Store 更新" opens:
+    /// https://apps.apple.com/app/id<the app's number in App Store Connect>.
+    /// Not known yet for this build: until it is written here, the screens
+    /// about the lowest version say to update without the button.
+    static let storePage: URL? = nil
     #else
     #error("No environment: build with one of the files in Config/")
     #endif

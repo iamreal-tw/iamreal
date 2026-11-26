@@ -105,7 +105,10 @@ extension CardProofModel {
             site: AppEnvironment.site,
             open: { UIApplication.shared.open($0) },
             copyText: { UIPasteboard.general.string = $0 },
-            share: share))
+            share: share,
+            canReadCards: { NFCCard.available },
+            minApp: { config, now in MinApp.read(config: config, build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String, now: now) },
+            storePage: AppEnvironment.storePage))
     }
 
     /// The system's settings at this app's notifications; before iOS 16,

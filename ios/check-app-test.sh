@@ -88,6 +88,14 @@ printf x >> "$tmp/app/IamrealApp.app/card-proof.json"
 expect "other sentences of the card proof" "card-proof.json in the app is not design/copy/card-proof.json"
 
 copy
+printf ' ' >> "$tmp/app/IamrealApp.app/hang.json"
+expect "another timeline of the demonstration" "hang.json in the app is not design/motion/hang.json"
+
+copy
+printf ' ' >> "$tmp/app/IamrealApp.app/sense.json"
+expect "another timeline of where the card goes" "sense.json in the app is not design/motion/sense.json"
+
+copy
 rm "$tmp/app/IamrealApp.app/app.json"
 expect "the app's sentences left out" "app.json in the app is not design/copy/app.json"
 

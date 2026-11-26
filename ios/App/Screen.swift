@@ -4,7 +4,9 @@ import Foundation
 /// it and every button. CardProofModel makes it; CardProofView draws it
 /// and nothing else, so what a test reads here is what the screen says.
 struct Screen: Equatable {
-    /// 1 to 8: which of the app's eight steps (design/copy/card-proof.md).
+    /// 1 to 8: which of the app's eight steps (design/copy/card-proof.md);
+    /// 0 for a screen in the place of step 1 that is none of them: this
+    /// version can no longer do a card proof, this phone cannot read a card.
     var step: Int
     var blocks: [Block]
     /// The buttons under the blocks, in their order; the last is the way
@@ -19,7 +21,11 @@ struct Screen: Equatable {
     var links: [Button] = []
     /// The way out at the very bottom: drops the PIN and goes back to step 1.
     var cancel: Button?
-    /// Above the step: the note of a reminder the app was opened from.
+    /// Above everything, in their order: that this version stops being
+    /// able to do a card proof on a day, that the card proof went back to
+    /// its start after five minutes.
+    var warnings: [Notice] = []
+    /// Above the step, under the warnings: the note of a reminder the app was opened from.
     var notice: Notice?
     /// On the right of the header: the settings (steps 1 and 8).
     var settings: Button?
@@ -27,7 +33,7 @@ struct Screen: Equatable {
     /// Every sentence on the screen, in its order: for tests. The
     /// header's are not among them: they are not card-proof.md's.
     var texts: [String] {
-        (notice?.texts ?? []) + blocks.flatMap(\.texts) + buttons.map(\.label) + links.map(\.label) + (cancel.map { [$0.label] } ?? [])
+        warnings.flatMap(\.texts) + (notice?.texts ?? []) + blocks.flatMap(\.texts) + buttons.map(\.label) + links.map(\.label) + (cancel.map { [$0.label] } ?? [])
     }
 }
 
@@ -87,12 +93,17 @@ enum Block: Equatable {
     case link(String)
     /// A button among the text; `main`: the screen's main button.
     case button(Button, main: Bool)
+    /// Buttons side by side, the first the screen's main button; one
+    /// under the other where they do not fit side by side.
+    case sideBySide([Button])
+    /// The demonstration of hanging the link (step 6), and its one button.
+    case demo(HangDemo)
     /// A button that looks like a link, on its own line.
     case action(Button)
     /// What the app is doing, beside a spinner.
     case busy(String)
-    /// The picture of where the card goes on the phone, and its captions.
-    case figure(Figure)
+    /// The demonstration of where the card goes on the phone (step 2), and its one button.
+    case senseDemo(SenseDemo)
 
     var texts: [String] {
         switch self {
@@ -111,22 +122,26 @@ enum Block: Equatable {
         case .row(let name, let account, let lines): return [name, account] + lines
         case .pair(let label, let value): return [label, value]
         case .button(let button, _), .action(let button): return [button.label]
-        case .figure(let figure): return figure.captions.map(\.text) + [figure.description]
+        case .sideBySide(let buttons): return buttons.map(\.label)
+        case .demo(let demo): return [demo.description, demo.control.label]
+        case .senseDemo(let demo): return [demo.description, demo.control.label]
         }
     }
 }
 
-/// A picture with a caption under each part: where the card goes.
-struct Figure: Equatable {
-    struct Caption: Equatable {
-        var text: String
-        /// The words of `text` written in ink and bold.
-        var emphasis: String
-    }
-
-    var captions: [Caption]
-    /// What the picture shows, for VoiceOver, which reads it in the place of the picture and the captions.
+/// The demonstration of step 2 (design/copy/card-proof.md, the section on
+/// the demonstrations; design/motion/README.md): the phone, which does not
+/// move, and the card that goes behind the top of it. What moves and when
+/// is the timeline's (TeachingAnimation).
+struct SenseDemo: Equatable {
+    /// What VoiceOver reads in the place of the whole picture.
     var description: String
+    /// The one button beside it: it stops while the demonstration plays, and plays it again otherwise.
+    var control: Button
+    var playing: Bool
+    /// It has played, or is playing, since step 2 came up: not playing, it
+    /// is then at rest with the card in place; before, the phone alone.
+    var played: Bool
 }
 
 /// The small card of the last step (design/DESIGN.md, the components:
@@ -146,6 +161,67 @@ struct ProofCard: Equatable {
     var texts: [String] {
         [label] + rows.flatMap { ($0.name.map { [$0] } ?? []) + [$0.account] } + [shortID]
     }
+}
+
+/// The demonstration of step 6 (design/copy/card-proof.md, the section on
+/// the demonstrations; design/motion/README.md): five screens side by side,
+/// the app's own and four sketches of Threads, and a camera that goes from
+/// copying the link to the line on the profile. What moves and when is the
+/// timeline's (TeachingAnimation); here is what the picture says.
+struct HangDemo: Equatable {
+    /// The words on the five screens, each from the copy.
+    struct Words: Equatable {
+        /// The app's own screen: the small words above it, its title, and the two buttons.
+        var kickOwn: String
+        var title: String
+        var copy: String
+        var copied: String
+        var open: String
+        /// The profile on Threads.
+        var kickProfile: String
+        var edit: String
+        var found: String
+        /// Editing the profile: the rows before the links, the links, the row after.
+        var kickEdit: String
+        var rows: [String]
+        var links: String
+        var featured: String
+        /// The links.
+        var kickLinks: String
+        var add: String
+        /// Adding a link.
+        var kickAdd: String
+        var done: String
+        var url: String
+        var paste: String
+        var linkTitle: String
+        /// The tags under what is to be pressed.
+        var press: String
+        var pressAgain: String
+        var pressThen: String
+        var pasteHere: String
+
+        /// Every one of them, for tests.
+        var all: [String] {
+            [kickOwn, title, copy, copied, open, kickProfile, edit, found, kickEdit] + rows
+                + [links, featured, kickLinks, add, kickAdd, done, url, paste, linkTitle, press, pressAgain, pressThen, pasteHere]
+        }
+    }
+
+    /// What VoiceOver reads in the place of the whole picture.
+    var description: String
+    /// The one button beside it: it stops while the demonstration plays, and plays it again otherwise.
+    var control: Button
+    var playing: Bool
+    /// It has played, or is playing, in this card proof: not playing, it
+    /// is then at its last frame; before, at its first.
+    var played: Bool
+    /// The card's account on Threads, as the screens write it, and its
+    /// page's address: as the link is shown, and whole as it is pasted.
+    var account: String
+    var link: String
+    var address: String
+    var words: Words
 }
 
 /// One item of a progress list.
@@ -177,6 +253,9 @@ struct Button: Equatable {
     var label: String
     var action: Action
     var enabled = true
+    /// What VoiceOver reads in the place of the label, where the label is
+    /// a short form of it.
+    var spoken: String?
 }
 
 /// What a button does. CardProofModel.perform does it.
@@ -203,6 +282,8 @@ enum Action: Equatable {
     case editList
     /// "不改了": back to what the card declares.
     case keep
+    /// The app's page in the store, to update it.
+    case openStore
     /// The phone's map, searching for household registration offices (step 1).
     case findOffice
     /// MOICA's site, in the browser (step 1).
@@ -235,6 +316,13 @@ enum Action: Equatable {
     case toFinish
     /// The system's settings, at this app's notifications.
     case openNotificationSettings
+    /// The picture of step 6's demonstration has come onto the screen: it
+    /// plays, the first time in a card proof.
+    case showDemo
+    /// The demonstration of the step (2 or 6) from its start: its button.
+    case playDemo
+    /// The demonstration at its last frame: its button, or its end.
+    case stopDemo
     /// The reminder, as step 7 offers it.
     case turnOnReminder
     /// The screen to choose the reminder's interval and time.

@@ -18,6 +18,13 @@ interface Card {
      * [CardException.Reason.CANCELLED] when [cancel] was cancelled while it waited for a card, or before.
      */
     fun <T> tap(cancel: TapCancel, use: (CardConnection) -> T): T
+
+    /**
+     * Whether this phone can read a card at all: false for a phone without NFC, which is told so in place of
+     * step 1 (design/copy/card-proof.md, "1. 開始之前", app). NFC that is turned off is not this: the tap says so
+     * ([CardException.Reason.NFC_OFF]). It may ask something that takes a moment: not for the main thread.
+     */
+    val hasNfc: Boolean get() = true
 }
 
 /**
@@ -70,6 +77,13 @@ interface CardConnection {
      * after [readCertificates] on this connection, whose certificates the caller compares first.
      */
     fun sign(message: ByteArray, pin: ByteArray): ByteArray
+
+    /**
+     * Whether the card took the PIN of [sign] on this connection, also when [sign] then failed: a card that left
+     * while it signed had accepted the PIN before. The caller sends a PIN a card has accepted again by itself, and
+     * never one no card has (issue #133).
+     */
+    val pinAccepted: Boolean get() = false
 }
 
 /** A tap that did not do what it was for. It carries the reason and nothing read from the card. */
