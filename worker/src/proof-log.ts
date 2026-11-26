@@ -844,6 +844,42 @@ export class ProofLog extends DurableObject<Env> {
   }
 
   /**
+   * For the counts' totals (count-totals.ts, `TotalsProofLog`): of these
+   * short IDs, those of a card of the open scope whose first valid record is
+   * dated `through` (`YYYY-MM-DD`, Taiwan's date) or before. One index
+   * (`view_cards_short_id`) for each.
+   */
+  totalsKnownShortIds(shortIds: readonly string[], through: string): string[] {
+    this.#checkViews();
+    const day = parseDay(through);
+    if (day === null) throw new Error("totals: not a date");
+    const scope = scopeOf(this.settings.kind);
+    return shortIds.filter(
+      (id) => this.ctx.storage.sql.exec("SELECT 1 FROM view_cards INDEXED BY view_cards_short_id WHERE scope_string = ? AND short_id = ? AND first_date <= ? LIMIT 1", scope, id, day).toArray().length > 0,
+    );
+  }
+
+  /** For the counts' totals: how many short IDs have a card of the open scope whose first valid record is dated `through` or before. */
+  totalsShortIdsThrough(through: string): number {
+    this.#checkViews();
+    const day = parseDay(through);
+    if (day === null) throw new Error("totals: not a date");
+    return this.ctx.storage.sql.exec<{ n: number }>("SELECT COUNT(DISTINCT short_id) AS n FROM view_cards WHERE scope_string = ? AND first_date <= ?", scopeOf(this.settings.kind), day).one().n;
+  }
+
+  /** For the counts' totals: the scoped ID of the record of each seq; none for a seq the proof log does not have. */
+  totalsScopedIds(seqs: readonly number[]): { seq: number; scopedId: string }[] {
+    this.#checkTables();
+    const out: { seq: number; scopedId: string }[] = [];
+    for (const seq of seqs) {
+      const row = this.ctx.storage.sql.exec<{ line: string }>("SELECT line FROM records WHERE seq = ?", seq).toArray()[0];
+      const record = row === undefined ? null : readRecordLine(this.settings.kind, row.line);
+      if (record !== null) out.push({ seq, scopedId: record.scopedId });
+    }
+    return out;
+  }
+
+  /**
    * The number of cards of a scope that give their place on a platform to
    * this username now, counted in the views (views.ts, `accountCards`): one
    * index, and no card's stored state is read.

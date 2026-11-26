@@ -72,7 +72,8 @@
       // "連線紀錄"). The operator makes the bucket and the rule before the first deploy; every hour the
       // Worker publishes the date of the oldest entry, so that a rule that does not delete shows.
       // The same bucket holds the counts (ADR-0032), under "count-events/", with a rule of their own
-      // that deletes after 31 days too, and the same hourly look (README.md, "計數").
+      // that deletes after 31 days too, and the same hourly look (README.md, "計數"); and their totals,
+      // kept for good under "count-totals/", where no rule deletes (README.md, "計數的加總").
       "r2_buckets": [
         { "binding": "DATA", "bucket_name": "iamreal-test-data" },
         { "binding": "CONNECTION_LOG", "bucket_name": "iamreal-test-logs" }

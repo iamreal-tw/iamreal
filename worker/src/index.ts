@@ -7,6 +7,7 @@ import { type ApiParts, api, isApiPath } from "./api.ts";
 import { poseidon2Hash, proofVerifier } from "./in-worker.ts";
 import { checkIssuerTable } from "./issuers.ts";
 import { OLDEST_KEY, isOverdue, oldestDay, oldestFile } from "./connection-log.ts";
+import { COUNT_TOTALS_OLDEST_KEY, DAY_TOTALS_PREFIX, type TotalsProofLog, countTotals } from "./count-totals.ts";
 import { COUNT_EVENTS_OLDEST_KEY, COUNT_EVENTS_PREFIX } from "./counts.ts";
 import { type CrlMirror, crlMirrorInWorker } from "./mirror.ts";
 import { pageDataOfProofLog } from "./page-data.ts";
@@ -33,9 +34,10 @@ export default {
 
   /**
    * The hourly schedule (wrangler.jsonc, "triggers"): the date of the
-   * connection log's oldest entry is published (connection-log.ts), and
-   * the date of the oldest file of counts (counts.ts), each by itself; then
-   * one round of the CRL mirror.
+   * connection log's oldest entry is published (connection-log.ts), the
+   * date of the oldest file of counts (counts.ts), and that of the earliest
+   * day of the counts' totals (count-totals.ts), each by itself; then one
+   * round of the CRL mirror, and then the counts' totals.
    */
   async scheduled(_controller, env): Promise<void> {
     // First, and by itself: the mirror's trouble is not this file's, nor the other way round. If the bucket
@@ -69,35 +71,69 @@ export default {
     } catch (e) {
       console.error(JSON.stringify({ event: "count_events_oldest_not_published", error: e instanceof Error ? e.name : "unknown" }));
     }
-
-    // The only place that says which mirror it is (src/mirror.ts, `CrlMirror`).
-    const mirror: CrlMirror = crlMirrorInWorker({
-      sources: CRL_SOURCES,
-      bucket: env.DATA,
-      timeoutMs: CRL_TIMEOUT_MS,
-      catchUpMs: CRL_CATCH_UP_MS,
-      issuers: ISSUERS,
-      hash: poseidon2Hash,
-      tell: async (newest) => {
-        // The settings are read where everything reads them, before the
-        // object is asked: with settings that do not fit each other nothing
-        // is told (settings.ts).
-        proofLogSettingsOf(env);
-        await proofLogOf(env).setNewestCrls(newest);
-      },
-    });
-    const round = await mirror.round();
-    const at = now().toISOString();
-    // One line per source and one per file that was read, in the live log only: nothing here is kept.
-    for (const r of round.sources) console.log(JSON.stringify({ event: "crl_mirror", at, ...r }));
-    for (const f of round.files) {
-      if (f.result === "failed") console.log(JSON.stringify({ event: "crl_index", at, ...f }));
-      else {
-        const { issuer, crlNumber, crlDate, sha256, root } = f.line;
-        console.log(JSON.stringify({ event: "crl_index", at, result: f.result, sha256, issuer, crl_number: crlNumber, crl_date: crlDate, root, entries: f.entries, keys: f.keys, hashes: f.hashes, read_ms: f.readMs, tree_ms: f.treeMs }));
-      }
+    // The counts' totals are kept for good (count-totals.ts): the earliest day's must stay. The date of the
+    // earliest is published the same way, and whoever checks from outside sees it move if a rule deleted it.
+    try {
+      const oldest = await inTime(oldestDay(env.CONNECTION_LOG, DAY_TOTALS_PREFIX));
+      await inTime(env.DATA.put(COUNT_TOTALS_OLDEST_KEY, oldestFile(time, oldest), { httpMetadata: { cacheControl: "public, max-age=60", contentType: "application/json" } }));
+    } catch (e) {
+      console.error(JSON.stringify({ event: "count_totals_oldest_not_published", error: e instanceof Error ? e.name : "unknown" }));
     }
-    // Thrown after everything that could be done was done, so that the run shows as failed.
-    if (round.errors.length > 0) throw new Error(`CRL mirror: ${round.errors.join("; ")}`);
+
+    // The mirror's trouble does not keep the totals from being made: it is thrown after them.
+    let mirrorFailed: { error: unknown } | null = null;
+    try {
+      await mirrorRound(env);
+    } catch (error) {
+      mirrorFailed = { error };
+    }
+    // The counts' totals (count-totals.ts), after the mirror: the mirror's round counts its time from its start.
+    try {
+      // The settings are read where everything reads them, before the object is asked (settings.ts).
+      proofLogSettingsOf(env);
+      const proofLog = proofLogOf(env);
+      const asked: TotalsProofLog = {
+        knownShortIds: (ids, through) => proofLog.totalsKnownShortIds(ids, through),
+        shortIdsThrough: (through) => proofLog.totalsShortIdsThrough(through),
+        scopedIdsOf: (seqs) => proofLog.totalsScopedIds(seqs),
+      };
+      await countTotals(env.CONNECTION_LOG, asked, now());
+    } catch (e) {
+      console.error(JSON.stringify({ event: "count_totals_not_made", error: e instanceof Error ? e.name : "unknown" }));
+    }
+    if (mirrorFailed !== null) throw mirrorFailed.error;
   },
 } satisfies ExportedHandler<Env>;
+
+/** One round of the CRL mirror, with its lines in the live log. Throws if it failed, after everything that could be done was done. */
+async function mirrorRound(env: Env): Promise<void> {
+  // The only place that says which mirror it is (src/mirror.ts, `CrlMirror`).
+  const mirror: CrlMirror = crlMirrorInWorker({
+    sources: CRL_SOURCES,
+    bucket: env.DATA,
+    timeoutMs: CRL_TIMEOUT_MS,
+    catchUpMs: CRL_CATCH_UP_MS,
+    issuers: ISSUERS,
+    hash: poseidon2Hash,
+    tell: async (newest) => {
+      // The settings are read where everything reads them, before the
+      // object is asked: with settings that do not fit each other nothing
+      // is told (settings.ts).
+      proofLogSettingsOf(env);
+      await proofLogOf(env).setNewestCrls(newest);
+    },
+  });
+  const round = await mirror.round();
+  const at = now().toISOString();
+  // One line per source and one per file that was read, in the live log only: nothing here is kept.
+  for (const r of round.sources) console.log(JSON.stringify({ event: "crl_mirror", at, ...r }));
+  for (const f of round.files) {
+    if (f.result === "failed") console.log(JSON.stringify({ event: "crl_index", at, ...f }));
+    else {
+      const { issuer, crlNumber, crlDate, sha256, root } = f.line;
+      console.log(JSON.stringify({ event: "crl_index", at, result: f.result, sha256, issuer, crl_number: crlNumber, crl_date: crlDate, root, entries: f.entries, keys: f.keys, hashes: f.hashes, read_ms: f.readMs, tree_ms: f.treeMs }));
+    }
+  }
+  // Thrown after everything that could be done was done, so that the run shows as failed.
+  if (round.errors.length > 0) throw new Error(`CRL mirror: ${round.errors.join("; ")}`);
+}
