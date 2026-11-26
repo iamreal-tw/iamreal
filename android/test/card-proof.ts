@@ -1409,7 +1409,9 @@ function countsChecked(shortId: string): void {
   check(done.length === 4, `the card proofs that were done sent their step done: ${done.length}`);
   for (const cs of done) {
     const steps = cs.filter((c) => c.event === "step").map((c) => c.step as string);
-    check(JSON.stringify([...steps].sort()) === JSON.stringify([...APP_STEPS].sort()) && steps[0] === "open" && steps.at(-1) === "done", `a card proof that was done sent each step once, from open to done: ${steps.join(",")}`);
+    // `open` is step 1's: a card proof begun again while step 1 stayed (turned away at its start, 8.) has none of its own.
+    const expected = steps[0] === "open" ? APP_STEPS : APP_STEPS.filter((s) => s !== "open");
+    check(JSON.stringify([...steps].sort()) === JSON.stringify([...expected].sort()) && steps.at(-1) === "done", `a card proof that was done sent each step once, from open or read to done: ${steps.join(",")}`);
     const timed = cs.filter((c) => c.event === "duration").map((c) => c.step as string).sort();
     check(JSON.stringify(timed) === JSON.stringify(["crl", "proved", "tree"]), `and how long the CRL, the tree and the proof took: ${timed.join(",")}`);
     check(!cs.some((c) => c.event === "stop"), "and no stop");
