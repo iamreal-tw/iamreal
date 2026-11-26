@@ -75,12 +75,69 @@ struct HTTPBackend: Backend {
         try await api("POST", "api/v1/card-state", body: body, expecting: 200)
     }
 
+    /// Asked once more when the first request went out and the head of an
+    /// answer did not come (#404): the connection the app kept from an
+    /// earlier request may have gone dead while the cardholder was on steps
+    /// 4 and 5, and asking again costs nothing but a challenge the server
+    /// issued for no one. The only request that is: a submission is never
+    /// sent twice by itself.
     func challenge() async throws -> String {
-        let body = try await api("POST", "api/v1/challenges", body: nil, expecting: 200)
+        let body: Data
+        do {
+            body = try await challengeOnce()
+        } catch is Unanswered {
+            do {
+                body = try await challengeOnce()
+            } catch is Unanswered {
+                throw BackendFailure(code: "network", requestID: nil)
+            }
+        }
         guard let answer = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
               let challenge = answer["challenge"] as? String
         else { throw BackendFailure(code: "malformed_response", requestID: nil) }
         return challenge
+    }
+
+    /// The request went out, or may have, and the head of an answer did not
+    /// come: the connection was closed, or the time limit ran out.
+    private struct Unanswered: Error {}
+
+    /// What the system says of a server that could not be connected to at
+    /// all: then nothing was sent, and asking again is not what #404 is for.
+    private static let notReached: Set<URLError.Code> = [.cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .notConnectedToInternet]
+
+    /// `POST /api/v1/challenges`, once: the body of a 200. The head first,
+    /// then the body, so that a failure before the head (`Unanswered`) is
+    /// told from one after it.
+    private func challengeOnce() async throws -> Data {
+        var request = URLRequest(url: site.appendingPathComponent("api/v1/challenges"))
+        request.httpMethod = "POST"
+        let bytes: URLSession.AsyncBytes
+        let response: HTTPURLResponse
+        do {
+            let (stream, answer) = try await session.bytes(for: request)
+            guard let http = answer as? HTTPURLResponse else { throw BackendFailure(code: "network", requestID: nil) }
+            (bytes, response) = (stream, http)
+        } catch let failure as BackendFailure {
+            throw failure
+        } catch let error as URLError where Self.notReached.contains(error.code) {
+            throw BackendFailure(code: "network", requestID: nil)
+        } catch {
+            throw Unanswered()
+        }
+        var data = Data()
+        do {
+            for try await byte in bytes {
+                data.append(byte)
+                if data.count > Self.mostOfAnAnswer { throw BackendFailure(code: "network", requestID: nil) }
+            }
+        } catch {
+            throw BackendFailure(code: "network", requestID: nil)
+        }
+        guard response.statusCode == 200 else {
+            throw BackendFailure(code: Self.errorCode(data) ?? "http_\(response.statusCode)", requestID: Self.requestID(response))
+        }
+        return data
     }
 
     func submit(_ body: Data) async throws -> Data {

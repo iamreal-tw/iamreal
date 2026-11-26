@@ -41,7 +41,7 @@
 | `App/NFCCard.swift` | 用 Core NFC 讀卡：一次感應是一個 `NFCTagReaderSession`，系統的面板中間那一句照 `design/copy/card-proof.md`「app：感應的面板」；感應沒有完成時帶著「沒有完成，請看 app 畫面上的說明。」把面板收成失敗的樣子，不然系統會播完成的勾（[#367](https://github.com/iamreal-tw/iamreal/issues/367)）；同時只開一個；卡片中途離開時說 PIN 送出了沒有 |
 | `App/GpkiCard.swift` | 對卡片送的指令：讀 PKCS #15 的目錄和每一張憑證（不用 PIN）；建立安全通道、驗 PIN、簽章；認出第一代的卡片 |
 | `App/CardChannel.swift` | `spec/card-channel.md`：卡片的靜態金鑰、安全通道的金鑰和每一道指令的加密與 MAC、PIN 和要簽的區塊。三個讀卡的檔（這個、`GpkiCard.swift`、`NFCCard.swift`）第一行寫出處：上游 `mctea01/my-Bonds-fork-android` 的 `GpkiCard.kt`，釘 commit `a8696253`（Apache-2.0，`NOTICE`） |
-| `App/Backend.swift` | 「後台」這一層：`config`、清冊鏡像的兩種檔、查現況、題目、送出。位元組進出，請求和回應的內容由核心寫和讀 |
+| `App/Backend.swift` | 「後台」這一層：`config`、清冊鏡像的兩種檔、查現況、題目、送出。位元組進出，請求和回應的內容由核心寫和讀。拿題目的請求送出去之後回應的標頭沒有來時（連線被關，或等到逾時），再送一次，第二次還是沒有才是 `network`（[#404](https://github.com/iamreal-tw/iamreal/issues/404)）：手機停在第 4、5 步的那幾分鐘，先前留著的連線可能已經不通。連不上伺服器不重送；送出紀錄的請求不自己重送（`Tests/ChallengeAgainTests.swift`） |
 | `App/CardProofFlow.swift` | 一次過卡，沒有畫面的狀態機。每一步呼叫核心的哪個函式、PIN 和憑證和簽章各留到什麼時候，寫在檔頭 |
 | `App/CardProofModel.swift`、`App/Screen.swift`、`App/Screens.swift` | 畫面看到的過卡：`Screen` 是一個畫面上從上到下的每一句話和每一個按鈕，`Screens` 決定 `design/copy/card-proof.md` 的哪一句放在哪裡，`CardProofModel` 做按鈕要做的事 |
 | `App/CardProofView.swift` | 把 `Screen` 畫出來（SwiftUI，`ScreenView`），長得和 `design/screens/` 的 `card-proof-app-*` 一樣。它自己沒有任何句子，也不做任何判斷 |
