@@ -1,5 +1,5 @@
 // The player of the demonstration on the page of hanging a proof
-// (design/copy/hang.md, 示範; design/motion/README.md). It is the second half
+// (design/copy/hang.md, its section on the demonstration; design/motion/README.md). It is the second half
 // of site/demo.js: scripts/site-files.ts writes that file from
 // src/teaching-animation.ts, with its types taken off, and this one, so the
 // functions used here (`hangStateAt`) are the ones the answers of
@@ -42,7 +42,7 @@ if (demo !== null && data !== null && typeof demo.animate === "function") {
     return place;
   };
 
-  /** A framing as the row's place and scale (design/motion/README.md, 取景). */
+  /** A framing as the row's place and scale (design/motion/README.md, on framings). */
   const poseOf = (name) => {
     const frame = timeline.frames[names[name] ?? name];
     const scale = picture.clientWidth / ((frame.span * box("s0").offsetWidth) / timeline.screen);

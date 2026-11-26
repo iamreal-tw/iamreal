@@ -140,7 +140,7 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
 
   // The files Static Assets sends.
   const fileHeaders = { ...EVERY_RESPONSE, ...VISITOR_HEADERS, ...TEST_SITE_HEADERS, "Cache-Control": VISITOR_FILE_CACHE };
-  for (const path of ["/pages.css", "/copy.js", `/${FONT_FILE}`, `/${OG_IMAGE_FILE}`]) {
+  for (const path of ["/pages.css", "/copy.js", "/demo.js", `/${FONT_FILE}`, `/${OG_IMAGE_FILE}`]) {
     await check(`GET ${path}`, async () => {
       const res = await file(path);
       await res.arrayBuffer();
