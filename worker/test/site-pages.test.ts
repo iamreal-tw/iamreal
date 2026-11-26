@@ -197,13 +197,10 @@ function hangPictures(): { picture: string[]; told: string[] }[] {
  * part 3, as hang.md writes them with the examples replaced; each picture its title, what a screen reader is
  * told and its pieces hidden from a screen reader; no inline style.
  */
-/**
- * The words of screens of the demonstration (hang.md, 示範): the code block that starts with `first`, and with
- * `second` if two start alike (the links' screen, which the Android words start with too).
- */
-function demoWords(first: string, second?: string): string[] {
-  const found = codeBlocks(copySection("hang.md", "示範")).filter((b) => b[0] === first && (second === undefined || b[1] === second));
-  assert.equal(found.length, 1, `hang.md has one block of the demonstration's words that starts with ${first}${second === undefined ? "" : `, ${second}`}`);
+/** The words of the five screens of the demonstration (hang.md, 示範): the code block that starts with `first`. */
+function demoWords(first: string): string[] {
+  const found = codeBlocks(copySection("hang.md", "示範")).filter((b) => b[0] === first);
+  assert.equal(found.length, 1, `hang.md has one block of the demonstration's words that starts with ${first}`);
   return found[0]!;
 }
 
@@ -278,7 +275,7 @@ describe("hanging a proof on a profile", () => {
   test("/hang/<short ID> has the demonstration of hang.md, hidden until its player shows it: the five screens with the card's account and address, the timeline of design/motion/ as data, the one sentence for a screen reader, the button's two words", async () => {
     await pagesWorld(worker, "2026-11-18", [r("2026-11-06", cardStarting(CARD_A), "threads:carol.tw")]);
     const { page } = await getPage(worker, `/hang/${CARD_A}`);
-    const demo = /<div class="demo" data-demo="hang-timeline" data-variant="ios" hidden>([\s\S]*?)<script type="application\/json" id="hang-timeline">([^<]*)<\/script>/.exec(page);
+    const demo = /<div class="demo" data-demo="hang-timeline" hidden>([\s\S]*?)<script type="application\/json" id="hang-timeline">([^<]*)<\/script>/.exec(page);
     assert.ok(demo !== null, "the demonstration is in the page, hidden, with its timeline after it");
     // The timeline is design/motion/hang.json, whole, and nothing a browser runs.
     assert.deepEqual(JSON.parse(demo[2]!), JSON.parse(readFileSync(join(WORKER_DIR, "..", "design", "motion", "hang.json"), "utf8")));
@@ -294,10 +291,10 @@ describe("hanging a proof on a profile", () => {
     assert.equal(squash(visibleText(picture[2]!)), squash(copyLines(words, "@alice", "@carol.tw", "iamreal.tw/p/", "test.iamreal.tw/p/").join("")));
     // The four screens of Threads say they are illustrations.
     assert.deepEqual([...picture[2]!.matchAll(/<p class="kick">([^<]*)<\/p>/g)].map((m) => m[1]!.endsWith("（示意）")), [false, true, true, true, true]);
-    // Every box the timeline names for this platform is in the page once; the other platform's is not.
-    const timeline = JSON.parse(demo[2]!) as { boxes: Record<string, string>; variants: Record<string, Record<string, string>> };
+    // Every box the timeline names is in the page once, both platforms' way back among them.
+    const timeline = JSON.parse(demo[2]!) as { boxes: Record<string, string> };
     const boxes = [...picture[2]!.matchAll(/data-box="([^"]*)"/g)].map((m) => m[1]!);
-    assert.deepEqual([...boxes].sort(), Object.keys(timeline.boxes).filter((b) => b !== timeline.variants.android!.back).sort());
+    assert.deepEqual([...boxes].sort(), Object.keys(timeline.boxes).sort());
     // What a change of the screens shows or moves is one of the timeline's six.
     const changes = [...picture[2]!.matchAll(/data-(?:on|off)="([^"]*)"|data-shift="([^"]*)"/g)].flatMap((m) => (m[1] !== undefined ? [m[1]] : m[2]!.split(" ").map((s) => s.split(":")[0]!)));
     assert.deepEqual([...new Set(changes)].sort(), ["copied", "linkListed", "linkOnProfile", "pasteMenu", "pasted", "resultLabel"]);
@@ -331,7 +328,6 @@ describe("hanging a proof on a profile", () => {
     assert.ok(said !== undefined, "hang.md says what is above the first screen on this page");
     const words = [said, ...demoWords("島民證明的畫面").slice(1)];
     assert.equal(squash(visibleText(row)), squash(copyLines(words, "iamreal.tw/p/", "test.iamreal.tw/p/").join("")));
-    assert.match(whole, /<div class="demo" data-demo="hang-timeline" data-variant="ios" hidden>/);
     // The player and nothing else: no copy button, so not its script.
     assert.deepEqual(whole.match(/<script src="[^"]*"/g), ['<script src="/demo.js"']);
     // The pictures write hang.md's examples, in the site's own domain.
@@ -346,48 +342,39 @@ describe("hanging a proof on a profile", () => {
     wantPreview(page, title, site);
   });
 
-  test("a device that says it is Android gets Android's way back from the links, on both pages; every other gets the iPhone's; the answer says it depends on the device", async () => {
+  test("the page is the same for every device: it has both ways back from the links, for the player to choose in the browser; the Worker reads nothing of the device", async () => {
     await pagesWorld(worker, "2026-11-18", [r("2026-11-06", cardStarting(CARD_A), "threads:carol.tw")]);
-    const agents: [string, string | null, "ios" | "android"][] = [
-      ["an Android phone", "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36", "android"],
-      ["an Android tablet", "Mozilla/5.0 (Linux; Android 13; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36", "android"],
-      ["an iPhone", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1", "ios"],
-      ["a desktop", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36", "ios"],
-      ["a desktop on Linux", "Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0", "ios"],
-      ["one in another case", "android", "ios"],
-      ["one that says nothing", "", "ios"],
-      ["one with no User-Agent", null, "ios"],
-    ];
     const section = copySection("hang.md", "示範");
-    assert.ok(section.includes("裡面有 `Android` 的給 Android 的版本") && section.includes("`Vary: User-Agent`"), "hang.md says the rule");
-    const timeline = JSON.parse(readFileSync(join(WORKER_DIR, "..", "design", "motion", "hang.json"), "utf8")) as { boxes: Record<string, string>; variants: Record<string, { back: string }> };
+    assert.ok(section.includes("由播放程式在瀏覽器裡決定") && section.includes("裡有 `Android` 的是 Android 的版本"), "hang.md says the rule");
+    const agents: (string | null)[] = [
+      "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+      "",
+      null,
+    ];
     for (const path of ["/hang", `/hang/${CARD_A}`]) {
-      for (const [who, agent, variant] of agents) {
+      const pages: string[] = [];
+      for (const agent of agents) {
         const res = await worker.fetch(path, { headers: agent === null ? {} : { "User-Agent": agent } });
-        const page = await res.text();
-        const what = `${path}, ${who}`;
-        assert.equal(res.status, 200, what);
-        checkVisitorHeaders(what, res, { cache: "public, max-age=60", script: true });
-        assert.match(res.headers.get("vary") ?? "", /\bUser-Agent\b/, `${what}: Vary`);
-        assert.ok(page.includes(`data-variant="${variant}" hidden>`), `${what}: the ${variant} version`);
-        // The boxes of that platform, and not the other's way back.
-        const other = variant === "ios" ? "android" : "ios";
-        const boxes = [...page.matchAll(/data-box="([^"]*)"/g)].map((m) => m[1]!);
-        assert.deepEqual([...boxes].sort(), Object.keys(timeline.boxes).filter((b) => b !== timeline.variants[other]!.back).sort(), `${what}: its boxes`);
-        if (variant === "android") {
-          // The links: ✕ at the left is what to press, 完成 at the right is grey and no box (hang.md, the Android words).
-          const links = /<div class="shot s3" data-box="s3">([\s\S]*?)<\/div>\s*<\/div>\s*<div class="shot s4"/.exec(page)?.[1];
-          assert.ok(links !== undefined, `${what}: the screen of the links`);
-          const address = path === "/hang" ? ["iamreal.tw/p/", "test.iamreal.tw/p/"] : ["iamreal.tw/p/7K2Q9FM4XD", testSiteCardAddress(CARD_A)];
-          assert.equal(squash(visibleText(links)), squash(copyLines(demoWords("按了「連結」之後（示意）", "✕"), ...address).join("")), `${what}: the words of the links`);
-          assert.ok(links.includes('<span class="act dim">完成</span>'), `${what}: 完成 is grey`);
-        }
+        assert.equal(res.status, 200, path);
+        checkVisitorHeaders(path, res, { cache: "public, max-age=60", script: true });
+        assert.doesNotMatch(res.headers.get("vary") ?? "", /User-Agent/i, `${path}: nothing in the answer depends on the device`);
+        pages.push(await res.text());
       }
+      assert.equal(new Set(pages).size, 1, `${path}: the same page whatever the device says it is`);
+      // The page says no platform; the player does, in the browser. Both ways back are boxes: ✕ at the left, 完成 at the right.
+      assert.ok(pages[0]!.includes('<div class="demo" data-demo="hang-timeline" hidden>') && !pages[0]!.includes("data-variant"), `${path}: no platform chosen in the page`);
+      assert.match(pages[0]!, /<p class="top"><span class="act close" data-box="x3">✕[\s\S]*?<\/span><b>連結<\/b><span class="act" data-box="done3">完成/, `${path}: both ways back from the links`);
     }
-    // A redirect is the same for every device, and says nothing of one.
-    const moved = await worker.fetch("/hang/7k2q9fm4xd", { redirect: "manual" });
-    assert.equal(moved.status, 301);
-    assert.doesNotMatch(moved.headers.get("vary") ?? "", /User-Agent/i);
+    // The player chooses by what the browser says it is, and tells the style sheet; the style sheet draws each platform's top.
+    const player = readFileSync(join(WORKER_DIR, "demo", "player.js"), "utf8");
+    assert.ok(player.includes('const variant = /Android/.test(navigator.userAgent) ? "android" : "ios";') && player.includes("demo.dataset.variant = variant;"));
+    const css = readFileSync(join(WORKER_DIR, "site", "pages.css"), "utf8");
+    assert.match(css, /body\.hang \.demo\[data-variant="ios"\] \.shot \[data-box="x3"\] \{\s*display: none;\s*\}/);
+    assert.match(css, /body\.hang \.demo\[data-variant="android"\] \.shot \[data-box="done3"\] \{\s*color: var\(--dot\);\s*\}/);
+    // The Worker's code for the pages does not look at the device.
+    for (const file of ["visitor.ts", join("pages", "hang.ts"), join("pages", "layout.ts")]) assert.doesNotMatch(readFileSync(join(WORKER_DIR, "src", file), "utf8").replace(/^\s*(\/\/|\*|\/\*).*$/gm, ""), /user-agent/i, `src/${file} reads no User-Agent`);
   });
 
   test("/hang/<short ID> is the page for one card with an account on Threads only (302 to /hang otherwise); another spelling is redirected (301); one that does not read is answered without the proof log's object", async () => {

@@ -15,7 +15,8 @@
 //
 // The pages are made here, from what `PageData` answers (page-data.ts).
 // Their style sheet (/pages.css), the copy buttons' script that /faq, /verify
-// and /hang/… load (/copy.js) and the card proof page (/proof and everything
+// and /hang/… load (/copy.js), the player of the demonstration that /hang and
+// /hang/… load (/demo.js) and the card proof page (/proof and everything
 // under it) are not: they are files of Static Assets, which
 // sends them itself, and a request for one of those paths does not run the
 // Worker at all (wrangler.jsonc, "assets"; README.md, "Static Assets"). The
@@ -26,12 +27,12 @@
 // the back end itself fails, one line says which kind of page and where,
 // never the short ID, the account or anything else of the address.
 import { readShortIdInUrl } from "iamreal-protocol/scoped-id.ts";
-import { BY_DEVICE, EVERY_RESPONSE, PROOF_LOG_PAGE_CACHE, SCRIPT_PAGE_HEADERS, TEST_SITE_HEADERS, VISITOR_HEADERS } from "./headers.ts";
+import { EVERY_RESPONSE, PROOF_LOG_PAGE_CACHE, SCRIPT_PAGE_HEADERS, TEST_SITE_HEADERS, VISITOR_HEADERS } from "./headers.ts";
 import type { PageData } from "./page-data.ts";
 import { accountPage, notAName } from "./pages/account.ts";
 import { checkPage } from "./pages/check.ts";
 import { faqPage } from "./pages/faq.ts";
-import { hangPage, hangWithout, variantOf } from "./pages/hang.ts";
+import { hangPage, hangWithout } from "./pages/hang.ts";
 import { homePage } from "./pages/home.ts";
 import { type Document, type Site, layout } from "./pages/layout.ts";
 import { notFoundPage } from "./pages/not-found.ts";
@@ -95,14 +96,14 @@ interface Answer {
 
 const text = (status: number, body: string): Answer => ({ status, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" }, body });
 
-function page(site: Site, status: number, document: Document, more: Readonly<Record<string, string>> = {}): Answer {
+function page(site: Site, status: number, document: Document): Answer {
   let body: string;
   try {
     body = layout(site, document);
   } catch (e) {
     throw new Internal("render", e);
   }
-  return { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": PROOF_LOG_PAGE_CACHE, ...more }, body, script: document.script === true || document.demo === true };
+  return { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": PROOF_LOG_PAGE_CACHE }, body, script: document.script === true || document.demo === true };
 }
 
 /** `GET /`: the home page, with the proof log's two numbers. */
@@ -206,14 +207,10 @@ async function proofLog(site: Site, parts: VisitorParts, query: URLSearchParams)
  * `/p/` reads it, and another spelling redirected (301) to its one
  * spelling. A short ID that does not read, resolves to no card or to
  * several, or to a card with no account on Threads, is redirected (302) to
- * /hang; only a short ID that reads is asked of the proof log. The two
- * pages show the demonstration of the device's platform, read from the
- * request's User-Agent, and say so to a cache (`BY_DEVICE`); a redirect is
- * the same for every device.
+ * /hang; only a short ID that reads is asked of the proof log.
  */
-async function hang(site: Site, parts: VisitorParts, pathname: string, userAgent: string | null): Promise<Answer> {
-  const variant = variantOf(userAgent);
-  if (pathname === "/hang") return page(site, 200, hangWithout(site, variant), BY_DEVICE);
+async function hang(site: Site, parts: VisitorParts, pathname: string): Promise<Answer> {
+  if (pathname === "/hang") return page(site, 200, hangWithout(site));
   const typed = typedAfter(pathname, "/hang/");
   const short = readShortIdInUrl(typed);
   if (short !== null && short !== typed) return redirect(301, `/hang/${short}`);
@@ -221,7 +218,7 @@ async function hang(site: Site, parts: VisitorParts, pathname: string, userAgent
   const { cards } = await ask(() => parts.pageData.cards(short));
   const account = cards.length === 1 ? (cards[0]!.slots.find((s) => s.platform === PLATFORM)?.current ?? null) : null;
   if (account === null) return redirect(302, "/hang");
-  return page(site, 200, hangPage(site, short, account, variant), BY_DEVICE);
+  return page(site, 200, hangPage(site, short, account));
 }
 
 /**
@@ -247,7 +244,7 @@ export async function visitor(request: Request, env: Env, parts: VisitorParts): 
     else if (kind === "card") answer = await card(site, parts, pathname);
     else if (kind === "proof_log") answer = await proofLog(site, parts, searchParams);
     else if (kind === "account") answer = await threadsAccount(site, parts, pathname);
-    else if (kind === "hang") answer = await hang(site, parts, pathname, request.headers.get("User-Agent"));
+    else if (kind === "hang") answer = await hang(site, parts, pathname);
     else if (kind === "faq") answer = page(site, 200, faqPage());
     else if (kind === "verify") answer = page(site, 200, verifyPage());
     else if (kind === "check") answer = page(site, 200, checkPage(site));

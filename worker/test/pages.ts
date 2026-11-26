@@ -81,7 +81,7 @@ export function withScript(path: string): boolean {
   return p === "/faq" || p === "/verify" || p.startsWith("/hang/");
 }
 
-/** Whether the page at a path has the demonstration when it is found, so loads its player and differs by device: /hang and /hang/<short ID>. */
+/** Whether the page at a path has the demonstration when it is found, so loads its player: /hang and /hang/<short ID>. */
 export function withDemo(path: string): boolean {
   const p = path.split("?")[0]!;
   return p === "/hang" || p.startsWith("/hang/");
@@ -90,7 +90,8 @@ export function withDemo(path: string): boolean {
 /**
  * What a response of the visitors' pages has for headers: these, each with
  * this value, and no other. `noindex` is false on the production log;
- * `script` is true for a page that loads the copy buttons' script.
+ * `script` is true for a page that loads a script of this site (the copy
+ * buttons', the demonstration's player).
  */
 export function checkVisitorHeaders(what: string, res: Response, expect: { cache: string; noindex?: boolean; script?: boolean; more?: readonly string[] }): void {
   const want: Record<string, string> = {
@@ -235,8 +236,8 @@ export async function getPage(worker: TestWorker, path: string, expect: { test?:
   const demo = withDemo(path) && res.status === 200;
   const script = copies || demo;
   checkVisitorHeaders(path, res, { cache: expect.cache ?? "public, max-age=60", noindex: test, script });
-  // A page that differs by device says so to a cache; no other page does. (The local workerd may add what it compresses by.)
-  assert.equal(/\bUser-Agent\b/i.test(res.headers.get("vary") ?? ""), demo, `${path}: Vary names User-Agent only on the pages of hanging a proof`);
+  // No page differs by the device that asks: none says so to a cache. (The local workerd may add what it compresses by.)
+  assert.doesNotMatch(res.headers.get("vary") ?? "", /User-Agent/i, `${path}: Vary does not name User-Agent`);
   assert.equal(res.headers.get("content-type"), "text/html; charset=utf-8", `${path}: Content-Type`);
   if (script) {
     // The pages of hanging a proof have the demonstration: its player, and its timeline as data (hang.md, 示範).

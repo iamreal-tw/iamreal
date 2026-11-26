@@ -7,7 +7,7 @@ import { Html, html } from "./html.ts";
 /** Where the style sheet is served, and what the pages link to. */
 export const CSS_PATH = "/pages.css";
 
-/** Where the copy buttons' script is (site/copy.js, sent by Static Assets): the one script of the pages, loaded by /faq, /verify and /hang/<short ID> only. */
+/** Where the copy buttons' script is (site/copy.js, sent by Static Assets): loaded by /faq, /verify and /hang/<short ID> only. */
 export const COPY_JS_PATH = "/copy.js";
 
 /** Where the player of the demonstration is (site/demo.js, sent by Static Assets): loaded by /hang and /hang/<short ID> only (design/copy/hang.md, 示範). */

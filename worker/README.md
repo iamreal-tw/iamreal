@@ -513,7 +513,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 - **格式不對的帳號不問 Durable Object**：查詢頁的名稱先把 A–Z 轉成小寫，不合平台表裡 Threads 的格式就直接回「Threads 沒有這樣的帳號名稱」那一頁，`404`；有大寫的 `301` 轉到小寫。證明紀錄頁的查詢框是 Threads 的名稱時 `303` 轉到查詢頁，也不問。測試把 Durable Object 弄成什麼都不答來確認這幾種照樣回答。
 - **查詢框去掉前後的空白，照舊後台的 `strings.TrimSpace`**：Go 的空白（`unicode.IsSpace`）和 JavaScript 的 `trim` 差兩個字元：U+0085 Go 算空白，U+FEFF 不算。這裡照 Go。
 - **掛上去的示範**（`/hang`、`/hang/<短編號>`，`design/copy/hang.md`「示範」，[#371](https://github.com/iamreal-tw/iamreal/issues/371)、[#372](https://github.com/iamreal-tw/iamreal/issues/372)）：頁面裡多一個送出時隱藏的區塊（五個示意畫面，寫著這張卡片的帳號和網址，`/hang` 寫固定的例子）和一個資料區塊 `<script type="application/json">`，內容是 `design/motion/hang.json`；瀏覽器不執行它。播放程式 `/demo.js` 載入後才顯示示範、隱藏四張靜態圖和結果圖；沒有載入時頁面和原本相同。`/hang/<短編號>` 原本就准本站的程式（`script-src 'self'`）；`/hang` 原本完全不准程式，為了示範改成相同（[#369](https://github.com/iamreal-tw/iamreal/issues/369)，維護者 2026-11-26 同意），它只載入 `/demo.js`，不載入 `/copy.js`（那一頁沒有複製的按鈕）。
-  - **示範照裝置分兩個版本**（回到「連結」那一頁後，iPhone 按右上角的「完成」，Android 按左上角的 ✕）：後台看請求的 `User-Agent`，裡面有 `Android` 的給 Android 的版本，其餘給 iPhone 的（`src/pages/hang.ts` 的 `variantOf`）。`User-Agent` 只用來選這一段，不記下來。同一個網址因此有兩種內容，而頁面可以被快取 60 秒，所以這兩頁的 `200` 多帶 `Vary: User-Agent`（`src/headers.ts` 的 `BY_DEVICE`）；轉址不分裝置，不帶。Cloudflare 上 Worker 前面的快取會不會照 `Vary` 分開存，還沒有在線上看過（ADR-0026「還沒查到」的那幾項之一）：不照的話，一分鐘內 Android 的手機可能拿到 iPhone 的版本，兩個版本只差回程按哪一顆
+  - **示範有兩個版本**（回到「連結」那一頁後，iPhone 按右上角的「完成」，Android 按左上角的 ✕）：頁面同時帶著兩個版本要按的那一顆，由播放程式在瀏覽器裡看 `navigator.userAgent` 選（有 `Android` 的是 Android 的版本，其餘是 iPhone 的）。後台送給每一種裝置的頁面相同，不讀 `User-Agent`，回應不帶 `Vary`，頁面的快取不受影響。規格（[#369](https://github.com/iamreal-tw/iamreal/issues/369)）原本寫伺服器選；改成瀏覽器選的理由在那張票 2026-11-26 的最後一則留言
   - `site/demo.js` 由 `scripts/site-files.ts` 從兩個檔寫出，提交進版控：`src/teaching-animation.ts`（算狀態的函式，去掉型別）和 `demo/player.js`（畫的部分）。`test/demo.test.ts` 檢查版控裡的那一份就是這兩個檔寫出來的，而且它算的狀態和 `spec/vectors/teaching-animation.json` 的答案相同
   - 播放程式不向任何地方要資料、不寫 cookie、不改網址，也不在元素上寫樣式：會動的部分是它把時間表每一秒六十個時刻的狀態交給瀏覽器的 `Element.animate`。`test/site-pages.test.ts` 檢查程式裡沒有那些字
   - 後台的程式不引用 `worker/`、`protocol/` 以外的檔，所以時間表有一份拷貝 `src/pages/hang-timeline.ts`，同一支腳本寫出，同一個測試核對
@@ -586,8 +586,6 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | （沒有 `Cross-Origin-Embedder-Policy`、`Document-Isolation-Policy`） | | 送了的話 Threads 的框會被擋 |
 
 載入本站程式的四頁（常見問題、如何驗證證明紀錄、掛上去的兩頁）的 `200`：上面那一組，`Content-Security-Policy` 換成多一項 `script-src 'self'` 的 `default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`，和舊後台的 `scriptPageHeaders` 相同：只跑自己網域的程式，沒有行內的程式、沒有別的網站的。同一個網址的轉址、`405`、`500` 不載入程式，用上面那一組；舊後台是照路徑給，如何驗證證明紀錄和掛上去這兩個網址的每一種回應都帶 `script-src 'self'`（舊後台的常見問題沒有程式）。
-
-掛上去的兩頁（`/hang`、`/hang/<短編號>`）的 `200` 另外帶 `Vary: User-Agent`：示範照裝置分兩個版本（[頁面和檔案](#頁面和檔案)「掛上去的示範」）。
 
 過卡的頁面和它的每個檔案（`/proof`、`/proof/…`）：`Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups` 三個，值和每一項的理由寫在 [`web/README.md`](../web/README.md)「頁面需要的標頭」。[`test/proof-files.test.ts`](test/proof-files.test.ts) 從那份 README 讀出這三個值，確認它們和 `src/headers.ts` 的相同，本機的 workerd 對 `/proof` 的每一種回應（檔案、`301`、`404`、`405`、`304`）送的也一字不差。`connect-src` 裡的資料網域照證明紀錄的種類（`src/headers.ts` 的 `DATA_ORIGINS`、`proofPageHeaders`）：測試的證明紀錄的網站是 `https://test-data.iamreal.tw`，正式的證明紀錄的是 `https://data.iamreal.tw`（舊後台只有後面這一份）。兩份 `web/README.md` 都引用了，測試各比一次。
 
