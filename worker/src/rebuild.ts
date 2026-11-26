@@ -238,6 +238,8 @@ export async function beginRebuild(storage: RebuildStorage, bucket: FileBucket, 
       last === undefined ? null : formatDay(last.date!),
       time,
     );
+    // A last line of no records: the states at that count are no state at all, kept now, before any record is applied.
+    if (last?.count === 0) snapshotAtPublished(sql);
   });
 }
 
@@ -314,8 +316,9 @@ export interface RebuildParts {
  *
  * Throws `RebuildRefused` when the rebuild cannot end with a swap: the
  * rebuild is then over, `refused`, with that reason, and the staged tables
- * are dropped. Any other error (the bucket did not answer) leaves the
- * rebuild as it was before the step, to be tried again.
+ * are dropped. That is every failure but one: a bucket that does not answer
+ * throws whatever it throws, and leaves the rebuild as it was before the
+ * step, to be tried again.
  */
 export async function rebuildStep(storage: RebuildStorage, bucket: FileBucket, parts: RebuildParts): Promise<"more" | "done"> {
   const sql = storage.sql;
@@ -341,7 +344,7 @@ export async function rebuildStep(storage: RebuildStorage, bucket: FileBucket, p
     const to = staged(sql);
     const count = state.records + run.lines.length;
     let latest = state.latest_date === null ? null : parseDay(state.latest_date);
-    storage.transactionSync(() => {
+    const apply = (): void => {
       for (const row of applied) {
         const record = readRecordLine(parts.kind, row.line)!;
         const date = parseChallenge(record.challenge);
@@ -361,14 +364,24 @@ export async function rebuildStep(storage: RebuildStorage, bucket: FileBucket, p
       if (run.fileSha256 !== null) sql.exec(`INSERT INTO ${STAGE}full_files (records_before, fingerprint_after, file_sha256) VALUES (?, ?, ?)`, state.records, fingerprint, run.fileSha256);
       sql.exec("UPDATE rebuild_state SET records = ?, fingerprint = ?, latest_date = ?, fingerprint_at_published = ? WHERE id = 1", count, fingerprint, latest === null ? null : formatDay(latest), atPublished);
       if (run.last) {
+        // Read from the bucket alone, there is nothing but the fingerprint file to say that these files are the proof log.
+        if (state.source === "bucket" && state.published_count === null && count > 0) throw new RebuildRefused("the data bucket has log files and no line of the fingerprint file to compare them with");
         if (state.published_count !== null) {
           if (count < state.published_count) throw new RebuildRefused(`the proof log has ${count} records, fewer than the ${state.published_count} of the last line of the fingerprint file`);
           if (atPublished !== state.published_fingerprint) throw new RebuildRefused(`the proof log fingerprint after ${state.published_count} records is not the one of the last line of the fingerprint file`);
-          if (state.published_count === 0) snapshotAtPublished(sql);
         }
         swap(sql, state.source, count, fingerprint, latest, parts.time);
       }
-    });
+    };
+    try {
+      storage.transactionSync(apply);
+    } catch (e) {
+      // Nothing in the transaction waits for anything, so what failed there fails the same way at every try: a row the
+      // tables do not take, a state that is none. The rebuild ends rather than hold card proofs back for good. Only
+      // the kind of the error is kept, as in the object's log lines: a message can carry what a record holds.
+      if (e instanceof RebuildRefused) throw e;
+      throw new RebuildRefused(`the records after record ${state.records} could not be applied (${e instanceof Error ? e.name : "unknown"})`);
+    }
     return run.last ? "done" : "more";
   } catch (e) {
     if (e instanceof RebuildRefused) {

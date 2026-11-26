@@ -726,6 +726,8 @@ export class ProofLog extends DurableObject<Env> {
    */
   #acceptAt(record: ProofLogRecord, hash: string, fingerprint: string): AcceptTry {
     const sql = this.ctx.storage.sql;
+    // A rebuild may have begun while the record was hashed: it reads the records as they are, and none is added under it.
+    if (this.#rebuilding()) return refused("paused");
     if (this.#proofLogRow().count !== record.seq - 1) return { outcome: "the count moved" };
     const { kind, platforms } = this.settings;
     const date = parseChallenge(record.challenge);
@@ -1060,6 +1062,9 @@ export class ProofLog extends DurableObject<Env> {
     return { date, count: row.count, fingerprint: row.fingerprint };
   }
 
+  /** The publication that is going on, if one is: a rebuild from the proof log does not begin inside it. */
+  #publishing: Promise<void> | null = null;
+
   /** The failures in a row of publishing the proof log, and when it is tried again. */
   readonly #publishRetries = new Retries(this.ctx.storage.sql, "publication", LONGEST_RETRY_MS);
 
@@ -1091,7 +1096,8 @@ export class ProofLog extends DurableObject<Env> {
    */
   #dailyPublication: TimedWork = {
     due: () => {
-      if (this.#paused) return null;
+      // Nor while a rebuild from the proof log runs: the line and the card state file would be of the states it is about to replace.
+      if (this.#paused || this.#rebuilding()) return null;
       const sql = this.ctx.storage.sql;
       const { last, behind } = sql.exec<{ last: string | null; behind: number }>("SELECT MAX(date) AS last, COALESCE(SUM(in_bucket = 0), 0) AS behind FROM published").one();
       const again = this.#publishRetries.againAt() ?? 0;
@@ -1102,11 +1108,14 @@ export class ProofLog extends DurableObject<Env> {
     },
     run: async (time) => {
       try {
-        await this.#publish();
+        this.#publishing = this.#publish();
+        await this.#publishing;
         this.#publishRetries.succeeded();
       } catch (e) {
         this.#publishRetries.failedAt(time);
         logFailure(e instanceof FingerprintFileDiffers ? "fingerprint_file_differs" : "proof_log_not_published", e);
+      } finally {
+        this.#publishing = null;
       }
     },
   };
@@ -1321,9 +1330,11 @@ export class ProofLog extends DurableObject<Env> {
   protected async beginRebuild(token: string): Promise<boolean> {
     this.#checkTables();
     if (rebuildProgress(this.ctx.storage.sql)?.token === token) return false;
-    // Not while the views are being filled, or a full file moved: both read and write what a rebuild replaces.
+    // Not while the views are being filled, a full file moved or the proof log published: they read and write what a
+    // rebuild reads and replaces. (A publication that fails is its own piece's to say.)
     await this.viewsFilling;
     await this.#moving;
+    await this.#publishing?.catch(() => undefined);
     await beginRebuild(this.ctx.storage, this.bucket(), token, now().getTime());
     this.#rebuildRetries.succeeded();
     console.log(JSON.stringify({ event: "rebuild_begun", token }));
@@ -1350,51 +1361,58 @@ export class ProofLog extends DurableObject<Env> {
    *   the last record. The card state file of the last published date is
    *   written again at once, from the states the rebuild computed for that
    *   line's count, for a re-verifier to compare (spec/record-rules.md,
-   *   "The card state file").
+   *   "The card state file"). Writing it is this piece's last step: if it
+   *   fails, or the object stops before it, it is due again until the file
+   *   is in the bucket.
    * - One line is written for each step, with the count so far, and one
    *   when it ends.
    *
-   * No move of full files and no publication runs meanwhile: they are
-   * pieces of the alarm's work too, which runs one piece after the other.
+   * The proof log is not published while a rebuild runs (`#dailyPublication`):
+   * the date that changes meanwhile gets its line once the rebuild is over.
+   * Full files are moved between two steps as at any time: a step reads the
+   * list of the full files and the kept records as they are when it begins.
    */
   #rebuild: TimedWork = {
-    due: () => (this.#rebuilding() ? (this.#rebuildRetries.againAt() ?? 0) : null),
+    due: () => (this.#rebuilding() || publishedStatesDate(this.ctx.storage.sql) !== null ? (this.#rebuildRetries.againAt() ?? 0) : null),
     run: async (time) => {
       const sql = this.ctx.storage.sql;
-      try {
-        const step = await rebuildStep(this.ctx.storage, this.bucket(), { kind: this.settings.kind, platforms: this.settings.platforms, today: taiwanDay(time), time });
-        this.#rebuildRetries.succeeded();
-        const progress = rebuildProgress(sql)!;
-        console.log(JSON.stringify({ event: step === "done" ? "rebuild_swapped" : "rebuild_step", token: progress.token, records: progress.records }));
-        if (step === "more") return;
-        this.#paused = false;
-        this.#viewsAtLastRecord = true;
-        this.#fillRetries.succeeded();
-      } catch (e) {
-        if (e instanceof RebuildRefused) {
+      if (this.#rebuilding()) {
+        try {
+          const step = await rebuildStep(this.ctx.storage, this.bucket(), { kind: this.settings.kind, platforms: this.settings.platforms, today: taiwanDay(time), time });
+          this.#rebuildRetries.succeeded();
           const progress = rebuildProgress(sql)!;
-          console.log(JSON.stringify({ event: "rebuild_refused", token: progress.token, records: progress.records, reason: progress.reason }));
-        } else {
-          this.#rebuildRetries.failedAt(time);
-          logFailure("rebuild_step_failed", e);
-        }
-        return;
-      }
-      // The swap is made. The card state file is written from it; a failure of that is its own, and the next daily publication writes one.
-      try {
-        const date = publishedStatesDate(sql);
-        if (date !== null) {
-          copyCards(sql, PUBLISHED_STATES);
-          try {
-            await this.#writeCardStateFile(date);
-          } finally {
-            dropCardsCopy(sql);
+          console.log(JSON.stringify({ event: step === "done" ? "rebuild_swapped" : "rebuild_step", token: progress.token, records: progress.records }));
+          if (step === "more") return;
+          this.#paused = false;
+          this.#viewsAtLastRecord = true;
+          this.#fillRetries.succeeded();
+        } catch (e) {
+          if (e instanceof RebuildRefused) {
+            const progress = rebuildProgress(sql)!;
+            console.log(JSON.stringify({ event: "rebuild_refused", token: progress.token, records: progress.records, reason: progress.reason }));
+          } else {
+            this.#rebuildRetries.failedAt(time);
+            logFailure("rebuild_step_failed", e);
           }
+          return;
         }
-      } catch (e) {
-        logFailure("rebuild_card_state_file_not_written", e);
-      } finally {
+      }
+      // The swap is made, now or before the object last stopped: the card state file is written from the states it
+      // left for that (rebuild.ts, `PUBLISHED_STATES`), which are kept until the file is in the bucket.
+      const date = publishedStatesDate(sql);
+      if (date === null) return;
+      try {
+        copyCards(sql, PUBLISHED_STATES);
+        try {
+          await this.#writeCardStateFile(date);
+        } finally {
+          dropCardsCopy(sql);
+        }
         dropPublishedStates(sql);
+        this.#rebuildRetries.succeeded();
+      } catch (e) {
+        this.#rebuildRetries.failedAt(time);
+        logFailure("rebuild_card_state_file_not_written", e);
       }
     },
   };

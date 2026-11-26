@@ -311,6 +311,86 @@ describe("after the swap", () => {
   });
 });
 
+describe("what the review of the rebuild found", () => {
+  const cardStateRows = async (date: string): Promise<number | null> => {
+    const file = (await worker.files("proof-log/")).find((f) => f.key === `proof-log/card-state/${date}.jsonl`);
+    return file === undefined ? null : new TextDecoder().decode(file.bytes).split("\n").filter((l) => l !== "").length;
+  };
+  const fingerprintLines = async (): Promise<number> => {
+    const file = (await worker.files("proof-log/")).find((f) => f.key === "proof-log/fingerprints.jsonl");
+    return file === undefined ? 0 : new TextDecoder().decode(file.bytes).split("\n").filter((l) => l !== "").length;
+  };
+
+  test("a last published line of no records: the card state file written again is of no card, whatever was recorded since", async () => {
+    await freshProofLog(worker);
+    const root = await publishG3(worker);
+    await midnight("2026-11-21");
+    await day(worker, 1);
+    assert.equal(await cardStateRows("2026-11-21"), 0);
+    await fillTo(root, 2);
+    await worker.putFile("proof-log/card-state/2026-11-21.jsonl", "lost\n", "public, max-age=60", "application/x-ndjson");
+    assert.equal(await worker.proofLog.beginRebuild("line-of-none"), true);
+    assert.deepEqual(await rebuildToItsEnd(), { steps: 1, status: "swapped", reason: null, records: 2 });
+    assert.equal(await cardStateRows("2026-11-21"), 0);
+  });
+
+  test("the card state file could not be written after the swap: the swap stands, and the file is written a minute later, also by an object that started again in between", async () => {
+    const { cards } = await smallProofLog();
+    const before = await computed(cards);
+    const key = "proof-log/card-state/2026-11-21.jsonl";
+    await worker.putFile(key, "lost\n", "public, max-age=60", "application/x-ndjson");
+    const started = new Date("2026-11-21T13:00:00+08:00");
+    await worker.setClock(started);
+    await worker.proofLog.setBucketFault({ key, how: "put fails" });
+    assert.equal(await worker.proofLog.beginRebuild("file-later"), true);
+    await worker.proofLog.runAlarm();
+    assert.deepEqual(await worker.proofLog.rebuildStatus(), { token: "file-later", status: "swapped", records: 6, reason: null });
+    assert.deepEqual(await computed(cards), before);
+    assert.equal(await cardStateRows("2026-11-21"), 1, "still the lost file");
+    assert.ok(worker.logLines().some((l) => l.includes('"event":"rebuild_card_state_file_not_written"')));
+    await worker.proofLog.setBucketFault(null);
+    await worker.proofLog.restart();
+    await worker.setClock(new Date(started.getTime() + 61_000));
+    await worker.proofLog.runAlarm();
+    assert.equal(await cardStateRows("2026-11-21"), 2);
+    assert.deepEqual((await worker.proofLog.tables()).filter((name) => name.startsWith("rebuilt_") || name === "cards_copy"), []);
+  });
+
+  test("the date changes while a rebuild runs: the proof log is not published from the tables that are about to be replaced, and is once the rebuild is over", async () => {
+    await freshProofLog(worker);
+    const root = await publishG3(worker);
+    await fillTo(root, LINES_PER_FILE + 2);
+    await worker.proofLog.runAlarm();
+    await midnight("2026-11-21");
+    assert.equal(await fingerprintLines(), 1);
+    assert.equal(await worker.proofLog.beginRebuild("over-midnight"), true);
+    await worker.proofLog.runAlarm();
+    assert.equal((await worker.proofLog.rebuildStatus())!.status, "running");
+    // Midnight, between the rebuild's two steps: the alarm makes the second step, and no line of the new date before it.
+    await worker.setClock(tw("2026-11-22", "00:00:10"));
+    assert.equal(await fingerprintLines(), 1);
+    await worker.proofLog.runAlarm();
+    assert.equal((await worker.proofLog.rebuildStatus())!.status, "swapped");
+    await worker.proofLog.runAlarm();
+    assert.equal(await fingerprintLines(), 2);
+    assert.equal(await cardStateRows("2026-11-22"), LINES_PER_FILE + 2);
+  });
+
+  test("an empty object and a bucket with log files but no fingerprint file: there is nothing to compare them with, and nothing is put in place", async () => {
+    await freshProofLog(worker);
+    const root = await publishG3(worker);
+    await fillTo(root, 3);
+    await midnight("2026-11-21");
+    await worker.deleteFile("proof-log/fingerprints.jsonl");
+    await worker.switchProofLog({ PROOF_LOG_KIND: "test", PROOF_LOG_OBJECT_NAME: "test-rebuilt-no-lines" });
+    assert.equal(await worker.proofLog.beginRebuild("no-lines"), true);
+    const ended = await rebuildToItsEnd();
+    assert.equal(ended.status, "refused");
+    assert.match(ended.reason ?? "", /log files and no line of the fingerprint file/);
+    assert.equal((await worker.proofLog.stored()).proofLog.count, 0);
+  });
+});
+
 describe("the operator asks for a rebuild by a setting (REBUILD_PROOF_LOG)", () => {
   const status = async (): Promise<unknown> => (await worker.fetch("/api/v1/rebuild")).json();
   /** The settings as the dashboard has them after a change, and the object started again with them, as a new version of the Worker starts it. */
