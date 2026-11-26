@@ -52,6 +52,14 @@ object DeviceCore {
     fun cardStatus(platformsJson: ByteArray, cardStateJson: ByteArray, knownPlatformsJson: ByteArray, now: Long): ByteArray =
         nativeCardStatus(platformsJson, cardStateJson, knownPlatformsJson, now)
 
+    /**
+     * Whether this build of the app may do a card proof (spec/min-app.md): JSON, `{"verdict":"ok"}`,
+     * `{"verdict":"ok_until","from":"2027-03-01"}`, `{"verdict":"stop","from":"2027-03-01"}` or `{"verdict":"unreadable"}`.
+     * [config] is the body of `GET /api/v1/config` as the server sent it; [appBuild] the app's own
+     * `versionCode`; [now] the phone's clock in seconds. The core reads the Android app's entry.
+     */
+    fun minApp(config: ByteArray, appBuild: Int, now: Long): ByteArray = nativeMinApp(config, appBuild, now)
+
     /** The short ID (spec/scoped-id.md) of a scoped ID in its text form: 10 characters. */
     fun shortId(scopedId: ByteArray): ByteArray = nativeShortId(scopedId)
 
@@ -139,6 +147,8 @@ object DeviceCore {
     private external fun nativeListConsequence(platformsJson: ByteArray, cardStateJson: ByteArray, knownPlatformsJson: ByteArray, accountsJson: ByteArray, now: Long): ByteArray
 
     private external fun nativeCardStatus(platformsJson: ByteArray, cardStateJson: ByteArray, knownPlatformsJson: ByteArray, now: Long): ByteArray
+
+    private external fun nativeMinApp(config: ByteArray, appBuild: Int, now: Long): ByteArray
 
     private external fun nativeShortId(scopedId: ByteArray): ByteArray
 
