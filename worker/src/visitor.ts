@@ -47,8 +47,8 @@ import { PLATFORM, isThreadsUsername, proofMissing, proofPage } from "./pages/pr
 import { PAGE_SIZE, proofLogPage, readAfter } from "./pages/proof-log-page.ts";
 import { verifyPage } from "./pages/verify.ts";
 import { OTHER_SCHEMA } from "./proof-log.ts";
-import { tooManyRequestsPage } from "./pages/too-many-requests.ts";
-import { RETRY_AFTER_SECONDS, withinLimit } from "./rate-limit.ts";
+import { busyPage, tooManyRequestsPage } from "./pages/too-many-requests.ts";
+import { RETRY_AFTER_SECONDS, isOverloaded, withinLimit } from "./rate-limit.ts";
 import { proofLogSettingsOf } from "./settings.ts";
 
 /** What the pages are given besides the environment: the piece that is behind an interface, so that it can be replaced by itself. */
@@ -267,8 +267,15 @@ export async function visitor(request: Request, env: Env, parts: VisitorParts): 
     else answer = page(site, 404, notFoundPage());
   } catch (e) {
     const cause = e instanceof Internal ? e.cause : e;
-    console.error(JSON.stringify({ event: "internal_error", page: kind, where: e instanceof Internal ? e.where : "render", error: cause instanceof Error ? cause.name : "unknown" }));
-    answer = text(500, "internal error\n");
+    if (site !== null && isOverloaded(cause)) {
+      // The proof log's object is overloaded (ADR-0026): the page of too many people, not kept by any cache.
+      console.error(JSON.stringify({ event: "proof_log_overloaded", page: kind }));
+      const told = page(site, 503, busyPage());
+      answer = { ...told, headers: { ...told.headers, "Cache-Control": "no-store", "Retry-After": String(RETRY_AFTER_SECONDS) } };
+    } else {
+      console.error(JSON.stringify({ event: "internal_error", page: kind, where: e instanceof Internal ? e.where : "render", error: cause instanceof Error ? cause.name : "unknown" }));
+      answer = text(500, "internal error\n");
+    }
   }
   const headers = new Headers({
     ...answer.headers,

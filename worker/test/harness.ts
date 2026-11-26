@@ -172,6 +172,8 @@ export interface TestWorker {
   connectionLog(): Promise<{ key: string; text: string; entry: Record<string, unknown>; contentType: string | undefined }[]>;
   /** From now on every write to the connection log's bucket fails, or, with false, none does. */
   failConnectionLog(fails: boolean): Promise<void>;
+  /** From now on every call to the proof log's object is turned away as overloaded, or, with false, none is. */
+  overloadProofLog(overloaded: boolean): Promise<void>;
   /** Takes every object out of the connection log's bucket. */
   emptyConnectionLog(): Promise<void>;
   /** Puts an object into the connection log's bucket behind the Worker's back, under any key. */
@@ -480,7 +482,7 @@ export interface StartOptions {
 }
 
 /** The bindings of the per-IP limits (wrangler.jsonc, "ratelimits"). */
-export type RateBinding = "RATE_CHALLENGES" | "RATE_CARD_STATE" | "RATE_RECORDS" | "RATE_PUBLIC_READS" | "RATE_PAGES";
+export type RateBinding = "RATE_CHALLENGES" | "RATE_CARD_STATE" | "RATE_RECORDS" | "RATE_PUBLIC_READS" | "RATE_PAGES" | "RATE_STARTS";
 
 /** The text of wrangler.jsonc with the limit of each binding named in `limits` replaced. Throws if a binding is not there once. */
 export function withRateLimits(config: string, limits: Readonly<Partial<Record<RateBinding, number>>>): string {
@@ -658,6 +660,10 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
     async failConnectionLog(fails) {
       const res = await server.fetch("/__test/connection-log-fault", { method: "PUT", body: String(fails) });
       if (res.status !== 204) throw new Error(`setting the connection log's fault: HTTP ${res.status}`);
+    },
+    async overloadProofLog(overloaded) {
+      const res = await server.fetch("/__test/proof-log-overloaded", { method: "PUT", body: String(overloaded) });
+      if (res.status !== 204) throw new Error(`setting the proof log's overload: HTTP ${res.status}`);
     },
     async newestCrls() {
       const res = await server.fetch("/__test/newest-crls");

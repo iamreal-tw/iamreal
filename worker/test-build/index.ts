@@ -74,7 +74,37 @@ const failingBucket = (real: R2Bucket): R2Bucket =>
     },
   });
 
-const testEnv = (env: Env): Env => ({ ...env, ...testSettings, ...(connectionLogFails && { CONNECTION_LOG: failingBucket(env.CONNECTION_LOG) }) });
+/** Whether every call to the proof log's object is turned away as overloaded, as the test chose (`PUT /__test/proof-log-overloaded`). */
+let proofLogOverloaded = false;
+
+/**
+ * The proof log's namespace with every call to an object rejected the way
+ * Cloudflare rejects one to an overloaded object: an Error with
+ * `overloaded` set (https://developers.cloudflare.com/durable-objects/best-practices/error-handling/).
+ */
+const overloadedNamespace = (real: DurableObjectNamespace): DurableObjectNamespace =>
+  new Proxy(real, {
+    get: (target, name) => {
+      if (name === "get") {
+        return () =>
+          new Proxy(
+            {},
+            {
+              get: () => () => Promise.reject(Object.assign(new Error("Durable Object is overloaded. Too many requests queued."), { overloaded: true, retryable: false })),
+            },
+          );
+      }
+      const value = Reflect.get(target, name) as unknown;
+      return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+    },
+  });
+
+const testEnv = (env: Env): Env => ({
+  ...env,
+  ...testSettings,
+  ...(connectionLogFails && { CONNECTION_LOG: failingBucket(env.CONNECTION_LOG) }),
+  ...(proofLogOverloaded && { PROOF_LOG: overloadedNamespace(env.PROOF_LOG) as Env["PROOF_LOG"] }),
+});
 
 /**
  * The stand-in verifier: it looks at nothing but the proof's first byte. 0
@@ -623,6 +653,10 @@ export default {
     }
     if (route === "PUT /__test/connection-log-fault") {
       connectionLogFails = (await request.text()) === "true";
+      return done();
+    }
+    if (route === "PUT /__test/proof-log-overloaded") {
+      proofLogOverloaded = (await request.text()) === "true";
       return done();
     }
     const env = testEnv(deployedEnv);

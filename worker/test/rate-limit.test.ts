@@ -15,7 +15,7 @@ import { block, copyLines, wantLines, wantPreview } from "./copy.ts";
 import { type RateBinding, type TestWorker, startWorker, withRateLimits } from "./harness.ts";
 import { TEST_SCOPE, freshProofLog, newCard, publishG3, sub } from "./records.ts";
 
-const LIMITS: Readonly<Record<RateBinding, number>> = { RATE_CHALLENGES: 3, RATE_CARD_STATE: 4, RATE_RECORDS: 2, RATE_PUBLIC_READS: 5, RATE_PAGES: 6 };
+const LIMITS: Readonly<Record<RateBinding, number>> = { RATE_CHALLENGES: 3, RATE_CARD_STATE: 4, RATE_RECORDS: 2, RATE_PUBLIC_READS: 5, RATE_PAGES: 6, RATE_STARTS: 1000 };
 
 let worker: TestWorker;
 before(async () => {
