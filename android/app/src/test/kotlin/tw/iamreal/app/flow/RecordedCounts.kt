@@ -10,6 +10,8 @@ class RecordedCounts(
     private val appVersion: String = "2026.11.5",
     private val model: String = "SM-S918B",
     private val sendFails: Boolean = false,
+    /** The random source's bytes, every time; by default each ID is told apart from the one before. */
+    private val random: ByteArray? = null,
 ) {
     val sent = mutableListOf<JSONObject>()
     private var next = 0
@@ -24,6 +26,8 @@ class RecordedCounts(
 
         // Not random: each ID is told apart from the one before.
         override fun random(bytes: ByteArray) {
+            val given = random
+            if (given != null) return given.copyInto(bytes).let {}
             next++
             bytes.fill(next.toByte())
         }

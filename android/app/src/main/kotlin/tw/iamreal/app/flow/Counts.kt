@@ -4,9 +4,6 @@ import org.json.JSONObject
 import tw.iamreal.app.card.CardException
 import tw.iamreal.app.core.DeviceCore
 import tw.iamreal.app.core.DeviceCoreException
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneOffset
 
 /**
  * The counts of the app's card proofs (spec/counts.md; ADR-0032, ADR-0039): which step a card proof reached, why it
@@ -19,7 +16,7 @@ import java.time.ZoneOffset
  *   drop is not sent. Nothing of a failure but its code: no text of an exception, the card or the server. No account, no
  *   scoped ID, nothing read from the card.
  * - The card proof device ID is 16 random bytes kept in the app's own preferences with the date it was made on, in
- *   Taiwan; 31 days after that date it is replaced, and the old one is not kept anywhere ([deviceId]). The submission of
+ *   Taiwan; 31 days after that date it is replaced, and the old one is not kept anywhere ([deviceId], the core's rule). The submission of
  *   a record carries it too. The attempt ID is 16 random bytes kept in memory by one card proof ([Attempt]), and dropped
  *   with it.
  * - Sending never holds a card proof up: [Deps.send] does not wait, and a request that fails is not sent again.
@@ -59,18 +56,17 @@ class Counts(private val deps: Deps) {
     }
 
     /**
-     * The card proof device ID today: the stored one if it was made less than [DEVICE_ID_DAYS] days ago, otherwise a new
-     * one, written over the old. A stored value that cannot be read, or is dated after today, is replaced too.
+     * The card proof device ID today, by the core's rule (spec/counts.md, "The card proof device ID"): the stored one if it
+     * was made fewer than 31 days ago in Taiwan, otherwise a new one, written over the old. Throws [DeviceCoreException]
+     * for a clock the core does not take.
      */
     @Synchronized
     fun deviceId(): String {
-        val today = Instant.ofEpochMilli(deps.now()).atOffset(ZoneOffset.ofHours(8)).toLocalDate()
-        val stored = STORED.matchEntire(deps.store.get() ?: "")
-        val made = stored?.let { runCatching { LocalDate.parse(it.groupValues[2]) }.getOrNull() }
-        if (stored != null && made != null && !made.isAfter(today) && made.plusDays(DEVICE_ID_DAYS).isAfter(today)) return stored.groupValues[1]
-        val id = newId()
-        deps.store.set("$id.$today")
-        return id
+        val random = ByteArray(16).also(deps::random)
+        val answer = JSONObject(String(DeviceCore.countDeviceId((deps.store.get() ?: "").toByteArray(), deps.now() / 1000, random), Charsets.UTF_8))
+        random.fill(0)
+        if (!answer.isNull("store")) deps.store.set(answer.getString("store"))
+        return answer.getString("device_id")
     }
 
     private fun newId(): String {
@@ -79,8 +75,15 @@ class Counts(private val deps: Deps) {
         return bytes.joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 
-    /** The counts of one card proof, under a new attempt ID; its first count is the step `open`. */
-    fun attempt(): Attempt = Attempt(newId()).also { it.step("open") }
+    /** The card proof device ID, or null when none can be had (a clock the core does not take, no preferences). */
+    fun deviceIdOrNull(): String? = try {
+        deviceId()
+    } catch (e: RuntimeException) {
+        null
+    }
+
+    /** The counts of one card proof, under a new attempt ID. */
+    fun attempt(): Attempt = Attempt(newId())
 
     /**
      * The counts of one card proof. Each step is sent once; after a stop, nothing more is: the card proof is over. Any
@@ -89,6 +92,10 @@ class Counts(private val deps: Deps) {
     inner class Attempt internal constructor(private val id: String) {
         private val reached = mutableSetOf<String>()
         private var stopped = false
+
+        /** A card was asked to be read for this card proof, or it stopped: a card proof after it is another one. */
+        val begun: Boolean
+            @Synchronized get() = stopped || "read" in reached
 
         /** The card proof reached [step]. */
         @Synchronized
@@ -162,11 +169,6 @@ class Counts(private val deps: Deps) {
     }
 
     companion object {
-        /** After how many days a card proof device ID is replaced, counted from the date it was made on. */
-        const val DEVICE_ID_DAYS = 31L
-
-        private val STORED = Regex("([0-9a-f]{32})\\.(\\d{4}-\\d{2}-\\d{2})")
-
         /**
          * The reason code of [stop] (spec/counts.md, "Reasons"), chosen by its own codes and by nothing else it holds: not
          * its dates, days, request ID. Null when there is none to count: the cardholder left ([Stop] `cancelled`), or a card

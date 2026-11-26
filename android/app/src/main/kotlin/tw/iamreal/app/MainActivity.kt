@@ -307,8 +307,8 @@ private class StoredDeviceId(context: Context) : Counts.Store {
     override fun get(): String? = preferences.getString(KEY, null)
 
     override fun set(value: String) {
-        // commit, not apply: the old one is gone from the file before the new one is sent.
-        preferences.edit().putString(KEY, value).commit()
+        // In place of the old one: the old one is kept nowhere.
+        preferences.edit().putString(KEY, value).apply()
     }
 
     private companion object {

@@ -72,7 +72,7 @@ class CountsTest {
         assertEquals("2026.11.5", count.getString("app_version"))
         assertEquals("SM-S918B", count.getString("model"))
         // Each card proof its own attempt ID; the device ID is the same.
-        r.counts.attempt()
+        r.counts.attempt().step("read")
         assertNotEquals(count.getString("attempt_id"), r.sent.last().getString("attempt_id"))
         assertEquals(count.getString("device_id"), r.sent.last().getString("device_id"))
     }
@@ -80,7 +80,7 @@ class CountsTest {
     @Test
     fun `a version or a model not in its format is left out, not rewritten`() {
         val r = RecordedCounts(osVersion = "VanillaIceCream", appVersion = "dev", model = "Alice’s phone")
-        r.counts.attempt()
+        r.counts.attempt().step("open")
         val count = r.sent.single()
         for (member in listOf("os_version", "app_version", "model")) assertFalse(member, count.has(member))
         assertEquals("open", count.getString("step"))
@@ -101,7 +101,7 @@ class CountsTest {
         attempt.stop("engine")
         attempt.retry("no_tap")
         assertEquals(
-            listOf("step:open", "step:read", "retry:no_tap", "action:tap_dropped:2", "duration:tree:10s_30s", "retry:server_other", "stop:server_other"),
+            listOf("step:read", "retry:no_tap", "action:tap_dropped:2", "duration:tree:10s_30s", "retry:server_other", "stop:server_other"),
             r.events(),
         )
     }
@@ -112,7 +112,7 @@ class CountsTest {
         val attempt = r.counts.attempt()
         attempt.step("read")
         attempt.stop("no_nfc")
-        assertEquals(listOf("step:open", "step:read", "stop:no_nfc"), r.events())
+        assertEquals(listOf("step:read", "stop:no_nfc"), r.events())
     }
 
     // The reason of every stop ---------------------------------------------------------
@@ -170,6 +170,7 @@ class CountsTest {
             override fun set(issuer: String, number: String) {}
         }
         override val counts = r.counts
+        override val attempt = r.counts.attempt()
     })
 
     private fun readCard(f: CardProof): Stop = assertThrows(Stop::class.java) { f.readCard(object : CardProof.Events {}) }
@@ -189,11 +190,11 @@ class CountsTest {
             val r = RecordedCounts()
             val f = flow(r, FailingCard(reason))
             readCard(f)
-            assertEquals(reason.name, listOf("step:open", "step:read", "step:config") + then, r.events())
+            assertEquals(reason.name, listOf("step:read", "step:config") + then, r.events())
             // Tried again on the same card proof: the steps already sent are not sent again.
             if (then.single().startsWith("retry") || then.single().startsWith("action")) {
                 readCard(f)
-                assertEquals(reason.name, listOf("step:open", "step:read", "step:config") + then + then, r.events())
+                assertEquals(reason.name, listOf("step:read", "step:config") + then + then, r.events())
             }
         }
     }
@@ -202,16 +203,16 @@ class CountsTest {
     fun `step 2 before the tap - the server stopped taking card proofs, or did not answer`() {
         val paused = RecordedCounts()
         readCard(flow(paused, FailingCard(CardException.Reason.NO_TAP)) { """{"paused":true,$platforms}""".toByteArray() })
-        assertEquals(listOf("step:open", "step:read", "stop:server_paused"), paused.events())
+        assertEquals(listOf("step:read", "stop:server_paused"), paused.events())
 
         val silent = RecordedCounts()
         readCard(flow(silent, FailingCard(CardException.Reason.NO_TAP)) { throw tw.iamreal.app.backend.ServerException(Backend.NETWORK, 0, null) })
-        assertEquals(listOf("step:open", "step:read", "stop:server_network"), silent.events())
+        assertEquals(listOf("step:read", "stop:server_network"), silent.events())
 
         val old = RecordedCounts()
         readCard(flow(old, FailingCard(CardException.Reason.NO_TAP)) { """{$platforms,"min_app":{"android":{"build":2,"from":"2026-11-20"}}}""".toByteArray() })
         // The server answered its config; this build is too old by it.
-        assertEquals(listOf("step:open", "step:read", "step:config", "stop:app_too_old"), old.events())
+        assertEquals(listOf("step:read", "step:config", "stop:app_too_old"), old.events())
     }
 
     @Test
@@ -221,7 +222,33 @@ class CountsTest {
         f.end(Stop("idle"))
         // Ended once: what the screen says after it is not counted again.
         f.end(Stop("engine"))
-        assertEquals(listOf("step:open", "stop:idle"), r.events())
+        assertEquals(listOf("stop:idle"), r.events())
+    }
+
+    @Test
+    fun `counts that cannot be sent change nothing of the card proof`() {
+        for (reason in listOf(CardException.Reason.NO_TAP, CardException.Reason.NO_NFC)) {
+            val quiet = RecordedCounts()
+            val failing = RecordedCounts(sendFails = true)
+            val a = readCard(flow(quiet, FailingCard(reason)))
+            val b = readCard(flow(failing, FailingCard(reason)))
+            assertEquals(a.code, b.code)
+            assertEquals(a.values, b.values)
+            assertEquals(quiet.events(), failing.events())
+        }
+    }
+
+    @Test
+    fun `the device ID is the core's, by the vectors' rule`() {
+        val vectors = org.json.JSONObject(java.io.File(System.getProperty("iamreal.vectors"), "counts.json").readText()).getJSONArray("device_ids")
+        for (i in 0 until vectors.length()) {
+            val d = vectors.getJSONObject(i)
+            val stored = if (d.isNull("stored")) null else d.getString("stored")
+            val hex = d.getString("random")
+            val r = RecordedCounts(nowMs = d.getLong("now") * 1000, stored = stored, random = ByteArray(16) { hex.substring(2 * it, 2 * it + 2).toInt(16).toByte() })
+            assertEquals(d.getString("name"), d.getString("device_id"), r.counts.deviceId())
+            assertEquals(d.getString("name"), if (d.isNull("store")) stored else d.getString("store"), r.stored)
+        }
     }
 
     @Test

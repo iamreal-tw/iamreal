@@ -4,7 +4,8 @@
 // written here by hand. Before writing, each case is read with
 // src/counts.ts; if one gives another result, nothing is written.
 import { writeFileSync } from "node:fs";
-import { BROWSERS, CARD_PROOF_ACTIONS, CLIENTS, DURATIONS, EVENTS, OSES, PAGES, REASONS, SOURCES, STEPS, TAPS, TIMED_STEPS, VISITOR_ACTIONS, readCount, tookOf } from "../../src/counts.ts";
+import { BROWSERS, CARD_PROOF_ACTIONS, CLIENTS, DURATIONS, EVENTS, OSES, PAGES, REASONS, SOURCES, STEPS, TAPS, TIMED_STEPS, VISITOR_ACTIONS, deviceIdOn, readCount, tookOf } from "../../src/counts.ts";
+import { taiwanDayOfSeconds } from "../../src/date.ts";
 
 const DEVICE = "0123456789abcdef0123456789abcdef";
 const ATTEMPT = "fedcba9876543210fedcba9876543210";
@@ -150,6 +151,30 @@ const durations: { ms: number; took: string }[] = [
 ].map(([ms, took]) => ({ ms: ms as number, took: took as string }));
 for (const d of durations) if (tookOf(d.ms) !== d.took) throw new Error(`${d.ms} ms is written as ${d.took}, and src/counts.ts says otherwise`);
 
+/** The value a device keeps, a moment (seconds since 1970), 16 random bytes; the ID it uses then, and the value it keeps from then on. */
+const R = "a".repeat(32);
+const KEPT = "0123456789abcdef0123456789abcdef";
+const at = (iso: string): number => Date.parse(iso) / 1000;
+const deviceIds = [
+  { name: "none kept: a new one", stored: null, now: at("2027-01-01T04:00:00Z"), random: R, device_id: R, store: `${R}.2027-01-01` },
+  { name: "made today", stored: `${KEPT}.2027-01-01`, now: at("2027-01-01T04:00:00Z"), random: R, device_id: KEPT, store: null },
+  { name: "made 30 days ago", stored: `${KEPT}.2027-01-01`, now: at("2027-01-31T04:00:00Z"), random: R, device_id: KEPT, store: null },
+  { name: "made 31 days ago: replaced", stored: `${KEPT}.2027-01-01`, now: at("2027-02-01T04:00:00Z"), random: R, device_id: R, store: `${R}.2027-02-01` },
+  { name: "the day in Taiwan, not in UTC: 23:59 on day 30", stored: `${KEPT}.2027-01-01`, now: at("2027-01-31T15:59:59Z"), random: R, device_id: KEPT, store: null },
+  { name: "the day in Taiwan, not in UTC: 00:00 on day 31", stored: `${KEPT}.2027-01-01`, now: at("2027-01-31T16:00:00Z"), random: R, device_id: R, store: `${R}.2027-02-01` },
+  { name: "made in Taiwan's evening: that day", stored: null, now: at("2027-01-01T15:30:00Z"), random: R, device_id: R, store: `${R}.2027-01-01` },
+  { name: "dated after today: replaced", stored: `${KEPT}.2027-01-02`, now: at("2027-01-01T04:00:00Z"), random: R, device_id: R, store: `${R}.2027-01-01` },
+  { name: "a date that does not exist: replaced", stored: `${KEPT}.2027-02-30`, now: at("2027-03-01T04:00:00Z"), random: R, device_id: R, store: `${R}.2027-03-01` },
+  { name: "an ID in capitals: replaced", stored: `${KEPT.toUpperCase()}.2027-01-01`, now: at("2027-01-01T04:00:00Z"), random: R, device_id: R, store: `${R}.2027-01-01` },
+  { name: "an ID without its date: replaced", stored: KEPT, now: at("2027-01-01T04:00:00Z"), random: R, device_id: R, store: `${R}.2027-01-01` },
+  { name: "anything else: replaced", stored: "x", now: at("2027-01-01T04:00:00Z"), random: R, device_id: R, store: `${R}.2027-01-01` },
+  { name: "an empty value: replaced", stored: "", now: at("2027-01-01T04:00:00Z"), random: R, device_id: R, store: `${R}.2027-01-01` },
+];
+for (const d of deviceIds) {
+  const got = deviceIdOn(d.stored, taiwanDayOfSeconds(d.now), d.random);
+  if (got.id !== d.device_id || got.store !== d.store) throw new Error(`"${d.name}" is written otherwise than src/counts.ts says`);
+}
+
 for (const c of cases) {
   const kept = readCount(c.count);
   if ((kept !== null) !== c.taken) throw new Error(`"${c.name}" is written as ${c.taken ? "taken" : "dropped"}, and src/counts.ts says otherwise`);
@@ -158,7 +183,7 @@ for (const c of cases) {
 const file = {
   spec: "counts",
   status: "draft",
-  note: "table: every code of spec/counts.md and the clients it is for, as an implementation has it. cases: a parsed count, and whether it is taken or dropped whole. durations: how long a timed step took, in milliseconds, and the code it is sent as.",
+  note: "table: every code of spec/counts.md and the clients it is for, as an implementation has it. cases: a parsed count, and whether it is taken or dropped whole. durations: how long a timed step took, in milliseconds, and the code it is sent as. device_ids: the value a device keeps (null: none), the moment (seconds since 1970), 16 random bytes as hex; the card proof device ID used then, and the value kept from then on (null: the one kept).",
   generated_by: "protocol/test/generate/counts.ts",
   table: {
     clients: CLIENTS,
@@ -177,6 +202,7 @@ const file = {
   },
   cases,
   durations,
+  device_ids: deviceIds,
 };
 writeFileSync(new URL("../../../spec/vectors/counts.json", import.meta.url), `${JSON.stringify(file, null, 2)}\n`);
 console.log(`${cases.length} cases`);

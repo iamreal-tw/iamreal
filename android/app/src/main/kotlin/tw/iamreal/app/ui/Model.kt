@@ -175,6 +175,21 @@ internal class Model(
         override val appVersion = appVersion
         override val model: String = Build.MODEL ?: ""
     })
+
+    /** The counts of the card proof to come or under way (flow/Counts.kt); its first count is `open`, as step 1 shows. */
+    private var attempt: Counts.Attempt? = null
+
+    /**
+     * Step 1 shows: the first screen of a card proof (spec/counts.md, `open`). A new attempt, unless the one there has not
+     * begun: the cardholder came back to step 1 without a card read.
+     */
+    private fun opened() {
+        if (attempt?.begun != false) attempt = counts.attempt().also { it.step("open") }
+    }
+
+    init {
+        opened()
+    }
     private var flow: CardProof? = null
 
     var step by mutableStateOf(Step.BEFORE)
@@ -382,6 +397,9 @@ internal class Model(
             override val appBuild = wiring.appBuild
             override val crlNumbers = this@Model.crlNumbers
             override val counts = this@Model.counts
+
+            // The one step 1 opened, unless a card was read for it: a card proof started again from step 2 is another.
+            override val attempt = this@Model.attempt?.takeIf { !it.begun } ?: this@Model.counts.attempt().also { this@Model.attempt = it }
         }).also { flow = it }
     }
 
@@ -477,6 +495,7 @@ internal class Model(
         dropAll()
         askConfigAgain()
         step = Step.BEFORE
+        opened()
     }
 
     /** "感應卡片", and "再感應一次": the tap of step 2, on the card proof that is there. */
@@ -815,6 +834,7 @@ internal class Model(
         dropAll()
         askConfigAgain()
         step = Step.BEFORE
+        opened()
     }
 
     /** A stop outside the lists: the card proof is over. The counts are told why, unless the flow told them already. */
@@ -824,6 +844,7 @@ internal class Model(
         notice = if (stop.code == "idle") copy.say("app_before.idle") else null
         askConfigAgain()
         step = Step.BEFORE
+        opened()
     }
 
     /**
@@ -838,6 +859,7 @@ internal class Model(
         }
         dropAll()
         step = Step.BEFORE
+        opened()
         return true
     }
 

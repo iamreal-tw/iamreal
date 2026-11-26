@@ -1,6 +1,7 @@
 //! The counts (spec/counts.md; ADR-0032, ADR-0039): the table every value
 //! of a count is chosen from, the one reading that says whether a count is
-//! taken, and how long a timed step took as a code of the table. The
+//! taken, how long a timed step took as a code of the table, and when the
+//! card proof device ID is replaced. The
 //! server reads what it receives with the same rules (`protocol/`); the two
 //! apps build what they send here, so a count the server would drop is not
 //! sent.
@@ -10,6 +11,8 @@
 //! card reader's name, a phone's model). No time, no account, no scoped ID,
 //! nothing read from a card, a certificate or a CRL, and no text of an
 //! error.
+
+use crate::date::Date;
 
 /// A client of the table (GLOSSARY, "client").
 pub const CLIENTS: &[&str] = &["web", "android", "ios"];
@@ -189,16 +192,38 @@ pub const ORDER: &[&str] = &[
     "reader",
 ];
 
-/// The members whose value is checked by its format and comes from the
-/// phone's or the browser's system: a client leaves out one that is not in
-/// its format ([`to_send`]), and does not shorten or rewrite it.
-const FROM_THE_SYSTEM: &[&str] = &[
+/// The members whose value the device reads from outside the client's own
+/// program (the system, the browser, the card reader's component) and is
+/// checked by its format: a client leaves out one that is not in its format
+/// ([`to_send`]), and does not shorten or rewrite it.
+const READ_FROM_THE_DEVICE: &[&str] = &[
     "browser_version",
     "os_version",
     "app_version",
     "model",
     "reader",
 ];
+
+/// After how many days a card proof device ID is replaced, counted from the date it was made on (ADR-0039).
+pub const DEVICE_ID_DAYS: i64 = 31;
+
+/// The card proof device ID on `today` (spec/counts.md, "The card proof
+/// device ID"), from the value a device keeps (`stored`) and 16 random
+/// bytes: the ID to use, and the value to keep from now on, or `None` to
+/// keep the stored one.
+pub fn device_id(stored: Option<&str>, today: Date, random: &[u8; 16]) -> (String, Option<String>) {
+    if let Some((id, made)) = stored.and_then(|s| s.split_once('.')) {
+        if let Some(made) = Date::parse(made.as_bytes()) {
+            let age = today.days_since_1970() - made.days_since_1970();
+            if is_id(id) && (0..DEVICE_ID_DAYS).contains(&age) {
+                return (id.to_string(), None);
+            }
+        }
+    }
+    let id: String = random.iter().map(|b| format!("{b:02x}")).collect();
+    let store = format!("{id}.{today}");
+    (id, Some(store))
+}
 
 /// The code a timed step that took `ms` milliseconds is sent as (spec/counts.md, "Durations").
 pub fn took(ms: u64) -> &'static str {
@@ -322,7 +347,7 @@ fn card_proof(client: &str) -> Vec<(&'static str, Rule)> {
 
 /// Members a count may leave out. `browser` and `os` only where the client is an app, which has none.
 fn optional(member: &str, client: &str) -> bool {
-    FROM_THE_SYSTEM.contains(&member)
+    READ_FROM_THE_DEVICE.contains(&member)
         || ((member == "browser" || member == "os") && client != "web")
 }
 

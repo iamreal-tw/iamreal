@@ -3,7 +3,8 @@
 // of the vectors is taken or dropped as the vectors say.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { BROWSERS, CARD_PROOF_ACTIONS, CLIENTS, DURATIONS, EVENTS, OSES, PAGES, REASONS, SOURCES, STEPS, TAPS, TIMED_STEPS, VISITOR_ACTIONS, readCount, readCountText, tookOf } from "../src/counts.ts";
+import { BROWSERS, CARD_PROOF_ACTIONS, CLIENTS, DURATIONS, EVENTS, OSES, PAGES, REASONS, SOURCES, STEPS, TAPS, TIMED_STEPS, VISITOR_ACTIONS, deviceIdOn, readCount, readCountText, tookOf } from "../src/counts.ts";
+import { taiwanDayOfSeconds } from "../src/date.ts";
 import { repoFile, vectors } from "./vectors.ts";
 
 const file = vectors("counts.json");
@@ -26,6 +27,12 @@ describe("counts.json", () => {
       assert.deepEqual(sorted(kept), sorted(c.count));
       // And in one order, whatever order it came in.
       assert.deepEqual(Object.keys(readCount(Object.fromEntries(Object.entries(c.count).reverse()))!), Object.keys(kept));
+    });
+  }
+
+  for (const d of file.device_ids) {
+    test(`the card proof device ID: ${d.name}`, () => {
+      assert.deepEqual(deviceIdOn(d.stored, taiwanDayOfSeconds(d.now), d.random), { id: d.device_id, store: d.store });
     });
   }
 

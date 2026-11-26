@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use iamreal_device_checks::counts::{
     BROWSERS, CARD_PROOF_ACTIONS, CLIENTS, Code, DURATIONS, EVENTS, OSES, PAGES, REASONS, SOURCES,
-    STEPS, TAPS, TIMED_STEPS, VISITOR_ACTIONS, read_count, to_send, took,
+    STEPS, TAPS, TIMED_STEPS, VISITOR_ACTIONS, device_id, read_count, to_send, took,
 };
 use serde_json::Value;
 
@@ -193,4 +193,28 @@ fn a_value_of_the_system_not_in_its_format_is_left_out_of_what_is_sent() {
         ]),
         None
     );
+}
+
+#[test]
+fn every_device_id_of_the_vectors() {
+    let v = vectors();
+    let cases = v["device_ids"].as_array().expect("device_ids");
+    assert!(!cases.is_empty());
+    for d in cases {
+        let name = d["name"].as_str().expect("a name");
+        let today =
+            iamreal_device_checks::date::Date::in_taiwan(d["now"].as_i64().expect("seconds"))
+                .expect("a day");
+        let random: [u8; 16] = (0..16)
+            .map(|i| {
+                u8::from_str_radix(&d["random"].as_str().expect("hex")[2 * i..2 * i + 2], 16)
+                    .unwrap()
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+        let (id, store) = device_id(d["stored"].as_str(), today, &random);
+        assert_eq!(id, d["device_id"].as_str().expect("an ID"), "{name}");
+        assert_eq!(store.as_deref(), d["store"].as_str(), "{name}");
+    }
 }

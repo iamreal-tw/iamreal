@@ -9,6 +9,8 @@
 // numbers, a card reader's name, a phone's model). No time, no account, no scoped ID, nothing
 // read from a card, a certificate or a CRL, and no text of an error.
 
+import { type Day, formatDay, parseDay } from "./date.ts";
+
 /** The clients (GLOSSARY, "client"). */
 export const CLIENTS = ["web", "android", "ios"] as const;
 export type Client = (typeof CLIENTS)[number];
@@ -188,6 +190,23 @@ export const VERSION = /^[0-9]{1,5}(?:\.[0-9]{1,5}){0,3}$/;
 export const READER = /^[A-Za-z0-9 ]{1,64}$/;
 /** A phone's model as its system gives it: letters, digits, spaces and `-_.,()+`, 1 to 32 of them. */
 export const MODEL = /^[A-Za-z0-9 \-_.,()+]{1,32}$/;
+
+/** After how many days a card proof device ID is replaced, counted from the date it was made on (ADR-0039). */
+export const DEVICE_ID_DAYS = 31;
+
+/**
+ * The card proof device ID on `today` (spec/counts.md, "The card proof
+ * device ID"), from the value a device keeps (`stored`, null for none) and
+ * 16 random bytes as 32 hex digits (`random`): the ID to use, and the value
+ * to keep from now on, or null to keep the stored one.
+ */
+export function deviceIdOn(stored: string | null, today: Day, random: string): { id: string; store: string | null } {
+  const kept = /^([0-9a-f]{32})\.(\d{4}-\d{2}-\d{2})$/.exec(stored ?? "");
+  const made = kept === null ? null : parseDay(kept[2]!);
+  if (kept !== null && made !== null && made <= today && today - made < DEVICE_ID_DAYS) return { id: kept[1]!, store: null };
+  if (!COUNT_ID.test(random)) throw new Error("16 random bytes as 32 hex digits");
+  return { id: random, store: `${random}.${formatDay(today)}` };
+}
 
 /** A count that was taken: its members in the order of spec/counts.md, and no other. */
 export type Count = Readonly<Record<string, string>>;

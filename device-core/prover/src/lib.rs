@@ -632,6 +632,52 @@ pub unsafe extern "C" fn idc_count(count: *const u8, count_len: usize, out: *mut
     })
 }
 
+/// The card proof device ID at `now` (spec/counts.md, "The card proof
+/// device ID"): JSON in `*out`, `{"device_id":"…","store":"…"}`, or with
+/// `"store":null` when the value the app keeps stays as it is.
+///
+/// - `stored`: the value the app keeps, as it was written; `(NULL, 0)` for
+///   none.
+/// - `now`: the phone's clock, in seconds since 1970-01-01T00:00:00Z; the
+///   day is the one in Taiwan.
+/// - `random`: 16 bytes from the phone's random source; the new ID when the
+///   one kept is replaced.
+///
+/// When `store` is not null the app writes it in place of what it kept, so
+/// that the old ID is kept nowhere. `IDC_ERR_ARGUMENT` when `random` is not
+/// 16 bytes; `IDC_ERR_INPUT` when `now` is outside the years 2000 to 2049 in
+/// Taiwan.
+///
+/// # Safety
+///
+/// `stored` points to `stored_len` bytes, `random` to `random_len`; `out`
+/// is null or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_count_device_id(
+    stored: *const u8,
+    stored_len: usize,
+    now: i64,
+    random: *const u8,
+    random_len: usize,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let stored = unsafe { input(stored, stored_len) }?;
+        // SAFETY: the caller's promise.
+        let random: &[u8; 16] = unsafe { input(random, random_len) }?
+            .try_into()
+            .map_err(|_| IDC_ERR_ARGUMENT)?;
+        let today = Date::in_taiwan(now).ok_or(IDC_ERR_INPUT)?;
+        // A value that is not UTF-8 is not one the app wrote, and is replaced.
+        let stored = std::str::from_utf8(stored).ok().filter(|s| !s.is_empty());
+        let (id, store) = counts::device_id(stored, today, random);
+        Ok(json!({ "device_id": id, "store": store })
+            .to_string()
+            .into_bytes())
+    })
+}
+
 /// The code a timed step that took `ms` milliseconds is sent as
 /// (spec/counts.md, "Durations"): ASCII in `*out`, such as `10s_30s`.
 ///

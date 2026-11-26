@@ -5,7 +5,8 @@ mod common;
 
 use common::vectors;
 use iamreal_device_core::{
-    IDC_ERR_ARGUMENT, IDC_ERR_INPUT, IDC_OK, IdcBuf, idc_buf_free, idc_count, idc_count_took,
+    IDC_ERR_ARGUMENT, IDC_ERR_INPUT, IDC_OK, IdcBuf, idc_buf_free, idc_count, idc_count_device_id,
+    idc_count_took,
 };
 use serde_json::Value;
 
@@ -185,5 +186,48 @@ fn every_duration_of_the_vectors() {
     assert_eq!(
         unsafe { idc_count_took(1, std::ptr::null_mut()) },
         IDC_ERR_ARGUMENT
+    );
+}
+
+#[test]
+fn every_device_id_of_the_vectors() {
+    let v: Value = vectors("counts.json");
+    let cases = v["device_ids"].as_array().unwrap();
+    assert!(!cases.is_empty());
+    for d in cases {
+        let name = d["name"].as_str().unwrap();
+        let stored = d["stored"].as_str().map(str::as_bytes);
+        let random: Vec<u8> = (0..16)
+            .map(|i| {
+                u8::from_str_radix(&d["random"].as_str().unwrap()[2 * i..2 * i + 2], 16).unwrap()
+            })
+            .collect();
+        let now = d["now"].as_i64().unwrap();
+        let body = call(|out| unsafe {
+            idc_count_device_id(
+                stored.map_or(std::ptr::null(), <[u8]>::as_ptr),
+                stored.map_or(0, <[u8]>::len),
+                now,
+                random.as_ptr(),
+                random.len(),
+                out,
+            )
+        })
+        .unwrap_or_else(|e| panic!("{name}: {e}"));
+        let got: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(got["device_id"], d["device_id"], "{name}");
+        assert_eq!(got["store"], d["store"], "{name}");
+    }
+    // Not 16 random bytes; a clock the core does not take.
+    let r = [7u8; 16];
+    assert_eq!(
+        call(|out| unsafe {
+            idc_count_device_id(std::ptr::null(), 0, 1_800_000_000, r.as_ptr(), 15, out)
+        }),
+        Err(IDC_ERR_ARGUMENT)
+    );
+    assert_eq!(
+        call(|out| unsafe { idc_count_device_id(std::ptr::null(), 0, 0, r.as_ptr(), 16, out) }),
+        Err(IDC_ERR_INPUT)
     );
 }

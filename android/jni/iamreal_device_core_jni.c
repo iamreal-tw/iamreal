@@ -212,6 +212,23 @@ JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeCount(JNI
   return result(env, code, &out);
 }
 
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeCountDeviceId(JNIEnv *env, jobject self, jbyteArray stored,
+                                                                                     jlong now, jbyteArray random) {
+  (void)self;
+  copy kept;
+  if (!copy_in(env, stored, &kept)) return NULL;
+  copy bytes;
+  if (!copy_in(env, random, &bytes)) {
+    copy_free(&kept);
+    return NULL;
+  }
+  idc_buf out = {NULL, 0};
+  int32_t code = idc_count_device_id(kept.ptr, kept.len, (int64_t)now, bytes.ptr, bytes.len, &out);
+  copy_free(&kept);
+  copy_free(&bytes);
+  return result(env, code, &out);
+}
+
 JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeCountTook(JNIEnv *env, jobject self, jlong ms) {
   (void)self;
   /* A time that runs backwards is no duration, and is not passed on as a large one. */

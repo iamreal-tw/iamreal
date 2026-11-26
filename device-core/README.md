@@ -40,7 +40,7 @@
 | `circuit_inputs.rs` | `spec/circuit-inputs.md` | 電路的輸入（憑證、發證金鑰、路徑、`current_time`、兩個簽章各自切成的段，和兩個 Barrett 參數），以及裝置預期證明帶的公開輸入 |
 | `hex.rs` | | 寫在程式裡的十六進位常數 |
 | `record_rules.rs` | `spec/record-rules.md` | 紀錄規則：一筆紀錄的六項檢查（`apply_record`）、其中第 5、6 項（`apply_list`，裝置在簽章之前算的那一半）、從第一筆紀錄算起的現況（`MemoryRules`）、版本號 `RULES_VERSION` 和規則裡的數字。規則跟著版本號寫死在這裡（ADR-0035）；平台表不寫死，由呼叫的人傳進來 |
-| `counts.rs` | `spec/counts.md` | 計數的表（步驟、停下來的原因、動作、花了多久的分級……，每一項適用哪些客戶端）；一筆計數收不收，和後台同一套規則；app 送出的那一筆：系統給的版本號、手機型號不合格式的整個不送，不截短也不改寫；花了多久的毫秒數換成分級 |
+| `counts.rs` | `spec/counts.md` | 計數的表（步驟、停下來的原因、動作、花了多久的分級……，每一項適用哪些客戶端）；一筆計數收不收，和後台同一套規則；app 送出的那一筆：系統給的版本號、手機型號不合格式的整個不送，不截短也不改寫；花了多久的毫秒數換成分級；過卡裝置編號什麼時候換 |
 | `list_consequence.rs` | `spec/list-consequence.md` | 確認的畫面上每一列的後果：持卡人改過的清單在每個平台上是新宣告、再次過卡、更正、更換還是收回，更換之後還剩幾次；不認得的平台上的帳號照原樣留在清單裡 |
 
 | 檔案（`prover/src/`） | 內容 |
@@ -188,6 +188,7 @@ Android 另外有一層 JNI，把這些 C 函式包成 Kotlin 呼叫得到的函
 | `idc_short_id` | 匿名編號的短編號：文字形式的前 10 個字元（`spec/scoped-id.md`）。收查現況的請求裡那 52 個字元；不是唯一寫法的匿名編號是 `IDC_ERR_INPUT`。匿名編號本身只有 `idc_session_card_state_request` 算得出來 |
 | `idc_min_app` | 這一版 app 能不能過卡（`spec/min-app.md`）：收 `GET /api/v1/config` 的內文、是哪一個 app（`IDC_CLIENT_ANDROID`、`IDC_CLIENT_IOS`）、app 自己的 build、手機的時鐘，回 `{"verdict":…}`：`ok`（照常）、`ok_until`（照常，帶起算日 `from`）、`stop`（不讀卡、不要 PIN，請更新；也帶起算日 `from`，畫面要寫）、`unreadable`（讀不懂，也不往下）。內文不是 JSON 也是 `unreadable`，不是錯誤 |
 | `idc_count` | app 要送的一筆計數（`POST /api/v1/counts` 的內文，`spec/counts.md`）：收每個值都是字串的 JSON 物件，系統給的版本號、手機型號不合格式的拿掉，剩下的要是後台會收的一筆，照表的順序寫出來；不是的話是 `IDC_ERR_INPUT`（app 的程式寫錯了，沒有東西可以送）。兩個 app 送的每一筆都經過它 |
+| `idc_count_device_id` | 過卡裝置編號：收 app 存著的值（`<編號>.<產生的日子>`）、手機的時鐘、16 個隨機位元組，回這次用的編號，和要不要換掉存著的值（`spec/counts.md`「The card proof device ID」：台灣的日期起算，滿 31 天、日期在今天之後、讀不懂的都換）。核心不存，存由 app 做 |
 | `idc_count_took` | 一個計時的步驟花了幾毫秒，換成表上的分級（`lt_1s`、`10s_30s`……） |
 | `idc_records_response` | 送出後後台的回應（`POST /api/v1/records` 的 201），給完成的畫面（`spec/records-response.md`）：這一筆的 `seq` 和雜湊、這張卡片的順序號碼（`ordinal`，給分享的預填文字）、後台說每個平台記成什麼（`kinds`、`account_cards`），以及和確認畫面那幾列不同的平台（`mismatches`）。收回應的內文（照後台送來的原樣）和 `idc_list_consequence` 回的 `rows`。201 就是紀錄已經在證明紀錄裡：內文讀不懂不是錯誤，讀不出的欄位是 null。只有 `rows` 不是那個形狀時是 `IDC_ERR_INPUT`。後台的回應裝置沒辦法核對，這個函式只比對，不判斷哪一邊是對的。形狀寫在標頭檔 |
 | `idc_session_*` | 一次過卡的檢查、「檢查都通過了」、查現況的請求、證明和送出的請求，見上面那一節的表。每一塊緩衝區由誰釋放寫在標頭檔每個函式的說明裡 |
@@ -298,8 +299,8 @@ for f in DIR/*.crl; do /usr/bin/time -l target/release/examples/crl_size "$f"; d
 - `prover/tests/c_card_status.rs`：`idc_card_status`，照 app 呼叫的方式。`card-status.json` 的每一案，結果和標準答案相同；`list-consequence.json` 裡每一個讀不懂的回應都不收；只有 C 函式才有的：認得的平台的形狀、時鐘、`NULL`
 - `prover/tests/c_short_id.rs`：`idc_short_id`。`scoped-id.json` 每一個匿名編號的短編號，和不是唯一寫法的都不收
 - `prover/tests/c_min_app.rs`：`idc_min_app`，照 app 呼叫的方式。`min-app.json` 的每一案，結果和標準答案相同；內文不是 JSON、同一個鍵寫兩次是讀不懂；`build` 寫成 `12.0`、`1.2e1` 照數值讀；不認得的 app、時鐘在 2000 到 2049 年之外是呼叫的錯
-- `checks/tests/counts.rs`（不需要 Barretenberg）：`counts.json` 的表和這裡的一樣，每一項和它的客戶端；每一案收或整筆丟掉和標準答案相同，收的照表的順序；`durations` 的每一個毫秒數換成的分級；app 送的那一筆：系統給的值不合格式時只拿掉那一個，app 不能帶的欄位、表上沒有的代碼不送
-- `prover/tests/c_count.rs`：`idc_count`、`idc_count_took`，照 app 呼叫的方式。`counts.json` 的每一案：收的照原樣、照表的順序送；丟掉的不是 `IDC_ERR_INPUT` 就是只少了系統給的值；不是每個值都是字串的物件、同一個鍵寫兩次、`NULL`；`durations` 的每一個毫秒數
+- `checks/tests/counts.rs`（不需要 Barretenberg）：`counts.json` 的表和這裡的一樣，每一項和它的客戶端；每一案收或整筆丟掉和標準答案相同，收的照表的順序；`durations` 的每一個毫秒數換成的分級；`device_ids` 的每一案用哪個編號、存什麼；app 送的那一筆：系統給的值不合格式時只拿掉那一個，app 不能帶的欄位、表上沒有的代碼不送
+- `prover/tests/c_count.rs`：`idc_count`、`idc_count_took`，照 app 呼叫的方式。`counts.json` 的每一案：收的照原樣、照表的順序送；丟掉的不是 `IDC_ERR_INPUT` 就是只少了系統給的值；不是每個值都是字串的物件、同一個鍵寫兩次、`NULL`；`durations` 的每一個毫秒數；`idc_count_device_id`：`device_ids` 的每一案，隨機位元組不是 16 個、時鐘不收
 - `prover/tests/c_records_response.rs`：`idc_records_response`，照 app 呼叫的方式。`records-response.json` 的每一案，結果和標準答案相同；標準答案放不進去的內文（不是 UTF-8、同一個鍵寫兩次、巢狀太深、沒有內文）一樣是「什麼都不說」，不是錯誤；`rows` 不是確認畫面那幾列的形狀、`NULL`
 - `checks/tests/device_checks.rs`（不需要 Barretenberg）：`device-checks.json` 選憑證和檢查憑證的每一案（選到哪一張、發證者、序號、卡片的模數、兩個日期、姓名，或原因代碼）、`L`；`issuers.json`（寫死的兩把發證金鑰）；`crl/testdata/` 的每一份清冊可不可用、原因代碼、編號、清冊日期和 `expected.json` 相同；`crl/testdata/times/` 的每一份（時間的各種寫法）哪些收、哪些是 `not_usable_der`，收的 `thisUpdate` 和清冊日期和 `times/expected.json` 相同
 - `prover/tests/tree.rs`：`poseidon2.json` 的 `revocation_tree`、`revocation-tree.json`（整份清冊的樹根，每個序號的路徑或「在樹裡」）、`crl/testdata/` 每一份可用清冊的樹根。每一案都用 4 個執行緒建，也分 1、2、4 份各建一次，結果相同。`revocation-tree.json` 就是 `iamreal-crl prove` 印出來的（`cmd/iamreal-crl/vectors_test.go` 讀同一份）

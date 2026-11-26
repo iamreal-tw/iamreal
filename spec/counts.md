@@ -74,6 +74,16 @@ A count is a JSON object whose values are all strings. Its members:
   or one of `-` `_` `.` `,` `(` `)` `+`. An app leaves out a model that is
   anything else; it does not shorten or rewrite it (ADR-0032, ADR-0039).
 
+### The card proof device ID
+
+A device keeps its card proof device ID with the date it was made on, in
+Taiwan (UTC+8), as one value: the ID, `.`, the date as `YYYY-MM-DD`
+(`0123456789abcdef0123456789abcdef.2027-01-01`). On a day in Taiwan, the
+device uses the ID it keeps when the value is in that form, with a date
+that exists, not after that day, and fewer than 31 days before it. Else it
+makes a new ID from 16 random bytes and keeps it with that day, in place of
+the old value: the old ID is not kept anywhere (ADR-0039).
+
 A count has no time (the server uses the time it received it, and keeps
 that to the minute), no account, no scoped ID, nothing read from a card, a
 certificate or a CRL, and no text of any error: a failure is one code of
@@ -327,4 +337,6 @@ Without a version. A client that cannot tell sends `other`.
 [`vectors/counts.json`](vectors/counts.json): `table` is every code above
 with the clients it is for; `cases` are parsed counts, each taken or
 dropped; `durations` are numbers of milliseconds and the code each is sent
-as.
+as; `device_ids` are a value a device keeps, a moment, 16 random bytes, and
+the card proof device ID it uses then and the value it keeps from then on
+(`null`: the one it kept).

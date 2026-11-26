@@ -70,6 +70,13 @@ object DeviceCore {
      */
     fun count(count: ByteArray): ByteArray = nativeCount(count)
 
+    /**
+     * The card proof device ID at [now] (seconds since 1970) from [stored], the value the app keeps ("" for none), and
+     * 16 [random] bytes (spec/counts.md, "The card proof device ID"): JSON, `{"device_id":"…","store":"…"}`, `store`
+     * null when what the app keeps stays as it is.
+     */
+    fun countDeviceId(stored: ByteArray, now: Long, random: ByteArray): ByteArray = nativeCountDeviceId(stored, now, random)
+
     /** The code a timed step that took [ms] milliseconds is sent as (spec/counts.md, "Durations"). */
     fun countTook(ms: Long): String = String(nativeCountTook(ms), Charsets.US_ASCII)
 
@@ -153,6 +160,8 @@ object DeviceCore {
     private external fun nativeCount(count: ByteArray): ByteArray
 
     private external fun nativeCountTook(ms: Long): ByteArray
+
+    private external fun nativeCountDeviceId(stored: ByteArray, now: Long, random: ByteArray): ByteArray
 
     private external fun nativeScopeString(proofLog: Int): ByteArray
 

@@ -63,6 +63,12 @@
 //    (the sentence above step 1 before its start date, the screen in place
 //    of step 1 from it on, a field that cannot be read, a config that does
 //    not come) and a phone without NFC.
+// 7. The operator stops taking card proofs, and takes them again (#394, #402;
+//    app-backend.ts's PUT /__app-test/paused), before the first declaration:
+//    the app opened while stopped (step 1's sentence in place of 下一步);
+//    stopped after step 1, so that challenges answers paused, then records
+//    does (stops.paused, and only 回到開頭); taken again, the first
+//    declaration goes through.
 // 8. The counts (spec/counts.md, #433), as the server in between saw them:
 //    every count is the app's and carries nothing of a card, an account or
 //    a scoped ID; each card proof that was done sent every step of the
@@ -70,12 +76,6 @@
 //    interruptions above were sent as their reasons, and a card that left
 //    as an action with its tap; every submission carried the card proof
 //    device ID the counts carry.
-// 7. The operator stops taking card proofs, and takes them again (#394, #402;
-//    app-backend.ts's PUT /__app-test/paused), before the first declaration:
-//    the app opened while stopped (step 1's sentence in place of 下一步);
-//    stopped after step 1, so that challenges answers paused, then records
-//    does (stops.paused, and only 回到開頭); taken again, the first
-//    declaration goes through.
 import { execFileSync } from "node:child_process";
 import { createPrivateKey } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
