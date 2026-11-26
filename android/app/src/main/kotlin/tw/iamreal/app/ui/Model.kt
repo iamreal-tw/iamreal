@@ -479,7 +479,6 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         }
         block.fill(0)
         pinMessage = null
-        pinKept = false
         pinBusy = ""
         step(
             f,
@@ -506,21 +505,27 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
                     // Nor is it kept for a card the secure channel cannot be made with: the sentence sends the cardholder to a card reader,
                     // and another tap needs the PIN typed again (design/copy/card-proof.md, "3. 輸入 PIN", app).
                     // Nor for an answer of the card the app does not know: it may be its answer to the PIN.
-                    stop.code == "card" && reason in setOf(CardException.Reason.PIN_INCORRECT.name, CardException.Reason.PIN_MAYBE_SENT.name, CardException.Reason.CHANNEL.name, CardException.Reason.OTHER.name) -> pin.clear()
+                    stop.code == "card" && reason in setOf(CardException.Reason.PIN_INCORRECT.name, CardException.Reason.PIN_MAYBE_SENT.name, CardException.Reason.CHANNEL.name, CardException.Reason.OTHER.name) -> {
+                        pin.clear()
+                        pinKept = false
+                    }
                     // A locked card takes no PIN: the card proof is over.
                     stop.code == "card" && reason == CardException.Reason.LOCKED.name -> {
                         pin.clear()
+                        pinKept = false
                         pinEnded = true
                     }
                     // The PIN did not reach a card, or the tap was cancelled: the same PIN, the tap again.
                     stop.code == "card" || stop.code == "other_card" -> {
                         // Cancelling the panel is back to the screen as it was; anything else offers the tap again.
                         // A PIN that was kept stays kept, and its field shut, through a cancelled panel: the card may have taken it already.
-                        pinKept = pinKept || reason != CardException.Reason.CANCELLED.name
-                        if (pinMessage == null && pinKept) pinMessage = copy.say("common.halted")
+                        val cancelled = reason == CardException.Reason.CANCELLED.name
+                        pinKept = pinKept || !cancelled
+                        if (pinMessage == null && !cancelled) pinMessage = copy.say("common.halted")
                     }
                     else -> {
                         pin.clear()
+                        pinKept = false
                         pinEnded = true
                         if (pinMessage == null) pinMessage = copy.say("common.halted")
                     }
