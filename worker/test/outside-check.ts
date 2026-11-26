@@ -25,13 +25,14 @@
 //   is null or at most 33 days before today in UTC (31 days, and up to a day
 //   for R2's lifecycle rule, and a day of margin). This check reads that one
 //   file, with the other GETs: it reads no bucket and holds no token for R2.
-//   Off until #20 is merged and deployed (`CONNECTION_LOG_CHECKED`): before,
-//   there is no such file, and on, a missing file fails. While it is off the
-//   run says so in a line of its own, which neither passes nor fails.
+//   On since #20 was deployed and the file appeared on the test site
+//   (`CONNECTION_LOG_CHECKED`, 2026-11-27): a missing file fails. While a
+//   line is off the run says so in a line of its own, which neither passes
+//   nor fails.
 // - no count is kept past its time (#54; ADR-0032): the same of the counts,
 //   which are in the same bucket under their own prefix with the same 31
-//   days, as count-events/oldest.json. Off until #54 is deployed
-//   (`COUNT_EVENTS_CHECKED`), in the same way.
+//   days, as count-events/oldest.json. On since #54 was deployed and the
+//   file appeared (`COUNT_EVENTS_CHECKED`, 2026-11-27), in the same way.
 // - the counts' totals are kept (#435): they are never deleted, so their
 //   earliest day stays the same. The back end writes the date of the earliest
 //   day's totals every hour, as count-totals/oldest.json, in the same form.
@@ -66,19 +67,17 @@ const FINGERPRINT_FILE = "proof-log/fingerprints.jsonl";
 const cardStateFileKey = (day: Day): string => `proof-log/card-state/${formatDay(day)}.jsonl`;
 
 /**
- * Whether the line of the connection logs (#20) is checked. False until the
- * back end writes connection-log/oldest.json on the test site: turn it on in
- * the pull request after #20 is deployed.
+ * Whether the line of the connection logs (#20) is checked: on since the back
+ * end writes connection-log/oldest.json on the test site (2026-11-27).
  */
-export const CONNECTION_LOG_CHECKED = false;
+export const CONNECTION_LOG_CHECKED = true;
 /** The file the back end writes every hour about the connection logs (#20), on the data domain. */
 export const CONNECTION_LOG_FILE = "connection-log/oldest.json";
 /**
- * Whether the line of the counts (#54) is checked. False until the back end
- * writes count-events/oldest.json on the test site: turn it on in the pull
- * request after #54 is deployed.
+ * Whether the line of the counts (#54) is checked: on since the back end
+ * writes count-events/oldest.json on the test site (2026-11-27).
  */
-export const COUNT_EVENTS_CHECKED = false;
+export const COUNT_EVENTS_CHECKED = true;
 /** The file the back end writes every hour about the counts it keeps (#54), on the data domain. */
 export const COUNT_EVENTS_FILE = "count-events/oldest.json";
 /**
