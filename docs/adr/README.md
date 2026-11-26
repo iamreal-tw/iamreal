@@ -86,7 +86,7 @@
 
 | ADR | 程式現在還是 | 票 |
 |---|---|---|
-| 0022 | 不記 IP；`design/copy/` 還有「請經 VPN 過卡」 | [#20](https://github.com/iamreal-tw/iamreal/issues/20)、[#48](https://github.com/iamreal-tw/iamreal/issues/48) |
+| 0022 | 不記 IP | [#20](https://github.com/iamreal-tw/iamreal/issues/20) |
 | 0025 | 沒有營運者每天的重驗（GitHub Actions 的排程）；Go 的舊後台出快照前自己重驗，已經跟著它刪掉 | 通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
 | 0026 | 沒有限流；`config` 在流程一開始就拿 | [#32](https://github.com/iamreal-tw/iamreal/issues/32) |
 | 0027 | 指紋檔沒有另一份 | [#35](https://github.com/iamreal-tw/iamreal/issues/35) |
