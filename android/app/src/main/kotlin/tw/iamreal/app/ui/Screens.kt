@@ -262,6 +262,7 @@ private fun Pin(m: Model) {
             Button(c.say("app_read.restart"), wide, primary = true) { m.readAgain() }
         } else if (m.pinKept) {
             Button(c.say("app_read.tap_again"), wide, primary = true, enabled = !busy) { m.confirmCard() }
+            Button(c.say("common.back"), wide, enabled = !busy) { m.backToRead() }
         } else {
             Button(c.say("pin.confirm_card"), wide, primary = true, enabled = !busy) { m.confirmCard() }
             Button(c.say("common.back"), wide, enabled = !busy) { m.backToRead() }
