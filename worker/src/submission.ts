@@ -2,7 +2,8 @@
 // "Reading the request"): the fields of a record except `seq`, and which of
 // `malformed`, `scope` and `platform` a body that is not one gets. Nothing
 // here asks the proof log's object, and a submission that ends here does not
-// count towards the challenge's five.
+// count towards the challenge's five. Beside the record's fields a body may
+// carry `device_id` (ADR-0039), which is no part of the record.
 import { platformsOf } from "iamreal-protocol/platforms.ts";
 import { type RecordAccount, type RecordFields, fieldsProblem } from "iamreal-protocol/record.ts";
 import { lookupScope } from "iamreal-protocol/scope.ts";
@@ -39,20 +40,41 @@ function readAccounts(value: Json | undefined): RecordAccount[] | null {
   return accounts;
 }
 
+/** A card proof device ID (docs/api/card-proof.md, `device_id`): 16 random bytes as 32 lowercase hex digits. */
+const DEVICE_ID = /^[0-9a-f]{32}$/;
+
+/** What a body of `POST /api/v1/records` holds: the fields of a record, and the card proof device ID if it carried one. */
+export interface Submission {
+  readonly fields: RecordFields;
+  /**
+   * Not a field of the record: it goes to the connection log alone
+   * (ADR-0022, ADR-0039). Null if the body carried none, or one that is
+   * not in its format.
+   */
+  readonly deviceId: string | null;
+}
+
 /**
  * The submission a body is, for the proof log `kind`, or the code it is refused
  * with. In the document's order:
  *
- *   1. not one JSON object with exactly the eight keys, each once, every
- *      value but `accounts` a string: `malformed`;
+ *   1. not one JSON object with exactly the eight keys, or those and
+ *      `device_id`, each once, every value but `accounts` and `device_id`
+ *      a string: `malformed`;
  *   2. a scope string that is not this proof log's: `scope`;
  *   3. a list of well-shaped accounts with a platform outside this proof log's
  *      table: `platform`;
  *   4. anything else not in its format: `malformed`.
  */
-export function readSubmission(kind: ProofLogKind, text: string): RecordFields | "malformed" | "scope" | "platform" {
+export function readSubmission(kind: ProofLogKind, text: string): Submission | "malformed" | "scope" | "platform" {
   const body = parseJson(text);
-  if (!(body instanceof Map) || body.size !== STRINGS.length + 1 || !body.has("accounts")) return "malformed";
+  if (!(body instanceof Map) || !body.has("accounts")) return "malformed";
+  if (body.size !== STRINGS.length + 1 + (body.has("device_id") ? 1 : 0)) return "malformed";
+  // The device ID goes to the connection log and nowhere else, so a value that is not one does not make the
+  // body any less of a submission: it is as if none came. A card proof for which the PIN was typed is not
+  // turned away over it.
+  const given = body.get("device_id");
+  const deviceId = typeof given === "string" && DEVICE_ID.test(given) ? given : null;
   const strings = {} as Record<(typeof STRINGS)[number][1], string>;
   for (const [key, field] of STRINGS) {
     const value = body.get(key);
@@ -65,5 +87,5 @@ export function readSubmission(kind: ProofLogKind, text: string): RecordFields |
   const table = platformsOf(kind);
   if (accounts.some((a) => !table.some((row) => row.platform === a.platform))) return "platform";
   const fields: RecordFields = { ...strings, accounts };
-  return fieldsProblem(kind, fields) === null ? fields : "malformed";
+  return fieldsProblem(kind, fields) === null ? { fields, deviceId } : "malformed";
 }

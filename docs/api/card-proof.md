@@ -18,18 +18,42 @@ record is or how it is verified. It can change without invalidating records.
 - Every response carries `X-Content-Type-Options: nosniff`.
 - **A request that carries a scoped ID is a `POST` with the scoped ID in the
   body, never in the URL.**
-- **No request's IP address is logged**, by the application, the reverse
-  proxy or the load balancer, for any endpoint or static file. A scoped ID
-  next to an IP address would let the operator, or anyone who obtains the
-  logs, look for the person behind a card. Logging it only for the other
-  requests does not help: loading the page, downloading the CRL and asking
-  for a challenge all happen within a minute or two before the submission,
-  and the order of the records is public, so the times alone would link an
-  address to a record.
-- Every API response carries the header `X-Request-Id`. The server logs the
-  same ID with the time, the endpoint, the status and the error code, and
-  nothing that came in the request. The device shows the ID next to an error
-  from the server, so that a cardholder can report it.
+- **The server keeps a connection log of one kind of request, and of no
+  other** (ADR-0022): a submission of a record (`POST /api/v1/records`)
+  that carried a challenge the server issued and that it counted towards
+  the challenge's five (under `records`: "a submission counts once the
+  challenge passed the first look"). For
+  each it keeps one entry, for 31 days, after which the entry is deleted:
+  - the request ID, the time, the HTTP status answered, the IP address the
+    request came from, the country code and the AS number of that address,
+    and the card proof device ID if the request carried one (`device_id`,
+    under `records`);
+  - for a submission that became a record, the record's `seq`, and not the
+    body: it is in the proof log;
+  - for a submission that did not, the error code answered and the body as
+    it came (the scoped ID, the accounts, the challenge, the proof): what
+    it takes to reproduce a failed verification.
+
+  Nothing is written for any other request: a page, a static file,
+  `config`, `challenges`, `card-state`, `fingerprint`, and a submission
+  that was not counted: one that is not well formed, one refused because
+  card proofs are stopped, and one whose challenge does not pass the first
+  look (the server did not issue it or it has expired, a record was
+  already written for it, or it was counted five times). Those can be sent
+  without end by anyone, so they are not kept. In particular the server
+  keeps no entry that puts the scoped ID of a `card-state` request next to
+  an IP address. The entry of a submission that became a record does put an
+  IP address next to a `seq`, and through it next to a scoped ID and its
+  accounts, for those 31 days; the privacy notice says so. The network the
+  service is reached through has its own view of requests' addresses, for
+  the same 31 days: a sample, not every request (ADR-0022).
+- Every API response carries the header `X-Request-Id`. For a request that
+  has an entry in the connection log, the entry carries the same ID. For
+  any other request the server writes nothing, unless it fails itself
+  (`500`): then one line with the ID, the endpoint and where it failed, and
+  nothing that came in the request, to its live log, which is not kept. The
+  device shows the ID next to an error from the server, so that a
+  cardholder can report it.
 - A request body that the endpoint reads is at most 64 KB (65,536 bytes); a
   larger one is `400` `malformed`. `challenges` takes no body and does not
   read one: whatever is sent with it, of any length, is ignored.
@@ -62,7 +86,9 @@ Issues a challenge ([`spec/challenge.md`](../../spec/challenge.md)).
 - Response `200`: `{"challenge":"2026-11-16.000G40R40M30E209185GR38E1W"}`
 - The server stores the challenge with the time it was issued. It is usable
   for 10 minutes, for one accepted card proof, and for at most 5 submissions.
-- The server does not log the challenge.
+- The server writes nothing for this request. A challenge is in its
+  connection log only inside the body of a counted submission that did not
+  become a record ("Rules for every endpoint").
 - Errors: `429` `rate_limited`; `503` `paused` (under `records`, below):
   no challenge is issued.
 
@@ -178,6 +204,16 @@ Submits one card proof: the card's whole list of accounts.
   with the card's current list and does not fill in anything. The list is
   what the card signed; any other list fails verification.
 
+  The request may carry one more key, `device_id`: the card proof device ID
+  (ADR-0039), 16 random bytes as 32 lowercase hexadecimal digits, which the
+  page or the app made and replaces after 31 days. It is no field of the
+  record and is never written to the proof log: the server keeps it only in
+  the connection log's entry of this request ("Rules for every endpoint").
+  A request without it is taken as ever. So is one whose `device_id` is not
+  such a string, whatever its type: the value is dropped, as if the key had
+  not been sent, and the entry says none. A card proof is not refused over
+  a value that is kept only for the connection log.
+
   The request is JSON, not a line of the proof log. The order of the keys of
   the request and of an account, and whitespace between tokens, are free;
   the server writes the proof log line itself from the template. What is not
@@ -258,17 +294,25 @@ Submits one card proof: the card's whole list of accounts.
   written. One that is `paused`, or `challenge_unknown` or `challenge_used`
   at the first look, does not count. Neither does one the server fails on
   (`500`) before it has counted it: it could not read its settings or what
-  it stores, or the write that counts the submission itself failed.
+  it stores, or the write that counts the submission itself failed. The
+  submissions that count are the ones the connection log has an entry for,
+  short of a failure of the server between counting one and writing its
+  entry
+  ("Rules for every endpoint"): so a challenge has five entries at most,
+  the one of its record among them. That includes a submission the second
+  look refuses with `challenge_used` or `challenge_unknown`: it was counted
+  by then, and its entry has its body.
 
   **Reading the request**, and which of `malformed`, `scope` and `platform`
   it gets:
 
-  1. The body is one JSON object with exactly the keys of the example, each
-     once, spelled as shown. Every value except `accounts` is a string;
-     `accounts` is present. Otherwise `malformed`: not JSON, a missing key
-     (also `accounts`), an extra key, a key twice, a key in another case, a
-     value of another type. This comes first because without it there is
-     no scope to look at.
+  1. The body is one JSON object with exactly the keys of the example, or
+     those and `device_id`, each once, spelled as shown. Every value except
+     `accounts` and `device_id` is a string; `accounts` is present;
+     `device_id` may hold anything (above). Otherwise `malformed`:
+     not JSON, a missing key (also `accounts`), an extra key, a key twice,
+     a key in another case, a value of another type. This comes first
+     because without it there is no scope to look at.
   2. `scope_string` is not a scope of this proof log: `scope`.
   3. `accounts` is a list, every element of it is an object with exactly
      the two keys `platform` and `username`, each once, both strings, and
@@ -473,6 +517,7 @@ without going through the server's code (ADR-0027). The test site's are on
 |---|---|
 | `https://data.iamreal.tw/crl/index.jsonl` | The archive index ([`spec/revocation-tree.md`](../../spec/revocation-tree.md), "Archive index") |
 | `https://data.iamreal.tw/crl/<SHA-256>.crl` | One CRL of the archive, the original bytes; `<SHA-256>` is the file's SHA-256 as 64 lowercase hex digits |
+| `https://data.iamreal.tw/connection-log/oldest.json` | `{"checked":"2026-11-26T12:00:07.123Z","oldest":"2026-10-27"}`: when the server last looked at its connection log (UTC), every hour, and the date (UTC) of the oldest entry it then held, `null` if it held none. Nothing else of the connection log is published. An `oldest` more than 33 days before today means the entries are not being deleted after the 31 days of "Rules for every endpoint" (31 days, up to a day for the deletion to happen, and the dates being UTC); a `checked` more than two hours old means the server no longer looks. No device reads this file |
 | `https://data.iamreal.tw/proof-log/` | The log directory, its record hash lists (`hashes/`) and `fingerprints.jsonl` ([`spec/record.md`](../../spec/record.md), "The published proof log"), and the card state files of the last days (`card-state/`, [`spec/record-rules.md`](../../spec/record-rules.md), "The card state file") |
 
 Only `GET` from the card proof page's origin is allowed across origins
