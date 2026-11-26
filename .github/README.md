@@ -251,6 +251,7 @@ gh cache list --repo iamreal-tw/iamreal --ref refs/heads/main --limit 100 --sort
 | 資料網域的 `proof-log/fingerprints.jsonl` 最後一行的日期是今天（台灣） | 今天的證明紀錄沒有公布 |
 | 清冊存檔的索引裡，G2、G3 最新的可用清冊，日期不早於昨天 | 鏡像停了，或內政部的清冊沒有更新 |
 | 資料網域有今天的卡片狀態檔 `proof-log/card-state/<日期>.jsonl` | 同上，今天沒有公布 |
+| 資料網域的 `connection-log/oldest.json` 讀得懂，`checked` 在 2 小時內，`oldest` 是 `null` 或不早於今天（UTC）的 33 天前（#20；還沒打開，見下面） | 後台沒有在看連線紀錄，或有超過期限還沒刪的 |
 
 門檻和時間：
 
@@ -268,10 +269,15 @@ cd worker
 node --experimental-strip-types test/outside-check.ts
 ```
 
-還沒做、要加的：
+**連線紀錄那一項（#20）還沒打開。**
 
-- **連線紀錄有沒有超過期限還沒刪**（#20）：後台會自己定時看最舊的日期並露出來，這裡多一個 `GET` 讀它。介面定了再加，這個檢查不讀儲存桶、不握讀 R2 的權杖。
-- **正式網站**：有了之後加上同樣的檢查。
+- 後台每小時看一次最舊的連線紀錄，把結果寫成資料網域上的 `connection-log/oldest.json`：`{"checked":"<UTC 的時間>","oldest":"<UTC 的日期>"}`，一筆都沒有時 `oldest` 是 `null`。
+- 這個檢查只讀那一個公開的檔，不讀儲存桶，不握讀 R2 的權杖。
+- 33 天的來歷：31 天，加 R2 的生命週期規則最多晚一天刪，再留一天。
+- #20 合併、部署之前沒有這個檔，所以這一項由 `worker/test/outside-check.ts` 的 `CONNECTION_LOG_CHECKED` 關著，跑的時候印一行 `--  not checked yet`，不算過也不算不過。
+- 打開之後，檔不在就算失敗。#20 部署後過了一個整點、這個檔出現了，再開一個 PR 把它改成 `true`。
+
+還沒做的：正式網站。有了之後加上同樣的檢查。
 
 ### 通知信寄給誰
 

@@ -2,7 +2,8 @@
 # notification part of #413): worker/test/outside-check.ts sends GET requests only, to
 # test.iamreal.tw and test-data.iamreal.tw, and fails when the back end does
 # not answer, today's proof log was not published, the CRL mirror is more than
-# a day behind, or today's card state file is missing. A failed run is the
+# a day behind, or today's card state file is missing (and, once #20 is
+# deployed, when a connection log is kept past its time). A failed run is the
 # operator's notification: GitHub emails it (.github/README.md says to whom,
 # and what this does not catch). It prints only which check failed.
 #

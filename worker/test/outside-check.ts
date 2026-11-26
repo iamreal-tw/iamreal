@@ -17,10 +17,17 @@
 //   a day or more before card proofs would);
 // - today's card state file is there (proof-log/card-state/<today>.jsonl).
 //
-// To come: that no connection log is kept past its time (#20). The back end
-// will look at the oldest date under connection/ itself and show it; this
-// check will read what it shows, as one more GET, once #20 says how. It
-// reads no bucket and holds no token for R2.
+// - no connection log is kept past its time (#20): the back end looks at the
+//   oldest one every hour and writes what it found to the data domain, as
+//   connection-log/oldest.json, {"checked":"<UTC time>","oldest":"<UTC
+//   date>"|null}. It passes when the file is there and reads as that,
+//   `checked` is at most 2 hours old (the back end did look), and `oldest`
+//   is null or at most 33 days before today in UTC (31 days, and up to a day
+//   for R2's lifecycle rule, and a day of margin). This check reads that one
+//   file, with the other GETs: it reads no bucket and holds no token for R2.
+//   Off until #20 is merged and deployed (`CONNECTION_LOG_CHECKED`): before,
+//   there is no such file, and on, a missing file fails. While it is off the
+//   run says so in a line of its own, which neither passes nor fails.
 //
 // The proof log is published at midnight in Taiwan, and retried every
 // minute in the first hour (README.md, "每天公布"): until 01:00 in Taiwan
@@ -47,6 +54,18 @@ import type { CheckLine, Reader } from "./site-check.ts";
 const FINGERPRINT_FILE = "proof-log/fingerprints.jsonl";
 const cardStateFileKey = (day: Day): string => `proof-log/card-state/${formatDay(day)}.jsonl`;
 
+/**
+ * Whether the line of the connection logs (#20) is checked. False until the
+ * back end writes connection-log/oldest.json on the test site: turn it on in
+ * the pull request after #20 is deployed.
+ */
+export const CONNECTION_LOG_CHECKED = false;
+/** The file the back end writes every hour about the connection logs (#20), on the data domain. */
+export const CONNECTION_LOG_FILE = "connection-log/oldest.json";
+/** How long ago the back end may have looked last, in hours. */
+const CONNECTION_LOG_CHECKED_HOURS = 2;
+/** How old the oldest connection log may be, in days (UTC): 31, a day for R2's lifecycle rule, a day of margin. */
+export const CONNECTION_LOG_DAYS = 33;
 /** How old the newest usable CRL of an issuer key may be, in days. */
 export const CRL_NOTICE_DAYS = 1;
 /** Until this hour in Taiwan, yesterday's line of the fingerprint file and yesterday's card state file pass. */
@@ -63,7 +82,7 @@ const taiwanHour = (now: number): number => new Date(now + 8 * HOUR_MS).getUTCHo
  * each thing checked. `clearedOn` is the date the test log was last cleared
  * on (YYYY-MM-DD).
  */
-export async function checkFromOutside(parts: { site: Reader; data: Reader; now: number; clearedOn: string }): Promise<CheckLine[]> {
+export async function checkFromOutside(parts: { site: Reader; data: Reader; now: number; clearedOn: string; connectionLog?: boolean }): Promise<CheckLine[]> {
   const lines: CheckLine[] = [];
   const check = async (what: string, problem: () => Promise<string | null>): Promise<void> => {
     let found: string | null;
@@ -141,7 +160,30 @@ export async function checkFromOutside(parts: { site: Reader; data: Reader; now:
     return justCleared ? null : `there is no ${cardStateFileKey(today)}`;
   });
 
-  // To come (#20): the oldest date of the connection logs, as the back end shows it, at most their time old.
+  if (parts.connectionLog ?? CONNECTION_LOG_CHECKED) {
+    await check(`the data domain: ${CONNECTION_LOG_FILE} says the back end looked in the last ${CONNECTION_LOG_CHECKED_HOURS} hours, and no connection log is older than ${CONNECTION_LOG_DAYS} days`, async () => {
+      const res = await parts.data(`/${CONNECTION_LOG_FILE}`);
+      const text = await res.text();
+      if (res.status === 404) return "there is no file";
+      if (res.status !== 200) return `the status is ${res.status}`;
+      let found: unknown;
+      try {
+        found = JSON.parse(text);
+      } catch {
+        return "it is not JSON";
+      }
+      const { checked, oldest } = (typeof found === "object" && found !== null ? found : {}) as { checked?: unknown; oldest?: unknown };
+      const at = typeof checked === "string" ? Date.parse(checked) : Number.NaN;
+      if (Number.isNaN(at)) return "it has no time of checking";
+      if (oldest !== null && (typeof oldest !== "string" || parseDay(oldest) === null)) return "its oldest is neither a date nor null";
+      if (parts.now - at > CONNECTION_LOG_CHECKED_HOURS * HOUR_MS) return `the back end last looked at ${checked as string}`;
+      const todayUtc = Math.floor(parts.now / (24 * HOUR_MS));
+      if (oldest !== null && todayUtc - parseDay(oldest)! > CONNECTION_LOG_DAYS) return `the oldest connection log is of ${oldest}`;
+      return null;
+    });
+  } else {
+    lines.push({ ok: true, what: `not checked yet: ${CONNECTION_LOG_FILE}, the connection logs' age (#20)` });
+  }
   return lines;
 }
 
@@ -158,7 +200,7 @@ export async function runOutsideCheck(site: string, data: string): Promise<numbe
   const now = Date.now();
   console.log(`${site} and ${data}, ${formatDay(taiwanDay(now))} ${String(taiwanHour(now)).padStart(2, "0")}h in Taiwan; the test log was last cleared on ${clearedOn}`);
   const lines = await checkFromOutside({ site: reader(site), data: reader(data), now, clearedOn });
-  for (const line of lines) console.log(`${line.ok ? "ok    " : "FAIL  "} ${line.what}`);
+  for (const line of lines) console.log(`${line.what.startsWith("not checked yet") ? "--    " : line.ok ? "ok    " : "FAIL  "} ${line.what}`);
   const failures = lines.filter((l) => !l.ok).length;
   console.log(failures ? `${failures} check(s) failed` : "all checks passed");
   return failures;
