@@ -164,7 +164,10 @@ const demo = document.querySelector("[data-demo]");
 const data = demo === null ? null : document.getElementById(demo.dataset.demo);
 if (demo !== null && data !== null && typeof demo.animate === "function") {
   const timeline = JSON.parse(data.textContent);
-  const variant = demo.dataset.variant;
+  // Which platform's way back from the links to show (design/motion/README.md, on the box that differs): Android's
+  // on a browser that says it is Android, the iPhone's on every other. Chosen here, in the browser: the page is the
+  // same for every device, and the server reads nothing of the device.
+  const variant = /Android/.test(navigator.userAgent) ? "android" : "ios";
   const picture = demo.querySelector(".demo-picture");
   const row = demo.querySelector(".demo-row");
   const button = demo.querySelector("[data-demo-button]");
@@ -177,6 +180,8 @@ if (demo !== null && data !== null && typeof demo.animate === "function") {
   let animations = [];
   /** The demonstration in place of the still pictures, or the pictures again; the column is wider for the demonstration beside the steps. */
   const show = (on) => {
+    // The style sheet draws the links' top for the platform said here.
+    demo.dataset.variant = variant;
     demo.hidden = !on;
     page.classList.toggle("playing", on);
     page.parentElement.classList.toggle("with-demo", on);

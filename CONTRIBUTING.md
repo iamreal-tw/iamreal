@@ -58,7 +58,7 @@ ADR、`CLAUDE.md`、`GLOSSARY.md`、`docs/design/principles.md`、這一份。PR
 - 工作流程用 `pull_request_target` 觸發，或把 secrets 交給建置、測試的步驟：不接受
 - wrangler 的設定檔，特別是 `build.command`：部署時會執行它（[custom builds](https://developers.cloudflare.com/workers/wrangler/custom-builds/)）
 - app 的建置設定和建置腳本：`android/` 的 Gradle 設定（`*.gradle.kts`、`gradle.properties`、`gradle/`）、`build-native.sh`、`fetch-zig.sh`、`zig.sha256`；`ios/` 的 Xcode 專案檔（`IamrealApp.xcodeproj/`）、`Config/`、`build-core.sh`、`archive.sh`、`check-archive.sh`、`check-app.sh`、`ExportOptions.plist`；`device-core/` 的 `Cargo.toml`、`Cargo.lock`、`.cargo/config.toml`、`rust-toolchain.toml`、下載的腳本和它們的雜湊檔。建置的工作拿不到上傳的金鑰，但它做出來的檔就是簽章後傳到商店的那一個（ADR-0036，`.github/README.md`）
-- `worker/site/` 裡 wrangler 上傳的檔：`copy.js` 會在訪客的瀏覽器裡執行；`_headers`、`_redirects` 不會被執行，但決定過卡頁面、樣式表和 `copy.js` 帶什麼標頭、哪個網址送哪個檔（`worker/README.md`「Static Assets」）
+- `worker/site/` 裡 wrangler 上傳的檔：`copy.js`、`demo.js` 會在訪客的瀏覽器裡執行（`demo.js` 由 `worker/scripts/site-files.ts` 從 `worker/src/teaching-animation.ts` 和 `worker/demo/player.js` 寫出，改的是那兩個檔，三個一起看）；`_headers`、`_redirects` 不會被執行，但決定過卡頁面、樣式表和這兩支程式帶什麼標頭、哪個網址送哪個檔（`worker/README.md`「Static Assets」）
 - `package.json` 的 `scripts`，特別是 `preinstall`、`install`、`postinstall`、`prepare`：安裝套件時就會執行
 - 新增的套件、lockfile 裡的變動：解析到的網址和雜湊要對得上公開的套件庫
 - 安裝套件和 wrangler 啟動時會讀的檔：`.npmrc`、`.pnpmfile.cjs`（或 `.mjs`、`.js`）、`pnpm-workspace.yaml`、`worker/` 底下的 `.env*`

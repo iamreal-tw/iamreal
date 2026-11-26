@@ -81,10 +81,17 @@ export function withScript(path: string): boolean {
   return p === "/faq" || p === "/verify" || p.startsWith("/hang/");
 }
 
+/** Whether the page at a path has the demonstration when it is found, so loads its player: /hang and /hang/<short ID>. */
+export function withDemo(path: string): boolean {
+  const p = path.split("?")[0]!;
+  return p === "/hang" || p.startsWith("/hang/");
+}
+
 /**
  * What a response of the visitors' pages has for headers: these, each with
  * this value, and no other. `noindex` is false on the production log;
- * `script` is true for a page that loads the copy buttons' script.
+ * `script` is true for a page that loads a script of this site (the copy
+ * buttons', the demonstration's player).
  */
 export function checkVisitorHeaders(what: string, res: Response, expect: { cache: string; noindex?: boolean; script?: boolean; more?: readonly string[] }): void {
   const want: Record<string, string> = {
@@ -231,14 +238,18 @@ export async function getPage(worker: TestWorker, path: string, expect: { test?:
   const res = await worker.fetch(path, { redirect: "manual" });
   const page = await res.text();
   const test = expect.test !== false;
-  const script = withScript(path) && res.status === 200;
+  const copies = withScript(path) && res.status === 200;
+  const demo = withDemo(path) && res.status === 200;
+  const script = copies || demo;
   checkVisitorHeaders(path, res, { cache: expect.cache ?? "public, max-age=60", noindex: test, script });
+  // No page differs by the device that asks: none says so to a cache. (The local workerd may add what it compresses by.)
+  assert.doesNotMatch(res.headers.get("vary") ?? "", /User-Agent/i, `${path}: Vary does not name User-Agent`);
   assert.equal(res.headers.get("content-type"), "text/html; charset=utf-8", `${path}: Content-Type`);
   if (script) {
-    // The page of hanging a card's proof also has the demonstration: its player, and its timeline as data (hang.md, 示範).
-    const demo = path.startsWith("/hang/");
-    assert.deepEqual(page.match(/<\s*script[^>]*>/gi), demo ? [COPY_SCRIPT.replace("</script>", ""), DEMO_SCRIPT.replace("</script>", ""), DEMO_DATA] : [COPY_SCRIPT.replace("</script>", "")], `${path}: the scripts are this site's files, and nothing inline that runs`);
-    assert.ok(page.includes(COPY_SCRIPT) && (!demo || page.includes(DEMO_SCRIPT)), `${path}: each script is a file and holds nothing`);
+    // The pages of hanging a proof have the demonstration: its player, and its timeline as data (hang.md, 示範).
+    const tag = (whole: string): string => whole.replace("</script>", "");
+    assert.deepEqual(page.match(/<\s*script[^>]*>/gi), [...(copies ? [tag(COPY_SCRIPT)] : []), ...(demo ? [tag(DEMO_SCRIPT), DEMO_DATA] : [])], `${path}: the scripts are this site's files, and nothing inline that runs`);
+    assert.ok((!copies || page.includes(COPY_SCRIPT)) && (!demo || page.includes(DEMO_SCRIPT)), `${path}: each script is a file and holds nothing`);
   } else assert.doesNotMatch(page, /<\s*script/i, `${path}: no script`);
   assert.doesNotMatch(page, /\son[a-z]+\s*=/i, `${path}: no event attribute`);
   assert.doesNotMatch(page, /\sstyle\s*=|<\s*style/i, `${path}: no inline style`);
