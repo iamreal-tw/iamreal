@@ -29,6 +29,8 @@ type Tree struct {
 	keys  []Key  // sorted by path
 	nodes []node // children before parents; the root is last
 	root  int32  // index into nodes, or empty
+	// reuse is set only while a TreeBuilder builds the tree.
+	reuse *reuse
 }
 
 // A node is a leaf (left == leaf, right is the key's index) or a branch
@@ -47,7 +49,64 @@ var one = func() fr.Element { var e fr.Element; e.SetOne(); return e }()
 
 // NewTree builds the tree of keys. Keys that share their lowest 127 bits,
 // including a key given twice, are an error: they cannot be in one tree.
-func NewTree(keys []Key) (*Tree, error) {
+// Every hash of the tree is computed: it is the reference a TreeBuilder's
+// trees are compared with.
+func NewTree(keys []Key) (*Tree, error) { return newTree(keys, nil) }
+
+// A TreeBuilder builds one tree after another and, for each, reuses the
+// hashes of the tree it built before: a leaf's by its key, a branch's by
+// the hashes of its two children. The hash of a node is a function of
+// those alone (see Tree), so a reused hash is the hash NewTree computes,
+// and the tree is NewTree's tree, node for node.
+//
+// It is for the CRLs of one issuer key, in any order: two of them differ
+// in a few hundred serial numbers out of hundreds of thousands, so nearly
+// every node of one is a node of the other (README.md, "重用雜湊").
+// Only the last tree's hashes are kept, so the memory is that of one
+// tree's, however many are built. Nothing is written anywhere, and nothing
+// outlives the builder. The zero value is ready to use; it is not for use
+// by several goroutines at once.
+type TreeBuilder struct {
+	last     reuseTable
+	computed int
+}
+
+// A reuseTable holds the hashes of one tree: of each leaf by its key, of
+// each branch by its children's hashes (the zero element for an empty
+// subtree, as in the hash itself).
+type reuseTable struct {
+	leaves   map[Key]fr.Element
+	branches map[[2]fr.Element]fr.Element
+}
+
+// reuse is what a tree under construction reads earlier hashes from and
+// writes its own to.
+type reuse struct {
+	from, to reuseTable
+	computed int
+}
+
+// NewTree builds the tree of keys, as the function NewTree does.
+func (b *TreeBuilder) NewTree(keys []Key) (*Tree, error) {
+	r := &reuse{from: b.last, to: reuseTable{
+		leaves: make(map[Key]fr.Element, len(keys)),
+		// About 0.44 branches per key for random keys.
+		branches: make(map[[2]fr.Element]fr.Element, len(keys)/2+1),
+	}}
+	t, err := newTree(keys, r)
+	if err != nil {
+		// Nothing was built: the hashes of the tree before stay.
+		return nil, err
+	}
+	b.last, b.computed = r.to, r.computed
+	return t, nil
+}
+
+// Computed returns how many Poseidon2 hashes the last tree took that were
+// not reused: for the first tree, all of them (Tree.Hashes).
+func (b *TreeBuilder) Computed() int { return b.computed }
+
+func newTree(keys []Key, r *reuse) (*Tree, error) {
 	if i, j, ok := findCollision(keys); ok {
 		return nil, fmt.Errorf("crl: keys %d and %d share their lowest 127 bits", i, j)
 	}
@@ -60,14 +119,53 @@ func NewTree(keys []Key) (*Tree, error) {
 		sorted[i] = keyPath{k.path(), k}
 	}
 	slices.SortFunc(sorted, func(x, y keyPath) int { return x.p.compare(y.p) })
-	t := &Tree{keys: make([]Key, len(keys))}
+	t := &Tree{keys: make([]Key, len(keys)), reuse: r}
 	for i, s := range sorted {
 		t.keys[i] = s.k
 	}
 	// About 1.44 nodes per key for random keys.
 	t.nodes = make([]node, 0, len(keys)+len(keys)/2+1)
 	t.root = t.build(0, len(t.keys), 0)
+	t.reuse = nil
 	return t, nil
+}
+
+// leafHash is Poseidon2(k, 1, 1), reused if the tree before had the key.
+func (t *Tree) leafHash(key Key) fr.Element {
+	r := t.reuse
+	if r != nil {
+		if h, ok := r.from.leaves[key]; ok {
+			r.to.leaves[key] = h
+			return h
+		}
+	}
+	var k fr.Element
+	k.SetBytes(key[:])
+	h := poseidon2.Hash3(&k, &one, &one)
+	if r != nil {
+		r.to.leaves[key] = h
+		r.computed++
+	}
+	return h
+}
+
+// branchHash is Poseidon2(l, r), reused if the tree before had a branch
+// with these two children.
+func (t *Tree) branchHash(l, r fr.Element) fr.Element {
+	re := t.reuse
+	children := [2]fr.Element{l, r}
+	if re != nil {
+		if h, ok := re.from.branches[children]; ok {
+			re.to.branches[children] = h
+			return h
+		}
+	}
+	h := poseidon2.Hash2(&l, &r)
+	if re != nil {
+		re.to.branches[children] = h
+		re.computed++
+	}
+	return h
 }
 
 func (t *Tree) build(lo, hi, level int) int32 {
@@ -75,9 +173,7 @@ func (t *Tree) build(lo, hi, level int) int32 {
 	case 0:
 		return empty
 	case 1:
-		var k fr.Element
-		k.SetBytes(t.keys[lo][:])
-		t.nodes = append(t.nodes, node{hash: poseidon2.Hash3(&k, &one, &one), left: leaf, right: int32(lo)})
+		t.nodes = append(t.nodes, node{hash: t.leafHash(t.keys[lo]), left: leaf, right: int32(lo)})
 		return int32(len(t.nodes) - 1)
 	}
 	if level >= pathBits {
@@ -86,8 +182,7 @@ func (t *Tree) build(lo, hi, level int) int32 {
 	mid := lo + sort.Search(hi-lo, func(i int) bool { return t.keys[lo+i].bit(level) == 1 })
 	l := t.build(lo, mid, level+1)
 	r := t.build(mid, hi, level+1)
-	lh, rh := t.hash(l), t.hash(r)
-	t.nodes = append(t.nodes, node{hash: poseidon2.Hash2(&lh, &rh), left: l, right: r})
+	t.nodes = append(t.nodes, node{hash: t.branchHash(t.hash(l), t.hash(r)), left: l, right: r})
 	return int32(len(t.nodes) - 1)
 }
 
@@ -101,7 +196,8 @@ func (t *Tree) hash(i int32) fr.Element {
 // Len returns the number of keys.
 func (t *Tree) Len() int { return len(t.keys) }
 
-// Hashes returns the number of Poseidon2 hashes the tree took to build.
+// Hashes returns the number of Poseidon2 hashes the tree has: one for each
+// node. A TreeBuilder may have computed fewer (TreeBuilder.Computed).
 func (t *Tree) Hashes() int { return len(t.nodes) }
 
 // Root returns the root as an integer below the field modulus.
