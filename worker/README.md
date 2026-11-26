@@ -12,7 +12,7 @@
 | 證明紀錄的 Durable Object：題目表、紀錄、卡片狀態表、證明紀錄的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | |
 | 照 IP 的限流（[限流](#限流)）：題目、卡片現況、送出、公開的讀取、計數、頁面六類分開算，IPv4 照單一位址、IPv6 照 /64；超過回 `429` 和 `Retry-After`，訪客頁面回一頁說明 | 全站的總量上限（只數開始過卡的那一次 `config`）、Durable Object 撐不住時的 `busy`、客戶端的處理；WAF 的那一條規則和挑戰頁還沒有在測試網站設過 |
 | 收計數（[計數](#計數)，ADR-0032、ADR-0039）：`POST /api/v1/counts` 照 `spec/counts.md` 的表收，不合的整筆丟掉；收下的交給專門收計數的 Durable Object，每分鐘寫成不公開的儲存桶裡 `count-events/` 底下的一個檔，裡面沒有 IP，留 31 天；每分鐘的明細有上限；每小時公布最舊一檔的日期。送計數的客戶端現在只有網頁版的過卡 | 加總（[#435](https://github.com/iamreal-tw/iamreal/issues/435)）、營運者看數字的那一頁（[#436](https://github.com/iamreal-tw/iamreal/issues/436)）、訪客頁面和兩個 app 送計數（[#275](https://github.com/iamreal-tw/iamreal/issues/275)、[#433](https://github.com/iamreal-tw/iamreal/issues/433)、[#434](https://github.com/iamreal-tw/iamreal/issues/434)）；讀最舊日期的外部檢查還沒打開；這個物件一秒收得了多少還沒量 |
-| 連線紀錄（[連線紀錄](#連線紀錄)）：被算了一次的送出一筆各記一個 R2 物件（請求編號、時間、結果、IP、國家代碼、網路業者的編號、過卡裝置編號；成功的加第幾筆，沒成功的加錯誤代碼和內文），留 31 天，靠儲存桶的生命週期規則；每小時公布最舊一筆的日期，讓外面看得出規則有沒有在刪。其他的請求不記 | 查詢的指令；讀那個日期的外部檢查（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）；客戶端還沒有帶過卡裝置編號 |
+| 連線紀錄（[連線紀錄](#連線紀錄)）：被算了一次的送出一筆各記一個 R2 物件（請求編號、時間、結果、IP、國家代碼、網路業者的編號、過卡裝置編號；成功的加第幾筆，沒成功的加錯誤代碼和內文），留 31 天，靠儲存桶的生命週期規則；每小時公布最舊一筆的日期，讓外面看得出規則有沒有在刪。其他的請求不記。營運者查詢的指令和收到查詢、刪除請求時的做法（[查連線紀錄](#查連線紀錄)） | 讀那個日期的外部檢查（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）；帶過卡裝置編號的客戶端現在只有網頁版，兩個 app 還沒有 |
 | API 的七個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`、`GET /api/v1/rebuild`、`POST /api/v1/counts`；存著的規則版本和程式不同時、營運者停止收過卡時（[停止和恢復收過卡](#停止和恢復收過卡)），`challenges` 和 `records` 回 `paused` | 全站的總量上限、Durable Object 撐不住時的 `busy`（照 IP 的上限有了，見上一列） |
 | 寫滿 1,000 筆的紀錄檔和它的雜湊清單搬到 R2，讀回來核對過才刪掉 Durable Object 裡的那 1,000 筆（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)） | |
 | 每天台灣時間換日公布證明紀錄：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布證明紀錄](#每天換日公布證明紀錄)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的證明紀錄），重驗通過（[部署後要營運者做的](#每天換日公布證明紀錄)）；清空之後，2026-11-22 公布了營運者用真卡片過卡的那一筆，重驗通過（[#71](https://github.com/iamreal-tw/iamreal/issues/71)） | |
@@ -1431,7 +1431,94 @@ ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限
 
 **還有兩種時候，算了一次的送出沒有紀錄**：Durable Object 已經把次數加上去、回應卻沒有回到 Worker（那個請求回 `500`）；Worker 這一次執行在算了之後被平台結束（例如用完 CPU 時間）。後一種為了不讓「送出後馬上斷線」躲掉紀錄，寫入是在算了一次的那一刻就向執行環境登記的（`waitUntil`），不是等回應準備好才登記；客戶端斷線後請求是不是照樣跑完，沒有在 Cloudflare 上看過。
 
-**還沒有的**：營運者查詢用的指令（下載指定日期的物件、照欄位篩）、收到查詢或刪除請求時的做法，在營運的規格（[#413](https://github.com/iamreal-tw/iamreal/issues/413)）的別張票。**還沒在 Cloudflare 上看過的**：`CF-Connecting-IP`、`request.cf` 的 `country` 和 `asn` 實際的值（本機的 workerd 裡 IP 是測試自己帶的標頭）；滿 32 天後 `oldest.json` 的日期有沒有跟著往後移。
+**還沒在 Cloudflare 上看過的**：`CF-Connecting-IP`、`request.cf` 的 `country` 和 `asn` 實際的值（本機的 workerd 裡 IP 是測試自己帶的標頭）；滿 32 天後 `oldest.json` 的日期有沒有跟著往後移。
+
+### 查連線紀錄
+
+營運者在自己的電腦上查，後台沒有讀連線紀錄的介面（[#417](https://github.com/iamreal-tw/iamreal/issues/417)、[#413](https://github.com/iamreal-tw/iamreal/issues/413)）。指令是 [`scripts/connection-log.ts`](scripts/connection-log.ts)：給一段 UTC 的日期，下載那幾天的每一筆，印出符合條件的，一筆一行 JSON，舊的在前。
+
+```sh
+cd worker
+node --experimental-strip-types scripts/connection-log.ts --from 2026-11-20 --to 2026-11-21 [條件…]
+```
+
+| 條件 | 意思 |
+|---|---|
+| `--after <時間>`、`--before <時間>` | 這段時間裡的（含 `--after`，不含 `--before`）。ISO 8601，要寫時區：`2026-11-20T08:00:00Z`，或台灣時間 `2026-11-20T16:00:00+08:00` |
+| `--result <結果>` | `accepted`（寫成了一筆）、`refused`（沒有）、一個狀態碼（`409`），或一個錯誤代碼（`challenge_used`）。錯誤代碼拼錯的話只會查不到，不會報錯 |
+| `--ip <位址>` | 正好是這個 IP 位址的，IPv4 或 IPv6，不比對開頭。IPv6 的大小寫、省略的寫法不同也對得上（`2001:DB8::42` 和 `2001:db8:0::42` 是同一個） |
+| `--device <過卡裝置編號>` | 這台裝置的送出（ADR-0039）：每一筆的時間、結果、IP，成功的那幾筆有 `seq`，是證明紀錄的第幾筆 |
+| `--body` | 沒有成功的那幾筆連內文一起印（預設不印：一份完整的送出） |
+
+- `--from`、`--to` 一定要給，是 UTC 的日期，最長 33 天。台灣時間比 UTC 早 8 小時：台灣時間 11 月 21 日早上 8 點以前的請求，在 UTC 的 11 月 20 日那一天。
+- 印出來的有 IP 位址，當成敏感的東西：查完不要留著輸出的檔，不要貼到 issue、聊天或任何公開的地方。
+
+#### 讀儲存桶的權杖：要查的時候才建，查完刪掉
+
+指令用 R2 的 S3 相容介面讀 `iamreal-test-logs`，只做兩件事：列出一天的鍵（`ListObjectsV2`）和讀一筆（`GetObject`）。它要一把**只能讀、只限這一個儲存桶**的 R2 權杖。
+
+**不要用**讀得到整個帳號的權杖：`Workers R2 Storage Read`、Admin 的兩種權限，都讀得到每一個儲存桶。理由見上面「規則有沒有在刪，從外面看得到」。
+
+權杖平常不存在。營運者要查的時候：
+
+1. **建權杖。** 在 Cloudflare 的儀表板，R2 → 管理 R2 的 API 權杖 → 建一把新的（儀表板上的字可能改過，照下面的意思找）：
+   - 權限選 **Object Read only**。文件寫這種權限「Allows the ability to read and list objects in specific buckets」（[R2 API tokens](https://developers.cloudflare.com/r2/api/tokens/)，2026-11-26 讀）。
+   - 儲存桶選**只限指定的儲存桶**，只勾 `iamreal-test-logs`（「you can scope your token to a set of buckets」，同一頁）。
+   - 有到期的選項就設一天。
+   - 建好後頁面上會有 Access Key ID、Secret Access Key 和 S3 的端點 `https://<帳號編號>.r2.cloudflarestorage.com`。這幾個值只顯示這一次。
+2. **寫進金鑰檔** `~/.config/iamreal/connection-log.env`，只有自己讀得到：
+
+   ```sh
+   mkdir -p ~/.config/iamreal
+   (umask 077 && cat > ~/.config/iamreal/connection-log.env)   # 貼上下面三行，按 Ctrl-D
+   chmod 600 ~/.config/iamreal/connection-log.env
+   ```
+
+   ```
+   R2_ACCOUNT_ID=<端點裡的帳號編號>
+   R2_ACCESS_KEY_ID=<Access Key ID>
+   R2_SECRET_ACCESS_KEY=<Secret Access Key>
+   ```
+
+   - 這個檔不在程式庫裡，不要放進任何程式庫。
+   - 指令找不到這個檔時，會說去看這一節。檔讓別的使用者讀得到時，指令不讀它，要你先 `chmod 600`。
+   - 錯誤訊息不會印出檔裡的任何值。
+3. **跑上面的指令。**
+4. **查完刪掉：** 在儀表板的 R2 權杖列表刪掉這一把，再刪掉金鑰檔：`rm ~/.config/iamreal/connection-log.env`。
+
+**這把權杖讀得到 IP 位址**：它讀得到 31 天內每一筆被算過的送出（ADR-0022）的 IP、過卡裝置編號，和沒有成功的送出的內文。所以要當成敏感的東西保管：只放在營運者自己的電腦，不傳給別人，不放進 GitHub 的 secret，不在別的機器上建。
+
+正式網站有了之後，它的連線紀錄在另一個儲存桶，要另建一把只限那一個的權杖。指令的 `BUCKET` 到時候一起改。
+
+### 收到查詢或刪除連線紀錄的請求時
+
+隱私權說明寫了：想查連線紀錄裡和自己有關的部分，或依法要求刪除，請寫信給營運者，營運者個別處理（`design/copy/privacy.md` 第 14 段）。這一節是營運者收到信之後怎麼做。
+
+**對出是哪幾筆。** 連線紀錄裡沒有姓名、沒有卡片，對得上請求的人的只有：
+
+- **時間：** 請請求的人說大約是哪一天、幾點送出的（台灣時間），換成 UTC 給 `--from`、`--to`、`--after`、`--before`。
+- **IP 位址：** 請請求的人說那時候用的網路的對外 IP（家裡、公司的固定 IP 較好對；手機網路的 IP 常常換，對不準）。給 `--ip`。
+
+只有時間沒有 IP 的話，那段時間裡別人的送出也會列出來：不要把別人的那幾筆給請求的人。
+
+**查詢的請求。** 用上面的指令查出符合的那幾筆，確認時間和 IP 都對得上，再照下面「待定」那幾項回覆。
+
+**刪除的請求。** 先照上面對出是哪幾筆，記下每一筆的鍵：`connection/<UTC 的日期>/<time>-<request_id>.json`，兩個值都在印出來的那一行裡。然後：
+
+1. 在 Cloudflare 的儀表板，R2 → `iamreal-test-logs` → 物件，搜尋 `connection/<日期>/`，找到那幾個鍵，刪除。
+   - 不用另建能寫的權杖：刪除只在儀表板上做。
+2. 再跑一次同樣的查詢，確認那幾筆不在了。
+3. 刪了之後，Cloudflare 的文件上沒有把它救回來的機制（見上面「刪掉的物件救不救得回來」：文件上沒有，不是文件保證沒有）。不刪，它們也會在寫入 31 天後由生命週期規則刪掉；請求的時間如果已經接近 31 天，回覆時可以說明。
+
+連線紀錄刪了，證明紀錄不變：成功的送出寫進證明紀錄的那一筆，照 ADR-0005 不能刪，只能收回（隱私權說明第 10 段）。
+
+**待維護者定**（這張票不定）：
+
+- 對外怎麼回覆：查詢的結果給請求的人哪些欄位（IP、國家、網路業者的編號、過卡裝置編號、內文）、用什麼格式，刪除完成時寫什麼。
+- 多久內回。
+- 怎麼確認寫信來的人就是那些送出的人。只有時間和 IP，任何知道某人 IP 的人都能來問。
+- 收到的請求和處理的經過要不要留紀錄、留在哪裡、留多久（信本身在營運者的信箱裡，隱私權說明第 12 段）。
+- 對不出來（沒有 IP、時間太模糊、已經超過 31 天）時怎麼回覆。
 
 ## 計數
 
