@@ -4,7 +4,8 @@
 // written here by hand. Before writing, each case is read with
 // src/counts.ts; if one gives another result, nothing is written.
 import { writeFileSync } from "node:fs";
-import { BROWSERS, CARD_PROOF_ACTIONS, CLIENTS, DURATIONS, EVENTS, OSES, PAGES, REASONS, SOURCES, STEPS, TAPS, TIMED_STEPS, VISITOR_ACTIONS, readCount } from "../../src/counts.ts";
+import { BROWSERS, CARD_PROOF_ACTIONS, CLIENTS, DURATIONS, EVENTS, OSES, PAGES, REASONS, SOURCES, STEPS, TAPS, TIMED_STEPS, VISITOR_ACTIONS, deviceIdOn, readCount, tookOf } from "../../src/counts.ts";
+import { taiwanDayOfSeconds } from "../../src/date.ts";
 
 const DEVICE = "0123456789abcdef0123456789abcdef";
 const ATTEMPT = "fedcba9876543210fedcba9876543210";
@@ -43,6 +44,12 @@ const cases: Case[] = [
   taken("android, how long the tree took", { ...app("android"), event: "duration", step: "tree", took: "lt_1s" }),
   taken("web, with versions and the card reader's name", { ...web, event: "step", step: "pin", browser_version: "131.0.6778.86", os_version: "10.0", reader: "Generic Smart Card Reader 0" }),
   taken("ios, with versions", { ...app("ios"), event: "step", step: "done", os_version: "18.1.1", app_version: "1.4" }),
+  taken("ios, with the phone's model", { ...app("ios"), event: "step", step: "read", os_version: "18.1.1", app_version: "2026.11.5", model: "iPhone15,2" }),
+  taken("android, with the phone's model", { ...app("android"), event: "stop", reason: "nfc_off", os_version: "14", app_version: "2026.11.5", model: "SM-S918B" }),
+  taken("a model with spaces and brackets", { ...app("android"), event: "step", step: "read", model: "moto g(60)" }),
+  taken("a model with a plus", { ...app("android"), event: "step", step: "read", model: "HTC U12+" }),
+  taken("a model with an underscore", { ...app("android"), event: "step", step: "read", model: "ASUS_AI2302" }),
+  taken("a model of 32 characters", { ...app("android"), event: "step", step: "read", model: "A".repeat(32) }),
   taken("the members in another order", { step: "read", os: "macos", browser: "firefox", attempt_id: ATTEMPT, device_id: DEVICE, event: "step", client: "web" }),
   // Taken: a visitor.
   taken("a page", { ...visitor, event: "page", page: "home" }),
@@ -145,7 +152,38 @@ const cases: Case[] = [
   dropped("a card reader's name of 65 characters", { ...web, event: "step", step: "read", reader: "A".repeat(65) }),
   dropped("a card reader's name with a character outside ASCII", { ...web, event: "step", step: "read", reader: "讀卡機" }),
   dropped("an empty card reader's name", { ...web, event: "step", step: "read", reader: "" }),
+  dropped("a model of 33 characters", { ...app("android"), event: "step", step: "read", model: "A".repeat(33) }),
+  dropped("an empty model", { ...app("ios"), event: "step", step: "read", model: "" }),
+  dropped("a model with a slash", { ...app("android"), event: "step", step: "read", model: "Pixel 8/Pro" }),
+  dropped("a model with a character outside ASCII", { ...app("android"), event: "step", step: "read", model: "小米 13" }),
+  dropped("a name the phone's owner gave it", { ...app("ios"), event: "step", step: "read", model: "Alice’s iPhone" }),
+  dropped("a web count with a model", { ...web, event: "step", step: "read", model: "SM-S918B" }),
+  dropped("a page with a model", { ...visitor, event: "page", page: "home", model: "SM-S918B" }),
 ];
+
+/** The value a device keeps, a moment (seconds since 1970), 16 random bytes; the ID it uses then, and the value it keeps from then on. */
+const R = "a".repeat(32);
+const KEPT = "0123456789abcdef0123456789abcdef";
+const at = (iso: string): number => Date.parse(iso) / 1000;
+const deviceIds = [
+  { name: "none kept: a new one", stored: null, now: at("2027-01-01T04:00:00Z"), random: R, device_id: R, store: `${R}.2027-01-01` },
+  { name: "made today", stored: `${KEPT}.2027-01-01`, now: at("2027-01-01T04:00:00Z"), random: R, device_id: KEPT, store: null },
+  { name: "made 30 days ago", stored: `${KEPT}.2027-01-01`, now: at("2027-01-31T04:00:00Z"), random: R, device_id: KEPT, store: null },
+  { name: "made 31 days ago: replaced", stored: `${KEPT}.2027-01-01`, now: at("2027-02-01T04:00:00Z"), random: R, device_id: R, store: `${R}.2027-02-01` },
+  { name: "the day in Taiwan, not in UTC: 23:59 on day 30", stored: `${KEPT}.2027-01-01`, now: at("2027-01-31T15:59:59Z"), random: R, device_id: KEPT, store: null },
+  { name: "the day in Taiwan, not in UTC: 00:00 on day 31", stored: `${KEPT}.2027-01-01`, now: at("2027-01-31T16:00:00Z"), random: R, device_id: R, store: `${R}.2027-02-01` },
+  { name: "made in Taiwan's evening: that day", stored: null, now: at("2027-01-01T15:30:00Z"), random: R, device_id: R, store: `${R}.2027-01-01` },
+  { name: "dated after today: replaced", stored: `${KEPT}.2027-01-02`, now: at("2027-01-01T04:00:00Z"), random: R, device_id: R, store: `${R}.2027-01-01` },
+  { name: "a date that does not exist: replaced", stored: `${KEPT}.2027-02-30`, now: at("2027-03-01T04:00:00Z"), random: R, device_id: R, store: `${R}.2027-03-01` },
+  { name: "an ID in capitals: replaced", stored: `${KEPT.toUpperCase()}.2027-01-01`, now: at("2027-01-01T04:00:00Z"), random: R, device_id: R, store: `${R}.2027-01-01` },
+  { name: "an ID without its date: replaced", stored: KEPT, now: at("2027-01-01T04:00:00Z"), random: R, device_id: R, store: `${R}.2027-01-01` },
+  { name: "anything else: replaced", stored: "x", now: at("2027-01-01T04:00:00Z"), random: R, device_id: R, store: `${R}.2027-01-01` },
+  { name: "an empty value: replaced", stored: "", now: at("2027-01-01T04:00:00Z"), random: R, device_id: R, store: `${R}.2027-01-01` },
+];
+for (const d of deviceIds) {
+  const got = deviceIdOn(d.stored, taiwanDayOfSeconds(d.now), d.random);
+  if (got.id !== d.device_id || got.store !== d.store) throw new Error(`"${d.name}" is written otherwise than src/counts.ts says`);
+}
 
 for (const c of cases) {
   const kept = readCount(c.count);
@@ -178,7 +216,7 @@ const durationsOf: { ms: number; took: string | null }[] = [
 const file = {
   spec: "counts",
   status: "draft",
-  note: "table: every code of spec/counts.md and the clients it is for, as an implementation has it. cases: a parsed count, and whether it is taken or dropped whole. durations_of: how long a timed step took, in milliseconds, and the duration it is (null: none).",
+  note: "table: every code of spec/counts.md and the clients it is for, as an implementation has it. cases: a parsed count, and whether it is taken or dropped whole. durations_of: how long a timed step took, in milliseconds, and the duration it is (null: none). device_ids: the value a device keeps (null: none), the moment (seconds since 1970), 16 random bytes as hex; the card proof device ID used then, and the value kept from then on (null: the one kept).",
   generated_by: "protocol/test/generate/counts.ts",
   table: {
     clients: CLIENTS,
@@ -197,6 +235,7 @@ const file = {
   },
   cases,
   durations_of: durationsOf,
+  device_ids: deviceIds,
 };
 writeFileSync(new URL("../../../spec/vectors/counts.json", import.meta.url), `${JSON.stringify(file, null, 2)}\n`);
 console.log(`${cases.length} cases`);

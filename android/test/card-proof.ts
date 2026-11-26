@@ -41,7 +41,7 @@
 //    the third): it gets none. Twice a card the secure channel cannot be
 //    made with is held there: no PIN goes, the PIN typed is dropped, and
 //    the tap is not offered again. At the end the app's storage holds
-//    nothing of a card proof.
+//    nothing of a card proof but the card proof device ID.
 //    After the submission each step does one thing: step 6 hangs the link
 //    (the whole of it, or for a card proof again only whether the link is
 //    still there), step 7 is the reminder, step 8 is done and the
@@ -79,6 +79,13 @@
 //    read all the same. Then the card's state (step 3), the challenge and the submission (step 5)
 //    turned away: 再試一次 sends the same request again, and the card is
 //    held to the phone no more than in any card proof.
+// 9. The counts (spec/counts.md, #433), as the server in between saw them:
+//    every count is the app's and carries nothing of a card, an account or
+//    a scoped ID; each card proof that was done sent every step of the
+//    table once, and how long the CRL, the tree and the proof took; the
+//    interruptions above were sent as their reasons, and a card that left
+//    as an action with its tap; every submission carried the card proof
+//    device ID the counts carry.
 import { execFileSync } from "node:child_process";
 import { createPrivateKey } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -223,6 +230,10 @@ const asked = new Map<string, number>();
 const away = (line: string, status: 429 | 503, code: "rate_limited" | "busy"): void => void turnAway.set(line, [...(turnAway.get(line) ?? []), { status, code }]);
 /** What the app's requests called themselves (User-Agent), each once. */
 const userAgents = new Set<string>();
+/** The counts the app sent (`POST /api/v1/counts`), read, in the order they came. */
+const countsSent: Record<string, unknown>[] = [];
+/** The `device_id` of each submission (`POST /api/v1/records`), or null for one without it. */
+const submittedDeviceIds: (string | null)[] = [];
 /** Holds a card to the phone: answers the tap the app is waiting with. */
 const hold = async (held: string): Promise<void> => {
   for (let i = 0; i < 100 && waitingTaps.length === 0; i++) await sleep(100);
@@ -271,6 +282,16 @@ const front = createServer(async (req, res) => {
     }
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(c as Buffer);
+    if (req.method === "POST" && (path === "/api/v1/counts" || path === "/api/v1/records")) {
+      let said: Record<string, unknown> = {};
+      try {
+        said = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+      } catch {
+        // Not JSON: checked below as a count with nothing.
+      }
+      if (path === "/api/v1/counts") countsSent.push(said);
+      else submittedDeviceIds.push(typeof said.device_id === "string" ? said.device_id : null);
+    }
     const headers: Record<string, string> = {};
     for (const [k, v] of Object.entries(req.headers)) if (typeof v === "string" && !["host", "connection", "content-length"].includes(k)) headers[k] = v;
     const answer = await fetch(backend.origin + (req.url ?? "/"), { method: req.method, headers, redirect: "manual", ...(chunks.length > 0 && { body: Buffer.concat(chunks) }) });
@@ -1336,6 +1357,8 @@ async function oldVersionAndNoNfc(): Promise<void> {
   press(say("app_read.tap_card"));
   await hold(nfc("none"));
   await waitText(say("app_before.no_nfc_title"), "the screen in place of step 1, from step 2", 20_000);
+  // The app sends its counts one after the other, off the card proof's way: its stop is let arrive before the app is ended below.
+  for (let i = 0; i < 100 && !countsSent.some((c) => c.event === "stop" && c.reason === "no_nfc"); i++) await sleep(100);
   // A phone without NFC, as the app opens.
   phoneHasNfc = false;
   emulator.shell(`am force-stop ${APP}`);
@@ -1358,6 +1381,50 @@ async function oldVersionAndNoNfc(): Promise<void> {
 
 /** Where the app keeps the reminder (src/main/…/reminder/Phone.kt), and what is in it. */
 const REMINDER_FILE = `/data/data/${APP}/shared_prefs/reminder.xml`;
+
+/** The members a count of the app may have (spec/counts.md, "A count"). */
+const APP_COUNT_MEMBERS = new Set(["client", "event", "step", "reason", "action", "tap", "took", "device_id", "attempt_id", "os_version", "app_version", "model"]);
+/** The steps every card proof that is done reaches, each once (spec/counts.md, "Steps": the app's). */
+const APP_STEPS = ["open", "read", "config", "certificates", "certificate", "crl", "tree", "circuit", "engine", "pin", "checked", "scope_signed", "state", "chosen", "confirmed", "challenge", "code_signed", "proved", "done"];
+
+/** What the counts the app sent say (8.): what is in them, every step of each card proof that was done, and the interruptions. */
+function countsChecked(shortId: string): void {
+  check(countsSent.length > 0, `the app sent counts: ${countsSent.length}`);
+  const text = (c: Record<string, unknown>): string => JSON.stringify(c);
+  for (const c of countsSent) {
+    const extra = Object.keys(c).filter((k) => !APP_COUNT_MEMBERS.has(k));
+    if (!check(c.client === "android" && extra.length === 0 && Object.values(c).every((v) => typeof v === "string"), `a count is the Android app's, with the members of the table only: ${text(c)}`)) return;
+  }
+  // Nothing of the card, the accounts, the scoped ID or the PIN.
+  const all = JSON.stringify(countsSent);
+  for (const never of ["alice", "bob", shortId, PIN, NAME, ...backend.certificates.map((c) => c.slice(0, 16))]) check(!all.includes(never), `no count holds "${never}"`);
+  // The phone's system as it gives it: the emulator's Android 10; the fake build's version, `dev`, is no version and is left out.
+  check(countsSent.every((c) => c.os_version === "10" && c.app_version === undefined && typeof c.model === "string" && /^[A-Za-z0-9 \-_.,()+]{1,32}$/.test(c.model)), `every count carries Android's version, 10, and the emulator's model, and no app version: ${text(countsSent[0]!)}`);
+  // Each attempt's counts: one device ID for all of them.
+  const attempts = new Map<string, Record<string, unknown>[]>();
+  for (const c of countsSent) attempts.set(c.attempt_id as string, [...(attempts.get(c.attempt_id as string) ?? []), c]);
+  for (const [id, cs] of attempts) check(new Set(cs.map((c) => c.device_id)).size === 1 && /^[0-9a-f]{32}$/.test(id), `an attempt's counts carry one device ID (${id})`);
+  // Each card proof that was done: every step once, and the three timed steps.
+  const done = [...attempts.values()].filter((cs) => cs.some((c) => c.event === "step" && c.step === "done"));
+  check(done.length === 4, `the card proofs that were done sent their step done: ${done.length}`);
+  for (const cs of done) {
+    const steps = cs.filter((c) => c.event === "step").map((c) => c.step as string);
+    // `open` is step 1's: a card proof begun again while step 1 stayed (turned away at its start, 8.) has none of its own.
+    const expected = steps[0] === "open" ? APP_STEPS : APP_STEPS.filter((s) => s !== "open");
+    check(JSON.stringify([...steps].sort()) === JSON.stringify([...expected].sort()) && steps.at(-1) === "done", `a card proof that was done sent each step once, from open or read to done: ${steps.join(",")}`);
+    const timed = cs.filter((c) => c.event === "duration").map((c) => c.step as string).sort();
+    check(JSON.stringify(timed) === JSON.stringify(["crl", "proved", "tree"]), `and how long the CRL, the tree and the proof took: ${timed.join(",")}`);
+    check(!cs.some((c) => c.event === "stop"), "and no stop");
+  }
+  // The interruptions of 6. and the stops of 7., by their codes; a card that left as an action, with its tap.
+  const said = new Set(countsSent.map((c) => (c.event === "action" ? `action:${c.action}:${c.tap}` : c.event === "stop" || c.event === "retry" ? `${c.event}:${c.reason}` : "")));
+  for (const expected of ["retry:other_card", "retry:pin_incorrect", "retry:channel", "stop:channel", "stop:idle", "stop:app_too_old", "stop:no_nfc", "stop:server_paused", "action:tap_dropped:1", "action:tap_dropped:2", "action:tap_dropped:3"]) {
+    check(said.has(expected), `the counts say ${expected}`);
+  }
+  // Every submission carried the card proof device ID of the counts.
+  const ids = new Set(countsSent.map((c) => c.device_id));
+  check(submittedDeviceIds.length >= 4 && submittedDeviceIds.every((id) => id !== null && ids.has(id)), `every submission carried the card proof device ID the counts carry: ${JSON.stringify(submittedDeviceIds)}`);
+}
 const reminderStored = (): string => emulator.shell(`cat ${REMINDER_FILE} 2>/dev/null; true`);
 const storedDay = (): string | undefined => /<string name="day">([0-9-]+)<\/string>/.exec(reminderStored())?.[1];
 
@@ -1719,9 +1786,15 @@ try {
   // What the app's requests say of the phone: nothing. Not Android's own User-Agent, which names the model and the version.
   check(JSON.stringify([...userAgents]) === JSON.stringify(["iamreal"]), `every request of the app to the API and the CRL archive calls itself "iamreal" and nothing more: ${JSON.stringify([...userAgents])}`);
 
-  // What the app left on the emulator: the highest CRL number it used, and nothing else; the reminder's file, turned off, is empty. No PIN, no file of a card proof.
-  const stored = emulator.shell(`find /data/data/${APP} -type f`).split("\n").map((l) => l.trim()).filter(Boolean).filter((f) => f !== REMINDER_FILE);
-  check(JSON.stringify(stored) === JSON.stringify([`/data/data/${APP}/shared_prefs/highest_crl_number.xml`]), `the app's storage holds the CRL numbers it used and nothing else: ${JSON.stringify(stored)}`);
+  countsChecked(shortId);
+
+  // What the app left on the emulator: the highest CRL number it used and the card proof device ID, and nothing else; the reminder's file,
+  // turned off, is empty. No PIN, no file of a card proof.
+  const stored = emulator.shell(`find /data/data/${APP} -type f`).split("\n").map((l) => l.trim()).filter(Boolean).filter((f) => f !== REMINDER_FILE).sort();
+  check(JSON.stringify(stored) === JSON.stringify([`/data/data/${APP}/shared_prefs/card_proof_device_id.xml`, `/data/data/${APP}/shared_prefs/highest_crl_number.xml`]), `the app's storage holds the CRL numbers it used and the card proof device ID, and nothing else: ${JSON.stringify(stored)}`);
+  const kept = emulator.shell(`cat /data/data/${APP}/shared_prefs/card_proof_device_id.xml`);
+  const keptIds = [...kept.matchAll(/>([0-9a-f]{32})\.(\d{4}-\d{2}-\d{2})</g)];
+  check(keptIds.length === 1 && (kept.match(/[0-9a-f]{32}/g) ?? []).length === 1, `the card proof device ID is kept once, with the date it was made on, and no other: ${kept.replace(/\s+/g, " ")}`);
   check(!/<string|<int|<long|<boolean/.test(reminderStored()), `the reminder's file, turned off, holds nothing: ${reminderStored()}`);
   check(emulator.shell(`grep -r -l ${PIN} /data/data/${APP} /sdcard 2>/dev/null; true`).trim() === "", "the PIN is in no file of the app's or of the shared storage");
 } catch (e) {

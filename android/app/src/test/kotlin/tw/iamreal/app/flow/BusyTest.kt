@@ -183,9 +183,14 @@ class BusyTest {
                     numbers[issuer] = number
                 }
             }
+            override val counts = recorded.counts
+            override val attempt = recorded.counts.attempt()
         },
         started,
     )
+
+    /** The counts the card proofs of a test sent (#433). */
+    private val recorded = RecordedCounts()
 
     private val events = object : CardProof.Events {}
 
@@ -361,5 +366,30 @@ class BusyTest {
         assertEquals(listOf("threads" to "alice"), done.accounts)
         // The card proof is over.
         assertEquals("state", stopOf { f.resubmit() }.code)
+
+        // The counts of the whole card proof (#433): every step of the app's once (the tree's and the files' come from the
+        // background, in any order with the PIN's), the three that were turned away as retries, the record sent again as an
+        // action, the three durations, and no stop: the card proof went through.
+        val said = recorded.events()
+        val steps = said.filter { it.startsWith("step:") }
+        assertEquals(steps.toSet().size, steps.size)
+        assertEquals(
+            setOf("read", "config", "certificates", "certificate", "crl", "tree", "circuit", "engine", "checked", "pin", "scope_signed", "state", "chosen", "confirmed", "challenge", "code_signed", "proved", "done").map { "step:$it" }.toSet(),
+            steps.toSet(),
+        )
+        assertEquals("step:read", steps.first())
+        assertEquals("step:done", steps.last())
+        assertEquals(listOf("retry:server_busy", "retry:server_rate_limited", "retry:server_busy"), said.filter { it.startsWith("retry:") })
+        assertEquals(listOf("action:resubmit"), said.filter { it.startsWith("action:") })
+        assertEquals(setOf("crl", "tree", "proved"), said.filter { it.startsWith("duration:") }.map { it.split(":")[1] }.toSet())
+        assertTrue(said.none { it.startsWith("stop:") })
+        // Each count is the core's body for an app: no account, no short ID, nothing of the card.
+        for (count in recorded.sent) {
+            assertEquals("android", count.getString("client"))
+            assertFalse(count.toString().contains("alice"))
+        }
+        // The submission carried the card proof device ID of the counts, both times.
+        val ids = records.map { org.json.JSONObject(it).getString("device_id") }.toSet()
+        assertEquals(setOf(recorded.counts.deviceId()), ids)
     }
 }

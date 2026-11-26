@@ -5,9 +5,12 @@
 // sent with the same reader.
 //
 // A count holds nothing but what is here: codes of the table, three random
-// IDs, and four values checked by their format (a short ID, version
-// numbers, a card reader's name, the domain a visitor came from). No time, no account, no scoped ID, nothing
-// read from a card, a certificate or a CRL, and no text of an error.
+// IDs, and five values checked by their format (a short ID, version
+// numbers, a card reader's name, a phone's model, the domain a visitor came
+// from). No time, no account, no scoped ID, nothing read from a card, a
+// certificate or a CRL, and no text of an error.
+
+import { type Day, formatDay, parseDay } from "./date.ts";
 
 /** The clients (GLOSSARY, "client"). */
 export const CLIENTS = ["web", "android", "ios"] as const;
@@ -100,6 +103,7 @@ export const REASONS = {
   idle: ALL,
   state: ALL,
   app_too_old: APPS,
+  clock: APPS,
   // The list.
   username: ALL,
   blocked_switch_limit: ALL,
@@ -203,11 +207,31 @@ export const READER = /^[A-Za-z0-9 ]{1,64}$/;
 /** The domain a visitor came from (`source`): lowercase ASCII letters, digits, dots and hyphens, 1 to 253 of them, the longest a domain name is written in. */
 export const SOURCE = /^[a-z0-9.-]{1,253}$/;
 
+/** A phone's model as its system gives it: letters, digits, spaces and `-_.,()+`, 1 to 32 of them. */
+export const MODEL = /^[A-Za-z0-9 \-_.,()+]{1,32}$/;
+
+/** After how many days a card proof device ID is replaced, counted from the date it was made on (ADR-0039). */
+export const DEVICE_ID_DAYS = 31;
+
+/**
+ * The card proof device ID on `today` (spec/counts.md, "The card proof
+ * device ID"), from the value a device keeps (`stored`, null for none) and
+ * 16 random bytes as 32 hex digits (`random`): the ID to use, and the value
+ * to keep from now on, or null to keep the stored one.
+ */
+export function deviceIdOn(stored: string | null, today: Day, random: string): { id: string; store: string | null } {
+  const kept = /^([0-9a-f]{32})\.(\d{4}-\d{2}-\d{2})$/.exec(stored ?? "");
+  const made = kept === null ? null : parseDay(kept[2]!);
+  if (kept !== null && made !== null && made <= today && today - made < DEVICE_ID_DAYS) return { id: kept[1]!, store: null };
+  if (!COUNT_ID.test(random)) throw new Error("16 random bytes as 32 hex digits");
+  return { id: random, store: `${random}.${formatDay(today)}` };
+}
+
 /** A count that was taken: its members in the order of spec/counts.md, and no other. */
 export type Count = Readonly<Record<string, string>>;
 
 /** The members of a count, in the one order a taken count is written in. */
-const ORDER = ["client", "event", "page", "short_id", "source", "step", "reason", "action", "tap", "took", "visit_id", "device_id", "attempt_id", "browser", "os", "browser_version", "os_version", "app_version", "reader"] as const;
+const ORDER = ["client", "event", "page", "short_id", "source", "step", "reason", "action", "tap", "took", "visit_id", "device_id", "attempt_id", "browser", "os", "browser_version", "os_version", "app_version", "model", "reader"] as const;
 type Member = (typeof ORDER)[number];
 
 const has = (list: readonly string[], x: string | undefined): boolean => x !== undefined && list.includes(x);
@@ -236,6 +260,7 @@ const CARD_PROOF: Readonly<Partial<Record<Member, Rule>>> = {
   browser_version: (v, c) => c["client"] === "web" && VERSION.test(v),
   os_version: (v) => VERSION.test(v),
   app_version: (v, c) => c["client"] !== "web" && VERSION.test(v),
+  model: (v, c) => c["client"] !== "web" && MODEL.test(v),
   reader: (v, c) => c["client"] === "web" && READER.test(v),
 };
 
@@ -244,6 +269,7 @@ const optional = (member: Member, client: string, event: string): boolean =>
   member === "browser_version" ||
   member === "os_version" ||
   member === "app_version" ||
+  member === "model" ||
   member === "reader" ||
   member === "source" ||
   (member === "short_id" && event === "action") ||

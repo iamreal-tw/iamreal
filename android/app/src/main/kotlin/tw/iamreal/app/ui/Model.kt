@@ -1,5 +1,6 @@
 package tw.iamreal.app.ui
 
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.getValue
@@ -14,12 +15,14 @@ import tw.iamreal.app.card.CardException
 import tw.iamreal.app.card.SecureChannel
 import tw.iamreal.app.flow.Blocked
 import tw.iamreal.app.flow.CardProof
+import tw.iamreal.app.flow.Counts
 import tw.iamreal.app.flow.MinApp
 import tw.iamreal.app.flow.Platforms
 import tw.iamreal.app.flow.Stop
 import tw.iamreal.app.ui.demo.HangDemoPlayer
 import tw.iamreal.app.ui.demo.HangTimeline
 import tw.iamreal.app.ui.demo.SenseDemoPlayer
+import java.security.SecureRandom
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.FutureTask
@@ -146,11 +149,50 @@ internal class Model(
     hangMotion: () -> String,
     /** design/motion/sense.json, as the installer carries it: read when step 2 first comes up. */
     senseMotion: () -> String,
+    /** Where the card proof device ID is kept (flow/Counts.kt). */
+    deviceIdStore: Counts.Store,
+    /** The app's own version as the store shows it (`versionName`). */
+    appVersion: String,
 ) {
     val messages = Messages(copy)
     private val backend = Backend(wiring.site, wiring.data)
     private val main = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "card-proof") }
+
+    /** The counts' requests, one after the other, never in the way of a card proof's. */
+    private val sender = Executors.newSingleThreadExecutor { Thread(it, "counts") }
+
+    private val counts = Counts(object : Counts.Deps {
+        override fun send(body: ByteArray) {
+            sender.execute { backend.count(body) }
+        }
+
+        override fun now() = System.currentTimeMillis()
+
+        override fun random(bytes: ByteArray) = source.nextBytes(bytes)
+
+        private val source = SecureRandom()
+        override val store = deviceIdStore
+        override val client = "android"
+        override val osVersion: String = Build.VERSION.RELEASE ?: ""
+        override val appVersion = appVersion
+        override val model: String = Build.MODEL ?: ""
+    })
+
+    /** The counts of the card proof to come or under way (flow/Counts.kt); its first count is `open`, as step 1 shows. */
+    private var attempt: Counts.Attempt? = null
+
+    /**
+     * Step 1 shows: the first screen of a card proof (spec/counts.md, `open`). A new attempt, unless the one there has not
+     * begun: the cardholder came back to step 1 without a card read.
+     */
+    private fun opened() {
+        if (attempt?.begun != false) attempt = counts.attempt().also { it.step("open") }
+    }
+
+    init {
+        opened()
+    }
     private var flow: CardProof? = null
 
     var step by mutableStateOf(Step.BEFORE)
@@ -385,6 +427,10 @@ internal class Model(
             override fun now() = System.currentTimeMillis()
             override val appBuild = wiring.appBuild
             override val crlNumbers = this@Model.crlNumbers
+            override val counts = this@Model.counts
+
+            // The one step 1 opened, unless a card was read for it: a card proof started again from step 2 is another.
+            override val attempt = this@Model.attempt?.takeIf { !it.begun } ?: this@Model.counts.attempt().also { this@Model.attempt = it }
         }, started).also { flow = it }
     }
 
@@ -397,7 +443,7 @@ internal class Model(
                 Result.failure(e)
             } catch (e: Exception) {
                 // Whatever else went wrong carries nothing to show: the card proof stopped, and keeps nothing.
-                f.cancel()
+                f.end(Stop("engine"))
                 Result.failure(Stop("engine"))
             }
             main.post {
@@ -507,6 +553,7 @@ internal class Model(
         dropAll()
         askConfigAgain()
         step = Step.BEFORE
+        opened()
     }
 
     /** "感應卡片", and "再感應一次": the tap of step 2, on the card proof that is there. */
@@ -893,14 +940,17 @@ internal class Model(
         dropAll()
         askConfigAgain()
         step = Step.BEFORE
+        opened()
     }
 
-    /** A stop outside the lists: the card proof is over. */
+    /** A stop outside the lists: the card proof is over. The counts are told why, unless the flow told them already. */
     private fun stopped(stop: Stop) {
+        flow?.end(stop)
         dropAll()
         notice = if (stop.code == "idle") copy.say("app_before.idle") else null
         askConfigAgain()
         step = Step.BEFORE
+        opened()
     }
 
     /**
@@ -915,6 +965,7 @@ internal class Model(
         }
         dropAll()
         step = Step.BEFORE
+        opened()
         return true
     }
 

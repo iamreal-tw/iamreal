@@ -1,7 +1,7 @@
 {
   "spec": "counts",
   "status": "draft",
-  "note": "table: every code of spec/counts.md and the clients it is for, as an implementation has it. cases: a parsed count, and whether it is taken or dropped whole. durations_of: how long a timed step took, in milliseconds, and the duration it is (null: none).",
+  "note": "table: every code of spec/counts.md and the clients it is for, as an implementation has it. cases: a parsed count, and whether it is taken or dropped whole. durations_of: how long a timed step took, in milliseconds, and the duration it is (null: none). device_ids: the value a device keeps (null: none), the moment (seconds since 1970), 16 random bytes as hex; the card proof device ID used then, and the value kept from then on (null: the one kept).",
   "generated_by": "protocol/test/generate/counts.ts",
   "table": {
     "clients": [
@@ -300,6 +300,10 @@
         "ios"
       ],
       "app_too_old": [
+        "android",
+        "ios"
+      ],
+      "clock": [
         "android",
         "ios"
       ],
@@ -756,6 +760,82 @@
         "step": "done",
         "os_version": "18.1.1",
         "app_version": "1.4"
+      },
+      "taken": true
+    },
+    {
+      "name": "ios, with the phone's model",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "os_version": "18.1.1",
+        "app_version": "2026.11.5",
+        "model": "iPhone15,2"
+      },
+      "taken": true
+    },
+    {
+      "name": "android, with the phone's model",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "stop",
+        "reason": "nfc_off",
+        "os_version": "14",
+        "app_version": "2026.11.5",
+        "model": "SM-S918B"
+      },
+      "taken": true
+    },
+    {
+      "name": "a model with spaces and brackets",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "moto g(60)"
+      },
+      "taken": true
+    },
+    {
+      "name": "a model with a plus",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "HTC U12+"
+      },
+      "taken": true
+    },
+    {
+      "name": "a model with an underscore",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "ASUS_AI2302"
+      },
+      "taken": true
+    },
+    {
+      "name": "a model of 32 characters",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
       },
       "taken": true
     },
@@ -1992,6 +2072,93 @@
         "reader": ""
       },
       "taken": false
+    },
+    {
+      "name": "a model of 33 characters",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "taken": false
+    },
+    {
+      "name": "an empty model",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": ""
+      },
+      "taken": false
+    },
+    {
+      "name": "a model with a slash",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "Pixel 8/Pro"
+      },
+      "taken": false
+    },
+    {
+      "name": "a model with a character outside ASCII",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "小米 13"
+      },
+      "taken": false
+    },
+    {
+      "name": "a name the phone's owner gave it",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "Alice’s iPhone"
+      },
+      "taken": false
+    },
+    {
+      "name": "a web count with a model",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "model": "SM-S918B"
+      },
+      "taken": false
+    },
+    {
+      "name": "a page with a model",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "model": "SM-S918B"
+      },
+      "taken": false
     }
   ],
   "durations_of": [
@@ -2054,6 +2221,112 @@
     {
       "ms": -1,
       "took": null
+    }
+  ],
+  "device_ids": [
+    {
+      "name": "none kept: a new one",
+      "stored": null,
+      "now": 1798776000,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-01-01"
+    },
+    {
+      "name": "made today",
+      "stored": "0123456789abcdef0123456789abcdef.2027-01-01",
+      "now": 1798776000,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "0123456789abcdef0123456789abcdef",
+      "store": null
+    },
+    {
+      "name": "made 30 days ago",
+      "stored": "0123456789abcdef0123456789abcdef.2027-01-01",
+      "now": 1801368000,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "0123456789abcdef0123456789abcdef",
+      "store": null
+    },
+    {
+      "name": "made 31 days ago: replaced",
+      "stored": "0123456789abcdef0123456789abcdef.2027-01-01",
+      "now": 1801454400,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-02-01"
+    },
+    {
+      "name": "the day in Taiwan, not in UTC: 23:59 on day 30",
+      "stored": "0123456789abcdef0123456789abcdef.2027-01-01",
+      "now": 1801411199,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "0123456789abcdef0123456789abcdef",
+      "store": null
+    },
+    {
+      "name": "the day in Taiwan, not in UTC: 00:00 on day 31",
+      "stored": "0123456789abcdef0123456789abcdef.2027-01-01",
+      "now": 1801411200,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-02-01"
+    },
+    {
+      "name": "made in Taiwan's evening: that day",
+      "stored": null,
+      "now": 1798817400,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-01-01"
+    },
+    {
+      "name": "dated after today: replaced",
+      "stored": "0123456789abcdef0123456789abcdef.2027-01-02",
+      "now": 1798776000,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-01-01"
+    },
+    {
+      "name": "a date that does not exist: replaced",
+      "stored": "0123456789abcdef0123456789abcdef.2027-02-30",
+      "now": 1803873600,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-03-01"
+    },
+    {
+      "name": "an ID in capitals: replaced",
+      "stored": "0123456789ABCDEF0123456789ABCDEF.2027-01-01",
+      "now": 1798776000,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-01-01"
+    },
+    {
+      "name": "an ID without its date: replaced",
+      "stored": "0123456789abcdef0123456789abcdef",
+      "now": 1798776000,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-01-01"
+    },
+    {
+      "name": "anything else: replaced",
+      "stored": "x",
+      "now": 1798776000,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-01-01"
+    },
+    {
+      "name": "an empty value: replaced",
+      "stored": "",
+      "now": 1798776000,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-01-01"
     }
   ]
 }
