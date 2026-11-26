@@ -12,7 +12,7 @@ const policy = (dataOrigin: string): string =>
 /** The production log's site (iamreal.tw). */
 export const CONTENT_SECURITY_POLICY = policy("https://data.iamreal.tw");
 
-/** The test log's site (test.iamreal.tw), and the Worker the tests run in the local workerd, which is set up as that site. */
+/** The test log's site (test.iamreal.tw), `pnpm local`, and the Worker the tests run in the local workerd, which is set up as that site. */
 export const TEST_SITE_CONTENT_SECURITY_POLICY = policy("https://test-data.iamreal.tw");
 
 /**

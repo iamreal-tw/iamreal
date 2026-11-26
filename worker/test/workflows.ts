@@ -262,7 +262,7 @@ export const IOS_PATHS: readonly string[] = ["ios/**", "device-core/**", "spec/v
  * package.json among them), the files the rebuild compares with
  * (web/circuits/, verifier/vk/) and strips with
  * (web/scripts/strip-circuit.mjs), the vectors the tests read
- * (spec/vectors/poseidon2.json), what is installed (the lockfile, the
+ * (spec/vectors/poseidon2.json, spec/vectors/declaration-code.json), what is installed (the lockfile, the
  * workspace, and the package.json of the workspace's other packages, which
  * `pnpm install --frozen-lockfile` compares the lockfile with too), the
  * files at the root that change every check once added (ROOT_FILES_PATHS:
@@ -276,6 +276,7 @@ export const CIRCUITS_PATHS: readonly string[] = [
   "web/circuits/**",
   "verifier/vk/**",
   "spec/vectors/poseidon2.json",
+  "spec/vectors/declaration-code.json",
   "web/scripts/strip-circuit.mjs",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",

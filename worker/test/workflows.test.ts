@@ -979,7 +979,7 @@ function namedByCircuits(): Set<string> {
 
 test("the paths of checks-circuits.yml hold every file of the repository the rebuild and the tests of circuits/ use", () => {
   const named = namedByCircuits();
-  for (const p of ["spec/vectors/poseidon2.json", "web/scripts/strip-circuit.mjs", "web/circuits", "verifier/vk", "circuits/lib", "circuits/tests/lib/run.mjs"]) assert.ok(named.has(p), `the check found ${p}: ${[...named].join(", ")}`);
+  for (const p of ["spec/vectors/poseidon2.json", "spec/vectors/declaration-code.json", "web/scripts/strip-circuit.mjs", "web/circuits", "verifier/vk", "circuits/lib", "circuits/tests/lib/run.mjs"]) assert.ok(named.has(p), `the check found ${p}: ${[...named].join(", ")}`);
   const missing = (list: readonly string[]): string[] => [...named].filter((p) => !holds(list, p));
   assert.deepEqual(missing(CIRCUITS_PATHS), []);
   // And a list without one of them is caught.

@@ -36,6 +36,7 @@ on:
       - web/circuits/**
       - verifier/vk/**
       - spec/vectors/poseidon2.json
+      - spec/vectors/declaration-code.json
       - web/scripts/strip-circuit.mjs
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
