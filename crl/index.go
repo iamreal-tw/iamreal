@@ -243,7 +243,7 @@ func dirFiles(dir string) ([]ArchiveFile, error) {
 
 // BuildIndex returns the index of the archive directory dir: one line per
 // file, sorted (SortIndex). progress, if not nil, is called with each file
-// name before the file is read. The first CRL of an issuer key takes
+// name once the file is read, before its line is computed. The first CRL of an issuer key takes
 // seconds, the later ones a fraction of one (Indexer).
 func BuildIndex(dir string, keys []NamedKey, progress func(name string)) ([]IndexLine, error) {
 	files, err := dirFiles(dir)

@@ -22,7 +22,7 @@ func sameTree(t *testing.T, what string, got, want *Tree) {
 		t.Fatalf("%s: the reused tree is not NewTree's tree (root %s, want %s)", what, got.RootHex(), want.RootHex())
 	}
 	if got.reuse != nil {
-		t.Fatalf("%s: the tree still holds the builder's tables", what)
+		t.Fatalf("%s: the tree still holds the tree before", what)
 	}
 }
 
@@ -185,6 +185,59 @@ func TestTreeBuilderRun(t *testing.T) {
 	}
 	if again, _ := b.NewTree(lists[0]); b.Computed() != again.Hashes() {
 		t.Errorf("after an unrelated list the first computed %d of its %d hashes", b.Computed(), again.Hashes())
+	}
+}
+
+// Keys that share many low bits of the path: the tree before has a leaf
+// where the next has a branch many levels deep, and the other way round,
+// so the leaf of the tree before is carried down level after level, on its
+// own side only. Every list after every other, node for node NewTree's.
+func TestTreeBuilderSharedLowBits(t *testing.T) {
+	bit := func(bits ...uint) Key {
+		x := big.NewInt(1)
+		for _, b := range bits {
+			x.SetBit(x, int(b), 1)
+		}
+		k, err := KeyFromInt(x)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return k
+	}
+	lists := [][]Key{
+		nil,
+		{bit()},
+		{bit(), bit(100)},
+		{bit(100)},
+		{bit(), bit(100), bit(100, 120)},
+		{bit(100), bit(100, 126)},
+		{bit(60), bit(100)},
+		{bit(), bit(126)},
+		{bit(1), bit(2), bit(1, 2)},
+		{bit(), bit(100), bit(100, 120), bit(60), bit(126), bit(1), bit(2)},
+	}
+	want := make([]*Tree, len(lists))
+	for i, keys := range lists {
+		var err error
+		if want[i], err = NewTree(keys); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := range lists {
+		for j := range lists {
+			var b TreeBuilder
+			if _, err := b.NewTree(lists[i]); err != nil {
+				t.Fatal(err)
+			}
+			got, err := b.NewTree(lists[j])
+			if err != nil {
+				t.Fatal(err)
+			}
+			sameTree(t, fmt.Sprintf("list %d after list %d", j, i), got, want[j])
+			if i == j && b.Computed() != 0 {
+				t.Errorf("list %d again: %d hashes computed", i, b.Computed())
+			}
+		}
 	}
 }
 

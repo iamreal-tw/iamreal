@@ -238,6 +238,15 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		files = made
 	}
 	archive := files.dir
+	// Before the index is rebuilt, as it always was: a `bb` or a CRS that
+	// cannot be used is said before the minutes of rebuilding, and, now that
+	// the files of a URL are downloaded as the index is rebuilt, before
+	// they are downloaded too.
+	v, err := d.verifier(verifier.Config{BB: *bb, CRSDir: *crs, Timeout: *timeout})
+	if err != nil {
+		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
+		return exitError
+	}
 	var crls prooflog.CRLArchive = noArchive{}
 	var diffs []crl.IndexMismatch
 	switch {
@@ -271,13 +280,6 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		if len(diffs) > 0 {
 			fmt.Fprintf(stderr, "iamreal-verify: CRL archive: %d difference(s) between %s and the CRL files; continuing with the index rebuilt from the files\n", len(diffs), crl.IndexFileName)
 		}
-	}
-	// After the archive, as it always was: the archive's files used to be
-	// downloaded before this, and are now downloaded as the index is rebuilt.
-	v, err := d.verifier(verifier.Config{BB: *bb, CRSDir: *crs, Timeout: *timeout})
-	if err != nil {
-		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
-		return exitError
 	}
 	var rep *prooflog.Report
 	if pub != nil && pub.broken != nil {

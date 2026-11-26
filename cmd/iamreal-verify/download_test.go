@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/iamreal-tw/iamreal/prooflog"
+	"github.com/iamreal-tw/iamreal/verifier"
 )
 
 // proofLogFilesAsked is the log files a server was asked for.
@@ -251,7 +252,20 @@ func TestDataTempDirOnInterrupt(t *testing.T) {
 	t.Cleanup(srv.Close)
 	t.Cleanup(func() { close(release) })
 	tmp := t.TempDir()
-	c := exec.Command(cmd, "-bb", "bb", "-crs", "crs", "-proof-log", "test", "-data", srv.URL+"/")
+	// The verifier is made before any CRL is downloaded, so the command
+	// needs a bb that says its version and the CRS file: a stand-in bb, and
+	// the 64 bytes of verifier/README.md.
+	tools := t.TempDir()
+	bb := filepath.Join(tools, "bb")
+	if err := os.WriteFile(bb, []byte("#!/bin/sh\necho "+verifier.BBVersion+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	g1 := make([]byte, 64)
+	g1[31], g1[63] = 1, 2
+	if err := os.WriteFile(filepath.Join(tools, verifier.CRSFile), g1, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := exec.Command(cmd, "-bb", bb, "-crs", tools, "-proof-log", "test", "-data", srv.URL+"/")
 	c.Env = append(os.Environ(), "TMPDIR="+tmp)
 	var errOut bytes.Buffer
 	c.Stderr = &errOut
