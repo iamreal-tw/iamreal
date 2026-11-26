@@ -913,7 +913,8 @@ export function startApp(o: AppOptions): void {
             el("h3", {}, t.on_computer),
             linkbox,
             copy,
-            ...view.profiles.map((pr) => newTab(pr.url, { class: "btn ghost", "data-profile": "" }, say(pr.text))),
+            // The sentence in one element: a button is a flex box, and each of its children would be an item of its own.
+            ...view.profiles.map((pr) => newTab(pr.url, { class: "btn ghost", "data-profile": "" }, el("span", {}, say(pr.text)))),
             el("ol", { class: "hang-steps" }, el("li", {}, t.step_edit), el("li", {}, t.step_link), el("li", {}, t.step_add), el("li", {}, t.step_paste)),
           ),
         ),

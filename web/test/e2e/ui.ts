@@ -934,6 +934,8 @@ interface HangSeen {
   otherCards: string[];
   kindsUnreadable: boolean;
   where: string;
+  /** The first line of step 6 itself (under the line of where in the steps). */
+  first: string;
   main: string;
 }
 
@@ -990,6 +992,7 @@ const hangNow = () =>
     otherCards: [...document.querySelectorAll('[data-other-cards]')].map((e) => e.innerText),
     kindsUnreadable: !!document.querySelector('[data-kinds-unreadable]'),
     where: document.querySelector('[data-where]').innerText,
+    first: document.querySelector('[data-step="hang"]').innerText.split("\\n").filter(Boolean)[0],
     main: document.querySelector('main').innerText,
   })`);
 
@@ -1126,7 +1129,7 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   const h = hang!;
   check(h.where.includes(stepLine(6)), `${o.label}: 第 6 步，共 7 步 "${h.where}"`);
   check(h.main.includes(recorded), `${o.label}: step 6, the day it was recorded, unplug`);
-  if (mismatch.length > 0) check(h.main.split("\n").filter(Boolean)[0] === C.done.mismatch, `${o.label}: the difference, first of all`);
+  if (mismatch.length > 0) check(h.first === C.done.mismatch, `${o.label}: the difference, first of all "${h.first}"`);
   // Short for a card proof again with one platform; 沒有看到連結，重新掛上 shows the whole step.
   check(h.short === !!o.short, `${o.label}: step 6 ${o.short ? "is" : "is not"} short`);
   if (o.short) {
