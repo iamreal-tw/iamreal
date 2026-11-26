@@ -14,10 +14,10 @@ export const CSS_PATH = "/pages.css";
  */
 export const FAVICON_PATH = "/favicon.ico";
 
-/** Where the copy buttons' script is (site/copy.js, sent by Static Assets): the one script of the pages, loaded by /faq, /verify and /hang/<short ID> only. */
+/** Where the copy buttons' script is (site/copy.js, sent by Static Assets): loaded by /faq, /verify and /hang/<short ID> only. */
 export const COPY_JS_PATH = "/copy.js";
 
-/** Where the player of the demonstration is (site/demo.js, sent by Static Assets): loaded by /hang/<short ID> only, beside the copy buttons' script (design/copy/hang.md, 示範). */
+/** Where the player of the demonstration is (site/demo.js, sent by Static Assets): loaded by /hang and /hang/<short ID> only (design/copy/hang.md, 示範). */
 export const DEMO_JS_PATH = "/demo.js";
 
 /**
@@ -56,7 +56,7 @@ export interface Document {
   readonly preview?: boolean;
   /** True for a page that loads the copy buttons' script (`COPY_JS_PATH`). */
   readonly script?: boolean;
-  /** True for the page that also loads the demonstration's player (`DEMO_JS_PATH`). */
+  /** True for a page that loads the demonstration's player (`DEMO_JS_PATH`): the two pages of hanging a proof. */
   readonly demo?: boolean;
   /** og:description, for the one page that has one. */
   readonly description?: string;

@@ -485,7 +485,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `/hang` | 掛上去，從首頁點進來時（`design/copy/hang.md`） | Worker 產生，不問證明紀錄 |
 | `/hang/<短編號>` | 掛上去，帶著一張島民證明（`design/copy/hang.md`） | Worker 產生，短編號讀得成才問證明紀錄 |
 | `/copy.js` | 複製按鈕的程式，只有 `/faq`、`/verify` 和 `/hang/<短編號>` 載入；在常見問題上也展開網址指到的那一題 | Static Assets 直接送 `site/copy.js`，不跑 Worker |
-| `/demo.js` | 掛上去的示範的播放程式（`design/copy/hang.md`「示範」），只有 `/hang/<短編號>` 載入 | Static Assets 直接送 `site/demo.js`，不跑 Worker |
+| `/demo.js` | 掛上去的示範的播放程式（`design/copy/hang.md`「示範」），只有 `/hang` 和 `/hang/<短編號>` 載入 | Static Assets 直接送 `site/demo.js`，不跑 Worker |
 | `/pages.css` | 訪客頁面的樣式表 | Static Assets 直接送 `site/pages.css`，不跑 Worker |
 | `/og-image.png` | 連結預覽圖（`design/copy/proof-page.md` 第 8 段「預覽圖」） | Static Assets 直接送 `site/og-image.png`，不跑 Worker |
 | `/favicon.ico` | 網站的圖示：每一頁的 `<link rel="icon">` 指到這裡，瀏覽器和連結預覽也會自己來要（[#356](https://github.com/iamreal-tw/iamreal/issues/356)） | Static Assets 直接送 `site/favicon.ico`，不跑 Worker |
@@ -505,7 +505,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 - **樣板和複製按鈕的程式是舊後台的，樣式表照新的設計。** `src/pages/` 的 HTML 照舊後台的樣板逐段搬過來，`site/copy.js` 是舊後台的那一支（後來多了常見問題的幾行）；舊後台刪掉之前，測試核對過 `copy.js` 和當時的 `site/pages.css` 和舊後台的逐位元組相同。之後導覽列、頁尾和整站的外觀換成 `design/DESIGN.md` 的（[#283](https://github.com/iamreal-tw/iamreal/issues/283)）：`site/pages.css` 的 `:root` 每一個值和 `design/tokens.json` 同名的相同，顏色只從那裡來，`760px` 以下換成手機的排法（`test/style-sheet.test.ts`）；各頁自己的排法等各頁的票：首頁、島民證明頁、查詢頁、過卡需要什麼（`/prepare`）、常見問題（`/faq`）、如何驗證證明紀錄（`/verify`）、如何檢查 Threads 帳號的島民證明（`/check`）、掛上去（`/hang`）已經照 `design/DESIGN.md` 排，其他頁現在仍是一欄。畫面上的每一句寫在樣板裡，逐字照 `design/copy/`；測試（[`test/pages.test.ts`](test/pages.test.ts)、[`test/copy.ts`](test/copy.ts)）直接讀 `design/copy/` 的每一段，確認那一種情況的每一句都在頁面上、順序相同。
 - **放進 HTML 的值一律跳脫。** 樣板是 `src/pages/html.ts` 的 `html` 標籤：放進去的字串全部跳脫，只有這個標籤自己產生的片段不跳脫。訪客打的網址、證明紀錄裡的帳號都走這一條。
-- **頁面預設沒有程式**：沒有 `<script>`、沒有行內樣式、沒有事件屬性，不設 cookie。例外只有常見問題、如何驗證證明紀錄和帶著島民證明的掛上去：各載入一支自己網域的程式 `/copy.js`（`<script src="/copy.js" defer>`），帶著島民證明的掛上去另外載入示範的播放程式 `/demo.js`（下一點），沒有行內的程式；這三頁的 CSP 多一項 `script-src 'self'`（[頁面送的標頭](#頁面送的標頭)）。程式只讓「複製」的按鈕出現、按了複製；沒有程式時按鈕藏著，要複製的字照樣在頁面上選得起來。常見問題上，程式只做一件事：網址指到某一題（`/faq#<id>`）時，打開那一題的 `<details>`（頁面打開時，和 `#` 後面改變時）。每一題本身是 `<details>`，瀏覽器捲到它但不會打開它（瀏覽器只打開包著目標的 `<details>`）；沒有程式時題目照樣點得開，連到某一題時捲到那一題的題目，只是不自動展開。只收 `GET` 和 `HEAD`，其他方法回 `405`。產生頁面時只讀請求的方法和路徑，證明紀錄頁另外讀網址的查詢（`q`、`after`）。
+- **頁面預設沒有程式**：沒有 `<script>`、沒有行內樣式、沒有事件屬性，不設 cookie。例外只有四頁：常見問題、如何驗證證明紀錄和帶著島民證明的掛上去各載入一支自己網域的程式 `/copy.js`（`<script src="/copy.js" defer>`），掛上去的兩頁（`/hang`、`/hang/<短編號>`）載入示範的播放程式 `/demo.js`（下一點），沒有行內的程式；這四頁的 CSP 多一項 `script-src 'self'`（[頁面送的標頭](#頁面送的標頭)）。程式只讓「複製」的按鈕出現、按了複製；沒有程式時按鈕藏著，要複製的字照樣在頁面上選得起來。常見問題上，程式只做一件事：網址指到某一題（`/faq#<id>`）時，打開那一題的 `<details>`（頁面打開時，和 `#` 後面改變時）。每一題本身是 `<details>`，瀏覽器捲到它但不會打開它（瀏覽器只打開包著目標的 `<details>`）；沒有程式時題目照樣點得開，連到某一題時捲到那一題的題目，只是不自動展開。只收 `GET` 和 `HEAD`，其他方法回 `405`。產生頁面時只讀請求的方法和路徑，證明紀錄頁另外讀網址的查詢（`q`、`after`）。
 - **後台不存連線紀錄。** 頁面的請求也一樣，回答了就不寫任何東西。後台自己出錯時回 `500`（純文字），寫一行：`{event: "internal_error", page, where, error}`，`page` 是哪一種頁面（`home`、`card`、`account`、`proof_log`、`hang`、`faq`、`verify`、`check`、`prepare`、`none`），不含短編號、帳號和網址的任何部分。檔案的請求不跑 Worker，後台的程式對它們什麼都不寫。
 
 ### 讀證明紀錄經過一個介面
@@ -515,7 +515,8 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 - **格式不對的短編號不問 Durable Object**：照 `spec/scoped-id.md` 的寬鬆讀法（`protocol/` 的 `readShortIdInUrl`，讀 `spec/vectors/scoped-id.json`）讀不成 10 個字元的，直接回「找不到這張島民證明」那一頁，`404`。讀得成、但寫法不是標準的那一種（小寫、`O`、`I`、`L`），`301` 轉到標準寫法，也不問。掛上去的 `/hang/<短編號>` 讀法相同，讀不成的 `302` 到 `/hang`，也不問。
 - **格式不對的帳號不問 Durable Object**：查詢頁的名稱先把 A–Z 轉成小寫，不合平台表裡 Threads 的格式就直接回「Threads 沒有這樣的帳號名稱」那一頁，`404`；有大寫的 `301` 轉到小寫。證明紀錄頁的查詢框是 Threads 的名稱時 `303` 轉到查詢頁，也不問。測試把 Durable Object 弄成什麼都不答來確認這幾種照樣回答。
 - **查詢框去掉前後的空白，照舊後台的 `strings.TrimSpace`**：Go 的空白（`unicode.IsSpace`）和 JavaScript 的 `trim` 差兩個字元：U+0085 Go 算空白，U+FEFF 不算。這裡照 Go。
-- **掛上去的示範**（`/hang/<短編號>`，`design/copy/hang.md`「示範」，[#371](https://github.com/iamreal-tw/iamreal/issues/371)）：頁面裡多一個送出時隱藏的區塊（五個示意畫面，寫著這張卡片的帳號和網址）和一個資料區塊 `<script type="application/json">`，內容是 `design/motion/hang.json`；瀏覽器不執行它。播放程式 `/demo.js` 載入後才顯示示範、隱藏四張靜態圖和結果圖；沒有載入時頁面和原本相同。回應標頭沒有變：這一頁原本就准本站的程式（`script-src 'self'`）。
+- **掛上去的示範**（`/hang`、`/hang/<短編號>`，`design/copy/hang.md`「示範」，[#371](https://github.com/iamreal-tw/iamreal/issues/371)、[#372](https://github.com/iamreal-tw/iamreal/issues/372)）：頁面裡多一個送出時隱藏的區塊（五個示意畫面，寫著這張卡片的帳號和網址，`/hang` 寫固定的例子）和一個資料區塊 `<script type="application/json">`，內容是 `design/motion/hang.json`；瀏覽器不執行它。播放程式 `/demo.js` 載入後才顯示示範、隱藏四張靜態圖和結果圖；沒有載入時頁面和原本相同。`/hang/<短編號>` 原本就准本站的程式（`script-src 'self'`）；`/hang` 原本完全不准程式，為了示範改成相同（[#369](https://github.com/iamreal-tw/iamreal/issues/369)，維護者 2026-11-26 同意），它只載入 `/demo.js`，不載入 `/copy.js`（那一頁沒有複製的按鈕）。
+  - **示範有兩個版本**（回到「連結」那一頁後，iPhone 按右上角的「完成」，Android 按左上角的 ✕）：頁面同時帶著兩個版本要按的那一顆，由播放程式在瀏覽器裡看 `navigator.userAgent` 選（有 `Android` 的是 Android 的版本，其餘是 iPhone 的）。後台送給每一種裝置的頁面相同，不讀 `User-Agent`，回應不帶 `Vary`，頁面的快取不受影響。規格（[#369](https://github.com/iamreal-tw/iamreal/issues/369)）原本寫伺服器選；改成瀏覽器選的理由在那張票 2026-11-26 的最後一則留言
   - `site/demo.js` 由 `scripts/site-files.ts` 從兩個檔寫出，提交進版控：`src/teaching-animation.ts`（算狀態的函式，去掉型別）和 `demo/player.js`（畫的部分）。`test/demo.test.ts` 檢查版控裡的那一份就是這兩個檔寫出來的，而且它算的狀態和 `spec/vectors/teaching-animation.json` 的答案相同
   - 播放程式不向任何地方要資料、不寫 cookie、不改網址，也不在元素上寫樣式：會動的部分是它把時間表每一秒六十個時刻的狀態交給瀏覽器的 `Element.animate`。`test/site-pages.test.ts` 檢查程式裡沒有那些字
   - 後台的程式不引用 `worker/`、`protocol/` 以外的檔，所以時間表有一份拷貝 `src/pages/hang-timeline.ts`，同一支腳本寫出，同一個測試核對
@@ -587,7 +588,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `Cross-Origin-Opener-Policy` | `same-origin` | 開啟這一頁的別的網站，和這一頁開出去的視窗，彼此拿不到對方 |
 | （沒有 `Cross-Origin-Embedder-Policy`、`Document-Isolation-Policy`） | | 送了的話 Threads 的框會被擋 |
 
-載入 `/copy.js` 的三頁（常見問題、如何驗證證明紀錄、帶著島民證明的掛上去）的 `200`：上面那一組，`Content-Security-Policy` 換成多一項 `script-src 'self'` 的 `default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`，和舊後台的 `scriptPageHeaders` 相同：只跑自己網域的程式，沒有行內的程式、沒有別的網站的。同一個網址的轉址、`405`、`500` 不載入程式，用上面那一組；舊後台是照路徑給，如何驗證證明紀錄和掛上去這兩個網址的每一種回應都帶 `script-src 'self'`（舊後台的常見問題沒有程式）。
+載入本站程式的四頁（常見問題、如何驗證證明紀錄、掛上去的兩頁）的 `200`：上面那一組，`Content-Security-Policy` 換成多一項 `script-src 'self'` 的 `default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`，和舊後台的 `scriptPageHeaders` 相同：只跑自己網域的程式，沒有行內的程式、沒有別的網站的。同一個網址的轉址、`405`、`500` 不載入程式，用上面那一組；舊後台是照路徑給，如何驗證證明紀錄和掛上去這兩個網址的每一種回應都帶 `script-src 'self'`（舊後台的常見問題沒有程式）。
 
 過卡的頁面和它的每個檔案（`/proof`、`/proof/…`）：`Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups` 三個，值和每一項的理由寫在 [`web/README.md`](../web/README.md)「頁面需要的標頭」。[`test/proof-files.test.ts`](test/proof-files.test.ts) 從那份 README 讀出這三個值，確認它們和 `src/headers.ts` 的相同，本機的 workerd 對 `/proof` 的每一種回應（檔案、`301`、`404`、`405`、`304`）送的也一字不差。`connect-src` 裡的資料網域照證明紀錄的種類（`src/headers.ts` 的 `DATA_ORIGINS`、`proofPageHeaders`）：測試的證明紀錄的網站是 `https://test-data.iamreal.tw`，正式的證明紀錄的是 `https://data.iamreal.tw`（舊後台只有後面這一份）。兩份 `web/README.md` 都引用了，測試各比一次。
 
