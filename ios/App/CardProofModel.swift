@@ -127,10 +127,15 @@ final class CardProofModel: ObservableObject {
 
     func perform(_ action: Action) {
         switch action {
-        case .start, .readAgain:
+        case .start:
             reset()
             // The demonstration of where the card goes plays as the step comes up.
             sensePlaying = true
+            screen = read(reached: 0, running: false, stop: nil)
+        case .readAgain:
+            reset()
+            // The card was tapped once already: the demonstration is at rest, and plays again only by its button.
+            sensePlayed = true
             screen = read(reached: 0, running: false, stop: nil)
         case .back: back()
         case .readCard: run { await self.readCard() }

@@ -601,6 +601,29 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(card.signatures, 1, "the card signed the scope string only")
     }
 
+    /// "感應卡片" was pressed and no card came: the demonstration of where the card goes is at rest with the card
+    /// in place, and does not play again by itself, also not after "再感應一次"; its button plays it again.
+    func testTheDemonstrationDoesNotPlayAgainByItselfOnceTheCardWasTapped() async throws {
+        let model = makeModel(card: NoCardReader())
+        try await press("下一步", in: model)
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.playing, true, "it plays as the step comes up")
+        try await press("感應卡片", in: model)
+        XCTAssertEqual(model.screen.step, 2)
+        XCTAssertTrue(model.screen.texts.contains("沒有感應到卡片。請再感應一次，把卡片平貼在手機背面的上方。"))
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.playing, false)
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.played, true)
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.control, Button(label: "再看一次", action: .playDemo))
+        try await press("再感應一次", in: model)
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.playing, false)
+        try await press("再看一次", in: model)
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.playing, true)
+        // Back to step 1 and to step 2 again: it plays as the step comes up.
+        try await press("再感應一次", in: model)
+        model.perform(.restart)
+        try await press("下一步", in: model)
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.playing, true)
+    }
+
     /// A PIN the card refuses is dropped, and asked for again on the same screen.
     func testAWrongPINIsDroppedAndAskedForAgain() async throws {
         try await onTheSecondDay()
@@ -676,7 +699,7 @@ final class CardProofTests: XCTestCase {
     /// A model as the app makes its own, with the card and the back end of
     /// this test. `opened`: it has asked for `config`, as the screen makes
     /// it do when it is first drawn.
-    private func makeModel(opened: Bool = true) -> CardProofModel {
+    private func makeModel(opened: Bool = true, card: Card? = nil) -> CardProofModel {
         let backend = self.backend!
         let asked = CountingBackend(HTTPBackend(site: backend.origin, publicFiles: backend.origin))
         self.asked = asked
@@ -686,7 +709,7 @@ final class CardProofTests: XCTestCase {
         let flow = CardProofFlow.Dependencies(
             proofLog: .test,
             backend: asked,
-            card: card,
+            card: card ?? self.card,
             clock: { [unowned self] in self.now },
             crlNumbers: MemoryCRLNumbers(),
             openSession: backend.openSession,
