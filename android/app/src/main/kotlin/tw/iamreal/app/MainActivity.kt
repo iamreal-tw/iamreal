@@ -260,6 +260,7 @@ class MainActivity : ComponentActivity() {
             bundled = { name -> context.assets.open(name).use { it.readBytes() } },
             crlNumbers = StoredCrlNumbers(context),
             copy = Copy(context.resources.openRawResource(R.raw.card_proof_copy).use { String(it.readBytes(), Charsets.UTF_8) }),
+            hangMotion = { context.resources.openRawResource(R.raw.hang_motion).use { String(it.readBytes(), Charsets.UTF_8) } },
         ).also { model = it }
 
         /** The reminder as the screens show it, for this process. */

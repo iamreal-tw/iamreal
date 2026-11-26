@@ -50,6 +50,19 @@
 - **接收器不讓別的 app 叫**（`exported="false"`）：鬧鐘到了、通知上的「一週後再提醒我」、系統的三種廣播。打開 app 的畫面是對外開放的（主畫面要叫得到它），所以別的 app 也能用通知的那個方式打開它：得到的只有第 1 步上方那一段字
 - **測試**：日子怎麼算、存什麼、關掉後留下什麼，是單元測試（`app/src/test/…/reminder/`，假的鬧鐘和記憶體裡的儲存）；第 7 步說哪幾句是 `RemindViewTest`，第 6、第 8 步是 `DoneViewTest`。模擬器上的過卡測試走過第 7 步的「這次不要」「開啟提醒」和提醒已經開著的樣子、選間隔和時刻、設定頁，把模擬器的時鐘撥到提醒的時刻，看通知的字、按「一週後再提醒我」、點通知進第 1 步，最後關掉提醒，確認 app 的儲存裡不剩提醒的東西
 
+## 第 6 步的示範
+
+第 6 步「複製證明連結」和打開個人檔案的按鈕下面，是一段會動的示範（[#373](https://github.com/iamreal-tw/iamreal/issues/373)，`design/copy/card-proof.md`「示範」）：五個示意畫面排成一列，鏡頭從按「複製證明連結」一路帶到個人檔案多出來的那一行，帳號和網址是這張島民證明自己的。和網頁 `/hang/<短編號>`、iOS 播的是同一段。
+
+- **時間表是 `design/motion/hang.json`**，建置時原樣包進安裝檔（`raw/hang_motion.json`），app 不另外抄一份。Android 播的是回程按左上角 ✕ 的那一版（`variants.android`）
+- **算法是純函式**（`ui/demo/HangMotion.kt` 的 `hangStateAt`）：給時間表和秒數，算出那一刻鏡頭在哪、哪個框被標出來、哪一顆被按著、六個畫面變化各走了幾成、現在是四步裡的哪一步。不計時、不碰畫面。`HangMotionTest` 讀 `spec/vectors/teaching-animation.json` 的每一個答案，和網頁、iOS 對的是同一份
+- **畫面**（`ui/demo/HangDemo.kt`）用 Compose 自己的元件畫，不加程式庫：整列一個 `graphicsLayer`（位移加縮放），計時用系統給的每一格（`withFrameNanos`）。五個畫面上的每個框都回報過位置之後才算鏡頭，在那之前整列看不見。示意畫面裡的長度和字級是固定的 dp，不跟系統的字級：帳號最長 30 個字時留在一行，放不下的在尾端截掉
+- **什麼時候播**：大半張圖進到畫面時自己播一次，停在最後一格。下面一顆按鈕，播的時候是「停止」（直接到最後一格），停了或播完是「再看一次」。到第 7 步再回來不會重播。播到哪一步，下面四步的字裡那一步標出來
+- **系統關掉動畫時照樣播**（[#369](https://github.com/iamreal-tw/iamreal/issues/369) 維護者 2026-11-26 的留言）：這段動畫是自己照每一格的時間算的，系統的那個設定本來就管不到它，app 也不去問；看的人用「停止」停下來
+- **對報讀器**整段示範是一個元素，唸 `app_demo.hang` 那一句；裡面畫的字不唸，四步的字照常唸
+- **兩顆按鈕左右並排**，在示範上面，和示範的第一個畫面相同。並排時每一顆只有一半寬，字要折成兩行以上、按鈕得長高才放得下的時候（帳號很長、系統字級放大），改成上下排（`ui/Widgets.kt` 的 `SideBySide`）
+- 模擬器上的過卡測試檢查：示範給報讀器的那一句、按鈕的兩個字樣和 `design/copy/` 逐字相同，按「停止」後變成「再看一次」，兩顆按鈕左右並排而且在示範上面。加上 `IAMREAL_RECORD=<檔名>.webm` 時，另外把示範從頭播一次、用模擬器主機這一側的錄影存下來（模擬器裡的 `screenrecord` 讀不到畫面）
+
 ## 兩種 build
 
 同一個 app 有兩種 build（ADR-0037），識別碼不同，可以同時裝在一支手機上：
@@ -159,12 +172,13 @@ $NDK/llvm-readelf -lW app/build/intermediates/merged_native_libs/release/mergeRe
 
 `bundled.sha256` 和 `device-core/crs.sha256` 列出每一個的 SHA-256，數字和 `web/circuits/README.md`、`web/src/prover/artifacts.ts` 相同。建置時每個檔案先核對再複製（`bundleFiles`），做出安裝檔後再核對一次裡面的檔案（`checkApk`）。app 用它們之前，核心還會照寫死在 `device-core/` 的 SHA-256 再核對一次（ADR-0035）：讀完卡之後一次，算證明之前再一次。
 
-`design/` 的三個檔建置時原樣複製進安裝檔的資源（`copyDesign`，清單是 `app/build.gradle.kts` 的 `designResources`），app 的程式裡沒有給人看的句子：
+`design/` 的四個檔建置時原樣複製進安裝檔的資源（`copyDesign`，清單是 `app/build.gradle.kts` 的 `designResources`），app 的程式裡沒有給人看的句子：
 
 | 資源 | 來源 |
 |---|---|
 | `raw/card_proof_copy.json` | `design/copy/card-proof.json`：過卡畫面上的每一句話 |
 | `raw/app_copy.json` | `design/copy/app.json`：只在 app 上、不屬於過卡的字 |
+| `raw/hang_motion.json` | `design/motion/hang.json`：第 6 步示範的時間表（「第 6 步的示範」） |
 | `font/genryumin2tw_b.otf` | `design/fonts/GenRyuMin2TW-B.otf`：標題用的源流明體 TW 的子集 |
 
 做出安裝檔後 `checkApk`、`checkBundle` 確認每一個都在 `res/` 裡，而且和程式庫裡的逐位元組相同。release 的 APK 把資源換成短的名稱（例如 `res/c7.otf`），所以照內容找，不照路徑。

@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
@@ -68,8 +69,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -144,7 +147,7 @@ internal fun Button(label: String, modifier: Modifier = Modifier, primary: Boole
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
-        BasicText(label, style = TextStyle(color = if (primary) Colours.bg else Colours.ink, fontSize = Type.sizeBody, fontWeight = Type.weightHeading))
+        BasicText(label, style = TextStyle(color = if (primary) Colours.bg else Colours.ink, fontSize = Type.sizeBody, fontWeight = Type.weightHeading, textAlign = TextAlign.Center))
     }
 }
 
@@ -163,6 +166,35 @@ internal fun Link(text: String, modifier: Modifier = Modifier, size: TextUnit = 
     modifier.clickable(role = Role.Button, onClick = onClick).defaultMinSize(minHeight = Type.minTarget).padding(vertical = 8.dp),
     style = TextStyle(color = Colours.you, fontSize = size, lineHeight = Type.leadingSmall, fontWeight = Type.weightHeading, textDecoration = TextDecoration.Underline),
 )
+
+/**
+ * Two buttons side by side, each half the width, where neither has to grow taller for its words; one under the other, each
+ * as wide as the screen, where one would (a long account, the system's font made large). One button alone is as wide as the screen.
+ */
+@Composable
+internal fun SideBySide(modifier: Modifier = Modifier, content: @Composable () -> Unit) = Layout(content, modifier) { measurables, constraints ->
+    val gap = 12.dp.roundToPx()
+    val width = constraints.maxWidth
+    val half = (width - gap) / 2
+    val tall = Type.buttonHeight.roundToPx()
+    val beside = measurables.size == 2 && measurables.all { it.minIntrinsicHeight(half) <= tall }
+    val each = if (beside) half else width
+    val placed = measurables.map { it.measure(Constraints.fixedWidth(each)) }
+    if (beside) {
+        layout(width, placed.maxOf { it.height }) {
+            placed[0].place(0, 0)
+            placed[1].place(half + gap, 0)
+        }
+    } else {
+        layout(width, placed.sumOf { it.height } + gap * (placed.size - 1).coerceAtLeast(0)) {
+            var y = 0
+            for (p in placed) {
+                p.place(0, y)
+                y += p.height + gap
+            }
+        }
+    }
+}
 
 /** The buttons of a step, one under another, as wide as the screen: the primary one first. */
 @Composable
