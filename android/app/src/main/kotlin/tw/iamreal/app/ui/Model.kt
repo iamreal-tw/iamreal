@@ -575,7 +575,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         hangWhole = true
     }
 
-    /** "下一步" of step 6, "上一步" of step 8. */
+    /** "下一步" of step 6. */
     fun toRemind() {
         if (done != null) step = Step.REMIND
     }
@@ -583,6 +583,13 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
     /** "上一步" of step 7: step 6 as it was left. */
     fun backToHang() {
         if (done != null) step = Step.HANG
+    }
+
+    /** "上一步" of step 8: step 7; false where there is none (everything was withdrawn: step 8 came straight from step 5). */
+    fun backFromDone(): Boolean {
+        if (done?.accounts?.isEmpty() != false) return false
+        step = Step.REMIND
+        return true
     }
 
     /** Step 8, from step 7. */

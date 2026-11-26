@@ -180,8 +180,11 @@ class MainActivity : ComponentActivity() {
                         Step.BEFORE -> finish()
                         // Step 6 cannot go back: step 5 has submitted. From the last step of a card proof that withdrew everything, neither.
                         Step.HANG -> finish()
-                        Step.REMIND -> model.backToHang()
-                        Step.DONE -> if (model.done?.accounts?.isEmpty() == false) model.toRemind() else finish()
+                        Step.REMIND -> {
+                            reminder.notNow()
+                            model.backToHang()
+                        }
+                        Step.DONE -> if (!model.backFromDone()) finish()
                         Step.READ -> model.backToBefore()
                         Step.PIN -> model.backToRead()
                         Step.CONFIRM -> model.backToAccounts()
@@ -202,7 +205,7 @@ class MainActivity : ComponentActivity() {
         // "一週後再提醒我" on the notification may have changed the reminder meanwhile.
         reminder(applicationContext).refresh()
         // Back from the system's page of the app's notifications ("打開通知設定" of step 7): asked again whether the app may notify.
-        if (model(applicationContext).step == Step.REMIND) reminder(applicationContext).backAtStep(Phone.notificationsAllowed(this))
+        if (model(applicationContext).step == Step.REMIND) reminder(applicationContext).backAtRemind(Phone.notificationsAllowed(this))
     }
 
     override fun onPause() {

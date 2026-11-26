@@ -98,7 +98,7 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
                         Step.PROGRESS -> Progress(m)
                         Step.HANG -> Hang(m, outside)
                         Step.REMIND -> RemindStep(r, m.copy, m.done?.validUntil, back = { m.backToHang() }, next = { m.toDone() }, notificationSettings = outside.notificationSettings)
-                        Step.DONE -> Finish(m, r, outside)
+                        Step.DONE -> Finish(m, outside)
                     }
                 }
             }
@@ -552,15 +552,11 @@ private fun Hang(m: Model, outside: Outside) {
  * comes here from step 5: its date, that the link can be taken down, and no way back.
  */
 @Composable
-private fun Finish(m: Model, r: ReminderModel, outside: Outside) {
+private fun Finish(m: Model, outside: Outside) {
     val c = m.copy
     val d = m.done ?: return
     val view = m.messages.done(d, m.single)
     val wide = Modifier.fillMaxWidth()
-    val finish = {
-        r.notNow()
-        m.cancel()
-    }
     if (view.withdrawAll) {
         view.mismatch?.let { Problem(it, Modifier.testTag("done-mismatch")) }
         Title(view.title)
@@ -568,7 +564,7 @@ private fun Finish(m: Model, r: ReminderModel, outside: Outside) {
         view.kindsUnreadable?.let { Body(it) }
         Body(view.unlink)
         Recorded(c, d, view)
-        Actions { Button(c.say("finish.done"), wide, primary = true) { finish() } }
+        Actions { Button(c.say("finish.done"), wide, primary = true) { m.cancel() } }
         return
     }
     val url = m.proofUrl(d.shortId)
@@ -578,9 +574,10 @@ private fun Finish(m: Model, r: ReminderModel, outside: Outside) {
     Body((view.ordinal ?: "") + c.say("finish.invite"), Modifier.padding(top = 8.dp))
     Body(c.say("finish.thanks"))
     Actions {
-        for (share in view.shares) Button(share, wide, primary = true) { outside.share("${view.shareText}\n$url") }
-        Button(c.say("finish.done"), wide) { finish() }
-        Button(c.say("common.back"), wide) { m.toRemind() }
+        // One main button a screen (design/DESIGN.md): the first platform's, were there more than one.
+        for ((n, share) in view.shares.withIndex()) Button(share, wide, primary = n == 0) { outside.share("${view.shareText}\n$url") }
+        Button(c.say("finish.done"), wide) { m.cancel() }
+        Button(c.say("common.back"), wide) { m.backFromDone() }
     }
 }
 

@@ -91,7 +91,7 @@ internal class ReminderModel(
         private set
 
     /** Step 7: "開啟提醒" was pressed and the system did not let the app notify. */
-    var doneDenied by mutableStateOf(false)
+    var remindDenied by mutableStateOf(false)
         private set
 
     /** The app was opened from the notification and no card proof has been completed since. */
@@ -129,7 +129,7 @@ internal class ReminderModel(
     fun cardProofDone() {
         plan = reminders.afterCardProof(today())
         picked = false
-        doneDenied = false
+        remindDenied = false
         fromNotification = false
         snoozed = null
     }
@@ -143,32 +143,33 @@ internal class ReminderModel(
     }
 
     /** "開啟提醒" on step 7: the defaults, once the system lets the app notify, and then [on] (the next step). If it does not, step 7 says so. */
-    fun turnOnFromStep(on: () -> Unit) = askPermission { allowed ->
+    fun turnOnAtRemind(on: () -> Unit) = askPermission { allowed ->
         if (allowed) {
             turnOnDefaults()
             on()
         } else {
-            doneDenied = true
+            remindDenied = true
         }
     }
 
     private fun turnOnDefaults() {
         plan = reminders.turnOn(Reminders.DEFAULT_INTERVAL, Reminders.DEFAULT_TIME, null, today())
         picked = false
-        doneDenied = false
+        remindDenied = false
     }
 
     /**
      * Back in the app with step 7 up, after it said the system does not let the app notify ("打開通知設定"): asked again,
      * and if the app may notify now, the defaults are set, as "開啟提醒" would have. Step 7 then shows the reminder that is on.
      */
-    fun backAtStep(allowed: Boolean) {
-        if (doneDenied && plan == null && allowed) turnOnDefaults()
+    fun backAtRemind(allowed: Boolean) {
+        // Only with step 7 itself on the screen: not behind the settings or the screen of the interval and the time, which set their own.
+        if (remindDenied && plan == null && allowed && screen == Screen.CARD_PROOF) turnOnDefaults()
     }
 
-    /** "這次不要", and leaving the steps after the submission: nothing is stored, and what the system said is asked again the next time. */
+    /** "這次不要", and "上一步" of step 7: nothing is stored, and step 7 offers the reminder again the next time it is up. */
     fun notNow() {
-        doneDenied = false
+        remindDenied = false
     }
 
     /** "改提醒間隔或時刻", the switch turned on: the screen of the interval and the time, from what is on, else the defaults. */
@@ -201,7 +202,7 @@ internal class ReminderModel(
             val day = draftPicked?.takeIf { it in Reminders.pickable(today()) }
             plan = reminders.change(draftInterval, draftTime, day, now())
             picked = day != null
-            doneDenied = false
+            remindDenied = false
             screen = scheduleFrom
         }
         if (plan != null) return save()
@@ -305,7 +306,7 @@ private fun WithDay(text: String, at: String?) {
  */
 @Composable
 internal fun RemindStep(r: ReminderModel, card: Copy, validUntil: LocalDate?, back: () -> Unit, next: () -> Unit, notificationSettings: () -> Unit) {
-    val view = remindView(card, r.words, r.plan, r.picked, r.doneDenied, validUntil, r.today())
+    val view = remindView(card, r.words, r.plan, r.picked, r.remindDenied, validUntil, r.today())
     val wide = Modifier.fillMaxWidth()
     Title(view.title)
     Column(Modifier.fillMaxWidth().testTag("remind"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -314,11 +315,14 @@ internal fun RemindStep(r: ReminderModel, card: Copy, validUntil: LocalDate?, ba
     }
     Actions {
         when (view.kind) {
-            RemindView.Kind.ASK -> Button(card.say("app_done.reminder_turn_on"), wide, primary = true) { r.turnOnFromStep(next) }
+            RemindView.Kind.ASK -> Button(card.say("app_done.reminder_turn_on"), wide, primary = true) { r.turnOnAtRemind(next) }
             RemindView.Kind.ON -> Button(card.say("common.next"), wide, primary = true) { next() }
             RemindView.Kind.DENIED -> Button(card.say("app_reminder.settings"), wide, primary = true) { notificationSettings() }
         }
-        Button(card.say("common.back"), wide) { back() }
+        Button(card.say("common.back"), wide) {
+            r.notNow()
+            back()
+        }
     }
     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         if (view.kind != RemindView.Kind.DENIED) TextButton(card.say("app_reminder.adjust"), Modifier.testTag("reminder-adjust"), action = true) { r.openSchedule() }
