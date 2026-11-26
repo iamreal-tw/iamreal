@@ -78,8 +78,12 @@ func newVerifier(cfg Config, issuers map[string]*big.Int) (*Verifier, error) {
 	return v, nil
 }
 
+// checkBB runs `bb --version` once, when the verifier is made. It has
+// DefaultTimeout whatever Config.Timeout is: that one is per proof, and a
+// short one (a test's) would otherwise also cut off a bb that is slow to
+// start on a loaded machine before it said its version (#220).
 func (v *Verifier) checkBB() error {
-	ctx, cancel := context.WithTimeout(context.Background(), v.cfg.Timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, v.cfg.BB, "--version").Output()
 	if err != nil {

@@ -59,7 +59,7 @@ Poseidon2 和廢止清冊的樹不在這裡：驗證一筆紀錄不需要算它�
 |---|---|---|
 | macOS arm64 | `https://github.com/AztecProtocol/aztec-packages/releases/download/v6.0.0/barretenberg-arm64-darwin.tar.gz` | `48bd18a7d53781a2820e7538dfd89584ca5b4d76c7908e8be4910ce994e7c35e` |
 
-其他平台的壓縮檔在同一個發布頁，SHA-256 還沒有記錄。`New` 會跑 `bb --version`，不是 `6.0.0` 就拒絕啟動。
+其他平台的壓縮檔在同一個發布頁，SHA-256 還沒有記錄。`New` 會跑 `bb --version`，不是 `6.0.0` 就拒絕啟動。這一次最多等 `DefaultTimeout`（30 秒），不看 `Config.Timeout`：那是每一份證明的 `bb verify` 的（[#220](https://github.com/iamreal-tw/iamreal/issues/220)）。
 
 不另外下載也可以：`web/` 用的套件 `@aztec-foundation/bb.js` 6.0.0（`pnpm-lock.yaml`）附了四個平台的 `bb`，在根目錄 `pnpm install` 之後是 `web/node_modules/@aztec-foundation/bb.js/build/<平台>/bb`（`arm64-macos`、`amd64-macos`、`arm64-linux`、`amd64-linux`）。`arm64-macos` 那一個和上表壓縮檔裡的 `bb` 逐位元組相同（SHA-256 `f3af6634d08980744f6c9d18010f65b4fd2bbcf23f99e62fd81078ca9b35aa7e`）。GitHub Actions 上 PR 的檢查用 `amd64-linux` 那一個（`.github/workflows/checks.yml`、`checks-browser.yml`），每個工作用它之前核對它的 SHA-256：`5bbb64800d431c6760a70d8723be4eaf37ed10e8fbfe2842bb85b8436180c130`，是 `@aztec-foundation/bb.js` 6.0.0 的 `build/amd64-linux/bb`（`worker/test/workflows.test.ts` 拿裝下來的套件重算）。
 
@@ -101,7 +101,7 @@ IAMREAL_BB=/path/to/bb IAMREAL_CRS=/path/to/crs go test ./verifier   # 用指定
 
 `platforms_test.go`：兩份證明紀錄每個平台的格式字串，照裝置的讀法（不用正規表示式）讀出來，和檢查函式對每一個單一位元組、字母前後的每一個位元組、長度上限前後的字串答案相同。
 
-**真的證明**（`proof_test.go`）：正確的證明通過、每一個公開輸入改一個值被拒絕、紀錄的每個欄位改掉被拒絕（帳號清單：改一個帳號名稱、帳號換平台、少一個、多一個、順序對調、空的清單）、證明少一個位元組、多一個位元組、改一個位元組被拒絕、非零知識的證明被拒絕、亂數的證明被拒絕、`bb` 當掉或逾時算拒絕，以及兩筆紀錄組成的測試的證明紀錄經過 `prooflog/` 的規則。
+**真的證明**（`proof_test.go`）：正確的證明通過、每一個公開輸入改一個值被拒絕、紀錄的每個欄位改掉被拒絕（帳號清單：改一個帳號名稱、帳號換平台、少一個、多一個、順序對調、空的清單）、證明少一個位元組、多一個位元組、改一個位元組被拒絕、非零知識的證明被拒絕、亂數的證明被拒絕、`bb` 當掉或逾時算拒絕（假的 `bb` 說版本和當掉之前先等一秒，像負載高時行程慢慢啟動：當掉的要是當掉的拒絕、卡住的要是逾時的拒絕，子行程拿著管線的那一種不等滿它的 30 秒），以及兩筆紀錄組成的測試的證明紀錄經過 `prooflog/` 的規則。
 
 ## 對外的函式
 

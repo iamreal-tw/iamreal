@@ -374,7 +374,9 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
                 val reason = stop.values["reason"]
                 when {
                     // The card did not take the PIN, or may have: it is typed again (never sent again by itself).
-                    stop.code == "card" && (reason == CardException.Reason.PIN_INCORRECT.name || reason == CardException.Reason.PIN_MAYBE_SENT.name) -> pin.clear()
+                    // Nor is it kept for a card the secure channel cannot be made with: the sentence sends the cardholder to a card reader,
+                    // and another tap needs the PIN typed again (design/copy/card-proof.md, "3. 輸入 PIN", app).
+                    stop.code == "card" && reason in setOf(CardException.Reason.PIN_INCORRECT.name, CardException.Reason.PIN_MAYBE_SENT.name, CardException.Reason.CHANNEL.name) -> pin.clear()
                     // A locked card takes no PIN: the card proof is over.
                     stop.code == "card" && reason == CardException.Reason.LOCKED.name -> {
                         pin.clear()
@@ -542,8 +544,9 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
                 progressMessage = messages.stop(stop, Messages.At.DECLARE)
                 progressRequestId = stop.requestId
                 // The tap did not get to a signature: the PIN is still there, and the tap is made again.
-                // A PIN the card refused, or a card that is locked, is dropped with everything else.
-                val again = stop.code == "other_card" || (stop.code == "card" && stop.values["reason"] !in setOf(CardException.Reason.PIN_INCORRECT.name, CardException.Reason.LOCKED.name))
+                // A PIN the card refused, a card that is locked, a card the secure channel cannot be made with: the flow dropped the PIN
+                // with everything else, and the only way on is back to the beginning.
+                val again = stop.code == "other_card" || (stop.code == "card" && stop.values["reason"] !in CardProof.ENDS_AT_LAST_TAP)
                 progressButton = if (again) ProgressButton.TAP_AGAIN else ProgressButton.RESTART
             },
         )
