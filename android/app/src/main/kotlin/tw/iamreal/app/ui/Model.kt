@@ -127,7 +127,8 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
 
     /**
      * The operator stopped taking card proofs, as the server's config last said (docs/api/card-proof.md, `paused`): step 1
-     * says so in place of its button. Until the config answers, and when it does not: false, and step 2 asks again.
+     * says so in place of its button. Until the config answers, and when it does not: false, and step 2 asks again. Written on
+     * the main thread only; the Model is made there, so the first answer finds [config] set.
      */
     var paused by mutableStateOf(false)
         private set
@@ -330,13 +331,23 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         step = Step.READ
     }
 
-    /** Step 1 in front again while it says card proofs are stopped: asks the server whether they still are. */
+    /** Step 1 in front again: asks the server whether card proofs are stopped, or resumed, meanwhile. */
     fun checkPaused() {
-        if (step == Step.BEFORE && paused) synchronized(this) { if (config.isDone) config = askConfig() }
+        if (step == Step.BEFORE) askConfigAgain()
+    }
+
+    /**
+     * Step 1 asks the server for its config each time it opens, as the web page does (design/copy/card-proof.md, step 1: the
+     * operator stopping card proofs is said before a card is read); the card proof that follows uses that answer. Not while an
+     * answer is still to come.
+     */
+    private fun askConfigAgain() {
+        synchronized(this) { if (config.isDone) config = askConfig() }
     }
 
     fun backToBefore() {
         dropAll()
+        askConfigAgain()
         step = Step.BEFORE
     }
 
@@ -651,6 +662,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
     /** "取消" of steps 4 and 5, "回到開頭", "完成" of step 8: drops the PIN and everything else; back to step 1. */
     fun cancel() {
         dropAll()
+        askConfigAgain()
         step = Step.BEFORE
     }
 
@@ -658,6 +670,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
     private fun stopped(stop: Stop) {
         dropAll()
         notice = if (stop.code == "idle") copy.say("app_before.idle") else null
+        askConfigAgain()
         step = Step.BEFORE
     }
 

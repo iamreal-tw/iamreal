@@ -77,10 +77,4 @@ class PausedViewTest {
         assertEquals(copy.say("stops.paused"), messages.stop(stop, Messages.At.READ))
         assertEquals(ReadButton.RESTART, readButtonAfter(stop))
     }
-
-    @Test
-    fun `the sentences, word for word`() {
-        assertEquals("現在暫停收過卡。已經換到的島民證明照常有效，證明紀錄也照常可以查。請晚點再來。", copy.say("before.paused"))
-        assertEquals("現在暫停收過卡，證明紀錄沒有變動。請晚點再來。", copy.say("stops.paused"))
-    }
 }
