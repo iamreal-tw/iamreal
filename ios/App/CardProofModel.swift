@@ -98,6 +98,7 @@ final class CardProofModel: ObservableObject {
         fromReminder = .asked
         if flow == nil || finished != nil {
             reset()
+            askConfigAgain()
             screen = before()
         }
     }
@@ -110,12 +111,25 @@ final class CardProofModel: ObservableObject {
         let asked = Task { try await backend.config() }
         configuring = asked
         Task {
-            let said = (try? await asked.value).flatMap(CardProofFlow.paused) == true
+            let answer = try? await asked.value
             // Not when it was asked again meanwhile: the later answer says.
             guard self.configuring == asked else { return }
-            self.paused = said
+            // Kept for the card proof that follows; one that did not come is asked for again.
+            if let answer { self.config = answer } else { self.configuring = nil }
+            self.paused = answer.flatMap(CardProofFlow.paused) == true
             self.redraw()
         }
+    }
+
+    /// Step 1 asks the server for its config each time it opens, as the
+    /// web page does (card-proof.md, step 1: the operator stopping card
+    /// proofs is said before a card is read); the card proof that follows
+    /// uses that answer. Not while an answer is still to come.
+    private func askConfigAgain() {
+        guard config != nil || configuring == nil else { return }
+        config = nil
+        configuring = nil
+        open()
     }
 
     /// Whether a PIN is in memory, here or in the flow: for tests.
@@ -157,6 +171,7 @@ final class CardProofModel: ObservableObject {
         case .submitAgain: run { await self.submit() }
         case .restart:
             reset()
+            askConfigAgain()
             screen = before()
         case .copyLink:
             guard let finished else { return }
@@ -228,12 +243,8 @@ final class CardProofModel: ObservableObject {
     /// settings: asked again, and set as offered if it is allowed now.
     func cameBack() {
         askAgain()
-        // Card proofs the operator stopped may have resumed meanwhile.
-        if paused, flow == nil, screen.step == 1 {
-            config = nil
-            configuring = nil
-            open()
-        }
+        // The operator may have stopped card proofs, or resumed them, meanwhile.
+        if flow == nil, screen.step == 1 { askConfigAgain() }
     }
 
     /// Step 7 is up and says the system does not let the app notify: the
@@ -329,6 +340,7 @@ final class CardProofModel: ObservableObject {
         switch screen.step {
         case 2:
             reset()
+            askConfigAgain()
             screen = before()
         case 3:
             // Back to reading the card, which is read again.

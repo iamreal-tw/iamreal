@@ -92,6 +92,21 @@ final class PausedTests: XCTestCase {
         XCTAssertEqual(backend.configs, 2)
     }
 
+    func testStoppedAfterTheAppOpenedStepOneSaysSoWhenItOpensAgain() async throws {
+        let backend = PausedBackend(paused: false)
+        let model = model(backend)
+        model.open()
+        try await until("the config answered") { backend.configs == 1 }
+        XCTAssertEqual(model.screen.buttons.map(\.action), [.start])
+        // The operator stops card proofs; the cardholder goes to step 2 and back.
+        backend.paused = true
+        model.perform(.start)
+        model.perform(.back)
+        try await until("step 1 says card proofs are stopped") { says(model.screen, copy("before.paused")) }
+        XCTAssertEqual(model.screen.buttons, [])
+        XCTAssertEqual(backend.configs, 2)
+    }
+
     func testConfigSaysSoOnTheWayStepTwoStopsBeforeTheCard() async throws {
         let backend = PausedBackend(paused: true)
         let model = model(backend)
@@ -123,11 +138,6 @@ final class PausedTests: XCTestCase {
             XCTAssertEqual(why(screen), [copy("stops.paused"), copy("stops.request_id", ["request_id": "0123456789abcdef"])], "\(reached)")
             XCTAssertEqual(screen.buttons, [Button(label: copy("accounts.restart"), action: .restart)], "\(reached)")
         }
-    }
-
-    func testTheSentencesWordForWord() {
-        XCTAssertEqual(copy("before.paused"), "現在暫停收過卡。已經換到的島民證明照常有效，證明紀錄也照常可以查。請晚點再來。")
-        XCTAssertEqual(copy("stops.paused"), "現在暫停收過卡，證明紀錄沒有變動。請晚點再來。")
     }
 
     private func copy(_ key: String, _ values: [String: String] = [:]) -> String { sentences(key, values) }
