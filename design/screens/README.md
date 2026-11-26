@@ -65,7 +65,7 @@
 
 ### app 的過卡流程
 
-Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts`，指令見 `android/README.md`「模擬器上過一次卡」）加上 `IAMREAL_DESIGN_SCREENS=<目錄>` 拍：拍的時候把模擬器的螢幕暫時換成 390 dp 寬、一個像素一個 dp，從系統的狀態列下面拍到這一步的最後，至少 844 高。帳號、島民編號、日期是測試的假資料，連結的網址是測試連的本機伺服器。iPhone 和 Android 共用名稱的那幾張，換成哪一個 app 的寫在「版本」。iOS 的 app 也拍得出同名的那幾張和啟動畫面（`ios/Tests/ScreensTests.swift`，`ios/README.md`「截圖」）；現在放的是 Android 的。
+Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts`，指令見 `android/README.md`「模擬器上過一次卡」）加上 `IAMREAL_DESIGN_SCREENS=<目錄>` 拍：拍的時候把模擬器的螢幕暫時換成 390 dp 寬、一個像素一個 dp，從系統的狀態列下面拍到這一步的最後，至少 844 高。帳號、島民編號、日期是測試的假資料，連結的網址是測試連的本機伺服器。iPhone 和 Android 共用名稱的那幾張，換成哪一個 app 的寫在「版本」。iOS 的 app 也拍得出同名的那幾張和啟動畫面（`ios/Tests/ScreensTests.swift`，`ios/README.md`「截圖」：390 點寬、一個像素一個點的整頁，帳號、島民編號、日期是 `design/copy/` 的例子）；每一張放的是哪一個 app 的，寫在「版本」。
 
 | 截圖 | 畫面 | 版本 |
 |---|---|---|
