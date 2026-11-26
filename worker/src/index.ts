@@ -6,7 +6,7 @@ import { CRL_CATCH_UP_MS, CRL_SOURCES, CRL_TIMEOUT_MS, ISSUERS, now } from "#tar
 import { type ApiParts, api, isApiPath } from "./api.ts";
 import { poseidon2Hash, proofVerifier } from "./in-worker.ts";
 import { checkIssuerTable } from "./issuers.ts";
-import { OLDEST_KEY, isOverdue, oldestDay, oldestFile } from "./connection-log.ts";
+import { CONNECTION_LOG_PREFIX, OLDEST_KEY, isOverdue, oldestDay, oldestFile } from "./connection-log.ts";
 import { COUNT_TOTALS_OLDEST_KEY, DAY_TOTALS_PREFIX, type TotalsProofLog, countTotals } from "./count-totals.ts";
 import { COUNT_EVENTS_OLDEST_KEY, COUNT_EVENTS_PREFIX } from "./counts.ts";
 import { type CrlMirror, crlMirrorInWorker } from "./mirror.ts";
@@ -53,32 +53,27 @@ export default {
         if (timer !== undefined) clearTimeout(timer);
       }
     };
-    try {
-      const oldest = await inTime(oldestDay(env.CONNECTION_LOG));
-      await inTime(env.DATA.put(OLDEST_KEY, oldestFile(time, oldest), { httpMetadata: { cacheControl: "public, max-age=60", contentType: "application/json" } }));
-      // An entry older than any should be: the bucket's lifecycle rule is not deleting. Said here too; whoever
-      // checks from outside reads the same from the file.
-      if (isOverdue(oldest, time)) console.error(JSON.stringify({ event: "connection_log_overdue", oldest }));
-    } catch (e) {
-      console.error(JSON.stringify({ event: "connection_log_oldest_not_published", error: e instanceof Error ? e.name : "unknown" }));
-    }
-    // The same of the counts (counts.ts), which are in the same bucket under their own prefix, and with the
-    // same 31 days: the same file, the same bound. By itself, so that neither's trouble is the other's.
-    try {
-      const oldest = await inTime(oldestDay(env.CONNECTION_LOG, COUNT_EVENTS_PREFIX));
-      await inTime(env.DATA.put(COUNT_EVENTS_OLDEST_KEY, oldestFile(time, oldest), { httpMetadata: { cacheControl: "public, max-age=60", contentType: "application/json" } }));
-      if (isOverdue(oldest, time)) console.error(JSON.stringify({ event: "count_events_overdue", oldest }));
-    } catch (e) {
-      console.error(JSON.stringify({ event: "count_events_oldest_not_published", error: e instanceof Error ? e.name : "unknown" }));
-    }
-    // The counts' totals are kept for good (count-totals.ts): the earliest day's must stay. The date of the
-    // earliest is published the same way, and whoever checks from outside sees it move if a rule deleted it.
-    try {
-      const oldest = await inTime(oldestDay(env.CONNECTION_LOG, DAY_TOTALS_PREFIX));
-      await inTime(env.DATA.put(COUNT_TOTALS_OLDEST_KEY, oldestFile(time, oldest), { httpMetadata: { cacheControl: "public, max-age=60", contentType: "application/json" } }));
-    } catch (e) {
-      console.error(JSON.stringify({ event: "count_totals_oldest_not_published", error: e instanceof Error ? e.name : "unknown" }));
-    }
+    /**
+     * Publishes the date of the oldest object under one prefix of the bucket that is not public, as the file
+     * `key` of the public data. With `overdue`, a date older than any should be (the bucket's lifecycle rule
+     * is not deleting) is said in the live log too; whoever checks from outside reads the same from the file.
+     * By itself: one's trouble is not the others'.
+     */
+    const publishOldest = async (prefix: string, key: string, event: string, overdue: boolean): Promise<void> => {
+      try {
+        const oldest = await inTime(oldestDay(env.CONNECTION_LOG, prefix));
+        await inTime(env.DATA.put(key, oldestFile(time, oldest), { httpMetadata: { cacheControl: "public, max-age=60", contentType: "application/json" } }));
+        if (overdue && isOverdue(oldest, time)) console.error(JSON.stringify({ event: `${event}_overdue`, oldest }));
+      } catch (e) {
+        console.error(JSON.stringify({ event: `${event}_oldest_not_published`, error: e instanceof Error ? e.name : "unknown" }));
+      }
+    };
+    await publishOldest(CONNECTION_LOG_PREFIX, OLDEST_KEY, "connection_log", true);
+    // The counts (counts.ts) are in the same bucket under their own prefix, with the same 31 days: the same file, the same bound.
+    await publishOldest(COUNT_EVENTS_PREFIX, COUNT_EVENTS_OLDEST_KEY, "count_events", true);
+    // The counts' totals are kept for good (count-totals.ts): the earliest day's must stay, and whoever checks from
+    // outside sees its date move if a rule deleted it. No bound.
+    await publishOldest(DAY_TOTALS_PREFIX, COUNT_TOTALS_OLDEST_KEY, "count_totals", false);
 
     // The mirror's trouble does not keep the totals from being made: it is thrown after them.
     let mirrorFailed: { error: unknown } | null = null;

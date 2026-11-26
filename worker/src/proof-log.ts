@@ -393,6 +393,13 @@ function logFailure(event: string, e: unknown): void {
  * worker/; protocol/'s type of that name, which proof log, is `ProofLogKind`
  * here: settings.ts.)
  */
+/** A date the counts' totals give (count-totals.ts), `YYYY-MM-DD`; throws for anything else. */
+function totalsDay(through: string): Day {
+  const day = parseDay(through);
+  if (day === null) throw new Error("totals: not a date");
+  return day;
+}
+
 export class ProofLog extends DurableObject<Env> {
   /**
    * The settings the object started with. This and the other `protected`
@@ -851,8 +858,7 @@ export class ProofLog extends DurableObject<Env> {
    */
   totalsKnownShortIds(shortIds: readonly string[], through: string): string[] {
     this.#checkViews();
-    const day = parseDay(through);
-    if (day === null) throw new Error("totals: not a date");
+    const day = totalsDay(through);
     const scope = scopeOf(this.settings.kind);
     return shortIds.filter(
       (id) => this.ctx.storage.sql.exec("SELECT 1 FROM view_cards INDEXED BY view_cards_short_id WHERE scope_string = ? AND short_id = ? AND first_date <= ? LIMIT 1", scope, id, day).toArray().length > 0,
@@ -862,8 +868,7 @@ export class ProofLog extends DurableObject<Env> {
   /** For the counts' totals: how many short IDs have a card of the open scope whose first valid record is dated `through` or before. */
   totalsShortIdsThrough(through: string): number {
     this.#checkViews();
-    const day = parseDay(through);
-    if (day === null) throw new Error("totals: not a date");
+    const day = totalsDay(through);
     return this.ctx.storage.sql.exec<{ n: number }>("SELECT COUNT(DISTINCT short_id) AS n FROM view_cards WHERE scope_string = ? AND first_date <= ?", scopeOf(this.settings.kind), day).one().n;
   }
 

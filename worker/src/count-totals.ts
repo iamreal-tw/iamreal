@@ -10,10 +10,14 @@
 //   IDs are then dropped: an attempt is the day's whose first count is in
 //   it, and the hour before and the hour after the day are read so that one
 //   across midnight is joined.
+//   An attempt still going 1 hour after midnight has its later counts left
+//   out: the day it began says it began and not that it was done.
 // - A month (UTC) has one file, which each totalled day adds its numbers to,
 //   once: the file says which days it has. When the month's last day is
 //   added, the month is over, and the devices that sent several cards are
-//   counted.
+//   counted. A month whose last day is never totalled (the schedule stopped
+//   for longer than the counts are kept) is never closed: its `devices`
+//   stays null.
 // - The devices that sent several cards need card proof device IDs across
 //   the days of a month, and the connection log they are read from is
 //   deleted after 31 days. So each totalled day writes, under `count-events/`
@@ -39,7 +43,7 @@ export const monthTotalsKey = (month: string): string => `${MONTH_TOTALS_PREFIX}
 export const devicesKey = (day: string): string => `${COUNT_EVENTS_PREFIX}${day}/devices.json`;
 
 /** Where the date of the earliest day's totals is published, in the bucket of the public data. */
-export const COUNT_TOTALS_OLDEST_KEY = "count-totals/oldest.json";
+export const COUNT_TOTALS_OLDEST_KEY = `${COUNT_TOTALS_PREFIX}oldest.json`;
 
 /** How many source domains, and how many values of a monthly cell, a day keeps by themselves; the rest are `other`. */
 export const KEPT_PER_DAY = 100;
@@ -51,8 +55,12 @@ const ATTEMPT_IDLE_MINUTES = 60;
 const DAY_WAIT_MS = 2 * 3_600_000;
 /** A day is totalled only while the files of the hour before it are surely still there (31 days, less a margin). */
 const DAY_WINDOW_DAYS = 30;
-/** At most this many days are totalled in one run: a run that catches up reads no more files than this many days have. */
-const DAYS_PER_RUN = 2;
+/**
+ * At most this many days are totalled in one run: a run reads no more than
+ * one day's files (about 1,500, and its submissions), and a run that
+ * catches up does one day an hour.
+ */
+const DAYS_PER_RUN = 1;
 /** A file of the devices of a day is deleted this many days after the day began (the maintainer, 2026-11-27). */
 const DEVICES_DAYS = 31;
 /** How many short IDs, or seqs, are asked of the proof log at once. */
@@ -98,9 +106,12 @@ function bump(numbers: Numbers | undefined, code: string | undefined, n = 1): vo
   if (numbers !== undefined && code !== undefined && code in numbers) numbers[code]! += n;
 }
 
+/** Byte order of two keys. */
+const byteOrder = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
 /** Keys in byte order: a file written twice from the same counts is the same. */
 function sorted<T>(map: ReadonlyMap<string, T>): Record<string, T> {
-  return Object.fromEntries([...map].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  return Object.fromEntries([...map].sort(([a], [b]) => byteOrder(a, b)));
 }
 
 // ---------------------------------------------------------------------------
@@ -108,7 +119,7 @@ function sorted<T>(map: ReadonlyMap<string, T>): Record<string, T> {
 
 /** The KEPT_PER_DAY keys of most weight, the lighter one before by key; the rest are left out. */
 function heaviest<T>(map: ReadonlyMap<string, T>, weight: (t: T) => number): Set<string> {
-  const keys = [...map.keys()].sort((a, b) => weight(map.get(b)!) - weight(map.get(a)!) || (a < b ? -1 : a > b ? 1 : 0));
+  const keys = [...map.keys()].sort((a, b) => weight(map.get(b)!) - weight(map.get(a)!) || byteOrder(a, b));
   return new Set(keys.slice(0, KEPT_PER_DAY));
 }
 
@@ -167,8 +178,8 @@ class DayCells {
     }
     return cell;
   }
-  /** The KEPT_PER_DAY values of most attempts by themselves, the rest in `other`. */
-  done(): Cells {
+  /** The day's cells: the KEPT_PER_DAY values of most attempts by themselves, the rest in `other`. */
+  finish(): Cells {
     const kept = heaviest(this.values, (c) => c.attempts);
     const other = newCell();
     addCell(other, this.other);
@@ -190,6 +201,7 @@ export interface CardNumbers {
   download_app: number;
   start_card_proof: number;
 }
+const noCardNumbers = (): CardNumbers => ({ opened: 0, download_app: 0, start_card_proof: 0 });
 
 /** A source domain's counts, by kind of page. */
 interface SourcesOfPage {
@@ -366,7 +378,7 @@ class DayReader {
       return;
     }
     let asking = this.#asking.get(shortId);
-    if (asking === undefined) this.#asking.set(shortId, (asking = { opened: 0, download_app: 0, start_card_proof: 0 }));
+    if (asking === undefined) this.#asking.set(shortId, (asking = noCardNumbers()));
     asking[what]++;
     if (this.#asking.size >= ASK_AT_ONCE) await this.#ask();
   }
@@ -419,7 +431,8 @@ class DayReader {
     }
   }
 
-  async done(): Promise<{ totals: DayTotals; forMonth: DayForMonth }> {
+  /** The day's totals, and what it adds to its month, once every minute was read. */
+  async finish(): Promise<{ totals: DayTotals; forMonth: DayForMonth }> {
     for (const a of this.#attempts.values()) this.#close(a);
     this.#attempts.clear();
     await this.#ask();
@@ -466,7 +479,7 @@ class DayReader {
       attempts,
       card_pages: { cards, opened },
     };
-    const cardProofs = Object.fromEntries(CLIENTS.map((c) => [c, Object.fromEntries(DIMENSIONS[c].map((d) => [d, this.#cells[c][d]!.done()]))]));
+    const cardProofs = Object.fromEntries(CLIENTS.map((c) => [c, Object.fromEntries(DIMENSIONS[c].map((d) => [d, this.#cells[c][d]!.finish()]))]));
     return { totals, forMonth: { cards: this.#cards, cardProofs } };
   }
 }
@@ -503,7 +516,7 @@ function addDayToMonth(month: MonthTotals, day: string, add: DayForMonth): void 
   month.days = [...month.days, day].sort();
   const cards = new Map(Object.entries(month.cards));
   for (const [id, n] of add.cards) {
-    const was = cards.get(id) ?? { opened: 0, download_app: 0, start_card_proof: 0 };
+    const was = cards.get(id) ?? noCardNumbers();
     cards.set(id, { opened: was.opened + n.opened, download_app: was.download_app + n.download_app, start_card_proof: was.start_card_proof + n.start_card_proof });
   }
   month.cards = sorted(cards);
@@ -641,7 +654,7 @@ async function devicesOfMonth(bucket: R2Bucket, month: string): Promise<NonNulla
 async function totalDay(bucket: R2Bucket, day: string, proofLog: TotalsProofLog): Promise<void> {
   const reader = new DayReader(day, proofLog);
   await readMinutes(bucket, reader);
-  const { totals, forMonth } = await reader.done();
+  const { totals, forMonth } = await reader.finish();
 
   if ((await bucket.head(devicesKey(day))) === null) await write(bucket, devicesKey(day), { date: day, devices: await devicesOf(bucket, day, proofLog) });
 
@@ -674,11 +687,11 @@ export async function countTotals(bucket: R2Bucket, proofLog: TotalsProofLog, ti
 
   const earliest = addDays(today, -DAY_WINDOW_DAYS + 1);
   const totalled = new Set(await keysUnder(bucket, DAY_TOTALS_PREFIX, dayTotalsKey(addDays(earliest, -1))));
-  const first = (await bucket.list({ prefix: DAY_TOTALS_PREFIX, limit: 1 })).objects[0]?.key;
+  const earliestTotals = (await bucket.list({ prefix: DAY_TOTALS_PREFIX, limit: 1 })).objects[0]?.key;
   let done = 0;
   for (let day = earliest; startOf(day) + DAY_MS + DAY_WAIT_MS <= nowMs && done < DAYS_PER_RUN; day = addDays(day, 1)) {
     if (totalled.has(dayTotalsKey(day))) continue;
-    const begun = (first !== undefined && first < dayTotalsKey(day)) || (await bucket.list({ prefix: `${COUNT_EVENTS_PREFIX}${day}/${day}T`, limit: 1 })).objects.length > 0;
+    const begun = (earliestTotals !== undefined && earliestTotals < dayTotalsKey(day)) || (await bucket.list({ prefix: `${COUNT_EVENTS_PREFIX}${day}/${day}T`, limit: 1 })).objects.length > 0;
     if (!begun) continue;
     await totalDay(bucket, day, proofLog);
     done++;

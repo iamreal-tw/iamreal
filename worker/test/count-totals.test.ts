@@ -168,7 +168,9 @@ describe("a day's totals", () => {
     // Began before midnight, done after it.
     await putMinute(`${D}T23:58Z`, [web(late!, { event: "step", step: "open" })]);
     await putMinute("2026-11-21T00:03Z", [web(late!, { event: "step", step: "done" })]);
+    // One day a run: the day before has a file of counts too, and is totalled first.
     await runAt(AFTER_D);
+    await runAt("2026-11-21T03:00:00Z");
     const { started, done, reached } = (await dayFile()).attempts.web;
     assert.deepEqual([started, done], [3, 2]);
     assert.deepEqual([reached.open, reached.read, reached.pin, reached.done, reached.component], [3, 1, 1, 2, 0]);
