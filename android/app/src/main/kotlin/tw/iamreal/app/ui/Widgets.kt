@@ -60,6 +60,8 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -132,7 +134,7 @@ internal fun Rule(modifier: Modifier = Modifier, colour: Color = Colours.line, t
  * with the red of what you do, the others are framed in ink.
  */
 @Composable
-internal fun Button(label: String, modifier: Modifier = Modifier, primary: Boolean = false, enabled: Boolean = true, height: Dp = Type.buttonHeight, onClick: () -> Unit) {
+internal fun Button(label: String, modifier: Modifier = Modifier, primary: Boolean = false, enabled: Boolean = true, height: Dp = Type.buttonHeight, told: String? = null, onClick: () -> Unit) {
     val press = remember { MutableInteractionSource() }
     val pressed by press.collectIsPressedAsState()
     val shape = RoundedCornerShape(Type.radius)
@@ -147,7 +149,12 @@ internal fun Button(label: String, modifier: Modifier = Modifier, primary: Boole
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
-        BasicText(label, style = TextStyle(color = if (primary) Colours.bg else Colours.ink, fontSize = Type.sizeBody, fontWeight = Type.weightHeading, textAlign = TextAlign.Center))
+        // `told`: what a screen reader reads in place of a label too short to say what the button does.
+        BasicText(
+            label,
+            if (told != null) Modifier.semantics { contentDescription = told } else Modifier,
+            style = TextStyle(color = if (primary) Colours.bg else Colours.ink, fontSize = Type.sizeBody, fontWeight = Type.weightHeading, textAlign = TextAlign.Center),
+        )
     }
 }
 

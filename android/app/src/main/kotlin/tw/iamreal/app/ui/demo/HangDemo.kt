@@ -91,7 +91,7 @@ internal class HangDemoWords(
     val link: String,
     /** The same link as it is copied, with its scheme: what is pasted. */
     val url: String,
-    /** "打開 @alice 的 Threads 個人檔案". */
+    /** "打開 Threads": the button of step 6 that opens the profile. */
     val openProfile: String,
 )
 
@@ -403,7 +403,7 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
                 Line(c.say("done.copied"), label, Modifier.align(Alignment.Center).graphicsLayer { alpha = changed("copied") })
             }
             Target("open", button.border(1.5.dp, ink, RoundedCornerShape(Type.radius)), corner = Type.radius) {
-                BasicText(words.openProfile, Modifier.align(Alignment.Center).padding(horizontal = 8.dp), style = style(13.dp, weight = Type.weightHeading, align = TextAlign.Center), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Line(words.openProfile, style(14.dp, weight = Type.weightHeading, align = TextAlign.Center), Modifier.align(Alignment.Center).padding(horizontal = 8.dp))
             }
         }
         Column(Modifier.padding(top = 34.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {

@@ -531,15 +531,15 @@ private fun Hang(m: Model, outside: Outside) {
             outside.copy(url)
             copied = true
         }
-        if (profile != null) Button(profile.first) { outside.open(profile.second) }
+        if (profile != null) Button(profile.label, told = profile.told) { outside.open(profile.address) }
     }
-    for ((sentence, address) in view.profiles.drop(1)) Button(sentence, wide.padding(top = 12.dp)) { outside.open(address) }
+    for (other in view.profiles.drop(1)) Button(other.label, wide.padding(top = 12.dp), told = other.told) { outside.open(other.address) }
     // The demonstration, with the account and the link of this card proof; then its four steps in words, the one it is showing marked.
     val demo = m.hangDemo
     if (demo != null && profile != null) {
         Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val account = d.accounts.firstOrNull { (platform, _) -> Platforms.of(platform) != null }
-            val words = HangDemoWords(view.hangTitle, account?.let { Platforms.handle(it.first, it.second) } ?: "", link, url, profile.first)
+            val words = HangDemoWords(view.hangTitle, account?.let { Platforms.handle(it.first, it.second) } ?: "", link, url, profile.label)
             HangDemo(demo, c, words, c.say("app_demo.hang")) { label, onClick -> Button(label, Modifier.testTag("hang-demo-button"), height = 46.dp, onClick = onClick) }
         }
     }

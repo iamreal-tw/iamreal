@@ -629,11 +629,13 @@ const backToApp = async (n: number): Promise<void> => {
 const HUNG = say("done.hung", { open_proof: say("done.open_proof") });
 const LOOK = say("hang.look", { open_proof: say("done.open_proof") });
 const WHY = say("hang.why_single");
+/** The button of step 6 that opens the profile: its short words, beside 複製證明連結. A screen reader reads done.open_profile, with the account. */
+const OPEN = say("hang.open_threads", { platform: THREADS });
 /** What only the whole step 6 has. */
-const wholeHang = (account: string): string[] => [
+const wholeHang = (_account: string): string[] => [
   say("hang.title_single", { platform: THREADS }),
   say("hang.copy"),
-  say("done.open_profile", { account, platform: THREADS }),
+  OPEN,
   say("done.step_edit"),
   say("done.step_link"),
   say("done.step_add"),
@@ -726,11 +728,13 @@ async function hangStep(o: { name: string; shortId: string; account: string; dat
     toTop();
     const now = visible();
     const copy = now.find((n) => n.text === say("hang.copy"));
-    const open = now.find((n) => n.text === say("done.open_profile", { account: o.account, platform: THREADS }));
+    const open = now.find((n) => n.text === OPEN);
     const picture = now.find((n) => n.id === "hang-demo");
     if (check(copy !== undefined && open !== undefined && picture !== undefined, "step 6: the two buttons and the top of the demonstration are on the screen together")) {
-      check(Math.abs(copy!.y - open!.y) < 40 && copy!.x < open!.x, `step 6: 複製證明連結 and the button that opens the profile are side by side (${copy!.x},${copy!.y} and ${open!.x},${open!.y})`);
+      check(Math.abs(copy!.y - open!.y) < 40 && copy!.x < open!.x, `step 6: 複製證明連結 and 打開 Threads are side by side (${copy!.x},${copy!.y} and ${open!.x},${open!.y})`);
       check(copy!.bottom < picture!.top && open!.bottom < picture!.top, "step 6: the two buttons are above the demonstration");
+      const told = say("done.open_profile", { account: o.account, platform: THREADS });
+      check(open!.description === told, `step 6: 打開 Threads reads to a screen reader as "${told}" ("${open!.description}")`);
     }
   }
   check(!s.includes(app("settings.open")), "step 6 has no 設定 in its header");
@@ -740,7 +744,7 @@ async function hangStep(o: { name: string; shortId: string; account: string; dat
     press(say("hang.copy"));
     await waitText(say("done.copied"), "the button after the link was copied", 10_000);
     check(true, "step 6: 複製證明連結 turns into 已複製");
-    press(say("done.open_profile", { account: o.account, platform: THREADS }));
+    press(OPEN);
     await sleep(2_000);
     check(onTop().includes(`dat=https://www.threads.com/${o.account}`), `step 6: 打開 ${o.account} 的 Threads 個人檔案 opens https://www.threads.com/${o.account} outside the app`);
     await backToApp(6);
