@@ -42,7 +42,47 @@ export function expectTlv(der: Uint8Array, pos: number, tag: number, limit: numb
   return t;
 }
 
-/** The elements inside a constructed element, in order. */
+/**
+ * The elements inside a constructed element, one at a time. Nothing is kept
+ * of an element once the next is asked for, so an element with any number
+ * of elements inside costs no more memory than one with a few: what the CRL
+ * reader walks with, since a CRL is as long as the mirror stores and its
+ * bytes are anyone's who is on the way (src/crl/crl.ts).
+ */
+export class Elements {
+  readonly #der: Uint8Array;
+  #pos: number;
+  readonly #end: number;
+  #ahead: Tlv | undefined;
+
+  constructor(der: Uint8Array, parent: Tlv) {
+    this.#der = der;
+    this.#pos = parent.contentStart;
+    this.#end = parent.end;
+  }
+
+  /** The next element without taking it; `undefined` at the end. Throws DerError if what is there is not an element. */
+  peek(): Tlv | undefined {
+    if (this.#ahead === undefined && this.#pos < this.#end) this.#ahead = readTlv(this.#der, this.#pos, this.#end);
+    return this.#ahead;
+  }
+
+  /** Takes the next element; `undefined` at the end. */
+  next(): Tlv | undefined {
+    const t = this.peek();
+    if (t !== undefined) {
+      this.#pos = t.end;
+      this.#ahead = undefined;
+    }
+    return t;
+  }
+}
+
+/**
+ * The elements inside a constructed element, in order, all at once: for an
+ * element known to be small (a certificate's). A CRL is walked with
+ * `Elements`.
+ */
 export function children(der: Uint8Array, parent: Tlv): Tlv[] {
   const out: Tlv[] = [];
   for (let p = parent.contentStart; p < parent.end; ) {
@@ -78,7 +118,34 @@ export const TAG = {
   SET: 0x31,
 } as const;
 
-/** An OID's content bytes in dotted form. */
+/** The largest number an OID may hold, as written (spec/revocation-tree.md, "Object identifiers"). */
+const MAX_OID_NUMBER = 2 ** 31 - 1;
+
+/**
+ * Checks an OID's content bytes: not empty, every number in its shortest
+ * form and at most 2^31 - 1, the last one complete (spec/revocation-tree.md,
+ * "Object identifiers"). Two OIDs that pass are the same OID exactly when
+ * their bytes are the same, so a reader that only compares OIDs needs no
+ * other form of them, however long they are.
+ */
+export function checkOid(bytes: Uint8Array): void {
+  if (bytes.length === 0) throw new DerError("empty OID");
+  let x = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    const c = bytes[i]!;
+    if (x === 0 && c === 0x80) throw new DerError("non-minimal OID arc");
+    x = x * 128 + (c & 0x7f);
+    // Checked at every byte, so `x` stays far below what a number holds exactly.
+    if (x > MAX_OID_NUMBER) throw new DerError("an OID number above 2^31 - 1");
+    if (!(c & 0x80)) x = 0;
+    else if (i === bytes.length - 1) throw new DerError("truncated OID");
+  }
+}
+
+/**
+ * An OID's content bytes in dotted form, checked as `checkOid` checks them.
+ * For a short OID: the string is as long as the OID.
+ */
 export function oidString(bytes: Uint8Array): string {
   if (bytes.length === 0) throw new DerError("empty OID");
   const parts: number[] = [];
@@ -87,6 +154,8 @@ export function oidString(bytes: Uint8Array): string {
     const c = bytes[i]!;
     if (x === 0 && c === 0x80) throw new DerError("non-minimal OID arc");
     x = x * 128 + (c & 0x7f);
+    // Checked at every byte, so `x` stays far below what a number holds exactly.
+    if (x > MAX_OID_NUMBER) throw new DerError("an OID number above 2^31 - 1");
     if (!(c & 0x80)) {
       if (parts.length === 0) {
         const first = x < 40 ? 0 : x < 80 ? 1 : 2;
@@ -104,6 +173,9 @@ export function oidString(bytes: Uint8Array): string {
  * the epoch: the spellings of RFC 5280 (spec/revocation-tree.md, "Times").
  */
 export function readTime(der: Uint8Array, t: Tlv): number {
+  // The length first: a UTCTime is 13 bytes and a GeneralizedTime 15, and a very long content must not be spread into arguments
+  // (that throws a RangeError, which is not "this is not DER").
+  if (t.end - t.contentStart !== (t.tag === TAG.UTC_TIME ? 13 : 15)) throw new DerError("not a DER time");
   const s = String.fromCharCode(...content(der, t));
   let full: string;
   if (t.tag === TAG.UTC_TIME && /^[0-9]{12}Z$/.test(s)) full = (Number(s.slice(0, 2)) >= 50 ? "19" : "20") + s;

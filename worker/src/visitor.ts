@@ -9,6 +9,7 @@
 //   /verify           how to verify the proof log (design/copy/verify.md)
 //   /check            how to check an account's proof (design/copy/check.md)
 //   /prepare          what a card proof needs (design/copy/prepare.md)
+//   /privacy          the privacy statement (design/copy/privacy.md)
 //   /hang, /hang/…    hanging a proof on a profile (design/copy/hang.md)
 //   anything else     the page for what is not there
 //                     (design/copy/not-found.md), with 404
@@ -37,6 +38,7 @@ import { homePage } from "./pages/home.ts";
 import { type Document, type Site, layout } from "./pages/layout.ts";
 import { notFoundPage } from "./pages/not-found.ts";
 import { preparePage } from "./pages/prepare.ts";
+import { privacyPage } from "./pages/privacy.ts";
 import { PLATFORM, isThreadsUsername, proofMissing, proofPage } from "./pages/proof.ts";
 import { PAGE_SIZE, proofLogPage, readAfter } from "./pages/proof-log-page.ts";
 import { verifyPage } from "./pages/verify.ts";
@@ -70,7 +72,7 @@ async function ask<T>(run: () => Promise<T>): Promise<T> {
 }
 
 /** Which kind of page a path is, for the log: never the short ID or the account in it. */
-type Kind = "home" | "card" | "account" | "proof_log" | "hang" | "faq" | "verify" | "check" | "prepare" | "none";
+type Kind = "home" | "card" | "account" | "proof_log" | "hang" | "faq" | "verify" | "check" | "prepare" | "privacy" | "none";
 
 function kindOf(pathname: string): Kind {
   if (pathname === "/") return "home";
@@ -81,6 +83,7 @@ function kindOf(pathname: string): Kind {
   if (pathname === "/verify") return "verify";
   if (pathname === "/check") return "check";
   if (pathname === "/prepare") return "prepare";
+  if (pathname === "/privacy") return "privacy";
   if (pathname === "/hang" || pathname.startsWith("/hang/")) return "hang";
   return "none";
 }
@@ -249,6 +252,7 @@ export async function visitor(request: Request, env: Env, parts: VisitorParts): 
     else if (kind === "verify") answer = page(site, 200, verifyPage());
     else if (kind === "check") answer = page(site, 200, checkPage(site));
     else if (kind === "prepare") answer = page(site, 200, preparePage());
+    else if (kind === "privacy") answer = page(site, 200, privacyPage());
     else answer = page(site, 404, notFoundPage());
   } catch (e) {
     const cause = e instanceof Internal ? e.cause : e;

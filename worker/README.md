@@ -483,6 +483,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `/verify` | 如何驗證證明紀錄（`design/copy/verify.md`） | Worker 產生，不問證明紀錄 |
 | `/check` | 如何檢查 Threads 帳號的島民證明（`design/copy/check.md`） | Worker 產生，不問證明紀錄 |
 | `/prepare` | 過卡需要什麼（`design/copy/prepare.md`） | Worker 產生，不問證明紀錄 |
+| `/privacy` | 隱私權說明（`design/copy/privacy.md`）；每一頁的頁尾和兩個 app 的設定頁連到這裡 | Worker 產生，不問證明紀錄 |
 | `/hang` | 掛上去，從首頁點進來時（`design/copy/hang.md`） | Worker 產生，不問證明紀錄 |
 | `/hang/<短編號>` | 掛上去，帶著一張島民證明（`design/copy/hang.md`） | Worker 產生，短編號讀得成才問證明紀錄 |
 | `/copy.js` | 複製按鈕的程式，只有 `/faq`、`/verify` 和 `/hang/<短編號>` 載入；在常見問題上也展開網址指到的那一題 | Static Assets 直接送 `site/copy.js`，不跑 Worker |
@@ -994,11 +995,11 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 
 [`test/crl-testdata.test.ts`](test/crl-testdata.test.ts)，在 `pnpm test` 裡。每一份清冊當成假的內政部的回應，經過本機 workerd 裡的整個 Worker，看儲存桶裡的索引。
 
-1. `crl/testdata/` 的 48 份自製清冊：每一份的可用不可用、原因代碼、樹根、編號、時間、清冊日期，和 `crl/testdata/expected.json`（Go、`web/`、`device-core/` 的測試讀的同一份）相同。包括清冊編號剛好 20 和 21 個位元組、清冊和一筆的延伸欄位剛好 16 和 17 個。
-2. `crl/testdata/times/` 的 58 份：`thisUpdate`、`nextUpdate`、一筆的 `revocationDate` 用各種寫法（沒有秒的 UTCTime、帶時差、有小數、`Z` 後面還有字元、西元 0 年和 9999 年、不存在的日期……）。每一份在索引裡的那一行，和 `crl/testdata/times/expected.json` 寫的逐字相同；Go、`web/`、`device-core/` 的測試讀同一份。時間只收 RFC 5280 的兩種寫法（規格「Times」）：`Z` 結尾、有秒的 UTCTime 和 GeneralizedTime，其他寫法的檔是 `-not_usable_der`。線上的清冊每個時間都是 12 位數字加 `Z` 的 UTCTime。
-3. 把儲存桶裡的清冊檔寫到一個目錄，跑 Go 的 `iamreal-crl index`，印出來的索引和儲存桶裡的 `crl/index.jsonl` 逐位元組相同。除了上面 106 份，還有 3 個不是清冊的檔和 1 份測試金鑰簽的清冊。**這一項要有 `go`，沒有就跳過；前兩項不用。**
+1. `crl/testdata/` 的 61 份自製清冊：每一份的可用不可用、原因代碼、樹根、編號、時間、清冊日期，和 `crl/testdata/expected.json`（Go、`web/`、`device-core/` 的測試讀的同一份）相同。包括清冊編號剛好 20 和 21 個位元組、清冊和一筆的延伸欄位剛好 16 和 17 個。
+2. `crl/testdata/times/` 的 75 份（最後十六份不是時間：九份是延伸欄位的 OID，一個數字剛好是 2^31−1 和 2^31、不是最短寫法、沒寫完、空的，規格「Object identifiers」；七份是元素後面多了東西）：`thisUpdate`、`nextUpdate`、一筆的 `revocationDate` 用各種寫法（沒有秒的 UTCTime、帶時差、有小數、`Z` 後面還有字元、西元 0 年和 9999 年、不存在的日期……）。每一份在索引裡的那一行，和 `crl/testdata/times/expected.json` 寫的逐字相同；Go、`web/`、`device-core/` 的測試讀同一份。時間只收 RFC 5280 的兩種寫法（規格「Times」）：`Z` 結尾、有秒的 UTCTime 和 GeneralizedTime，其他寫法的檔是 `-not_usable_der`。線上的清冊每個時間都是 12 位數字加 `Z` 的 UTCTime。
+3. 把儲存桶裡的清冊檔寫到一個目錄，跑 Go 的 `iamreal-crl index`，印出來的索引和儲存桶裡的 `crl/index.jsonl` 逐位元組相同。除了上面 136 份，還有 3 個不是清冊的檔和 1 份測試金鑰簽的清冊。**這一項要有 `go`，沒有就跳過；前兩項不用。**
 
-2026-11-21 跑的結果（#120 之後）：三項都過，共 110 個檔，索引 110 行，沒有一行不同。
+2026-11-21 跑的結果（#120 之後，那時是 106 份）：三項都過，共 110 個檔，索引 110 行，沒有一行不同。
 
 ### 清冊鏡像量到的
 
@@ -1053,6 +1054,10 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 | 發證者名稱約 33,553,000 個位元組 | 33,553,457 | 23 ms | 66.0 MiB | 32.1 MiB |
 | 一個延伸欄位的 OID 約 3,355 萬節 | 33,553,505 | 90 ms | 66.1 MiB | 32.1 MiB |
 | 16 個延伸欄位，其中 15 個的 OID 各約 224 萬節、只差最後一節 | 33,554,176 | 441 ms | 66.1 MiB | 32.2 MiB |
+| 一個清冊延伸欄位，OID 後面 16,776,000 個 NULL（2026-11-26 加量的四個檔，[#410](https://github.com/iamreal-tw/iamreal/issues/410)；不是 DER） | 33,552,489 | 1 ms | 32.5 MiB | 32.2 MiB |
+| 一筆廢止，日期後面 16,776,000 個 NULL（不是 DER） | 33,552,501 | 0 ms | 32.4 MiB | 32.1 MiB |
+| `tbsCertList` 最後面 16,776,000 個 NULL（不是 DER） | 33,552,471 | 2 ms | 37.1 MiB | 36.8 MiB |
+| 1,118,000 筆廢止，每筆一個延伸欄位 | 33,540,477 | 241 ms | 69.0 MiB | 32.1 MiB |
 | 對照：線上的 G2（2026-11-21 05 時，340,633 筆，可用） | 16,873,034 | 229 ms | 59.3 MiB | 16.2 MiB |
 
 - 小的檔「其中檔案本身」比檔案小：讀檔用到的是程序原本就有、還沒算進高點的記憶體。
@@ -1472,7 +1477,7 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 
 [`test/site-check.ts`](test/site-check.ts) 對部署好的測試網站和它的資料網域只送 `GET`，每檢查一樣印一行（`ok` 或 `FAIL`），有一項不過結束碼是 1。不用卡片、不開瀏覽器、不用權杖，不會對內政部的元件送任何請求，可以隨時重跑。它檢查：
 
-- Worker 產生的每一種頁面（首頁、島民證明的「找不到」、查詢頁、證明紀錄頁、常見問題、如何驗證證明紀錄、如何檢查 Threads 帳號的島民證明、過卡需要什麼、掛上去、「找不到這一頁」）：狀態碼、[頁面送的標頭](#頁面送的標頭)的每一項、不設 cookie、頁面上有測試的證明紀錄的標示和 `noindex`，標示旁的日期是這個 checkout 的 `wrangler.jsonc` 寫的 `TEST_PROOF_LOG_CLEARED_ON`。島民證明用範例的短編號 `7K2Q9FM4XD`，要回 `404`
+- Worker 產生的每一種頁面（首頁、島民證明的「找不到」、查詢頁、證明紀錄頁、常見問題、如何驗證證明紀錄、如何檢查 Threads 帳號的島民證明、過卡需要什麼、隱私權說明、掛上去、「找不到這一頁」）：狀態碼、[頁面送的標頭](#頁面送的標頭)的每一項、不設 cookie、頁面上有測試的證明紀錄的標示和 `noindex`，標示旁的日期是這個 checkout 的 `wrangler.jsonc` 寫的 `TEST_PROOF_LOG_CLEARED_ON`。島民證明用範例的短編號 `7K2Q9FM4XD`，要回 `404`
 - 沒有一頁有不是自己網站的 script：Worker 產生的頁面和 `/proof` 都看。頁面裡每一個 `<script>` 都要有 `src`、而且指到自己網站的路徑；別的網域的、寫在頁面裡的都不過（這個程式庫的頁面沒有寫在頁面裡的 script）
 - 每個請求都照瀏覽器的送法：頁面帶 `Accept: text/html`，其餘帶 `Accept: */*`。Worker 和訪客之間的東西（Cloudflare 的功能）可能只在這種請求上改頁面：2026-11-21 就是這樣，不帶這個標頭的 `curl` 看不到被加進去的 script
 - 樣式表、複製按鈕的程式、圖示、字型、連結預覽圖、過卡的頁面 `/proof` 在不在，和它們帶的 `noindex`、`nosniff`；說明頁的舊網址 `/proof/help.html` 是 `301` 到 `/prepare`

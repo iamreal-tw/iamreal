@@ -227,7 +227,7 @@ function extensions(der: Uint8Array, at: number, limit: number): number {
   return next;
 }
 
-/** An OBJECT IDENTIFIER as Go's cryptobyte reads one: not empty, each part in its shortest form and below 2^31. */
+/** An OBJECT IDENTIFIER as the spec reads one (spec/revocation-tree.md, "Object identifiers"): not empty, each number in its shortest form and below 2^31. */
 function checkOid(der: Uint8Array, start: number, end: number): void {
   if (start === end) notDer();
   for (let p = start; p < end; ) {

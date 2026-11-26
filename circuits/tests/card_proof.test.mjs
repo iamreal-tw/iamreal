@@ -6,12 +6,11 @@
 // match the hashes computed outside the circuit.
 import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
-import { buildCases, CODE, FIRST_BYTES, NOW, SCOPE } from "./cases.mjs";
+import { buildCases, CODE, CODE_VECTOR, FIRST_BYTES, NOW, OTHER_CHALLENGE_CODE_VECTOR, SCOPE } from "./cases.mjs";
 import {
   AUTHORITY_KEY_ID, buildTbs, KEY_USAGE_ENCRYPTION, makeKey, serialOf, signWith, spkiOfModulus, SUBJECT_KEY_ID,
 } from "./lib/cert.mjs";
 import { chunkedHash, loadPoseidon2 } from "./lib/hashes.mjs";
-import { declarationCode } from "./lib/declaration-code.mjs";
 import { chainCase, limbs, noirCardProofInputs } from "./lib/inputs.mjs";
 import { runNoir } from "./lib/run.mjs";
 import { Smt } from "./lib/smt.mjs";
@@ -40,6 +39,8 @@ describe("card proof", () => {
     assert.equal(honest.ok, true, honest.error);
     assert.equal(BigInt(honest.returnValue.scope_packed), packed(SCOPE));
     assert.equal(BigInt(honest.returnValue.declaration_code_packed), packed(CODE));
+    // The packed value of spec/vectors/declaration-code.json for this code.
+    assert.equal(BigInt(honest.returnValue.declaration_code_packed), CODE_VECTOR.packed);
     assert.deepEqual(Object.keys(honest.returnValue).sort(), ["declaration_code_packed", "nullifier", "scope_packed"]);
   });
 
@@ -56,9 +57,12 @@ describe("card proof", () => {
   // with the proof's output: a code for another challenge needs a new
   // signature by the card.
   it("rejects a declaration code computed from another challenge that the card did not sign", async () => {
-    const declaration = { action: "declare", scopeString: "iamreal:threads:0______________", username: "alice" };
-    assert.deepEqual(declarationCode({ ...declaration, challenge: "1234567890" }), CODE); // the draft's example (tests/lib/declaration-code.mjs)
-    const otherCode = declarationCode({ ...declaration, challenge: "1234567891" });
+    // Two standard answers of spec/vectors/declaration-code.json that differ in the challenge alone.
+    const other = OTHER_CHALLENGE_CODE_VECTOR;
+    assert.equal(other.scopeString, CODE_VECTOR.scopeString);
+    assert.deepEqual(other.accounts, CODE_VECTOR.accounts);
+    assert.notEqual(other.challenge, CODE_VECTOR.challenge);
+    const otherCode = other.code;
     assert.notDeepEqual(otherCode, CODE);
 
     // Same certificate, same signatures; only the declaration code changed.
@@ -68,6 +72,8 @@ describe("card proof", () => {
     const resigned = await run(pass({ code: otherCode }));
     assert.equal(resigned.ok, true, resigned.error);
     assert.equal(BigInt(resigned.returnValue.declaration_code_packed), packed(otherCode));
+    // The packed value the standard answers give for this code.
+    assert.equal(BigInt(resigned.returnValue.declaration_code_packed), other.packed);
   });
 
   it("rejects the two messages swapped", async () => {

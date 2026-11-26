@@ -81,6 +81,31 @@ way is not a DER `CertificateList`.
 MOICA's CRLs, as checked on 2026-11-19, spell every time as a `UTCTime` of
 twelve digits and `Z`.
 
+### Object identifiers
+
+The `OBJECT IDENTIFIER` that names an extension, of the CRL or of an entry,
+is read as DER writes one (X.690, 8.19), with one bound more. Its content is
+one or more numbers, each written in base 128, most significant digit first,
+one digit to a byte, every byte but the number's last with its highest bit
+set. It must:
+
+- not be empty;
+- end where a number ends: its last byte has its highest bit clear;
+- write every number in its shortest form: no number begins with the byte
+  `0x80`;
+- hold no number above 2^31 - 1 (2147483647). This counts the numbers as
+  written, so the first, which stands for the identifier's first two arcs
+  (40 times the first plus the second), is bounded like the others.
+
+A file with an extension whose identifier is written in any other way is not
+a DER `CertificateList`. The identifiers elsewhere in the file are not read
+as numbers: the two of the signature algorithm are compared as bytes with
+the one algorithm accepted ("Reason codes", row 2), and those inside the
+issuer's name are not looked at. The bound is not DER's, which has none: it is what
+the readers this specification started from accept, and it is written here
+so that every implementation draws the line at the same number. The
+identifiers of RFC 5280, and every one in MOICA's CRLs, are far below it.
+
 ## Tree
 
 **Key.** The serial number's content bytes (without the DER tag and length)
@@ -268,5 +293,7 @@ prints; a serial number in the tree has none.
 is or is not recognized.
 [`../crl/testdata/`](../crl/testdata): synthetic CRLs, with whether each is
 usable, its reason code and its root (`expected.json`). Its `times/`: CRLs
-whose times are spelled in many ways, each with its line of the archive
+whose times are spelled in many ways, CRLs with an extension whose
+identifier is at and past each line of "Object identifiers", and CRLs with
+an element that holds more than it has, each with its line of the archive
 index (`times/expected.json`).

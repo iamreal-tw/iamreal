@@ -10,6 +10,7 @@ import { bytesOfHex, sha256Hex } from "iamreal-protocol/bytes.ts";
 import { buildWith } from "../src/crl/build.ts";
 import { KEY_WORDS, Unusable, parseCrl, usableCrl, wordsOfKey } from "../src/crl/crl.ts";
 import { type TreeResult, buildPart, checkAbsence } from "../src/crl/tree.ts";
+import { DerError, TAG, children, readTlv, whole } from "../src/der.ts";
 import { importRsaKey } from "../src/issuers.ts";
 import { formatDay, taiwanDayOfSeconds } from "iamreal-protocol/date.ts";
 import { scopedId, signatureLimbs } from "iamreal-protocol/scoped-id.ts";
@@ -165,6 +166,39 @@ describe("crl/testdata against crl/testdata/expected.json", async () => {
       read++;
     }
     assert.ok(read >= 10 && cases.length - read >= 10, `${read} of ${cases.length} read`);
+  });
+  test("a time field of 300,000 characters is not DER, like any time that is not 13 or 15 bytes", async () => {
+    // One element: its tag, its length in the long form, its content.
+    const tlv = (tag: number, body: Uint8Array): Uint8Array => {
+      const length = body.length < 0x80 ? [body.length] : body.length < 0x10000 ? [0x82, body.length >> 8, body.length & 0xff] : [0x83, body.length >> 16, (body.length >> 8) & 0xff, body.length & 0xff];
+      return Uint8Array.from([tag, ...length, ...body]);
+    };
+    const join = (parts: Uint8Array[]): Uint8Array => {
+      const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+      let at = 0;
+      for (const p of parts) {
+        out.set(p, at);
+        at += p.length;
+      }
+      return out;
+    };
+    // A CRL of crl/testdata/ with its thisUpdate written as 300,000 zeros and Z; everything else as it was.
+    const der = repoFile("crl/testdata/one.crl");
+    const [tbs, ...rest] = children(der, readTlv(der, 0));
+    const fields = children(der, tbs!);
+    const at = fields.findIndex((f) => f.tag === TAG.UTC_TIME);
+    assert.ok(at > 0, "thisUpdate is the first time of the TBSCertList");
+    for (const [tag, text] of [
+      [TAG.UTC_TIME, "0".repeat(300_000) + "Z"],
+      [TAG.GENERALIZED_TIME, "0".repeat(300_000) + "Z"],
+      [TAG.UTC_TIME, "26111916000000Z"], // one digit too many: 15 bytes, the length of the other type
+    ] as const) {
+      const time = tlv(tag, new TextEncoder().encode(text));
+      const long = tlv(TAG.SEQUENCE, join([tlv(TAG.SEQUENCE, join(fields.map((f, i) => (i === at ? time : whole(der, f))))), ...rest.map((f) => whole(der, f))]));
+      const what = `${tag === TAG.UTC_TIME ? "UTCTime" : "GeneralizedTime"} of ${text.length} characters`;
+      assert.throws(() => parseCrl(long), DerError, what);
+      await assert.rejects(usableCrl(long, key, bits), (err: unknown) => err instanceof Unusable && err.code === "not_usable_der", what);
+    }
   });
   test("parse reads thisUpdate of files that are not usable", () => {
     const e = expected.find((x) => x.name === "bad-signature")!;
