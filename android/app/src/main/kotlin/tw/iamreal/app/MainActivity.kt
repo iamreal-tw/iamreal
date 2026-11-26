@@ -102,8 +102,10 @@ class MainActivity : ComponentActivity() {
                 try {
                     // In the browser's own task, not on top of the card proof: coming back to the app finds the step as it was.
                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(address)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    true
                 } catch (e: ActivityNotFoundException) {
-                    // No app on the phone opens an address: nothing to do here.
+                    // No app on the phone opens the address: the screen may have another to try.
+                    false
                 }
             },
             copy = { text -> (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("", text)) },

@@ -30,6 +30,12 @@ internal enum class ItemState { NONE, NOW, DONE, HALT }
 /** The buttons of step 2. */
 internal enum class ReadButton { TAP, TAP_AGAIN, NFC, RESTART, NEXT }
 
+/**
+ * Which screen of step 4 (design/copy/card-proof.md, "4. 你的帳號"): as it opens (rows to fill, or what the card
+ * declares and the actions); after accounts.switch (one platform); after accounts.edit_list (several).
+ */
+internal enum class AccountsMode { OPEN, SWITCH, EDIT }
+
 /** The buttons under step 5's list when it stopped. */
 internal enum class ProgressButton { NONE, TAP_AGAIN, RESTART }
 
@@ -119,6 +125,8 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
 
     // Step 4
     var status by mutableStateOf<CardProof.Status?>(null)
+        private set
+    var accountsMode by mutableStateOf(AccountsMode.OPEN)
         private set
     val fields = mutableStateMapOf<String, String>()
     val rowMessages = mutableStateMapOf<String, String>()
@@ -391,11 +399,41 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
     private fun showAccounts(status: CardProof.Status) {
         this.status = status
         single = messages.onePlatform(status)
+        openAccounts(AccountsMode.OPEN)
+        step = Step.ACCOUNTS
+    }
+
+    /** A screen of step 4 as it first shows: each field holds the account its row has now; the one of accounts.switch is empty. */
+    private fun openAccounts(mode: AccountsMode) {
+        val status = status ?: return
+        accountsMode = mode
         fields.clear()
         for (slot in status.slots) if (slot.known) fields[slot.platform] = slot.current ?: ""
+        if (mode == AccountsMode.SWITCH) messages.switchSlot(status)?.let { fields[it.platform] = "" }
         rowMessages.clear()
         listMessage = null
-        step = Step.ACCOUNTS
+    }
+
+    /** "改成別的帳號": the same step, with a field for the other account. */
+    fun switchAccount() = openAccounts(AccountsMode.SWITCH)
+
+    /** "修改帳號清單": the same step, with a row for each platform. */
+    fun editList() = openAccounts(AccountsMode.EDIT)
+
+    /** "不改了": back to what the card declares, nothing typed kept. */
+    fun keep() = openAccounts(AccountsMode.OPEN)
+
+    /** The card's list as it is: each platform the screens offer, its account now or "". */
+    private fun listNow(status: CardProof.Status): Map<String, String> = status.slots.filter { it.known }.associate { it.platform to (it.current ?: "") }
+
+    /** "更新島民證明": the list as it is, to step 5. */
+    fun refresh() {
+        choose(listNow(status ?: return))
+    }
+
+    /** "收回對 @alice 的宣告" (one platform): the list without it, to step 5. */
+    fun withdraw() {
+        choose(listNow(status ?: return).mapValues { "" })
     }
 
     /** What is in a row's field, tidied the way its platform writes an account. */
@@ -420,12 +458,27 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         }
     }
 
+    /** "下一步" of a screen with fields: the list as typed, to step 5. */
     fun toConfirm() {
+        val status = status ?: return
+        if (accountsMode != AccountsMode.SWITCH) return choose(fields.keys.associateWith { typed(it) })
+        val platform = messages.switchSlot(status)?.platform ?: return
+        val username = typed(platform)
+        if (username.isEmpty()) {
+            // Withdrawing is the other action: an empty field goes nowhere.
+            rowMessages[platform] = copy.say("accounts.need_one")
+            return
+        }
+        choose(listNow(status) + (platform to username))
+    }
+
+    /** Step 5 for the list [entries], or under a row or the list why it cannot be signed. Whatever was pressed on step 4, what goes on is one list. */
+    private fun choose(entries: Map<String, String>) {
         val f = flow ?: return
         rowMessages.clear()
         listMessage = null
         try {
-            consequence = f.choose(fields.keys.associateWith { typed(it) })
+            consequence = f.choose(entries)
             step = Step.CONFIRM
         } catch (e: Blocked) {
             when (e.reason) {
@@ -441,6 +494,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
 
     // Step 5 ---------------------------------------------------------------------------
 
+    /** "上一步" of step 5: the screen of step 4 the button was pressed on, its fields as they were typed. */
     fun backToAccounts() {
         consequence = null
         step = Step.ACCOUNTS
@@ -519,6 +573,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         pinMessage = null
         name = ""
         status = null
+        accountsMode = AccountsMode.OPEN
         fields.clear()
         rowMessages.clear()
         listMessage = null
