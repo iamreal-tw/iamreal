@@ -15,7 +15,7 @@ import { block, copyLines, wantLines, wantPreview } from "./copy.ts";
 import { type RateBinding, type TestWorker, startWorker, withRateLimits } from "./harness.ts";
 import { TEST_SCOPE, freshProofLog, newCard, publishG3, sub } from "./records.ts";
 
-const LIMITS: Readonly<Record<RateBinding, number>> = { RATE_CHALLENGES: 3, RATE_CARD_STATE: 4, RATE_RECORDS: 2, RATE_PUBLIC_READS: 5, RATE_PAGES: 6, RATE_STARTS: 1000 };
+const LIMITS: Readonly<Record<RateBinding, number>> = { RATE_CHALLENGES: 3, RATE_CARD_STATE: 4, RATE_RECORDS: 2, RATE_PUBLIC_READS: 5, RATE_PAGES: 6, RATE_STARTS: 50 };
 
 let worker: TestWorker;
 before(async () => {
@@ -196,7 +196,7 @@ describe("a request that is turned away leaves nothing", () => {
 });
 
 describe("the limits are settings", () => {
-  test("the Worker above runs with the numbers it was started with, not wrangler.jsonc's; the repository's file has the five, each once", () => {
+  test("the Worker above runs with the numbers it was started with, not wrangler.jsonc's; the repository's file has the six, each once", () => {
     const config = readFileSync(join(WORKER_DIR, "wrangler.jsonc"), "utf8");
     const limitOf = (text: string, name: string): number => Number(new RegExp(`"name": "${name}", "namespace_id": "[0-9]+", "simple": \\{ "limit": ([0-9]+), "period": 60 \\}`).exec(text)?.[1]);
     const changed = withRateLimits(config, LIMITS);
@@ -209,7 +209,7 @@ describe("the limits are settings", () => {
     assert.throws(() => withRateLimits(config.replace("RATE_PAGES", "RATE_OTHER"), { RATE_PAGES: 1 }));
     // Each counter is its own: no two bindings share a namespace.
     const namespaces = [...config.matchAll(/"namespace_id": "([0-9]+)"/g)].map((m) => m[1]);
-    assert.deepEqual([namespaces.length, new Set(namespaces).size], [5, 5]);
+    assert.deepEqual([namespaces.length, new Set(namespaces).size], [6, 6]);
   });
 
   test("another Worker, started with another number for one class, stops that class at that number", async () => {
