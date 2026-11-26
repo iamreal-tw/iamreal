@@ -4,14 +4,15 @@
 
 ## 現在有什麼
 
-還沒做完：清冊鏡像、過卡的四個介面（發題目、卡片現況、送出一筆、設定）、每一種訪客頁面、過卡的頁面有了，寫滿的紀錄檔會搬到 R2，證明紀錄每天換日公布一次；限流還沒有。Go 的舊後台 `server/` 逐案比對完，2026-11-22 刪掉了（[#74](https://github.com/iamreal-tw/iamreal/issues/74)）；它的每個測試檔的案例在這裡的哪一組測試，列在那張票的 PR 說明。
+還沒做完：清冊鏡像、過卡的四個介面（發題目、卡片現況、送出一筆、設定）、每一種訪客頁面、過卡的頁面有了，寫滿的紀錄檔會搬到 R2，證明紀錄每天換日公布一次；限流有了照 IP 的那一層，全站的總量上限和 Durable Object 撐不住時的代碼還沒有。Go 的舊後台 `server/` 逐案比對完，2026-11-22 刪掉了（[#74](https://github.com/iamreal-tw/iamreal/issues/74)）；它的每個測試檔的案例在這裡的哪一組測試，列在那張票的 PR 說明。
 
 | 有 | 還沒有 |
 |---|---|
 | 清冊鏡像（[排程做什麼](#排程做什麼)）：每小時抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl`，驗章、建樹，寫清冊存檔的索引 `crl/index.jsonl`。`crl/testdata/` 的每一案和 Go 的 `crl/` 比對過 | |
 | 證明紀錄的 Durable Object：題目表、紀錄、卡片狀態表、證明紀錄的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | |
+| 照 IP 的限流（[限流](#限流)）：題目、卡片現況、送出、公開的讀取、頁面五類分開算，IPv4 照單一位址、IPv6 照 /64；超過回 `429` 和 `Retry-After`，訪客頁面回一頁說明 | 全站的總量上限（只數開始過卡的那一次 `config`）、Durable Object 撐不住時的 `busy`、客戶端的處理；WAF 的那一條規則和挑戰頁還沒有在測試網站設過 |
 | 連線紀錄（[連線紀錄](#連線紀錄)）：被算了一次的送出一筆各記一個 R2 物件（請求編號、時間、結果、IP、國家代碼、網路業者的編號、過卡裝置編號；成功的加第幾筆，沒成功的加錯誤代碼和內文），留 31 天，靠儲存桶的生命週期規則；每小時公布最舊一筆的日期，讓外面看得出規則有沒有在刪。其他的請求不記。營運者查詢的指令和收到查詢、刪除請求時的做法（[查連線紀錄](#查連線紀錄)） | 讀那個日期的外部檢查（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）；客戶端還沒有帶過卡裝置編號 |
-| API 的六個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`、`GET /api/v1/rebuild`；存著的規則版本和程式不同時、營運者停止收過卡時（[停止和恢復收過卡](#停止和恢復收過卡)），`challenges` 和 `records` 回 `paused` | 限流 |
+| API 的六個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`、`GET /api/v1/rebuild`；存著的規則版本和程式不同時、營運者停止收過卡時（[停止和恢復收過卡](#停止和恢復收過卡)），`challenges` 和 `records` 回 `paused` | 全站的總量上限、Durable Object 撐不住時的 `busy`（照 IP 的上限有了，見上一列） |
 | 寫滿 1,000 筆的紀錄檔和它的雜湊清單搬到 R2，讀回來核對過才刪掉 Durable Object 裡的那 1,000 筆（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)） | |
 | 每天台灣時間換日公布證明紀錄：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布證明紀錄](#每天換日公布證明紀錄)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的證明紀錄），重驗通過（[部署後要營運者做的](#每天換日公布證明紀錄)）；清空之後，2026-11-22 公布了營運者用真卡片過卡的那一筆，重驗通過（[#71](https://github.com/iamreal-tw/iamreal/issues/71)） | |
 | 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過；送出一筆時用它驗證 | |
@@ -1287,6 +1288,79 @@ pnpm run deploy:test
 - 兩個 `ETag` 的後半相同，`Last-Modified` 也相同（18:55 台灣時間），比清冊的 `this_update`（約 17:11）晚：看起來是檔案放上伺服器的時間。
 - **還沒看過的**：從 Cloudflare 問時是不是一樣回 `304`。部署後的第二輪排程起（第一輪補記標頭），看 `crl_mirror` 是不是 `not_modified`。
 
+## 限流
+
+ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限（[#418](https://github.com/iamreal-tw/iamreal/issues/418)）。第一層（Cloudflare 自動的防護）不用設定；第二層（WAF 的一條限流規則）和緊急時的挑戰頁由營運者在儀表板設，見下面「營運者的說明」。全站的總量上限、Durable Object 撐不住時的 `busy`、客戶端怎麼處理 `429`，在營運的規格（[#413](https://github.com/iamreal-tw/iamreal/issues/413)）的別張票。
+
+程式在 [`src/rate-limit.ts`](src/rate-limit.ts)，用的是 Workers 的 [Rate Limiting binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)。
+
+**五類分開算**，一類一個綁定，上限寫在 [`wrangler.jsonc`](wrangler.jsonc) 的 `ratelimits`：
+
+| 類 | 綁定 | 哪些請求 | 每分鐘（起始值，待維護者定） |
+|---|---|---|---|
+| 題目 | `RATE_CHALLENGES` | `POST /api/v1/challenges` | 30 |
+| 卡片現況 | `RATE_CARD_STATE` | `POST /api/v1/card-state` | 30 |
+| 送出 | `RATE_RECORDS` | `POST /api/v1/records` | 30 |
+| 公開的讀取 | `RATE_PUBLIC_READS` | `GET /api/v1/config`、`fingerprint`、`rebuild`，三個合起來 | 180 |
+| 頁面 | `RATE_PAGES` | 每一個跑到 Worker 的頁面請求（`GET`、`HEAD`），找不到的網址也算 | 300 |
+
+- **一類被擋不影響另一類**：看了很多頁面的網路，過卡的三個介面照樣回答。
+- **不算的**：Static Assets 直接送的檔（過卡的頁面 `/proof`、樣式、字型，不跑 Worker）；方法不對的請求（`405`）；`/api/` 底下不是介面的路徑（`404`）。這幾種都不問 Durable Object。
+- **`config` 放在公開的讀取**：規格說不帶記號的 `config` 只受照 IP 的上限，沒有說哪一類。它不問 Durable Object；和 `fingerprint`、`rebuild` 放在一起是因為都是誰都能隨時問的讀取。一次過卡現在問 `config` 兩次（網頁版）或更多次（app 打開、回到前景、三次感應之前，算 6 次），所以這一類的上限是題目那一類的 6 倍：題目的上限還沒到之前，`config` 不會先被擋。**這一點現在特別要緊**：客戶端還沒有做「過卡途中的 `config` 被限流時不停下」（[#413](https://github.com/iamreal-tw/iamreal/issues/413)），`config` 回 `429` 會讓那一次過卡停在讀卡之前。
+
+**計次的鍵**由一個函式產生（`rateKey`）：類別加上來源的網路。
+
+- IPv4 照單一位址
+- IPv6 照 /64：取前 64 個位元，不管位址怎麼寫（大小寫、補零、`::`、後面接 IPv4 的寫法）都算成同一個鍵
+- 寫成 IPv6 的 IPv4（`::ffff:192.0.2.1`）就是那個 IPv4
+- 來源是 Cloudflare 給的 `CF-Connecting-IP`。沒有這個標頭、或它不是一個位址的請求不算：不拿別人編得出來的字當鍵。在 Cloudflare 上每個請求都有
+- **本機的位址（`127.0.0.0/8`、`::1`）不算**：本機的 workerd 會替沒帶標頭的請求補上它連進來的本機位址，所以 `pnpm dev`、`pnpm local`（用真卡片過卡）和其他測試都不受上限影響。Cloudflare 上不會出現這種來源
+
+**被擋的請求**在讀內文、問 Durable Object 之前就回答：
+
+- 介面：`429`，`{"error":"rate_limited"}`，`Retry-After: 60`
+- 頁面：`429`，一頁 HTML（[`design/copy/too-many-requests.md`](../design/copy/too-many-requests.md)），`Retry-After: 60`，`Cache-Control: no-store`。頁面上不寫位址，也不把訪客要的網址寫回來
+- 不算進題目的 5 次，不寫連線紀錄（[連線紀錄](#連線紀錄)），即時的輸出也不寫任何一行
+- `Retry-After` 固定是 60：綁定只回答過或不過，不說還剩幾次、什麼時候重新算（文件裡 `limit()` 的回應只有 `success`）；計次的期間是 60 秒，所以 60 秒是最長要等的時間
+- 綁定本身出錯、或環境沒有那個綁定時放行（問不到上限，不能把所有人都擋下），即時的輸出寫一行 `{"event":"rate_limit_unavailable","class":"pages","error":"TypeError"}`，裡面沒有請求的內容。新開一個環境（正式的）時要在它底下另外寫 `ratelimits`：綁定不會從別的環境繼承
+
+**這個綁定的性質**（[文件](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)，2026-11-26 讀的）：
+
+- 期間只能是 10 或 60 秒（「Must be either 10 or 60」）
+- 「Rate limits are approximate and apply separately in each Cloudflare location.」每個機房各算各的，是近似值：擋得住單一來源的大量請求，不是精確的配額
+- 文件寫「It is not recommended to use IP addresses or locations (regions or countries)」當鍵，理由是很多人可能共用一個 IP。這裡照 ADR-0026 用 IP：上限訂成共用 IP 的家庭或辦公室也用不完的量，擋的是單一來源的大量請求；之後查詢介面發金鑰時，帶金鑰的請求改用金鑰當鍵
+- `namespace_id` 是帳號裡自己取的正整數，「unique within your Cloudflare account」：兩個綁定用同一個就會算在一起。測試環境用 1001 到 1005；正式環境要另外五個
+
+**改上限**：改 `wrangler.jsonc` 那一行的 `limit`，合併到 `main`，部署後生效。這是「部署會執行到的東西」，營運者看過才合併（`CONTRIBUTING.md`）。照 Cloudflare 的分析裡被擋的量調；被擋的請求後台自己不留紀錄。
+
+**本機的 workerd 模擬得了這個綁定**（[bindings per environment](https://developers.cloudflare.com/workers/development-testing/bindings-per-env/) 的表：Rate Limiting，local simulations ✅），所以測試直接用它，沒有另外做假的計次。[`test/rate-limit.test.ts`](test/rate-limit.test.ts) 啟動一個上限只有幾次的 Worker（測試工具把設定檔的副本裡那幾個數字換掉，`startWorker` 的 `rateLimits`），來源用 `CF-Connecting-IP` 標頭給。
+
+### 營運者的說明
+
+第二層和緊急時的挑戰頁都在 Cloudflare 的儀表板設（ADR-0029：後台以外的設定由營運者做）。**這兩樣還沒有在測試網站設過**；下面是照 ADR-0026 和 Cloudflare 的文件寫的步驟，上線前在測試網站各做一次、實際打一次，把看到的補回這一節。
+
+**一、WAF 的那一條限流規則（平時開著）**
+
+- 在哪裡：zone `iamreal.tw` → Security → WAF → Rate limiting rules → Create rule（[rate limiting rules](https://developers.cloudflare.com/waf/rate-limiting-rules/)）。Free 方案只有 1 條、計數期間 10 秒
+- 比對哪些請求：會跑到 Worker、打得到 Durable Object 的路徑合起來。用運算式寫：主機是 `test.iamreal.tw`（正式上線後加 `iamreal.tw`），而且路徑不是 Static Assets 直接送的那幾種（`/proof` 和它底下的檔、`/pages.css`、`/copy.js`、`/demo.js`、`/fonts/`、`/favicon.ico`、`/og-image.png`）
+- 照什麼算：IP（這一層只能照完整的位址，IPv6 的 /64 由 Worker 那一層管）
+- 上限：訂得比 Worker 裡各類的上限合起來寬很多。這一層擋的是單一來源的洪水；細的分法在 Worker。**起始值待定**：WAF 的規則會不會連快取命中的請求一起算，還沒有在測試網站看過（ADR-0026 的 Consequences），看過再定
+- 動作：Block，期間 10 秒（Free 方案的選項）
+- 打開和關掉：規則列表上的開關。關掉之後只剩 Worker 裡的那一層
+- 被這一條擋下的請求不會跑到 Worker，後台什麼都不知道；看 Security → Events
+
+**二、緊急時的挑戰頁（平時關著）**
+
+- 事先做好一條自訂規則：Security → WAF → Custom rules → Create rule（[custom rules](https://developers.cloudflare.com/waf/custom-rules/)），動作選 Managed Challenge，存成**關著**的
+- 只套在訪客的頁面：首頁 `/`、島民證明 `/p/…`、查詢頁 `/threads/…`、證明紀錄頁 `/proof-log`。**不套**在 `/api/`、`/proof` 和它底下的檔、資料網域（`data.iamreal.tw`、`test-data.iamreal.tw`）：挑戰頁回的是一整頁 HTML，頁面裡的 `fetch()` 會直接失敗，過卡和重驗的工具都會壞（ADR-0026「緊急時的挑戰頁」）
+- 不用整站的 I'm Under Attack 模式
+- 什麼時候打開：限流和（之後的）總量上限都開著，頁面還是撐不住
+- 打開：規則列表上把那一條打開。關掉：同一個開關。事後公告開了多久
+- 開著的期間：訪客要先過一次檢查，通過後 Cloudflare 放一個 `cf_clearance` cookie（預設 30 分鐘）；用程式讀頁面會被擋；平台抓連結預覽的程式過不了，那段時間貼出去的島民證明連結可能沒有預覽
+- 上線前在測試網站演練一次：打開、用瀏覽器和 `curl` 各開一頁島民證明、確認 `/api/v1/config` 和 `/proof` 不受影響、關掉
+
+**三、上線後要看、再補回這裡的**（ADR-0026 列的）：WAF 的限流規則算不算快取命中的請求；Rate Limiting binding 的計數實際上多久歸零、不同機房之間差多少；各類被擋的量（Cloudflare 的分析），起始值要不要調。
+
 ## 連線紀錄
 
 後台替送出一筆（`POST /api/v1/records`）的請求記一筆連線紀錄，其他的請求不記（ADR-0022，[#20](https://github.com/iamreal-tw/iamreal/issues/20)）。這是後台唯一存 IP 的地方。程式在 [`src/connection-log.ts`](src/connection-log.ts)，一個不引用別的模組的檔。
@@ -1296,7 +1370,7 @@ pnpm run deploy:test
 - 看頁面、靜態檔、`config`、拿題目、查卡片現況、`fingerprint`、`rebuild`
 - 第 1 段擋下的送出（`malformed`、`scope`、`platform`）
 - 第 2 段擋下的送出：題目不是後台發的或已經過期（`challenge_unknown`）、這個題目已經寫過一筆（`challenge_used`）、第 6 次起（`challenge_attempts`）、停止收過卡（`paused`）。這幾種誰都能無限次送。第 4 段再看題目時才擋下的 `challenge_used`、`challenge_unknown` 不同：那一次已經算了，照記，有內文
-- 被限流擋下的請求：限流還沒有做（[#32](https://github.com/iamreal-tw/iamreal/issues/32)），做的時候它在這之前就回答，不會走到這裡
+- 被限流擋下的請求（[限流](#限流)）：在讀內文、問 Durable Object 之前就回 `429`，沒有被算，走不到這裡
 
 **一筆記什麼**。一筆一個 JSON 物件，欄位就是下面這些，沒有別的（`test/connection-log.test.ts` 逐一比對物件的鍵）：
 
@@ -1500,7 +1574,7 @@ node --experimental-strip-types scripts/connection-log.ts --from 2026-11-20 --to
 - **最後一次公布之後的紀錄不在 R2 上，補不回來**（ADR-0033 的 Consequences）
 - 重建完，物件要等清冊鏡像下一輪（每小時）告訴它最新的清冊，在那之前 `records` 回 `crl_stale`：最新的清冊不是從證明紀錄算得出來的
 
-**看進度和結果。** `GET /api/v1/rebuild`（`docs/api/card-proof.md`）：名稱、狀態（`running`、`swapped`、`refused`）、做到第幾筆、沒換的原因。它是公開的，沒有營運者專用的入口；每一種裝置都不讀它。它每次都問物件（讀 `rebuild_state` 的那一列），回應和 API 的其他回應一樣帶 `Cache-Control: no-store`，沒有快取：和 `GET /api/v1/fingerprint` 是同一種請求，物件做的事是讀一列。ADR-0026 的 60 秒快取是訪客頁面的；會打到物件的 API 路徑靠的是那份 ADR 的限流（WAF 那一條規則把這些路徑合起來算，Worker 裡的 Rate Limiting binding），限流現在還沒做（上面「現在有什麼」），做的時候這個路徑和 `fingerprint` 算在一起。沒有替它另外加快取：營運者要看的是當下做到第幾筆，而且重建進行中的回應每一步都在變。即時輸出（`wrangler tail` 或儀表板的即時紀錄，沒有開保存）每一步一行：
+**看進度和結果。** `GET /api/v1/rebuild`（`docs/api/card-proof.md`）：名稱、狀態（`running`、`swapped`、`refused`）、做到第幾筆、沒換的原因。它是公開的，沒有營運者專用的入口；每一種裝置都不讀它。它每次都問物件（讀 `rebuild_state` 的那一列），回應和 API 的其他回應一樣帶 `Cache-Control: no-store`，沒有快取：和 `GET /api/v1/fingerprint` 是同一種請求，物件做的事是讀一列。ADR-0026 的 60 秒快取是訪客頁面的；會打到物件的 API 路徑靠的是那份 ADR 的限流（WAF 那一條規則把這些路徑合起來算，Worker 裡的 Rate Limiting binding），照 IP 的那一層有了（[限流](#限流)）：這個路徑和 `fingerprint`、`config` 算在同一類。沒有替它另外加快取：營運者要看的是當下做到第幾筆，而且重建進行中的回應每一步都在變。即時輸出（`wrangler tail` 或儀表板的即時紀錄，沒有開保存）每一步一行：
 
 | 事件 | 什麼時候 |
 |---|---|

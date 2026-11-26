@@ -3,7 +3,7 @@
 // A test sends it HTTP requests, runs its schedule, reads the files it wrote
 // to the simulated R2 bucket, and sets its clock. Nothing here needs a
 // Cloudflare account, and nothing sends a request to MOICA.
-import { copyFileSync, cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { type Server, createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -470,6 +470,27 @@ export interface StartOptions {
    * before web/ is built for it.
    */
   readonly proofFiles?: string;
+  /**
+   * Other limits than wrangler.jsonc has for the per-IP classes
+   * (ADR-0026), by binding: the copy of the configuration this Worker runs
+   * from gets these numbers in place of its own. The file in the
+   * repository is not changed.
+   */
+  readonly rateLimits?: Readonly<Partial<Record<RateBinding, number>>>;
+}
+
+/** The bindings of the per-IP limits (wrangler.jsonc, "ratelimits"). */
+export type RateBinding = "RATE_CHALLENGES" | "RATE_CARD_STATE" | "RATE_RECORDS" | "RATE_PUBLIC_READS" | "RATE_PAGES";
+
+/** The text of wrangler.jsonc with the limit of each binding named in `limits` replaced. Throws if a binding is not there once. */
+export function withRateLimits(config: string, limits: Readonly<Partial<Record<RateBinding, number>>>): string {
+  let out = config;
+  for (const [name, limit] of Object.entries(limits)) {
+    const line = new RegExp(`("name": "${name}", "namespace_id": "[0-9]+", "simple": \\{ "limit": )[0-9]+(, "period": (?:10|60) \\})`, "g");
+    if ([...out.matchAll(line)].length !== 1) throw new Error(`wrangler.jsonc has no one line for the limit of ${name}`);
+    out = out.replace(line, `$1${limit}$2`);
+  }
+  return out;
 }
 
 /** Builds the test build and starts it in the local workerd, with a fake MOICA that has no CRL yet. */
@@ -477,12 +498,13 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
   const moica = await FakeMoica.start();
   mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
   const dir = mkdtempSync(join(WORKER_DIR, "test-output", "worker-"));
-  // The Worker runs from a copy of wrangler.jsonc, byte for byte, in a directory of this test's own: the
+  // The Worker runs from a copy of wrangler.jsonc (byte for byte, unless the test asked for other per-IP limits) in a directory of this test's own: the
   // configuration is the deployed one, and "assets.directory" (./site) is then this test's, so that tests
   // running at once do not share the card proof page's files. The files of site/ in the repository (the style
   // sheet) are copied as they are.
   const run = mkdtempSync(join(WORKER_DIR, "test-output", "run-"));
-  copyFileSync(join(WORKER_DIR, "wrangler.jsonc"), join(run, "wrangler.jsonc"));
+  if (options.rateLimits === undefined) copyFileSync(join(WORKER_DIR, "wrangler.jsonc"), join(run, "wrangler.jsonc"));
+  else writeFileSync(join(run, "wrangler.jsonc"), withRateLimits(readFileSync(join(WORKER_DIR, "wrangler.jsonc"), "utf8"), options.rateLimits));
   cpSync(join(WORKER_DIR, "site"), join(run, "site"), { recursive: true, filter: (source) => source !== join(WORKER_DIR, "site", "proof") });
   if (options.proofFiles !== undefined) cpSync(options.proofFiles, join(run, "site", "proof"), { recursive: true });
   // site/_headers in the repository is a test log's site's; a production log's has its own.

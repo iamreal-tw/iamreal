@@ -65,6 +65,19 @@
         { "binding": "DATA", "bucket_name": "iamreal-test-data" },
         { "binding": "CONNECTION_LOG", "bucket_name": "iamreal-test-logs" }
       ],
+      // The per-IP limits (ADR-0026; src/rate-limit.ts): one binding to a class of request, each
+      // counted by itself, IPv4 by address and IPv6 by /64. "limit" is how many requests one
+      // network may send in "period" seconds (10 or 60; the code tells a refused request to come
+      // back in 60). The numbers are the operator's to tune (README.md, "限流"). A namespace_id is
+      // an integer of the account's own choosing, one to a counter: never the same for two bindings
+      // or two environments, or they would count together.
+      "ratelimits": [
+        { "name": "RATE_CHALLENGES", "namespace_id": "1001", "simple": { "limit": 30, "period": 60 } },
+        { "name": "RATE_CARD_STATE", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } },
+        { "name": "RATE_RECORDS", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } },
+        { "name": "RATE_PUBLIC_READS", "namespace_id": "1004", "simple": { "limit": 180, "period": 60 } },
+        { "name": "RATE_PAGES", "namespace_id": "1005", "simple": { "limit": 300, "period": 60 } }
+      ],
       "vars": {
         // The name of the proof log's Durable Object: clearing the test log is giving it a new name.
         // The name of a test log's object always starts with "test-"; keep that when changing it.

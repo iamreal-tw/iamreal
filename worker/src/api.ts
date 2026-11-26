@@ -23,6 +23,7 @@ import { lookupScope } from "iamreal-protocol/scope.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
 import { type CountedSubmission, entryOf, writeEntry } from "./connection-log.ts";
 import { readStrings } from "./json.ts";
+import { RETRY_AFTER_SECONDS, type RateClass, withinLimit } from "./rate-limit.ts";
 import { recordVerifies } from "./record-proof.ts";
 import { type AcceptAnswer, CRL_MAX_AGE_DAYS, OTHER_SCHEMA, type RecordRefusal, type SubmissionRefusal, proofLogOf } from "./proof-log.ts";
 import { proofLogSettingsOf } from "./settings.ts";
@@ -38,6 +39,8 @@ interface Reply {
   readonly status: number;
   readonly body: unknown;
   readonly allow?: string;
+  /** `Retry-After`, in seconds: with a `429`. */
+  readonly retryAfter?: number;
 }
 
 /**
@@ -294,16 +297,24 @@ export interface ApiParts {
 
 interface Endpoint {
   readonly method: string;
+  /**
+   * The class its requests are counted in, by where they come from
+   * (rate-limit.ts; ADR-0026). The three of a card proof each have their
+   * own. `config`, `fingerprint` and `rebuild` are public reads, counted
+   * together: anyone may ask them at any time, and two of them ask the
+   * proof log's object every time.
+   */
+  readonly rate: RateClass;
   readonly handle: (request: Request, env: Env, parts: ApiParts, notes: Notes) => Promise<Reply>;
 }
 
 const ENDPOINTS: ReadonlyMap<string, Endpoint> = new Map([
-  ["/api/v1/challenges", { method: "POST", handle: postChallenge }],
-  ["/api/v1/card-state", { method: "POST", handle: postCardState }],
-  ["/api/v1/records", { method: "POST", handle: postRecord }],
-  ["/api/v1/config", { method: "GET", handle: getConfig }],
-  ["/api/v1/fingerprint", { method: "GET", handle: getFingerprint }],
-  ["/api/v1/rebuild", { method: "GET", handle: getRebuild }],
+  ["/api/v1/challenges", { method: "POST", rate: "challenges", handle: postChallenge }],
+  ["/api/v1/card-state", { method: "POST", rate: "card_state", handle: postCardState }],
+  ["/api/v1/records", { method: "POST", rate: "records", handle: postRecord }],
+  ["/api/v1/config", { method: "GET", rate: "public_reads", handle: getConfig }],
+  ["/api/v1/fingerprint", { method: "GET", rate: "public_reads", handle: getFingerprint }],
+  ["/api/v1/rebuild", { method: "GET", rate: "public_reads", handle: getRebuild }],
 ]);
 
 /** Whether the API answers for this path: everything under /api/. */
@@ -336,6 +347,9 @@ export async function api(request: Request, env: Env, parts: ApiParts, later: (w
   let reply: Reply;
   if (endpoint === undefined) reply = fail(404, "not_found");
   else if (request.method !== endpoint.method) reply = { ...fail(405, "method_not_allowed"), allow: endpoint.method };
+  // Before anything of the request is read and before the proof log's object is asked: a request over its
+  // class's limit costs nothing more, counts towards no challenge, and leaves nothing in the connection log.
+  else if (!(await withinLimit(env, endpoint.rate, request))) reply = { ...fail(429, "rate_limited"), retryAfter: RETRY_AFTER_SECONDS };
   else {
     try {
       reply = await endpoint.handle(request, env, parts, notes);
@@ -360,5 +374,6 @@ export async function api(request: Request, env: Env, parts: ApiParts, later: (w
     "X-Request-Id": id,
   });
   if (reply.allow !== undefined) headers.set("Allow", reply.allow);
+  if (reply.retryAfter !== undefined) headers.set("Retry-After", String(reply.retryAfter));
   return new Response(JSON.stringify(reply.body), { status: reply.status, headers });
 }
