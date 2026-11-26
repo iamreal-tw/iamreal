@@ -124,6 +124,28 @@ class GpkiCardTest {
     }
 
     @Test
+    fun `the card took the PIN - said from its answer on, also when it leaves afterwards`() {
+        // What the card proof asks before it keeps a PIN across a card that left as it was sent (issue #133).
+        var accepted: Boolean? = null
+        fun signWith(card: SimulatedCard): Throwable? = runCatching {
+            GpkiCard(card::transceive, TapCancel()).use {
+                it.readCertificates()
+                assertFalse("before any PIN", it.pinAccepted)
+                try { it.sign(message, pin) } finally { accepted = it.pinAccepted }
+            }
+        }.exceptionOrNull()
+
+        assertEquals(null, signWith(SimulatedCard()))
+        assertEquals(true, accepted)
+        signWith(SimulatedCard(leaveAt = 0xEA))
+        assertEquals("left after the PIN", true, accepted)
+        signWith(SimulatedCard(leaveAt = 0x20))
+        assertEquals("left as the PIN was sent", false, accepted)
+        signWith(SimulatedCard(pinAnswer = 0x63C2))
+        assertEquals("refused", false, accepted)
+    }
+
+    @Test
     fun `a tap given up ends at the next command`() {
         val cancel = TapCancel()
         val card = SimulatedCard()

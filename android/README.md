@@ -6,9 +6,17 @@
 
 過卡的提醒和設定頁（[#297](https://github.com/iamreal-tw/iamreal/issues/297)，「過卡提醒」）：第 7 步問要不要提醒，手機自己排本機通知；第 1 步和第 8 步的頁首有「設定」。字來自 `design/copy/app.json` 和 `card-proof.json`。
 
+過卡被打斷時（[#171](https://github.com/iamreal-tw/iamreal/issues/171)），句子都在 `design/copy/card-proof.md` 各步的「app」，哪一個原因說哪一句在 `ui/Messages.kt`：
+
+- **卡片離開、NFC 被關掉、換了卡**：只重做那一次感應（「再感應一次」）。第 3 步這時 PIN 欄位不能改，用的是記憶體裡的 PIN
+- **送 PIN 時掉線**：卡片從來沒有接受過這個 PIN 時，app 不重送，清掉 PIN，請持卡人再輸入。卡片回了 app 不認得的答覆時也一樣。卡片接受過（之後才掉線）的，PIN 是對的，留著重送：`card/Card.kt` 的 `pinAccepted`，`flow/CardProof.kt` 的 `sign`
+- **PIN 不正確**：清掉 PIN，第 3 步重新輸入；發生在第三次感應時回到開頭
+- **PIN 在手機上滿 5 分鐘**：從 PIN 的第一個字進到欄位算起（還在欄位裡的也算），清掉 PIN 和做到一半的過卡，回到第 1 步，最上面寫原因。app 切到背景再回來時、按「確認卡片」和最後一次感應之前各看一次時間；已經在等卡片的那一次感應會做完。手機的時鐘往回調不會延長
+- **最低版本**（`config` 的 `min_app`，ADR-0035、`spec/min-app.md`）：怎麼判斷在核心（`idc_min_app`），拿 app 自己的 `versionCode` 和手機的時鐘去問。打開 app、每次回到第 1 步都看：比最低版本舊、還沒到起算日，第 1 步最上面提醒，照常過卡；起算日當天起整個第 1 步換掉，只剩開 Google Play 的按鈕。三次感應之前各再看一次（`flow/CardProof.kt` 的 `checkMinApp`）：過卡做到一半到了起算日，也在等卡片之前停下。這一欄讀不懂時不往下，和平台表讀不懂相同
+- **沒有 NFC 的手機**：整個第 1 步換掉。NFC 只是關著的，在按了「感應卡片」之後說，給開系統設定的按鈕
+
 還沒有的：
 
-- **中斷和錯誤**（[#171](https://github.com/iamreal-tw/iamreal/issues/171)）：掉線重來、送 PIN 時掉線、換了卡、PIN 不正確、5 分鐘的各種回來的路、最低版本（`min_app`）和沒有 NFC 的畫面。現在遇到這些會停下來並寫出 `design/copy/` 已經有的那一句；app 的句子還沒寫的情況只寫「停在這裡」。`config` 的 `min_app` 現在還沒有讀
 - 正式的圖示（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。現在是暫時的：一整片網站的青色（`#226977`，`web/src/ui/style.css` 的 `--teal`），沒有字、沒有圖案，和 iOS 的暫時圖示相同（`app/src/main/res/mipmap-anydpi/ic_launcher.xml`）
 - 第 2 步示意圖的位置還沒有在真手機上實測過（[#153](https://github.com/iamreal-tw/iamreal/issues/153)）：卡片貼在背面的中間，是設計交接時定的
 
@@ -93,7 +101,7 @@
 
 | 東西 | 在哪裡 | 什麼時候清掉 |
 |---|---|---|
-| PIN | 輸入時在 `ui/Model.kt` 的 `PinField`（一個字元陣列，不是字串；輸入欄位裡只有圓點）。第二次感應成功後，`flow/CardProof.kt` 留一份位元組，等第三次感應。感應時 `card/GpkiCard.kt` 把它補成卡片要的 10 個位元組，在安全通道裡加密後送給卡片；補好的那一份送出後就蓋成零 | 第三次感應送出後、取消、停下來、卡片回 PIN 不正確、安全通道建立不起來、第二次感應後滿 5 分鐘；都是蓋成零。5 分鐘的計時在 app 的行程裡：行程在背景被系統凍結時不會跑，回到 app 的那一刻補查 |
+| PIN | 輸入時在 `ui/Model.kt` 的 `PinField`（一個字元陣列，不是字串；輸入欄位裡只有圓點）。第二次感應成功後，`flow/CardProof.kt` 留一份位元組，等第三次感應。感應時 `card/GpkiCard.kt` 把它補成卡片要的 10 個位元組，在安全通道裡加密後送給卡片；補好的那一份送出後就蓋成零 | 第三次感應送出後、取消、停下來、卡片回 PIN 不正確、安全通道建立不起來、PIN 的第一個字輸入後滿 5 分鐘；都是蓋成零。5 分鐘的計時在 app 的行程裡：行程在背景被系統凍結時不會跑，回到 app 的那一刻補查 |
 | 憑證 | 第一次感應讀到的幾張交給核心；選中的那一張 `CardProof` 留一份，第二、第三次感應拿來比對是不是同一張卡，**比對相同才把 PIN 交給卡片** | 算完證明、取消、停下來 |
 | 卡片上的姓名 | 核心回給畫面，只顯示在輸入 PIN 的畫面 | 離開過卡時 |
 | 兩個簽章 | `CardProof`，到算完證明為止 | 算完證明、取消、停下來 |
@@ -267,6 +275,9 @@ cd device-core && rustup target add aarch64-linux-android x86_64-linux-android &
 - 畫面用 `uiautomator dump` 讀，預期的每一句從 `design/copy/card-proof.json` 讀，逐字比對
 - 第二、第三次感應各貼一次「該放簽章憑證的位置是另一張憑證」的卡：畫面說不是同一張卡，假卡片沒有被交到 PIN
 - 第二、第三次感應各貼一次「安全通道建立不起來」的卡（[#365](https://github.com/iamreal-tw/iamreal/issues/365)）：假卡片沒有被交到 PIN。第 3 步 PIN 欄位清空，按鈕是「上一步」「確認卡片」，沒有重新輸入就按不會出現面板；第 5 步只有「回到開頭」
+- 過卡被打斷的每一種（[#171](https://github.com/iamreal-tw/iamreal/issues/171)），都在第一筆紀錄之前：假卡片在讀取途中、送 PIN 的那一刻、接受 PIN 之後離開；錯的 PIN；第 2 步之後 NFC 被關掉；切到背景再回來；把模擬器的時鐘調快 6 分鐘再回到 app（回到第 1 步，最上面寫原因，PIN 要重新輸入）；`am force-stop` 之後重開（從第 1 步來）。每一種都數假卡片被交到幾次 PIN：送 PIN 時掉線之後 app 不會自己再送
+- 最低版本：測試改寫後台 `config` 的 `min_app` 再交給 app（測試的 build 是 1）。起算日是明天時第 1 步最上面有提醒和開 Google Play 的按鈕，照常能往下；畫面停在第 1 步、把模擬器的時鐘調到起算日，第 2 步在等卡片之前就換成「這一版不能過卡了」；起算日是今天時一打開就是那個畫面，沒有「下一步」。`min_app` 讀不懂、`config` 沒有回應：第 2 步在等卡片之前停下，寫網頁版的那一句
+- 沒有 NFC 的手機：假卡片在感應時說沒有 NFC，和 app 一打開就問到沒有，兩條路都換成「這支手機不能感應卡片」
 - 隔天的兩次：把後台的時鐘和模擬器的時鐘都調到明天（測試結束時把模擬器的調回來）
 - 這裡的測試全過之後，`app-backend.ts` 讓 Worker 在下一個午夜公布證明紀錄，抄下資料桶，用 Go 的 `iamreal-verify`（帶 `iamrealtest` 標籤建置，才收測試的發證金鑰）和原生的 `bb` 重驗：四筆紀錄都有效，每一筆的種類是新宣告、再次過卡、更換、收回
 - 截圖留在 `test-output/screens/`。加上 `IAMREAL_DESIGN_SCREENS=<目錄>` 時，另外在那個目錄拍 `design/screens/` 的那幾張（`app-splash-phone.png`、`card-proof-app-*`），大小照 `design/screens/README.md`：拍的時候把模擬器的螢幕暫時換成 390 dp 寬、一個像素一個 dp，拍完換回來。裁切用 macOS 的 `sips`，所以這個選項只在 Mac 上用

@@ -26,6 +26,10 @@ internal class GpkiCard(private val transceive: (ByteArray) -> ByteArray, privat
     /** [readCertificates] went to its end on this connection: the channel works. */
     private var ready = false
 
+    /** The card answered the PIN of [sign] with 9000. */
+    override var pinAccepted = false
+        private set
+
     override fun readCertificates(): List<ByteArray> {
         ready = false
         connect()
@@ -61,7 +65,7 @@ internal class GpkiCard(private val transceive: (ByteArray) -> ByteArray, privat
         // Sent once as it is, whatever the card answers: no 6CXX, no GET RESPONSE. A card that left on the way may have taken it.
         val verify = send(apdu(wrapped.header[0].toInt() and 0xFF, 0x20, 0x00, 0x01, wrapped.body, 0), CardException.Reason.PIN_MAYBE_SENT)
         when {
-            verify.sw == 0x9000 -> {}
+            verify.sw == 0x9000 -> pinAccepted = true
             verify.sw == 0x6983 || verify.sw == 0x63C0 -> fail(CardException.Reason.LOCKED)
             verify.sw and 0xFFF0 == 0x63C0 -> fail(CardException.Reason.PIN_INCORRECT)
             else -> fail(CardException.Reason.OTHER)

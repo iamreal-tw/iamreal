@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import tw.iamreal.app.flow.CardProof
+import tw.iamreal.app.flow.MinApp
 import tw.iamreal.app.flow.Platforms
 import tw.iamreal.app.ui.demo.HangDemo
 import tw.iamreal.app.ui.demo.HangDemoWords
@@ -88,13 +89,26 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Type.gutter).padding(top = 28.dp, bottom = 48.dp).testTag("step-${m.step.name.lowercase()}"),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    // Opened from the reminder's notification: above everything of step 1 (design/screens/app-reminder-4-from-notification-phone.png).
-                    // The minimum version's sentence, when the app has it (issue #171), goes above it.
-                    if (m.step == Step.BEFORE) FromReminder(r)
-                    StepBar(m.copy, m.step.number)
-                    Spacer(Modifier.height(6.dp))
+                    // What stands in the place of step 1 has no step bar and nothing above it (design/screens/app-update-required-phone.png, app-no-nfc-phone.png).
+                    val gate = if (m.step == Step.BEFORE) m.gate else null
+                    if (m.step == Step.BEFORE && gate == null) {
+                        // Why the card proof came back to step 1: at the very top (design/copy/card-proof.md, "1. 開始之前", app).
+                        m.notice?.let { Problem(it) }
+                        // The minimum version's sentence is above everything of step 1, the reminder's too (design/screens/app-update-soon-phone.png).
+                        (m.minApp as? MinApp.Until)?.let { UpdateSoon(m, it.from, outside) }
+                        // Opened from the reminder's notification (design/screens/app-reminder-4-from-notification-phone.png).
+                        FromReminder(r)
+                    }
+                    if (gate == null) {
+                        StepBar(m.copy, m.step.number)
+                        Spacer(Modifier.height(6.dp))
+                    }
                     when (m.step) {
-                        Step.BEFORE -> Before(m, outside)
+                        Step.BEFORE -> when (gate) {
+                            Gate.NO_NFC -> NoNfc(m)
+                            Gate.TOO_OLD -> TooOld(m, (m.minApp as MinApp.TooOld).from, outside)
+                            null -> Before(m, outside)
+                        }
                         Step.READ -> Read(m, outside)
                         Step.PIN -> Pin(m)
                         Step.ACCOUNTS -> Accounts(m, outside)
@@ -124,10 +138,51 @@ internal const val FIND_OFFICE_SITE = "https://www.google.com/maps/search/?api=1
 /** before.how_to_get_moica: the certificate authority's site (design/copy/card-proof.md, "1. 開始之前"). */
 private const val MOICA = "https://moica.nat.gov.tw/"
 
+/** The store the app is updated from, as the copy's `{store}` (design/copy/card-proof.md: on Android, Google Play), and the app's page there. */
+private const val STORE = "Google Play"
+internal const val STORE_PAGE = "https://play.google.com/store/apps/details?id=tw.iamreal.app"
+
+/** The room above a screen that stands in the place of step 1, where the step bar is not (design/screens/app-update-required-phone.png). */
+private val GATE_TOP = 56.dp
+
+/** Above step 1 while this version still does card proofs and will not from [from] on (design/copy/card-proof.md, "1. 開始之前", app). */
+@Composable
+private fun UpdateSoon(m: Model, from: String, outside: Outside) {
+    val c = m.copy
+    Column(
+        Modifier.fillMaxWidth().background(Colours.soft, RoundedCornerShape(Type.radiusPanel)).padding(16.dp).testTag("update-soon"),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        BasicText(c.say("app_before.update_soon", "min_app_from" to from, "store" to STORE), style = TextStyle(color = Colours.ink, fontSize = 15.sp, lineHeight = 1.75.em))
+        Button(c.say("app_before.update", "store" to STORE), Modifier.fillMaxWidth(), height = 44.dp) { outside.open(STORE_PAGE) }
+    }
+}
+
+/** In place of step 1 from the date the minimum version starts on: nothing of a card proof can be reached. */
+@Composable
+private fun TooOld(m: Model, from: String, outside: Outside) {
+    val c = m.copy
+    Spacer(Modifier.height(GATE_TOP))
+    Title(c.say("app_before.too_old_title"))
+    Body(c.say("app_before.too_old", "min_app_from" to from))
+    Body(c.say("app_before.nothing_sent"))
+    Actions { Button(c.say("app_before.update", "store" to STORE), Modifier.fillMaxWidth(), primary = true) { outside.open(STORE_PAGE) } }
+    Small(c.say("app_before.or_reader", "domain" to m.domain))
+}
+
+/** In place of step 1 on a phone without NFC: nothing of a card proof can be reached. */
+@Composable
+private fun NoNfc(m: Model) {
+    val c = m.copy
+    Spacer(Modifier.height(GATE_TOP))
+    Title(c.say("app_before.no_nfc_title"))
+    Body(c.say("app_before.no_nfc"))
+    Body(c.say("app_before.no_nfc_reader", "domain" to m.domain))
+}
+
 @Composable
 private fun Before(m: Model, outside: Outside) {
     val c = m.copy
-    m.notice?.let { Problem(it) }
     Title(c.say("before.title"))
     Body(c.say("before.prepare_card"), strong = true)
     Body(c.say("before.citizens_only"))
@@ -197,7 +252,7 @@ private fun Pin(m: Model) {
     }
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Subhead(c.say("pin.label"))
-        PinInput(m.pin, enabled = !busy && !m.pinEnded, tag = "pin", modifier = Modifier.fillMaxWidth())
+        PinInput(m.pin, enabled = !busy && !m.pinEnded && !m.pinKept, tag = "pin", modifier = Modifier.fillMaxWidth())
     }
     m.pinNote?.let { Problem(it) }
     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -209,6 +264,9 @@ private fun Pin(m: Model) {
         val wide = Modifier.fillMaxWidth()
         if (m.pinEnded) {
             Button(c.say("app_read.restart"), wide, primary = true) { m.readAgain() }
+        } else if (m.pinKept) {
+            Button(c.say("app_read.tap_again"), wide, primary = true, enabled = !busy) { m.confirmCard() }
+            Button(c.say("common.back"), wide, enabled = !busy) { m.backToRead() }
         } else {
             Button(c.say("pin.confirm_card"), wide, primary = true, enabled = !busy) { m.confirmCard() }
             Button(c.say("common.back"), wide, enabled = !busy) { m.backToRead() }

@@ -26,6 +26,8 @@ import java.util.concurrent.TimeUnit
 internal class NfcCard(private val adapter: NfcAdapter?) : Card, ReadsInFront {
     private val main = Handler(Looper.getMainLooper())
 
+    override val hasNfc: Boolean get() = adapter != null
+
     /** The screen in front, on the main thread only. */
     private var front: Activity? = null
 

@@ -74,6 +74,9 @@ class CardProof(private val deps: Deps) {
         /** The phone's clock, in milliseconds since 1970. */
         fun now(): Long
 
+        /** The app's own build, the `versionCode` (spec/min-app.md). */
+        val appBuild: Int
+
         val crlNumbers: CrlNumbers
     }
 
@@ -239,6 +242,12 @@ class CardProof(private val deps: Deps) {
 
     @Volatile private var firstSignedAt: Long? = null
 
+    /**
+     * The card has accepted this card proof's PIN at some tap, also one that then failed. From then on a card that
+     * leaves while the PIN is on its way is a card that left: the PIN is right, and is sent again (issue #133).
+     */
+    @Volatile private var pinAccepted = false
+
     @Volatile private var ended = false
 
     /** The tap under way, to give it up from another thread. */
@@ -271,6 +280,18 @@ class CardProof(private val deps: Deps) {
         throw stop
     }
 
+    /**
+     * The minimum app version of [config] at the phone's clock now (spec/min-app.md; ADR-0035: before a PIN is asked for and
+     * before a card is tapped). Before each tap: the start date may come while a card proof is on its way.
+     */
+    private fun checkMinApp(config: ByteArray) {
+        when (val verdict = minApp(config, deps.appBuild, deps.now())) {
+            is MinApp.TooOld -> fail(Stop("min_app", mapOf("from" to verdict.from)))
+            MinApp.Unreadable -> fail(Stop("server", mapOf("code" to "malformed_response")))
+            else -> {}
+        }
+    }
+
     /** The wait between tap 2 and tap 3 is over ([IDLE_MS]). */
     fun idleExpired(): Boolean = firstSignedAt?.let { deps.now() - it >= IDLE_MS } ?: false
 
@@ -296,6 +317,8 @@ class CardProof(private val deps: Deps) {
             null -> throw Stop("server", mapOf("code" to "malformed_response"))
             false -> {}
         }
+        // The minimum app version (spec/min-app.md), before the card is read: step 1 looked too, at the answer it had.
+        checkMinApp(config)
         this.config = config
         events.done(Item.SERVER)
 
@@ -421,7 +444,12 @@ class CardProof(private val deps: Deps) {
             live()
             events.tap(Tap.SIGNING)
             connection.sign(message, handed).also { events.tap(Tap.SIGNED) }
+        } catch (e: CardException) {
+            // Whether this PIN was ever accepted is looked at before this tap adds to it.
+            val accepted = pinAccepted
+            throw if (e.reason == CardException.Reason.PIN_MAYBE_SENT && accepted) CardException(CardException.Reason.DROPPED) else e
         } finally {
+            if (connection.pinAccepted) pinAccepted = true
             handed.fill(0)
         }
     }
@@ -431,6 +459,7 @@ class CardProof(private val deps: Deps) {
     /** [pin] stays the caller's, who overwrites it. A PIN the card refuses ends nothing: the screen asks again. */
     fun confirmCard(pin: ByteArray, events: Events): Status {
         if (session == 0L || background == null || scopeSignature != null || ended) throw Stop("state")
+        config?.let(::checkMinApp)
         // Nothing is signed, and no request carries the scoped ID, before these pass.
         awaitBackground()
         val signature = sign(events, DeviceCore.scopeString(), pin)
@@ -592,6 +621,7 @@ class CardProof(private val deps: Deps) {
         val shown = chosen
         if (shown == null || ended) throw Stop("state")
         checkIdle()
+        config?.let(::checkMinApp)
         sameAsShown()
         val accounts = chosenAccountsJson ?: throw Stop("cancelled")
         val challenge: String
@@ -739,6 +769,25 @@ class CardProof(private val deps: Deps) {
             else -> null
         }
 
+        /**
+         * What the minimum app version of `config` says of the build [appBuild] at the phone's clock [nowMs]
+         * (spec/min-app.md), as the core reads it. Throws [Stop] `clock` for a clock the core does not take.
+         */
+        fun minApp(config: ByteArray, appBuild: Int, nowMs: Long): MinApp {
+            val answer = try {
+                JSONObject(String(DeviceCore.minApp(config, appBuild, nowMs / 1000), Charsets.UTF_8))
+            } catch (e: DeviceCoreException) {
+                // Whatever the config holds is a verdict, never an error: the one input the core refuses here is the clock.
+                throw Stop(if (e.code == DeviceCoreException.INPUT) "clock" else "engine")
+            }
+            return when (answer.getString("verdict")) {
+                "ok" -> MinApp.Ok
+                "ok_until" -> MinApp.Until(answer.getString("from"))
+                "stop" -> MinApp.TooOld(answer.getString("from"))
+                else -> MinApp.Unreadable
+            }
+        }
+
         private const val CRS_G1 = "bn254_g1_compressed_2p18.dat"
         private const val CRS_G2 = "bn254_g2.dat"
     }
@@ -764,6 +813,7 @@ class CardProof(private val deps: Deps) {
  *   date_mismatch   the challenge is not dated today by the phone's clock
  *   date_changed    the list would now do something other than the screen said
  *   idle            [CardProof.IDLE_MS] passed after tap 2
+ *   min_app         this build is older than the server's minimum app version, since `from`
  *   clock           the phone's clock is outside the years the core takes
  *   cancelled, state
  */
@@ -800,6 +850,21 @@ class Stop(val code: String, val values: Map<String, String> = emptyMap(), val r
             }
         }
     }
+}
+
+/** What the minimum app version says of this build (spec/min-app.md, "What the app does"). */
+sealed interface MinApp {
+    /** The app goes on as usual. */
+    data object Ok : MinApp
+
+    /** The app goes on as usual, and says that from [from] (`YYYY-MM-DD`, in Taiwan) this version can no longer do a card proof. */
+    data class Until(val from: String) : MinApp
+
+    /** This version can no longer do a card proof, since [from]: no PIN is asked for and no card read. */
+    data class TooOld(val from: String) : MinApp
+
+    /** The field cannot be read: the app does not go on, as with a platform table it cannot read. */
+    data object Unreadable : MinApp
 }
 
 /** A list that cannot be signed (spec/list-consequence.md): `username`, `empty`, `switch_limit`, `daily_limit`. The cardholder changes the list. */
