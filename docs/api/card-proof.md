@@ -301,13 +301,26 @@ Submits one card proof: the card's whole list of accounts.
   submissions of one challenge at the same moment, at most one is written.
 
   **`paused`**: the server accepts no card proof for now, and issues no
-  challenge. There is one cause so far: the state of the cards the server
-  stores was computed by another version of the record rules than the one
-  it runs ([`spec/record-rules.md`](../../spec/record-rules.md), "The
-  version number"), and writing a record from that state could accept one
-  the rules refuse. `card-state` and `config` answer as ever. The device
-  treats it as a code it does not know (below); the sentence for the
-  cardholder is not written yet.
+  challenge. Two causes:
+
+  - The operator stopped taking card proofs (ADR-0033; `CARD_PROOFS_PAUSED`,
+    `worker/README.md`, "停止和恢復收過卡"). `config` says so (`paused`).
+    The Worker refuses before it asks the proof log's object; the daily
+    publication goes on.
+  - The state of the cards the server stores was computed by another
+    version of the record rules than the one it runs
+    ([`spec/record-rules.md`](../../spec/record-rules.md), "The version
+    number"), and writing a record from that state could accept one the
+    rules refuse. `config` does not say this one.
+
+  `card-state`, `config`, `fingerprint` and the visitors' pages answer as
+  ever. What the device does: when `config` says `paused` it says so before
+  a card is read, and stops reading one if `config` says it on the way;
+  when `challenges` or `records` answer `paused`, it stops with its own
+  sentence for the cardholder (`design/copy/card-proof.md`: the card proof
+  is not recorded, come back later) and the request ID. Sending the same
+  record again is not offered: it would be `paused` again until the
+  operator resumes, so the device offers only going back to the beginning.
 
   A server that cannot run its proof verifier answers `500` `internal`. That
   is not a verdict on the proof: the record is not written.
@@ -339,9 +352,15 @@ Submits one card proof: the card's whole list of accounts.
 - Response `200`:
 
   ```
-  {"crl_max_age_days":3,"platforms":[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}],"min_app":{"android":{"build":12,"from":"2027-03-01"},"ios":{"build":9,"from":"2027-03-01"}}}
+  {"paused":false,"crl_max_age_days":3,"platforms":[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}],"min_app":{"android":{"build":12,"from":"2027-03-01"},"ios":{"build":9,"from":"2027-03-01"}}}
   ```
 
+  - `paused` is `true` while the operator has stopped taking card proofs
+    (ADR-0033; `CARD_PROOFS_PAUSED`, `worker/README.md`): `challenges` and
+    `records` then answer `paused`. It says nothing of the other cause of
+    `paused` (the record rules' version, under `records`), which only those
+    two find. A server that does not send it (the Go backend) has not
+    stopped; a device reads its absence as `false`.
   - `platforms` is the platform table of this proof log
     ([`spec/scope.md`](../../spec/scope.md)), one element per row, in
     ascending order of `platform`: the platform ID, the display name, and

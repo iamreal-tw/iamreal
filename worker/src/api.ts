@@ -136,7 +136,8 @@ async function readBody(request: Request): Promise<string | null> {
 
 /** `POST /api/v1/challenges`: the proof log's object issues and stores it. The body is not read. */
 async function postChallenge(_request: Request, env: Env): Promise<Reply> {
-  settings(env);
+  // The operator stopped taking card proofs: no challenge, and the object is not asked.
+  if (settings(env).cardProofsPaused) return refuse("paused");
   const issued = await askProofLog(() => proofLogOf(env).issueChallenge());
   return issued.challenge === null ? refuse("paused") : ok({ challenge: issued.challenge });
 }
@@ -161,11 +162,13 @@ async function postChallenge(_request: Request, env: Env): Promise<Reply> {
  * the object is not asked to write anything.
  */
 async function postRecord(request: Request, env: Env, parts: ApiParts): Promise<Reply> {
-  const { kind } = settings(env);
+  const { kind, cardProofsPaused } = settings(env);
   const text = await readBody(request);
   if (text === null) return MALFORMED;
   const fields = readSubmission(kind, text);
   if (typeof fields === "string") return fail(400, fields);
+  // The operator stopped taking card proofs: before the object, as its own `paused` is, so the submission does not count.
+  if (cardProofsPaused) return refuse("paused");
 
   const proofLog = proofLogOf(env);
   const begun = await askProofLog(() => proofLog.beginSubmission(fields.challenge));
@@ -217,14 +220,15 @@ async function postCardState(request: Request, env: Env): Promise<Reply> {
 }
 
 /**
- * `GET /api/v1/config`: the CRL age bound, the platform table of this
- * proof log, in ascending order of platform ID, and the minimum app version
- * (src/min-app.ts). The Worker answers by itself, without asking the
+ * `GET /api/v1/config`: whether the operator stopped taking card proofs,
+ * the CRL age bound, the platform table of this proof log, in ascending
+ * order of platform ID, and the minimum app version (src/min-app.ts). The Worker answers by itself, without asking the
  * proof log's object.
  */
 async function getConfig(_request: Request, env: Env): Promise<Reply> {
-  const { platforms, minApp } = settings(env);
+  const { platforms, minApp, cardProofsPaused } = settings(env);
   return ok({
+    paused: cardProofsPaused,
     crl_max_age_days: CRL_MAX_AGE_DAYS,
     platforms: platforms.map((p) => ({ platform: p.platform, display_name: p.displayName, username_format: p.format.text })),
     min_app: { android: { build: minApp.android.build, from: minApp.android.from }, ios: { build: minApp.ios.build, from: minApp.ios.from } },

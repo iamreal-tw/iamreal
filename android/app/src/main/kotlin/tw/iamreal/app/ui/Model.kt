@@ -21,8 +21,21 @@ import java.util.concurrent.Executors
 import java.util.concurrent.FutureTask
 import kotlin.concurrent.thread
 
-/** The six steps (design/copy/card-proof.md); the declaration under way is still step 5. */
-internal enum class Step(val number: Int) { BEFORE(1), READ(2), PIN(3), ACCOUNTS(4), CONFIRM(5), PROGRESS(5), DONE(6) }
+/**
+ * The eight steps (design/copy/card-proof.md); the declaration under way is still step 5. After the submission, one thing a
+ * step: hang the link (6), the reminder (7), done and share (8). A card proof that withdrew everything goes from 5 to 8.
+ */
+internal enum class Step(val number: Int) {
+    BEFORE(1), READ(2), PIN(3), ACCOUNTS(4), CONFIRM(5), PROGRESS(5), HANG(6), REMIND(7), DONE(8);
+
+    /** After the submission: the card proof is recorded, and nothing of the card is kept. */
+    val submitted: Boolean get() = number >= 6
+
+    companion object {
+        /** "第 2 步，共 8 步": the same from step 1 on. */
+        const val COUNT = 8
+    }
+}
 
 /** What an item of a list shows after it: nothing yet, in progress, done, stopped here. */
 internal enum class ItemState { NONE, NOW, DONE, HALT }
@@ -149,8 +162,12 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
     var signed by mutableStateOf(false)
         private set
 
-    // Step 6
+    // Steps 6 to 8
     var done by mutableStateOf<CardProof.Done?>(null)
+        private set
+
+    /** Step 6 is the whole one: "沒有看到連結，重新掛上" was pressed on the short one. */
+    var hangWhole by mutableStateOf(false)
         private set
     var single by mutableStateOf<String?>(null)
         private set
@@ -536,7 +553,9 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
                 this.done = done
                 dropAll(keepDone = true)
                 onDone(done)
-                step = Step.DONE
+                hangWhole = false
+                // Everything withdrawn: nothing to hang, to be reminded of or to share.
+                step = if (done.accounts.isEmpty()) Step.DONE else Step.HANG
             },
             { stop ->
                 if (stop.code == "idle") return@step stopped(stop)
@@ -552,6 +571,35 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         )
     }
 
+    // Steps 6 to 8 -----------------------------------------------------------------------
+
+    /** "沒有看到連結，重新掛上": step 6 still, the whole of it. */
+    fun hangAgain() {
+        hangWhole = true
+    }
+
+    /** "下一步" of step 6. */
+    fun toRemind() {
+        if (done != null) step = Step.REMIND
+    }
+
+    /** "上一步" of step 7: step 6 as it was left. */
+    fun backToHang() {
+        if (done != null) step = Step.HANG
+    }
+
+    /** "上一步" of step 8: step 7; false where there is none (everything was withdrawn: step 8 came straight from step 5). */
+    fun backFromDone(): Boolean {
+        if (done?.accounts?.isEmpty() != false) return false
+        step = Step.REMIND
+        return true
+    }
+
+    /** Step 8, from step 7. */
+    fun toDone() {
+        if (done != null) step = Step.DONE
+    }
+
     // Leaving ----------------------------------------------------------------------------
 
     /** "取消" on the panel of a tap. */
@@ -559,7 +607,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         flow?.cancelTap()
     }
 
-    /** "取消" of steps 4 and 5, "回到開頭": drops the PIN and everything else; back to step 1. */
+    /** "取消" of steps 4 and 5, "回到開頭", "完成" of step 8: drops the PIN and everything else; back to step 1. */
     fun cancel() {
         dropAll()
         step = Step.BEFORE
@@ -594,6 +642,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         if (!keepDone) {
             done = null
             single = null
+            hangWhole = false
         }
     }
 

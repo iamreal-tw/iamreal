@@ -39,7 +39,7 @@ describe("GET /api/v1/config", () => {
     assert.equal(res.status, 200);
     assert.equal(
       await res.text(),
-      '{"crl_max_age_days":3,"platforms":[{"platform":"test-example","display_name":"Example (no real service)","username_format":"[a-z0-9-]{1,20}"},{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}],"min_app":{"android":{"build":1,"from":"2026-11-20"},"ios":{"build":1,"from":"2026-11-20"}}}',
+      '{"paused":false,"crl_max_age_days":3,"platforms":[{"platform":"test-example","display_name":"Example (no real service)","username_format":"[a-z0-9-]{1,20}"},{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}],"min_app":{"android":{"build":1,"from":"2026-11-20"},"ios":{"build":1,"from":"2026-11-20"}}}',
     );
   });
 
@@ -771,7 +771,7 @@ describe("the setting that says which proof log the environment serves", () => {
       const config = await worker.fetch("/api/v1/config");
       assert.equal(config.status, 200);
       const text = await config.text();
-      assert.equal(text, '{"crl_max_age_days":3,"platforms":[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}],"min_app":{"android":{"build":1,"from":"2026-11-20"},"ios":{"build":1,"from":"2026-11-20"}}}');
+      assert.equal(text, '{"paused":false,"crl_max_age_days":3,"platforms":[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}],"min_app":{"android":{"build":1,"from":"2026-11-20"},"ios":{"build":1,"from":"2026-11-20"}}}');
       // The row is the one under "Production log" in spec/scope.md, and no row is a test platform.
       const spec = repoText("spec/scope.md");
       assert.ok(spec.slice(spec.indexOf("**Production log**", spec.indexOf("## Platforms")), spec.indexOf("**Test logs only**", spec.indexOf("## Platforms"))).includes("| `threads` | Threads | `[a-z0-9._]{1,30}` |"));
