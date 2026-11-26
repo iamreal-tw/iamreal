@@ -87,7 +87,26 @@ fn a_body_that_is_not_config() {
             "{body}"
         );
     }
-    // A key twice is not one reading.
+    // No bytes at all, passed as (NULL, 0).
+    let mut out = IdcBuf {
+        ptr: std::ptr::null_mut(),
+        len: 0,
+    };
+    assert_eq!(
+        unsafe { idc_min_app(std::ptr::null(), 0, IDC_CLIENT_ANDROID, 99, ON, &mut out) },
+        IDC_OK
+    );
+    assert_eq!(
+        unsafe { std::slice::from_raw_parts(out.ptr, out.len) },
+        br#"{"verdict":"unreadable"}"#
+    );
+    unsafe { idc_buf_free(&mut out) };
+    // A key twice is not one reading (spec/min-app.md, "Outside these rules"), also in a member that is ignored.
+    let ignored = CONFIG.replacen('{', r#"{"x":1,"x":2,"#, 1);
+    assert_eq!(
+        min_app(ignored.as_bytes(), IDC_CLIENT_ANDROID, 99, ON),
+        Ok(json!({"verdict": "unreadable"}))
+    );
     let twice = r#"{"min_app":{"android":{"build":12,"build":1,"from":"2027-03-01"}}}"#;
     assert_eq!(
         min_app(twice.as_bytes(), IDC_CLIENT_ANDROID, 99, ON),

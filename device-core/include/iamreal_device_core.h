@@ -186,7 +186,8 @@ int32_t idc_short_id(const uint8_t *scoped_id, size_t scoped_id_len, idc_buf *ou
  *   {"verdict":"unreadable"}    the field cannot be read (a body that is not
  *     config's included): the app does not go on either
  *
- * No config is an error. IDC_ERR_ARGUMENT when client is neither of the two;
+ * Whatever config holds, it is not an error (no bytes at all are unreadable).
+ * IDC_ERR_ARGUMENT when client is neither of the two;
  * IDC_ERR_INPUT when now is outside the years 2000 to 2049 in Taiwan. */
 int32_t idc_min_app(const uint8_t *config, size_t config_len, uint32_t client, uint32_t app_build, int64_t now, idc_buf *out);
 
