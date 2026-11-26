@@ -62,7 +62,11 @@
 | `card-proof-web-5-confirm-switch-desktop.png` | 第 5 步：確認，更換 | 實作版 |
 | `card-proof-web-5-confirm-withdraw-desktop.png` | 第 5 步：確認，收回對 @帳號 的宣告 | 實作版 |
 | `card-proof-web-5-progress-desktop.png` | 第 5 步：進行中 | 實作版 |
-| `card-proof-web-6-done-desktop.png` | 第 6 步：完成，這張卡片的第一筆紀錄 | 實作版 |
+| `card-proof-web-6-hang-desktop.png` | 第 6 步：掛上去，這張卡片的第一筆紀錄 | 實作版 |
+| `card-proof-web-6-hang-short-desktop.png` | 第 6 步：掛上去，再次過卡的短版 | 實作版 |
+| `card-proof-web-7-done-desktop.png` | 第 7 步：完成和分享，這張卡片的第一筆紀錄 | 實作版 |
+| `card-proof-web-7-done-switch-desktop.png` | 第 7 步：完成和分享，更換了帳號 | 實作版 |
+| `card-proof-web-7-withdraw-desktop.png` | 第 7 步：已全部收回（第 5 步之後直接到這一步） | 實作版 |
 
 ### app 的過卡流程
 

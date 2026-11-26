@@ -1,4 +1,4 @@
-// The frame every screen of the card proof shares (the six steps): the
+// The frame every screen of the card proof shares (the seven steps): the
 // header (the mark, the service's name and the site's, not
 // a link) as wide as the site, and the one column the page sits in.
 import { COPY } from "./copy.ts";

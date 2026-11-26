@@ -557,7 +557,7 @@ describe("confirm (step 5)", () => {
   });
 });
 
-describe("done (step 6)", () => {
+describe("after the submission: hang it (step 6), done and share (the last step)", () => {
   const ID = "7K2Q9FM4XD" + "0".repeat(42);
   function done(expected: ConsequenceRow[], kinds: Done["kinds"], o: Partial<Done> = {}): Done {
     const accounts = expected.filter((r) => r.kind !== "withdraw").map((r) => ({ platform: r.platform, username: r.username }));
@@ -579,18 +579,49 @@ describe("done (step 6)", () => {
   }
   const k = (platform: string, kind: ConsequenceRow["kind"], username: string, accountCards: number | null = 1) => ({ platform, kind, username, accountCards });
 
-  test("the titles", () => {
+  test("the last step's title: by what this card proof did", () => {
+    const title = (expected: ConsequenceRow[], kinds: Done["kinds"], single: string | null, o: Partial<Done> = {}): string => t(doneView(done(expected, kinds, o), single).title);
     const first = [crow({ kind: "first", username: "alice" })];
-    assert.equal(t(doneView(done(first, [k("threads", "first", "alice")], { firstRecord: true })).title), "你拿到島民證明了");
+    assert.equal(title(first, [k("threads", "first", "alice")], "Threads", { firstRecord: true }), "恭喜你完成島民證明");
+    assert.equal(title(first, [k("threads", "first", "alice")], null, { firstRecord: true }), "恭喜你完成島民證明");
     const same = [crow({ kind: "refresh", username: "alice", current: "alice" })];
-    assert.equal(t(doneView(done(same, [k("threads", "refresh", "alice")])).title), "島民證明已更新");
+    assert.equal(title(same, [k("threads", "refresh", "alice")], "Threads"), "島民證明已更新");
+    assert.equal(title(same, [k("threads", "refresh", "alice")], null), "島民證明已更新");
+    // Declared again after everything was withdrawn, the same account or a new one: with one platform, like a new declaration.
     const back = [crow({ kind: "refresh", username: "alice", current: null })];
-    assert.equal(t(doneView(done(back, [k("threads", "refresh", "alice")])).title), "島民證明已更新");
-    const sw = [crow({ kind: "switch", username: "carol", current: "alice", previous: "alice", switchesLeftAfter: 4 })];
-    assert.equal(t(doneView(done(sw, [k("threads", "switch", "carol")])).title), "島民證明已更新");
+    assert.equal(title(back, [k("threads", "refresh", "alice")], "Threads"), "恭喜你完成島民證明");
+    assert.equal(title(first, [k("threads", "first", "alice")], "Threads"), "恭喜你完成島民證明");
+    assert.equal(title(back, [k("threads", "refresh", "alice")], null), "島民證明已更新");
+    // A switch, or a correction of today's account: with one platform, the account it is now.
+    const sw = [crow({ kind: "switch", username: "carol.tw", current: "alice", previous: "alice", switchesLeftAfter: 4 })];
+    assert.equal(title(sw, [k("threads", "switch", "carol.tw")], "Threads"), "島民證明換成 @carol.tw 了");
+    const fix = [crow({ kind: "correction", username: "carol.tw", current: "alice", previous: "bob" })];
+    assert.equal(title(fix, [k("threads", "correction", "carol.tw")], "Threads"), "島民證明換成 @carol.tw 了");
+    assert.equal(title(sw, [k("threads", "switch", "carol.tw")], null), "島民證明已更新");
     const all = [crow({ kind: "withdraw", username: "alice", current: "alice" })];
-    assert.equal(t(doneView(done(all, [k("threads", "withdraw", "alice", 0)])).title), "已全部收回");
-    assert.equal(t(doneView(done(same, null)).title), "證明紀錄已經記下這次過卡");
+    assert.equal(title(all, [k("threads", "withdraw", "alice", 0)], "Threads"), "已全部收回");
+    assert.equal(title(same, null, "Threads"), "證明紀錄已經記下這次過卡");
+  });
+
+  test("step 6 is short for a card proof again with one platform: the question, the link, the card's page", () => {
+    const same = [crow({ kind: "refresh", username: "alice", current: "alice" })];
+    const v = doneView(done(same, [k("threads", "refresh", "alice")]), "Threads");
+    assert.equal(v.short, true);
+    assert.equal(t(v.stillThere!), "你的 Threads 個人檔案上，還有這個連結嗎？");
+    assert.equal(t(v.why), "在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。");
+    // The whole step: anything else, more than one platform, the kinds not read, what was recorded differs.
+    const sw = [crow({ kind: "switch", username: "carol.tw", current: "alice", previous: "alice", switchesLeftAfter: 4 })];
+    assert.equal(doneView(done(sw, [k("threads", "switch", "carol.tw")]), "Threads").short, false);
+    assert.equal(doneView(done(same, [k("threads", "refresh", "alice")]), null).short, false);
+    assert.equal(doneView(done(same, null), "Threads").short, false);
+    assert.equal(doneView(done(same, [k("threads", "switch", "alice")], { mismatches: ["threads"] }), "Threads").short, false);
+    assert.equal(doneView(done(sw, [k("threads", "switch", "carol.tw")]), "Threads").stillThere, null);
+  });
+
+  test("the last step: the card's ordinal, then the invitation to share; without an ordinal, the invitation alone", () => {
+    const expected = [crow({ kind: "first", username: "alice" })];
+    assert.equal(t(doneView(done(expected, [k("threads", "first", "alice")], { ordinal: 1284 })).ordinal!), "這是第 1,284 張島民證明。");
+    assert.equal(doneView(done(expected, [k("threads", "first", "alice")], { ordinal: null })).ordinal, null);
   });
 
   test("the card's page is the link; the card lists the list after the record; the rows of the record", () => {
@@ -616,16 +647,13 @@ describe("done (step 6)", () => {
     assert.deepEqual(v.otherCards, []);
   });
 
-  test("the last step's heading and what it says: every account's profile, or with one platform this platform's; the card names the platforms only with more than one", () => {
+  test("step 6's heading and why: every account's profile, or with one platform this platform's; the card names the platforms only with more than one", () => {
     const expected = [crow({ kind: "first", username: "alice" })];
     const several = doneView(done(expected, [k("threads", "first", "alice")]), null);
-    assert.deepEqual([t(several.hangTitle), t(several.anyone)], [COPY.done.hang_title, COPY.done.anyone]);
+    assert.deepEqual([t(several.hangTitle), t(several.why)], [COPY.hang.title, COPY.done.anyone]);
     assert.deepEqual(several.card, [{ name: "Threads", account: "@alice", raw: false }]);
     const one = doneView(done(expected, [k("threads", "first", "alice")]), "Threads");
-    assert.deepEqual(
-      [t(one.hangTitle), t(one.anyone)],
-      ["最後一步：掛到你的 Threads 個人檔案", "任何人都能宣告任何帳號。你把連結掛上個人檔案，別人才知道這個帳號承認這張證明。"],
-    );
+    assert.deepEqual([t(one.hangTitle), t(one.why)], ["把證明掛上你的 Threads 個人檔案", "在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。"]);
     assert.deepEqual(one.card, [{ name: null, account: "@alice", raw: false }]);
     assert.equal(t(one.recordedOn), "2026-11-16 記進了證明紀錄。");
   });
@@ -640,8 +668,8 @@ describe("done (step 6)", () => {
     // The sentence with the card's ordinal, and on the line under it the card's page.
     const text = encodeURIComponent("我剛剛換了第 128 張島民證明，宣告本帳號背後是一名台灣人。\nhttps://iamreal.tw/p/7K2Q9FM4XD");
     assert.deepEqual(
-      v.shares.map((sh) => [t(sh.note), t(sh.button), sh.url]),
-      [["把你的島民證明分享到 Threads。", "分享到 Threads", `https://www.threads.com/intent/post?text=${text}`]],
+      v.shares.map((sh) => [t(sh.button), sh.url]),
+      [["分享到 Threads", `https://www.threads.com/intent/post?text=${text}`]],
     );
     assert.equal(v.showRecord, false);
   });
@@ -684,10 +712,12 @@ describe("done (step 6)", () => {
   });
 
   test("everything withdrawn: no card, no link, the links can be taken down; the record line of a withdrawal", () => {
-    const v = doneView(done([crow({ kind: "withdraw", username: "alice", current: "alice" })], [k("threads", "withdraw", "alice", 0)]));
+    const all = [crow({ kind: "withdraw", username: "alice", current: "alice" })];
+    const v = doneView(done(all, [k("threads", "withdraw", "alice", 0)]));
     assert.equal(v.withdrawAll, true);
-    assert.equal(v.withdrawnLink, true);
+    assert.equal(t(v.unlink), "已經收回的帳號，個人檔案上的連結可以拿掉。");
     assert.equal(t(v.record!), "有一張有效的自然人憑證收回了所有帳號的宣告：");
+    assert.equal(t(doneView(done(all, [k("threads", "withdraw", "alice", 0)]), "Threads").unlink), "你可以拿掉 Threads 個人檔案上的證明連結。");
   });
 
   test("other cards declare an account of the list: one sentence for each", () => {
