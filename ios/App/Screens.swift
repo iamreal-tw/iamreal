@@ -14,6 +14,11 @@ struct Screens {
     let appCopy: Copy
     /// The site of this build, as a link on the screen writes it: its host.
     let host: String
+    /// The build has a page in the store that a button can open.
+    var storePage = false
+
+    /// The store the app is updated from, as the copy's `{store}` (design/copy/card-proof.md: App Store on an iPhone).
+    private static let store = "App Store"
 
     typealias Flow = CardProofFlow
 
@@ -32,10 +37,48 @@ struct Screens {
 
     // Step 1: before starting ------------------------------------------------------------------
 
+    /// The way to the app's page in the store; none in a build that has no such page yet.
+    private var update: Button? {
+        storePage ? Button(label: copy("app_before.update", ["store": Self.store]), action: .openStore) : nil
+    }
+
+    /// In the place of step 1 from the day the server's lowest version
+    /// starts on, for a build older than it (card-proof.md, step 1, "app";
+    /// ADR-0035): nothing leads to a card or a PIN. `from`: that day.
+    func tooOld(from: String) -> Screen {
+        var blocks: [Block] = [
+            .title(copy("app_before.too_old_title")),
+            .text(copy("app_before.too_old", ["min_app_from": from])),
+            .text(copy("app_before.nothing_sent")),
+        ]
+        if let update { blocks.append(.button(update, main: true)) }
+        blocks.append(.small(copy("app_before.or_reader", ["domain": host])))
+        return Screen(step: 0, blocks: blocks, settings: settingsButton)
+    }
+
+    /// In the place of step 1 on a phone that cannot read a card
+    /// (card-proof.md, step 1, "app"): nothing leads to a tap.
+    func noNFC() -> Screen {
+        Screen(
+            step: 0,
+            blocks: [.title(copy("app_before.no_nfc_title")), .text(copy("app_before.no_nfc")), .text(copy("app_before.no_nfc_reader", ["domain": host]))],
+            settings: settingsButton)
+    }
+
     /// `notice`: on top, when the app was opened from the reminder.
     /// `paused`: the operator stopped taking card proofs, as the server's
     /// config said: said in place of common.next (card-proof.md, step 1).
-    func before(notice: Notice? = nil, paused: Bool = false) -> Screen {
+    /// `updateFrom`: the day from which this version can no longer do a
+    /// card proof, for a build older than the server's lowest: said above
+    /// everything, and a card proof goes on as usual. `idle`: the card
+    /// proof came back here after five minutes.
+    func before(notice: Notice? = nil, paused: Bool = false, updateFrom: String? = nil, idle: Bool = false) -> Screen {
+        // The lowest version first, above the reminder's note too.
+        var warnings: [Notice] = []
+        if let updateFrom {
+            warnings.append(Notice(text: copy("app_before.update_soon", ["min_app_from": updateFrom, "store": Self.store]), button: update))
+        }
+        if idle { warnings.append(Notice(text: copy("app_before.idle"), button: nil)) }
         // No platform table yet: by the platforms the app has its own definition of.
         var blocks: [Block] = [
             .title(copy("before.title")),
@@ -56,8 +99,8 @@ struct Screens {
                 .action(Button(label: copy("before.how_to_get_moica"), action: .howToApply)),
             ]),
         ]
-        if paused { return Screen(step: 1, blocks: Array(blocks[..<questions]) + [.message(copy("before.paused"))] + blocks[questions...], notice: notice, settings: settingsButton) }
-        return Screen(step: 1, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .start)], notice: notice, settings: settingsButton)
+        if paused { return Screen(step: 1, blocks: Array(blocks[..<questions]) + [.message(copy("before.paused"))] + blocks[questions...], warnings: warnings, notice: notice, settings: settingsButton) }
+        return Screen(step: 1, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .start)], warnings: warnings, notice: notice, settings: settingsButton)
     }
 
     private var settingsButton: Button { Button(label: appCopy("settings.open"), action: .openSettings) }

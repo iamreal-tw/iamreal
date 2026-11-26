@@ -59,8 +59,10 @@ struct ScreenView: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(screen.warnings.enumerated()), id: \.offset) { _, warning in self.notice(warning) }
             if let notice = screen.notice { self.notice(notice) }
-            stepBars
+            // A screen in the place of step 1 is none of the steps.
+            if screen.step > 0 { stepBars }
             ForEach(Array(screen.blocks.enumerated()), id: \.offset) { index, block in
                 self.block(block, first: index == 0)
             }
