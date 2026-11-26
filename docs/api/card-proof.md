@@ -439,6 +439,29 @@ What the device does with what it cannot read:
   be less than the `count` of `card-state`.
 - It is answered while the proof log is paused.
 
+## `GET /api/v1/rebuild`
+
+For the operator, and for anyone who wants to see it: how far the last
+rebuild from the proof log is (ADR-0033; `worker/README.md`, "從證明紀錄重建").
+No device reads it.
+
+- Response `200`: `{"name":"2026-11-27-1","status":"running","records":3000,"reason":null}`
+  - `name`: the name the operator gave the rebuild (`REBUILD_PROOF_LOG`), 1 to
+    40 of `A-Za-z0-9._-`.
+  - `status`: `running`; `swapped`, when what was computed was put in place
+    of what the server had; `refused`, when it ended without changing
+    anything.
+  - `records`: the number of records applied so far, from the first; for a
+    rebuild that ended, how far it came.
+  - `reason`: for `refused`, why, in a sentence of English that names a
+    record's `seq` or a file where it can; otherwise `null`.
+- A server that never began a rebuild:
+  `{"name":null,"status":null,"records":0,"reason":null}`.
+- It says what the last rebuild begun was, not whether one is asked for: a
+  name the operator set while card proofs were not stopped begins nothing,
+  and the answer stays what it was.
+- While a rebuild is `running`, `challenges` and `records` answer `paused`.
+
 ## Public files
 
 The CRL archive and the published proof log are not served by the server.

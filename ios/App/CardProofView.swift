@@ -252,7 +252,8 @@ struct ScreenView: View {
         case .cardName(let label, let name, let note):
             VStack(alignment: .leading, spacing: 6) {
                 Text(label).font(Theme.body(Theme.sizeSmall)).foregroundColor(Theme.mute.color)
-                Text(name).font(Theme.display(Theme.sizeHeading)).foregroundColor(Theme.ink.color)
+                // The system's typeface, not the headings': that one is a subset of the words of design/copy/, and a name has others (design/DESIGN.md, "字").
+                Text(name).font(Theme.body(Theme.sizeHeading, Theme.weightHeading)).foregroundColor(Theme.ink.color)
                 Text(note).font(Theme.body(Theme.sizeSmall)).foregroundColor(Theme.mute.color)
             }
             .padding(20)
