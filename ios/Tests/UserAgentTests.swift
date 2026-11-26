@@ -3,11 +3,12 @@ import Network
 import XCTest
 @testable import IamrealApp
 
-/// What every request of the app calls itself (#444): one fixed value, the
-/// same as Android's (android/…/backend/Backend.kt, USER_AGENT), in place
-/// of the system's own, which names the app's build and the system's
-/// version. Against a server on this machine that keeps the head of every
-/// request it gets.
+/// What the headers of the app's requests say of the phone (#444): nothing.
+/// User-Agent is one fixed value, the same as Android's
+/// (android/…/backend/Backend.kt, USER_AGENT), in place of the system's own,
+/// which names the app's build and the system's version; Accept-Language is
+/// one fixed language, in place of the phone's list. Against a server on
+/// this machine that keeps the head of every request it gets.
 final class UserAgentTests: XCTestCase {
     /// Listens on this machine; answers every request with `status` and an
     /// empty JSON object, closes the connection, and keeps the request's head.
@@ -91,13 +92,14 @@ final class UserAgentTests: XCTestCase {
         }
     }
 
-    func testEveryRequestCallsItselfTheOneFixedName() async throws {
+    func testNoHeaderOfARequestSaysAnythingOfThePhone() async throws {
         let server = try Recorder()
         let site = try await server.start()
         defer { withExtendedLifetime(server) {} }
         let backend = HTTPBackend(site: site, publicFiles: site)
 
         // Every request the app makes (Backend): the answers are not what is looked at, so what each call makes of `{}` is let go.
+        XCTAssertNotEqual(Locale.preferredLanguages, ["zh-TW"], "the phone's own list is another one, so the test tells the two apart")
         _ = try? await backend.config()
         _ = try? await backend.crlIndex()
         _ = try? await backend.crl(sha256: String(repeating: "0", count: 64))
@@ -118,11 +120,22 @@ final class UserAgentTests: XCTestCase {
             let request = head.components(separatedBy: "\r\n")[0]
             // Android's value, to the letter.
             XCTAssertEqual(values(of: "User-Agent", in: head), ["iamreal"], request)
-            // Nothing of the system's own User-Agent anywhere in the head: the app's name and build,
-            // CFNetwork's version, Darwin's. (Accept-Language, the phone's languages, is still there.)
+            // One language for every phone, not the phone's list (the simulator's: zh-TW,zh-Hant;q=0.9, or whatever it is set to).
+            XCTAssertEqual(values(of: "Accept-Language", in: head), ["zh-TW"], request)
+            // Nothing of the system's own User-Agent anywhere in the head: the app's name and build, CFNetwork's version, Darwin's.
             for word in ["CFNetwork", "Darwin", "IamrealApp"] {
                 XCTAssertFalse(head.contains(word), "\(request): \(word) in \(head)")
             }
+            // The headers the system adds besides: these and no other, each with the value measured on the simulator,
+            // which names nothing of the phone. A header or a value that is new with a new system fails here, and is
+            // looked at before it is let through.
+            let names = Set(head.components(separatedBy: "\r\n").dropFirst().compactMap { line in
+                line.firstIndex(of: ":").map { line[..<$0].lowercased() }
+            })
+            XCTAssertTrue(names.isSubset(of: ["host", "accept", "accept-language", "accept-encoding", "connection", "user-agent", "content-type", "content-length"]), "\(request): \(names.sorted())")
+            XCTAssertEqual(values(of: "Accept", in: head), ["*/*"], request)
+            XCTAssertEqual(values(of: "Accept-Encoding", in: head), ["gzip, deflate"], request)
+            XCTAssertEqual(values(of: "Connection", in: head), ["keep-alive"], request)
         }
     }
 }
