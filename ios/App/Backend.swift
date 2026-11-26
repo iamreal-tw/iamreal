@@ -35,7 +35,8 @@ struct BackendFailure: Error, Equatable {
 /// (AppEnvironment); a test gives it the address of a local Worker.
 ///
 /// No request carries a cookie, a cache or an identifier of the device,
-/// and nothing is stored: the session is ephemeral.
+/// nor the app's version or the system's (its User-Agent is one fixed
+/// word), and nothing is stored: the session is ephemeral.
 struct HTTPBackend: Backend {
     let site: URL
     let publicFiles: URL
@@ -49,6 +50,8 @@ struct HTTPBackend: Backend {
         configuration.httpShouldSetCookies = false
         configuration.urlCache = nil
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        // In place of the system's own, which names the app's build and the system's version (#444).
+        configuration.httpAdditionalHeaders = ["User-Agent": Self.userAgent]
         configuration.timeoutIntervalForRequest = 30
         // A CRL is tens of megabytes.
         configuration.timeoutIntervalForResource = 5 * 60
@@ -116,6 +119,10 @@ struct HTTPBackend: Backend {
         }
         return data
     }
+
+    /// What every request calls itself: the same for every phone and every
+    /// version of the app, and the same as Android's (Backend.kt, USER_AGENT).
+    static let userAgent = "iamreal"
 
     /// The most the app reads of the answer to a submission: 1 MiB.
     private static let mostOfAnAnswer = 1 << 20
