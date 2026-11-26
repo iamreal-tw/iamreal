@@ -89,7 +89,8 @@ export async function checkFromOutside(parts: { site: Reader; data: Reader; now:
     try {
       found = await problem();
     } catch (e) {
-      found = `the request failed (${e instanceof Error ? e.message : "unknown"})`;
+      // Not the error's message: it can quote what was answered (a JSON parser's does).
+      found = "the request failed, or what it answered could not be read";
     }
     lines.push({ ok: found === null, what: found === null ? what : `${what}: ${found}` });
   };
@@ -103,7 +104,12 @@ export async function checkFromOutside(parts: { site: Reader; data: Reader; now:
     const res = await parts.site("/api/v1/config", { Accept: "*/*" });
     const body = await res.text();
     if (res.status !== 200) return `the status is ${res.status}`;
-    const platforms = (JSON.parse(body) as { platforms?: unknown }).platforms;
+    let platforms: unknown;
+    try {
+      platforms = (JSON.parse(body) as { platforms?: unknown }).platforms;
+    } catch {
+      return "it is not JSON";
+    }
     return Array.isArray(platforms) && platforms.length > 0 ? null : "it has no platform table";
   });
   await check("GET / (the home page) answers", async () => {
@@ -129,19 +135,18 @@ export async function checkFromOutside(parts: { site: Reader; data: Reader; now:
     return date >= due ? null : `the last line is dated ${formatDay(date)}`;
   });
 
-  let index: ReturnType<typeof newestCrls> | null = null;
-  let indexProblem = "there is no index to look in";
+  // The index, read once for the lines of both issuer keys: what it is, or why there is none.
+  let index: ReturnType<typeof newestCrls> | string;
+  try {
+    const res = await parts.data("/crl/index.jsonl");
+    const text = await res.text();
+    index = res.status === 200 ? newestCrls(readIndex(text)) : `the index's status is ${res.status}`;
+  } catch {
+    index = "the request for the index failed, or the index could not be read";
+  }
   for (const issuer of ISSUER_NAMES) {
     await check(`the data domain: the newest usable CRL of ${issuer} in crl/index.jsonl is at most ${CRL_NOTICE_DAYS} day old`, async () => {
-      if (index === null) {
-        const res = await parts.data("/crl/index.jsonl");
-        const text = await res.text();
-        if (res.status !== 200) {
-          indexProblem = `the index's status is ${res.status}`;
-          return indexProblem;
-        }
-        index = newestCrls(readIndex(text));
-      }
+      if (typeof index === "string") return index;
       const newest = index[issuer][0];
       if (newest === undefined) return `the index has no usable CRL of ${issuer}`;
       const day: Day | null = parseDay(newest.crlDate);
@@ -173,10 +178,11 @@ export async function checkFromOutside(parts: { site: Reader; data: Reader; now:
         return "it is not JSON";
       }
       const { checked, oldest } = (typeof found === "object" && found !== null ? found : {}) as { checked?: unknown; oldest?: unknown };
-      const at = typeof checked === "string" ? Date.parse(checked) : Number.NaN;
-      if (Number.isNaN(at)) return "it has no time of checking";
+      // A time in UTC, as the back end writes it (toISOString): nothing Date.parse would read otherwise, such as a local time.
+      const at = typeof checked === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/.test(checked) ? Date.parse(checked) : Number.NaN;
+      if (Number.isNaN(at)) return "it has no time of checking in UTC";
       if (oldest !== null && (typeof oldest !== "string" || parseDay(oldest) === null)) return "its oldest is neither a date nor null";
-      if (parts.now - at > CONNECTION_LOG_CHECKED_HOURS * HOUR_MS) return `the back end last looked at ${checked as string}`;
+      if (parts.now - at > CONNECTION_LOG_CHECKED_HOURS * HOUR_MS) return `the back end last looked ${Math.floor((parts.now - at) / HOUR_MS)} hours ago`;
       const todayUtc = Math.floor(parts.now / (24 * HOUR_MS));
       if (oldest !== null && todayUtc - parseDay(oldest)! > CONNECTION_LOG_DAYS) return `the oldest connection log is of ${oldest}`;
       return null;
@@ -192,18 +198,23 @@ export async function checkFromOutside(parts: { site: Reader; data: Reader; now:
  * prints a line for each thing checked and a last line, and returns how
  * many failed. The date of the clearing is wrangler.jsonc's.
  */
-export async function runOutsideCheck(site: string, data: string): Promise<number> {
-  const { unstable_readConfig } = await import("wrangler");
-  const config = join(fileURLToPath(new URL("..", import.meta.url)), "wrangler.jsonc");
-  const clearedOn = String(unstable_readConfig({ config, env: "test" }, { hideWarnings: true }).vars.TEST_PROOF_LOG_CLEARED_ON);
+export async function runOutsideCheck(site: string, data: string, at: { now?: number; clearedOn?: string; connectionLog?: boolean } = {}): Promise<number> {
+  const clearedOn = at.clearedOn ?? (await clearedOnOfWranglerJsonc());
   const reader = (origin: string): Reader => (path, headers) => fetch(new URL(path, origin), { redirect: "manual", headers: { ...headers } });
-  const now = Date.now();
+  const now = at.now ?? Date.now();
   console.log(`${site} and ${data}, ${formatDay(taiwanDay(now))} ${String(taiwanHour(now)).padStart(2, "0")}h in Taiwan; the test log was last cleared on ${clearedOn}`);
-  const lines = await checkFromOutside({ site: reader(site), data: reader(data), now, clearedOn });
+  const lines = await checkFromOutside({ site: reader(site), data: reader(data), now, clearedOn, ...(at.connectionLog !== undefined && { connectionLog: at.connectionLog }) });
   for (const line of lines) console.log(`${line.what.startsWith("not checked yet") ? "--    " : line.ok ? "ok    " : "FAIL  "} ${line.what}`);
   const failures = lines.filter((l) => !l.ok).length;
   console.log(failures ? `${failures} check(s) failed` : "all checks passed");
   return failures;
+}
+
+/** The date the test log was last cleared on, as wrangler.jsonc says. */
+async function clearedOnOfWranglerJsonc(): Promise<string> {
+  const { unstable_readConfig } = await import("wrangler");
+  const config = join(fileURLToPath(new URL("..", import.meta.url)), "wrangler.jsonc");
+  return String(unstable_readConfig({ config, env: "test" }, { hideWarnings: true }).vars.TEST_PROOF_LOG_CLEARED_ON);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

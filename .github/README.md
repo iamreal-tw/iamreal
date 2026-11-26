@@ -288,7 +288,9 @@ GitHub 的兩頁文件說法不同（2026-11-26 讀）：
 - [Events that trigger workflows](https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#schedule)：「Notifications for scheduled workflows are sent to the user who last modified the cron syntax in the workflow file.」
 - [Notifications for workflow runs](https://docs.github.com/en/actions/concepts/workflows-and-actions/notifications-for-workflow-runs)：「Notifications for scheduled workflows are sent to the user who initially created the workflow. If a different user updates the cron syntax in the workflow file, subsequent notifications will be sent to that user instead.」同一頁還寫：「If a scheduled workflow is disabled and then re-enabled, notifications will be sent to the user who re-enabled the workflow rather than the user who last modified the cron syntax.」
 
-兩種說法在這個程式庫是同一個人：這個檔和它的 `cron` 那一行由合併進 `main` 的提交加進來。改 `cron` 那一行，或停用再啟用這個工作流程，收信的人可能換掉。
+在這個程式庫，兩種說法都可能不是營運者。推到 `main` 的是合併佇列：2026-11-26 看 `cache.yml` 由推送觸發的 run，`actor` 和 `triggering_actor` 都是 `github-merge-queue[bot]`，合併提交的作者是營運者。文件沒有說「建立」「最後改 `cron` 的人」指推送的人還是提交的作者，所以信可能寄給這個 bot，也就是沒有人收。
+
+**所以合併之後，營運者要在 Actions 的頁面把 `watch-test` 停用、再啟用一次。** 照上面第二頁的最後一句，之後的通知寄給重新啟用的人。之後有人改了 `cron` 那一行，或再停用、啟用過，收信的人可能又換掉，要再做一次。
 
 收不收得到信，看收信的人自己在 GitHub 的設定：Settings → Notifications → System → Actions，選 Email，並勾「Only notify for failed workflows」（[Configuring notifications for GitHub Actions](https://docs.github.com/en/subscriptions-and-notifications/how-tos/managing-github-actions-notifications)）。手動觸發的工作，信寄給按下觸發的人。
 

@@ -8,7 +8,9 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { CRL_TIME, freshProofLog, publishCrl, tw } from "./records.ts";
-import { CONNECTION_LOG_CHECKED, CONNECTION_LOG_FILE, checkFromOutside } from "./outside-check.ts";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { CONNECTION_LOG_CHECKED, CONNECTION_LOG_FILE, checkFromOutside, runOutsideCheck } from "./outside-check.ts";
 import type { Reader } from "./site-check.ts";
 
 /** The date this test's proof log was cleared on: the day its object first runs. */
@@ -72,7 +74,7 @@ test("the connection logs (#20), when checked: the back end looked in the last 2
     data: async (p) => {
       if (p === `/${CONNECTION_LOG_FILE}`) return body === null ? new Response(null, { status: 404 }) : new Response(body, { headers: { "Content-Type": "application/json" } });
       if (p.startsWith("/proof-log/")) return new Response(null, { status: 404 });
-      // CRLs of the day before: within a day.
+      // The index left out of it too: those lines fail, and are filtered out below.
       return answering("/crl/index.jsonl", () => new Response(null, { status: 404 }), data)(p);
     },
   });
@@ -82,17 +84,20 @@ test("the connection logs (#20), when checked: the back end looked in the last 2
   assert.deepEqual(await only('{"checked":"2026-11-26T12:00:07.123Z","oldest":null}'), [], "no connection log at all");
   assert.deepEqual(await only('{"checked":"2026-11-26T10:31:00Z","oldest":"2026-10-24"}'), [], "33 days, and looked 1 hour 59 minutes ago");
   assert.deepEqual(await only('{"checked":"2026-11-26T12:00:07.123Z","oldest":"2026-10-23"}'), [`${line}: the oldest connection log is of 2026-10-23`]);
-  assert.deepEqual(await only('{"checked":"2026-11-26T10:29:00Z","oldest":"2026-11-01"}'), [`${line}: the back end last looked at 2026-11-26T10:29:00Z`]);
+  assert.deepEqual(await only('{"checked":"2026-11-26T10:29:00Z","oldest":"2026-11-01"}'), [`${line}: the back end last looked 2 hours ago`]);
+  assert.deepEqual(await only('{"checked":"2026-11-26 12:00:07","oldest":null}'), [`${line}: it has no time of checking in UTC`], "a time with no zone is not read as one");
   assert.deepEqual(await only(null), [`${line}: there is no file`]);
   assert.deepEqual(await only("not json"), [`${line}: it is not JSON`]);
-  assert.deepEqual(await only('{"oldest":null}'), [`${line}: it has no time of checking`]);
+  assert.deepEqual(await only('{"oldest":null}'), [`${line}: it has no time of checking in UTC`]);
   assert.deepEqual(await only('{"checked":"2026-11-26T12:00:07Z","oldest":"27 Oct"}'), [`${line}: its oldest is neither a date nor null`]);
 });
 
 test("config not answering, and the home page not answering: each its own line", async () => {
   await failsOnly({ site: answering("/api/v1/config", () => new Response("", { status: 500 }), site) }, "GET /api/v1/config", /the status is 500/);
   await failsOnly({ site: answering("/api/v1/config", () => Response.json({ crl_max_age_days: 3 }), site) }, "GET /api/v1/config", /no platform table/);
-  await failsOnly({ site: async (p, h) => (p === "/api/v1/config" ? Promise.reject(new Error("connect ECONNREFUSED")) : site(p, h)) }, "GET /api/v1/config", /the request failed/);
+  await failsOnly({ site: async (p, h) => (p === "/api/v1/config" ? Promise.reject(new Error("connect ECONNREFUSED 10.0.0.1:443")) : site(p, h)) }, "GET /api/v1/config", /the request failed, or what it answered could not be read$/);
+  // An answer that is not JSON: said so, without quoting it.
+  await failsOnly({ site: answering("/api/v1/config", () => new Response("<html>secret</html>"), site) }, "GET /api/v1/config", /: it is not JSON$/);
   await failsOnly({ site: answering("/", () => new Response("", { status: 503 }), site) }, "GET / ", /the status is 503/);
 });
 
@@ -129,11 +134,46 @@ test("a CRL index whose newest usable CRL of an issuer key is more than a day ol
   // No index: both lines fail, saying so.
   const noIndex = await failed({ data: answering("/crl/index.jsonl", () => new Response(null, { status: 404 }), data) });
   assert.equal(noIndex.length, 2, noIndex.join("\n"));
-  assert.ok(noIndex.every((l) => l.endsWith("the index's status is 404") || l.endsWith("there is no index to look in")), noIndex.join("\n"));
+  assert.ok(noIndex.every((l) => l.endsWith(": the index's status is 404")), noIndex.join("\n"));
 });
 
 test("what a line says: what was checked, a status or a date; nothing of a request's contents", async () => {
   const lines = await failed({ now: tw("2026-11-25", "09:30:00").getTime() });
   assert.ok(lines.length > 0);
   for (const l of lines) assert.doesNotMatch(l, /\b\d{1,3}(\.\d{1,3}){3}\b|scoped_id|"accounts"/, l);
+});
+
+test("the command: over HTTP, a FAIL line naming what failed, and the number of failures it exits with", async () => {
+  // The site and the data domain as two servers on this computer, the way the workflow reaches the real ones.
+  const serve = async (answer: (path: string) => Promise<Response>): Promise<{ origin: string; close: () => Promise<void> }> => {
+    const server = createServer(async (req, res) => {
+      const a = await answer(req.url ?? "/");
+      const headers: Record<string, string> = {};
+      a.headers.forEach((v, k) => void (headers[k] = v));
+      res.writeHead(a.status, headers).end(Buffer.from(await a.arrayBuffer()));
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    return { origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close: () => new Promise((r) => server.close(() => r())) };
+  };
+  let missing = "";
+  const siteServer = await serve((p) => site(p));
+  const dataServer = await serve((p) => (p === missing ? Promise.resolve(new Response(null, { status: 404 })) : data(p)));
+  const printed: string[] = [];
+  const log = console.log;
+  console.log = (line: string) => void printed.push(line);
+  try {
+    const run = (): Promise<number> => runOutsideCheck(siteServer.origin, dataServer.origin, { now: AS_RUNNING.now, clearedOn: CLEARED_ON });
+    assert.equal(await run(), 0);
+    assert.equal(printed.at(-1), "all checks passed");
+    printed.length = 0;
+    missing = "/proof-log/card-state/2026-11-21.jsonl";
+    assert.equal(await run(), 1, "one failure: the command exits with 1");
+    assert.deepEqual(printed.filter((l) => l.startsWith("FAIL")), ["FAIL   the data domain: the card state file of 2026-11-21 or later is there: there is no proof-log/card-state/2026-11-21.jsonl"]);
+    assert.ok(printed.some((l) => l.startsWith("--     not checked yet")), "the connection logs' line, not checked yet, neither ok nor FAIL");
+    assert.equal(printed.at(-1), "1 check(s) failed");
+  } finally {
+    console.log = log;
+    await siteServer.close();
+    await dataServer.close();
+  }
 });

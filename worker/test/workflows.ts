@@ -1275,7 +1275,6 @@ function cacheProblems(file: string, text: string): string[] {
   return problems;
 }
 
-/** The workflows, exactly, by file name: one to a line, in order. */
 /**
  * The check from outside Cloudflare (#53, #413 "通知"): every hour, and by
  * hand, it runs test/outside-check.ts against the test site; a line that
@@ -1307,6 +1306,7 @@ export const WATCH_JOBS: YamlMap = {
   },
 };
 
+/** The workflows, exactly, by file name: one to a line, in order. */
 export const WORKFLOW_FILES: readonly string[] = [
   "cache.yml",
   "checks-browser.yml",
