@@ -27,13 +27,16 @@ export function append(parent: Node, ...children: Child[]): void {
 const CODE_PLACEHOLDERS = new Set(["code", "short_id"]);
 /** Placeholders whose values are accounts, shown in the accounts' typeface. */
 const ACCOUNT_PLACEHOLDERS = new Set(["account", "last_declared"]);
+/** Placeholders whose values are words to heed, in bold ink (confirm.cannot_delete, design/copy/card-proof.md step 5). */
+const EMPHASIS_PLACEHOLDERS = new Set(["cannot_delete"]);
 
-/** A sentence of the copy with its values; codes in <code>, accounts in <span class="acct">. */
+/** A sentence of the copy with its values; codes in <code>, accounts in <span class="acct">, words to heed in <strong>. */
 export function sentence(template: string, values: Values = {}): DocumentFragment {
   const f = document.createDocumentFragment();
   for (const p of parts(template, values)) {
     if (p.placeholder !== null && CODE_PLACEHOLDERS.has(p.placeholder)) f.appendChild(el("code", {}, p.text));
     else if (p.placeholder !== null && ACCOUNT_PLACEHOLDERS.has(p.placeholder)) f.appendChild(el("span", { class: "acct" }, p.text));
+    else if (p.placeholder !== null && EMPHASIS_PLACEHOLDERS.has(p.placeholder)) f.appendChild(el("strong", { class: "heed" }, p.text));
     else f.appendChild(document.createTextNode(p.text));
   }
   return f;

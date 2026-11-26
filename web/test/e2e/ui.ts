@@ -365,6 +365,17 @@ async function noLinkOut(label: string): Promise<void> {
 }
 const stepLine = (n: number) => fill(C.common.step, { step: n, steps: 6 });
 
+/** Step 1's two links, in the question on how to get a card: a map's search, MOICA's site; each in a new tab, nothing else (card-proof.md, step 1). */
+const STEP1_LINKS = [
+  [C.before.find_office, "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent("戶政事務所")],
+  [C.before.how_to_get_moica, "https://moica.nat.gov.tw/"],
+];
+async function step1Links(label: string, p: Page = page): Promise<void> {
+  const links = await p.eval<[string, string, string][]>(`[...document.querySelectorAll('#app a')].map((a) => [a.textContent, a.getAttribute("href"), a.target + " " + a.rel + " " + !!a.closest('.asks details')])`);
+  const want = STEP1_LINKS.map(([text, href]) => [text, href, "_blank noopener noreferrer true"]);
+  check(JSON.stringify(links) === JSON.stringify(want), `${label}: the two links of how to get a card, in its question, in new tabs ${JSON.stringify(links)}`);
+}
+
 /** A new page load: step 1. */
 async function open(): Promise<void> {
   await page.goto(PAGE);
@@ -525,6 +536,12 @@ interface RowSeen {
 
 interface AccountsSeen {
   state: string;
+  /** Which screen of step 4: fill (rows to fill), declared (what the card declares, and the actions), edit (修改帳號清單), switch (改成別的帳號). */
+  mode: string;
+  /** With the card declaring accounts: [the platform's name, or "" with one platform; the account]. */
+  current: [string, string][];
+  /** The line of the last card proof, under what the card declares; "" if none. */
+  last: string;
   /** The h1 of step 4. */
   title: string;
   lead: string[];
@@ -551,6 +568,9 @@ async function waitAccounts(): Promise<AccountsSeen> {
   await waitStep("accounts", "step 4");
   return {
     state: await page.eval<string>(`document.querySelector('[data-step="accounts"]').dataset.state`),
+    mode: await page.eval<string>(`document.querySelector('[data-step="accounts"]').dataset.mode`),
+    current: await page.eval<[string, string][]>(`[...document.querySelectorAll('[data-current-row]')].map((r) => [r.querySelector('.plat-name')?.innerText ?? "", r.querySelector('[data-current-account]').innerText])`),
+    last: await page.text("[data-last]"),
     title: await page.text(`[data-step="accounts"] h1`),
     lead: await page.eval<string[]>(`[...document.querySelectorAll('[data-status], [data-fact]')].map((e) => e.innerText)`),
     rows: await rowsOnScreen(),
@@ -575,8 +595,10 @@ interface ConfirmSeen {
   buttons: string[];
   main: string;
   listedTogether: boolean;
-  /** With one platform, the sentence in place of listed together; "" if none. */
-  listedSingle: string;
+  /** The points under the list. */
+  points: string[];
+  /** The words in bold ink in the points. */
+  heed: string[];
   withdrawStays: boolean;
   links: string[];
 }
@@ -598,14 +620,26 @@ async function waitConfirm(): Promise<ConfirmSeen> {
     buttons: await buttonTexts(),
     main: await page.text(),
     listedTogether: await page.eval<boolean>(`!!document.querySelector('[data-step="confirm"] [data-listed-together]')`),
-    listedSingle: await page.text(`[data-step="confirm"] [data-listed-single]`),
+    points: await page.eval<string[]>(`[...document.querySelectorAll('[data-points] li')].map((e) => e.innerText)`),
+    heed: await page.eval<string[]>(`[...document.querySelectorAll('[data-points] strong.heed')].map((e) => e.innerText)`),
     withdrawStays: await page.eval<boolean>(`!!document.querySelector('[data-withdraw-stays]')`),
     links: await linksOnScreen(),
   };
 }
 
-/** Types the rows of step 4 (`entries`: platform → what to type, "" to empty it) and presses 下一步. */
+/** 修改帳號清單 (the card declares accounts, more than one platform): the rows, each changed on its own. */
+async function openEdit(): Promise<AccountsSeen> {
+  await page.clickButton(C.accounts.edit_list);
+  await page.waitFor(`document.querySelector('[data-step="accounts"][data-mode="edit"]')`, "修改帳號清單", 10_000);
+  return waitAccounts();
+}
+
+/**
+ * Types the rows of step 4 (`entries`: platform → what to type, "" to empty
+ * it) and presses 下一步. With the card declaring accounts, 修改帳號清單 first.
+ */
 async function typeRows(entries: Record<string, string>): Promise<void> {
+  if (!(await page.eval<boolean>(`!!document.querySelector('[data-account-field]')`))) await openEdit();
   for (const [platform, typed] of Object.entries(entries)) {
     await page.eval(`document.querySelector('#account-${platform}').value = ""`);
     if (typed !== "") await page.type(`#account-${platform}`, typed);
@@ -693,7 +727,7 @@ async function toRead(o: { screenshots?: string } = {}): Promise<void> {
   const s1 = await page.text();
   for (const s of [C.before.title, C.before.duration, C.before.prepare_card, C.before.citizens_only, C.before.one_proof, C.before.listed_together, C.before.why_physical, C.before.how_to_get]) check(s1.includes(s), `step 1 says "${s}"`);
   check(s1.indexOf(C.before.duration) < s1.indexOf(C.before.prepare_card), "step 1: how long it takes, first");
-  await noLinkOut("step 1");
+  await step1Links("step 1");
   // The test build knows two platforms (test-example and threads): step 1 does not speak of one.
   check((await page.text("[data-one-proof]")) === C.before.one_proof, `step 1: the test build knows more than one platform: "${await page.text("[data-one-proof]")}"`);
   check(!(await page.eval<boolean>(`!!document.querySelector('[data-step="before"] details [data-listed-together]')`)), "step 1: that the accounts are listed together is not in a question to open");
@@ -739,7 +773,8 @@ async function toAccounts(o: { wrongPinFirst?: boolean; blockClicks?: boolean; s
   check((await whereText()).includes(stepLine(3)), "step 3: 第 3 步，共 6 步");
   const s3 = await page.text();
   check((await page.text("[data-card-read]")) === [C.pin.card_read, "測試用戶", C.pin.name_note].join("\n"), `step 3: the name, and that it stays here: ${JSON.stringify(await page.text("[data-card-read]"))}`);
-  for (const s of [C.pin.purpose, C.pin.stays, C.pin.card_and_pin]) check(s3.includes(s), `step 3, next to the PIN field: "${s}"`);
+  for (const s of [C.pin.purpose, C.pin.stays]) check(s3.includes(s), `step 3, next to the PIN field: "${s}"`);
+  check(!s3.includes(C.pin.card_and_pin), "step 3: who holds the card and the PIN is said on step 5, not here");
   await noLinkOut("step 3");
   if (o.screenshots) await screenshot(`${o.screenshots}-3-pin`);
   if (o.wrongPinFirst) {
@@ -809,37 +844,66 @@ function checkRows(label: string, rows: RowSeen[], want: Record<string, RowExpec
   }
 }
 
-/** The notes of step 4 below the list, by the card's state. */
-function checkAccountsNotes(label: string, st: AccountsSeen, kind: "never" | "declared" | "nothing"): void {
+/** Step 4 with rows to fill (more than one platform), by the card's state: the notes below the list. */
+function checkAccountsNotes(label: string, st: AccountsSeen, kind: "never" | "nothing"): void {
   const has = (s: string) => st.main.includes(s);
   const a = C.accounts;
-  check(st.state === kind, `${label}: step 4 is "${st.state}"`);
+  check(st.state === kind && st.mode === "fill", `${label}: step 4 is "${st.state}", "${st.mode}"`);
   check(st.title === a.title, `${label}: step 4's title "${st.title}"`);
-  check(has(a.not_yours) && has(a.preview_note) && has(a.switches_limited), `${label}: step 4, that the account is not checked, the preview, that switches are limited`);
-  check(has(a.how_refresh) === (kind === "declared"), `${label}: card proof again explained ${kind === "declared" ? "" : "not "}(什麼都不改……)`);
-  check(has(a.how_change) === (kind !== "never") && has(a.one_per_platform) === (kind === "never"), `${label}: how to change the list`);
+  check(has(a.preview_note) && has(a.switches_limited), `${label}: step 4, the preview, that switches are limited`);
+  check(has(a.how_change) === (kind === "nothing") && has(a.one_per_platform) === (kind === "never"), `${label}: how to change the list`);
+  check(!has(a.not_yours) && !has(a.how_refresh), `${label}: step 4 no longer says that the account is not checked, nor how card proof again works`);
   check(!has("還有平台沒填"), `${label}: no nudge to fill every platform`);
   check(st.links.length === 0, `${label}: step 4 links to no other page ${JSON.stringify(st.links)}`);
   check(JSON.stringify(st.buttons.filter((b) => b !== C.accounts.preview)) === JSON.stringify([C.common.next, C.common.cancel]), `${label}: step 4 buttons ${JSON.stringify(st.buttons)}`);
 }
 
+/** The line of the last card proof on step 4. */
+const lastLine = (daysAgo: number) => (daysAgo === 0 ? C.accounts.last_proof_today : fill(C.accounts.last_proof, { days_ago: daysAgo }));
+
 /**
- * Step 5: the whole list to be signed, each row's platform name and ID and what happens; the buttons.
- * `single`: the one platform's name, when the screens speak of one platform.
+ * Step 4 with the card declaring accounts: what it declares ([name, account]; the name "" with one
+ * platform), the last card proof, 更新島民證明 and the other actions: with one platform 改成別的帳號 and
+ * 收回對 @… 的宣告, with more 修改帳號清單.
  */
-function checkConfirm(label: string, c: ConfirmSeen, want: [platform: string, name: string, account: string, kinds: string[]][], button: string, single: string | null = null): void {
+function checkDeclared(label: string, st: AccountsSeen, current: [string, string][], daysAgo: number): void {
+  const a = C.accounts;
+  const single = current.every(([name]) => name === "");
+  check(st.state === "declared" && st.mode === "declared", `${label}: step 4 is "${st.state}", "${st.mode}"`);
+  check(JSON.stringify(st.lead) === JSON.stringify([a.declared_now]) && JSON.stringify(st.current) === JSON.stringify(current), `${label}: step 4, what the card declares ${JSON.stringify(st.current)}`);
+  check(st.last === lastLine(daysAgo), `${label}: step 4, "${st.last}"`);
+  check(st.main.includes(a.refresh_note), `${label}: step 4, what 更新島民證明 does`);
+  const others = single ? [a.switch, fill(a.withdraw, { account: current[0]![1] })] : [a.edit_list];
+  check(JSON.stringify(st.buttons) === JSON.stringify([a.refresh, ...others, C.common.cancel]), `${label}: step 4 buttons ${JSON.stringify(st.buttons)}`);
+  check(!st.main.includes(a.switches_limited) && !st.main.includes(a.switch_limit.split("，")[0]!), `${label}: step 4 does not speak of the switches' limit before 改成別的帳號`);
+  check(!st.main.includes(a.not_yours) && !st.main.includes(fill(a.not_yours_single, { platform: THREADS_NAME })), `${label}: step 4 no longer says that the account is not checked`);
+  check(st.links.length === 0, `${label}: step 4 links to no other page ${JSON.stringify(st.links)}`);
+  check(st.rows.every((r) => r.value === null), `${label}: no field before an action is chosen`);
+}
+
+/**
+ * Step 5: the whole list to be signed, each row's platform name and ID and what happens; the points; the buttons.
+ * `single`: the one platform's name, when the screens speak of one platform. `platforms`: the names the points
+ * give (the one, or each the page knows of the server's table).
+ */
+function checkConfirm(label: string, c: ConfirmSeen, want: [platform: string, name: string, account: string, kinds: string[]][], button: string, single: string | null = null, platforms: string[] = single !== null ? [single] : [EXAMPLE_NAME, THREADS_NAME]): void {
+  const f = C.confirm;
   const rows = c.rows.map((r) => [r.platform, r.name, r.account, r.kinds]);
   check(JSON.stringify(rows) === JSON.stringify(want), `${label}: step 5's list ${JSON.stringify(rows)}`);
   check(c.rows.every((r) => r.id === r.platform), `${label}: step 5 shows each platform's ID beside its name`);
   check(c.links.length === 0, `${label}: step 5 links to no other page ${JSON.stringify(c.links)}`);
-  const empty = button === C.confirm.button_withdraw_all;
-  check(c.intro === (empty ? C.confirm.intro_withdraw_all : single !== null ? C.confirm.intro_single : C.confirm.intro), `${label}: step 5's first sentence "${c.intro}"`);
-  check(c.main.includes(today()) && c.main.includes(C.confirm.short_id_label) && c.main.includes(C.confirm.no_identity) && c.main.includes(C.confirm.permanent), `${label}: step 5, the date, the short ID, that the record has no name, that it cannot be deleted`);
+  const empty = want.every((r) => r[3].includes(C.kinds.withdraw));
+  check(c.intro === (empty ? f.intro_withdraw_all : single !== null ? f.intro_public : f.intro), `${label}: step 5's first sentence "${c.intro}"`);
+  check(c.main.includes(today()) && c.main.includes(f.short_id_label), `${label}: step 5, the date, the short ID`);
+  const named = platforms.join(f.platform_separator);
+  const notIdentifiable = fill(f.not_identifiable, { platform: named });
+  const points = empty ? [f.history_stays, notIdentifiable, f.holder_later_withdraw] : [notIdentifiable, fill(f.holder_later, { platform: named, cannot_delete: f.cannot_delete })];
+  check(JSON.stringify(c.points) === JSON.stringify(points), `${label}: step 5's points ${JSON.stringify(c.points)}`);
+  check(JSON.stringify(c.heed) === JSON.stringify(empty ? [] : [f.cannot_delete]), `${label}: step 5, "${f.cannot_delete}" in bold ${JSON.stringify(c.heed)}`);
+  check(!c.main.includes(C.pin.card_and_pin) && !c.main.includes(f.no_identity), `${label}: step 5 says who holds the card and the PIN once, in the new words`);
   check(c.listedTogether === (!empty && single === null), `${label}: step 5 ${!empty && single === null ? "says" : "does not say"} the accounts are listed together`);
-  const listedSingle = !empty && single !== null ? fill(C.confirm.listed_single, { platform: single }) : "";
-  check(c.listedSingle === listedSingle, `${label}: step 5 ${listedSingle ? `says "${listedSingle}"` : "does not say this one account is listed"} ("${c.listedSingle}")`);
-  check(c.withdrawStays === want.some((r) => r[3].includes(C.kinds.withdraw)), `${label}: step 5, that a withdrawn account's records stay`);
-  check(c.main.includes(empty ? C.confirm.later_withdraw : C.confirm.later), `${label}: step 5, what can be done later`);
+  check(!c.main.includes(fill(f.listed_single, { platform: THREADS_NAME })), `${label}: step 5, that it is public is in the first sentence, not a sentence of its own`);
+  check(c.withdrawStays === (!empty && single === null && want.some((r) => r[3].includes(C.kinds.withdraw))), `${label}: step 5, that a withdrawn account's records stay`);
   check(JSON.stringify(c.buttons) === JSON.stringify([C.common.back, button, C.common.cancel]), `${label}: step 5 buttons ${JSON.stringify(c.buttons)}`);
 }
 
@@ -1061,7 +1125,6 @@ const count = (used: number) =>
     : used < 5
       ? fill(A.row_switches, { switches_used: used, switches_left: 5 - used })
       : fill(A.row_used_up, { switches_used: used });
-const lastProof = (daysAgo: number) => fill(A.current, {}) + (daysAgo === 0 ? A.last_card_proof_today : fill(A.last_card_proof, { days_ago: daysAgo }));
 
 component.card = main.spec();
 
@@ -1162,10 +1225,18 @@ await tryStep("card proof again, nothing changed (the first submission dropped, 
     await undoConfig();
   }
   check(seenConfig.length === 1 && !st.main.includes("Not "), "the server's display names are not shown; the page's own are");
-  check(JSON.stringify(st.lead) === JSON.stringify([lastProof(0)]), `step 4: ${JSON.stringify(st.lead)}`);
-  checkAccountsNotes("refresh", st, "declared");
-  checkRows("refresh", st.rows, { [EXAMPLE]: [EXAMPLE_NAME, "", [A.row_unused]], [THREADS]: [THREADS_NAME, "alice", [count(0), A.row_today]] });
-  await page.clickButton(C.common.next);
+  checkDeclared("refresh", st, [[THREADS_NAME, at("alice")]], 0);
+  // 修改帳號清單: each row with its counts, how to change the list; 不改了 goes back.
+  const edit = await openEdit();
+  check(edit.state === "declared" && JSON.stringify(edit.lead) === JSON.stringify([A.current]), `修改帳號清單: ${edit.state} ${JSON.stringify(edit.lead)}`);
+  checkRows("refresh", edit.rows, { [EXAMPLE]: [EXAMPLE_NAME, "", [A.row_unused]], [THREADS]: [THREADS_NAME, "alice", [count(0), A.row_today]] });
+  check(edit.main.includes(A.how_change) && edit.main.includes(A.preview_note), "修改帳號清單: how to change the list, the preview");
+  check(JSON.stringify(edit.buttons.filter((b) => b !== A.preview)) === JSON.stringify([C.common.next, A.keep, C.common.cancel]), `修改帳號清單: the buttons ${JSON.stringify(edit.buttons)}`);
+  await screenshot("refresh-4-accounts-edit");
+  await page.clickButton(A.keep);
+  checkDeclared("refresh, 不改了", await waitAccounts(), [[THREADS_NAME, at("alice")]], 0);
+  // 更新島民證明: the list as it is, nothing typed.
+  await page.clickButton(A.refresh);
   checkConfirm("refresh", await waitConfirm(), [[THREADS, THREADS_NAME, at("alice"), [K.unchanged]]], C.confirm.button_refresh);
   await screenshot("refresh-5-confirm");
   await finish({
@@ -1197,8 +1268,8 @@ await tryStep("a correction on the day of the first declaration (@alice to @alic
 
 await tryStep("3 records today: step 4 keeps the list, says so, and offers only 回到開頭", async () => {
   const st = await toAccounts();
-  check(st.state === "daily_limit" && JSON.stringify(st.lead) === JSON.stringify([lastProof(0)]), `step 4: ${st.state} ${JSON.stringify(st.lead)}`);
-  checkRows("3 records today", st.rows, { [EXAMPLE]: [EXAMPLE_NAME, "", [], { fixed: true }], [THREADS]: [THREADS_NAME, at("alicia"), [], { fixed: true }] });
+  check(st.state === "daily_limit" && st.mode === "declared" && JSON.stringify(st.lead) === JSON.stringify([A.declared_now]) && st.last === lastLine(0), `step 4: ${st.state} ${JSON.stringify(st.lead)} ${st.last}`);
+  check(JSON.stringify(st.current) === JSON.stringify([[THREADS_NAME, at("alicia")]]), `3 records today: what the card declares ${JSON.stringify(st.current)}`);
   check((await page.text("[data-daily-limit]")) === C.stops.daily_limit, "step 4: the sentence of 3 records today");
   check(JSON.stringify(st.buttons) === JSON.stringify([A.restart]), `step 4: only 回到開頭 ${JSON.stringify(st.buttons)}`);
   check(!(await page.eval<boolean>(`!!document.querySelector('[data-account-field]')`)), "no field to type in");
@@ -1217,8 +1288,8 @@ await setDay(1);
 
 await tryStep("a second platform added, with 上一步 back and forth", async () => {
   const st = await toAccounts();
-  check(JSON.stringify(st.lead) === JSON.stringify([lastProof(1)]), `step 4: ${JSON.stringify(st.lead)}`);
-  checkRows("add", st.rows, { [EXAMPLE]: [EXAMPLE_NAME, "", [A.row_unused]], [THREADS]: [THREADS_NAME, "alicia", [count(0)]] });
+  checkDeclared("add", st, [[THREADS_NAME, at("alicia")]], 1);
+  checkRows("add", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "", [A.row_unused]], [THREADS]: [THREADS_NAME, "alicia", [count(0)]] });
   const signs = componentCount();
   const states = cardStateCount();
   const challenges = challengeCount();
@@ -1282,7 +1353,7 @@ await tryStep("a switch on Threads (@alicia to @bob)", async () => {
 
 await tryStep("one account withdrawn (the test-example row emptied)", async () => {
   const st = await toAccounts({ screenshots: "withdraw-one" });
-  checkRows("withdraw one", st.rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0), A.row_today]], [THREADS]: [THREADS_NAME, "bob", [count(1), A.row_today]] });
+  checkRows("withdraw one", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0), A.row_today]], [THREADS]: [THREADS_NAME, "bob", [count(1), A.row_today]] });
   await typeRows({ [EXAMPLE]: "" });
   checkConfirm(
     "withdraw one",
@@ -1364,7 +1435,7 @@ await setDay(2);
 
 await tryStep("everything withdrawn", async () => {
   const st = await toAccounts();
-  checkRows("withdraw all", st.rows, {
+  checkRows("withdraw all", (await openEdit()).rows, {
     [EXAMPLE]: [EXAMPLE_NAME, "", [fill(A.row_withdrawn, { last_declared: "a-b" }), count(0)]],
     [THREADS]: [THREADS_NAME, "bob", [count(1)]],
   });
@@ -1435,8 +1506,8 @@ await tryStep("a change the screen called a correction, recorded as a switch (th
   } finally {
     await undo();
   }
-  check(JSON.stringify(st.lead) === JSON.stringify([lastProof(0)]), `step 4 as the wrong state says: ${JSON.stringify(st.lead)}`);
-  checkRows("correction_date today", st.rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "bob", [count(1), A.row_today]] });
+  checkDeclared("correction_date today", st, [[EXAMPLE_NAME, "a-b"], [THREADS_NAME, at("bob")]], 0);
+  checkRows("correction_date today", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "bob", [count(1), A.row_today]] });
   await typeRows({ [THREADS]: "carol" });
   checkConfirm(
     "said a correction",
@@ -1479,7 +1550,7 @@ await setDay(4);
 
 await tryStep("the third switch (@carol to @dave): 2 left after it", async () => {
   const st = await toAccounts();
-  checkRows("two switches", st.rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "carol", [count(2)]] });
+  checkRows("two switches", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "carol", [count(2)]] });
   await typeRows({ [THREADS]: "dave" });
   checkConfirm(
     "the third",
@@ -1512,7 +1583,7 @@ await setDay(5);
 
 await tryStep("3 switches: the row says 2 are left; 取消 on step 5", async () => {
   const st = await toAccounts();
-  checkRows("three switches", st.rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "dave", [count(3)]] });
+  checkRows("three switches", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "dave", [count(3)]] });
   const signs = componentCount("MakeSignature");
   const challenges = challengeCount();
   await typeRows({ [THREADS]: "dave" });
@@ -1561,7 +1632,7 @@ await tryStep("a platform the page does not know: the account kept in the list a
   } finally {
     await undo();
   }
-  checkRows("unknown", st.rows, { [EXAMPLE]: [EXAMPLE, "a-b", [A.row_unknown_platform], { fixed: true }], [THREADS]: [THREADS_NAME, "dave", [count(3)]] });
+  checkRows("unknown", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE, "a-b", [A.row_unknown_platform], { fixed: true }], [THREADS]: [THREADS_NAME, "dave", [count(3)]] });
   // Threads alone on the table, and an account on a platform the page does not know: more than one.
   check(st.title === A.title, `unknown: step 4's title is that of more than one platform "${st.title}"`);
   await screenshot("unknown-4-accounts");
@@ -1574,6 +1645,9 @@ await tryStep("a platform the page does not know: the account kept in the list a
       [THREADS, THREADS_NAME, at("dave"), [K.unchanged]],
     ],
     C.confirm.button_refresh,
+    // The points name the platforms of the server's table the page knows: Threads alone now.
+    null,
+    [THREADS_NAME],
   );
   await screenshot("unknown-5-confirm");
   const submissions: Record<string, unknown>[] = [];
@@ -1646,7 +1720,7 @@ await tryStep("step 3's 上一步: step 2 again, the card read again", async () 
 await tryStep("the PIN's wait runs out: back to step 1", async () => {
   await toAccounts({ samePage: true });
   const signs = componentCount("MakeSignature");
-  await page.clickButton(C.common.next);
+  await page.clickButton(A.refresh);
   await waitConfirm();
   const t0 = Date.now();
   await waitStep("before", "step 1, after the wait", IDLE_MS + 15_000);
@@ -1662,7 +1736,7 @@ await tryStep("the PIN's wait runs out: back to step 1", async () => {
 
 await tryStep("the same page after 回到開頭, 取消 and the wait: card proof again", async () => {
   await toAccounts({ samePage: true });
-  await page.clickButton(C.common.next);
+  await page.clickButton(A.refresh);
   await waitConfirm();
   await finish({
     label: "refresh, same page",
@@ -1699,7 +1773,7 @@ await tryStep("the Worker restarted without RESTRICT_LATE_SWITCHES (the default)
 /** A fourth or fifth switch, made on the web like the first three; the server records it. */
 async function lateSwitch(label: string, from: string, to: string, used: number): Promise<void> {
   const st = await toAccounts();
-  checkRows(label, st.rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, from, [count(used)]] });
+  checkRows(label, (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, from, [count(used)]] });
   await typeRows({ [THREADS]: to });
   checkConfirm(
     label,
@@ -1733,7 +1807,7 @@ await setDay(8);
 
 await tryStep("5 switches: step 4 says none is left; another account typed anyway is refused; a sixth refused by the record rules (switch_limit)", async () => {
   const st = await toAccounts();
-  checkRows("five switches", st.rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "frank", [count(5), A.row_can_clear]] });
+  checkRows("five switches", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "frank", [count(5), A.row_can_clear]] });
   await screenshot("used-up-4-accounts");
   const requests = componentCount();
   const challenges = challengeCount();
@@ -2160,7 +2234,7 @@ await tryStep("a second card declares @zoe (account_cards 2): the sentence about
 await tryStep("the answer's kinds the page cannot read: 證明紀錄已經記下這次過卡", async () => {
   component.card = other.spec();
   await toAccounts();
-  await page.clickButton(C.common.next);
+  await page.clickButton(A.refresh);
   await waitConfirm();
   const seen: any[] = [];
   const undo = await rewrite("*/api/v1/records", (b) => void (b.kinds = [{ platform: THREADS, kind: "renewal", username: "zoe", account_cards: 2 }]), seen);
@@ -2185,7 +2259,7 @@ await tryStep("the answer's kinds the page cannot read: 證明紀錄已經記下
 await tryStep("a 201 whose body the page cannot read: 證明紀錄已經記下這次過卡, not a failure", async () => {
   component.card = other.spec();
   await toAccounts();
-  await page.clickButton(C.common.next);
+  await page.clickButton(A.refresh);
   await waitConfirm();
   const undo = await rewrite("*/api/v1/records", () => ({ unexpected: true }));
   try {
@@ -2209,7 +2283,7 @@ await tryStep("a 201 whose body the page cannot read: 證明紀錄已經記下�
 await tryStep("the answer to the submission lost, the record appended: 再試一次 gets challenge_used, the card's state shows the list (the real server)", async () => {
   component.card = fresh.spec();
   await toAccounts();
-  await page.clickButton(C.common.next);
+  await page.clickButton(A.refresh);
   await waitConfirm();
   const before = await recordCount();
   const states = cardStateCount();
@@ -2246,38 +2320,45 @@ await tryStep("the answer to the submission lost, the record appended: 再試一
 });
 
 // The server's table with Threads only (the first release's), and a card with no account
-// elsewhere: steps 5 and 6 speak of one platform, by its name. (Step 1 of this build still
+// elsewhere: steps 4, 5 and 6 speak of one platform, by its name. (Step 1 of this build still
 // speaks of more than one: it goes by the platforms the build knows, test-example and threads;
-// the production build's step 1 is checked last.)
+// the production build's step 1 is checked last.) One card, from its first declaration to
+// everything withdrawn, each by the button step 4 has for it: 下一步 with the field filled,
+// 更新島民證明, 改成別的帳號, 收回對 @… 的宣告.
 const single = await makeCard({ serial: "0a90567890abcdef1234567890abcdef" });
-await tryStep("the platform table with Threads only: steps 5 and 6 speak of one platform", async () => {
-  component.card = single.spec();
-  const seenConfig: any[] = [];
-  const undoConfig = await rewrite("*/api/v1/config", (b) => void (b.platforms = b.platforms.filter((p: { platform: string }) => p.platform === THREADS)), seenConfig);
-  let st: AccountsSeen;
+/** Steps 1 to 4 with the server's table cut to Threads on its way to the page. */
+async function toAccountsThreadsOnly(o: { screenshots?: string; seen?: unknown[] } = {}): Promise<AccountsSeen> {
+  const undo = await rewrite("*/api/v1/config", (b) => void (b.platforms = b.platforms.filter((p: { platform: string }) => p.platform === THREADS)), o.seen);
   try {
-    st = await toAccounts({ screenshots: "single" });
+    return await toAccounts({ screenshots: o.screenshots });
   } finally {
-    await undoConfig();
+    await undo();
   }
+}
+
+await tryStep("Threads only: a first declaration (the field alone)", async () => {
+  component.card = single.spec();
+  const seenConfig: unknown[] = [];
+  const st = await toAccountsThreadsOnly({ screenshots: "single", seen: seenConfig });
   check(seenConfig.length === 1, "the config was read once, and changed on its way");
-  check(st.state === "never", `a new card: ${st.state}`);
-  checkRows("one platform", st.rows, { [THREADS]: [THREADS_NAME, "", [A.row_unused]] });
-  // Step 4 names the one platform: the title, the line on top, the note of a first declaration.
+  check(st.state === "never" && st.mode === "fill", `a new card: ${st.state} ${st.mode}`);
+  // The field alone: no line under it, no rules of switching, nothing about who owns the account.
+  checkRows("one platform", st.rows, { [THREADS]: [THREADS_NAME, "", []] });
   check(st.title === "你的 Threads 帳號" && st.title === fill(A.title_single, { platform: THREADS_NAME }), `step 4, one platform: the title "${st.title}"`);
   check(JSON.stringify(st.lead) === JSON.stringify([A.none_yet, "填上你要宣告的 Threads 帳號。"]), `step 4, one platform: ${JSON.stringify(st.lead)}`);
-  check(st.main.includes("一張卡片只能宣告一個 Threads 帳號，之後改成別的帳號是更換。") && !st.main.includes(A.one_per_platform) && !st.main.includes(A.fill_one), "step 4, one platform: 一張卡片只能宣告一個 Threads 帳號……, not the sentences of more than one");
-  check((await page.eval<string>("document.title")) === "你的 Threads 帳號", "step 4, one platform: the page's title");
   check(
-    st.main.includes(fill(A.not_yours_single, { platform: THREADS_NAME })) && !st.main.includes(A.not_yours),
-    "step 4, one platform: 系統無法確認這個 Threads 帳號是不是你的……",
+    !st.main.includes(fill(A.one_per_platform_single, { platform: THREADS_NAME })) && !st.main.includes(A.switches_limited) && !st.main.includes(A.one_per_platform) && !st.main.includes(A.fill_one),
+    "step 4, one platform, a first declaration: no rules of switching, not the sentences of more than one",
   );
+  check(st.main.includes(A.preview_note), "step 4, one platform: the preview");
+  check(!st.main.includes(fill(A.not_yours_single, { platform: THREADS_NAME })) && !st.main.includes(A.not_yours), "step 4: no longer 系統無法確認這個 Threads 帳號是不是你的……");
+  check((await page.eval<string>("document.title")) === "你的 Threads 帳號", "step 4, one platform: the page's title");
+  check(JSON.stringify(st.buttons) === JSON.stringify([A.preview, C.common.next, C.common.cancel]), `step 4, one platform: the buttons ${JSON.stringify(st.buttons)}`);
   await screenshot("single-4-accounts");
   await typeRows({ [THREADS]: "yui" });
   const c = await waitConfirm();
   checkConfirm("one platform", c, [[THREADS, THREADS_NAME, at("yui"), [K.first]]], C.confirm.button_declare_single, THREADS_NAME);
-  check(c.listedSingle === "這個 Threads 帳號會公開列在島民證明上。", `step 5, one platform: "${c.listedSingle}"`);
-  check(c.intro === "按下後，證明紀錄會公開記下這張卡片宣告的帳號：", `step 5, one platform: "${c.intro}"`);
+  check(c.intro === "按下後，證明紀錄會記下新的證明並公開給所有人：", `step 5, one platform: "${c.intro}"`);
   check(c.buttons.includes("宣告這個帳號"), `step 5, one platform: the button ${JSON.stringify(c.buttons)}`);
   await screenshot("single-5-confirm");
   await finish({
@@ -2299,33 +2380,91 @@ await tryStep("the platform table with Threads only: steps 5 and 6 speak of one 
   );
   check((await page.text("[data-new-card]")) === "如果你換了新的自然人憑證：新卡片的島民編號和連結都和舊的不同。請把個人檔案的連結換成這一個。", "step 6: a new card's new link");
   check((await page.text()).includes("越久沒過卡，說服力越低。每次過卡，島民證明上的日期就會更新成今天。"), "step 6: why come back");
+});
 
-  // The same card the next day, with Threads only: step 4 with the account declared, and step 5 switching it.
-  // For the screenshots of design/screens/; then 取消, nothing signed a second time.
+await tryStep("Threads only, declared: 更新島民證明 (the list as it is), 上一步 and again", async () => {
   await setDay(day + 1);
-  const undoAgain = await rewrite("*/api/v1/config", (b) => void (b.platforms = b.platforms.filter((p: { platform: string }) => p.platform === THREADS)));
-  try {
-    const again = await toAccounts();
-    check(again.state === "declared" && again.title === "你的 Threads 帳號", `one platform, declared: step 4 "${again.state}" "${again.title}"`);
-    check(JSON.stringify(again.lead) === JSON.stringify([A.current + fill(A.last_card_proof, { days_ago: 1 })]), `one platform, declared yesterday: ${JSON.stringify(again.lead)}`);
-    check(again.links.length === 0, "one platform, declared: step 4 links to no other page");
-    await page.eval(`document.activeElement?.blur()`);
-    await screenshot("single-4-accounts-existing");
-    await typeRows({ [THREADS]: "yui.tw" });
-    const c2 = await waitConfirm();
-    checkConfirm(
-      "one platform, a switch",
-      c2,
-      [[THREADS, THREADS_NAME, at("yui.tw"), [fill(K.switch, { previous: at("yui") }), fill(C.confirm.uses_switch, { switches_left: 4 })]]],
-      C.confirm.button_declare_single,
-      THREADS_NAME,
-    );
-    await screenshot("single-5-confirm-switch");
-    await page.clickButton(C.common.cancel);
-    await waitStep("before", "step 1, after 取消");
-  } finally {
-    await undoAgain();
-  }
+  const st = await toAccountsThreadsOnly();
+  checkDeclared("one platform, declared yesterday", st, [["", at("yui")]], 1);
+  check(st.title === "你的 Threads 帳號", `one platform, declared: the title "${st.title}"`);
+  await page.eval(`document.activeElement?.blur()`);
+  await screenshot("single-4-accounts-existing");
+  const signs = componentCount("MakeSignature");
+  await page.clickButton(A.refresh);
+  const want: [string, string, string, string[]][] = [[THREADS, THREADS_NAME, at("yui"), [K.unchanged]]];
+  checkConfirm("one platform, 更新島民證明", await waitConfirm(), want, C.confirm.button_refresh, THREADS_NAME);
+  check(C.confirm.button_refresh === A.refresh, "step 5's button is step 4's word: 更新島民證明");
+  await screenshot("single-5-confirm-refresh");
+  await page.clickButton(C.common.back);
+  checkDeclared("上一步 from 更新島民證明", await waitAccounts(), [["", at("yui")]], 1);
+  await page.clickButton(A.refresh);
+  checkConfirm("one platform, 更新島民證明 again", await waitConfirm(), want, C.confirm.button_refresh, THREADS_NAME);
+  check(componentCount("MakeSignature") === signs, "back and forth: nothing signed");
+  await finish({ label: "one platform, 更新島民證明", button: C.confirm.button_refresh, title: C.done.refresh, card: [[THREADS_NAME, at("yui")]], record: [[THREADS_NAME, at("yui"), [K.unchanged]]], single: THREADS_NAME });
+});
+
+await tryStep("Threads only: 改成別的帳號 (@yui to @yui.tw): the limit said only then; 不改了; an empty field; 上一步", async () => {
+  const st = await toAccountsThreadsOnly();
+  checkDeclared("one platform, declared today", st, [["", at("yui")]], 0);
+  await page.clickButton(A.switch);
+  const sw = await waitAccounts();
+  check(sw.mode === "switch" && sw.title === "你的 Threads 帳號", `改成別的帳號: ${sw.mode} "${sw.title}"`);
+  check(JSON.stringify(sw.lead) === JSON.stringify([fill(A.declared_inline, { account: at("yui") })]), `改成別的帳號: ${JSON.stringify(sw.lead)}`);
+  checkRows("改成別的帳號", sw.rows, { [THREADS]: [THREADS_NAME, "", []] });
+  const lines = await page.eval<string[]>(`[...document.querySelectorAll('[data-switch-lines] p')].map((e) => e.innerText)`);
+  check(JSON.stringify(lines) === JSON.stringify([fill(A.switch_effect, { account: at("yui") }) + fill(A.switch_limit, { switches_left: 4 }), A.preview_note]), `改成別的帳號: what it does, the switches left after it ${JSON.stringify(lines)}`);
+  check(JSON.stringify(sw.buttons) === JSON.stringify([A.preview, C.common.next, A.keep, C.common.cancel]), `改成別的帳號: the buttons ${JSON.stringify(sw.buttons)}`);
+  await page.eval(`document.activeElement?.blur()`);
+  await screenshot("single-4-accounts-switch");
+  // An empty field: nowhere (withdrawing is the other button).
+  await page.clickButton(C.common.next);
+  const why = (await rowsOnScreen()).find((r) => r.platform === THREADS)?.why;
+  check(why === A.need_one && (await page.eval<boolean>(`!!${step("accounts")}`)), `改成別的帳號, empty: "${why}"`);
+  // 不改了: back to what the card declares.
+  await page.clickButton(A.keep);
+  checkDeclared("不改了", await waitAccounts(), [["", at("yui")]], 0);
+  await page.clickButton(A.switch);
+  await waitAccounts();
+  await typeRows({ [THREADS]: "yui.tw" });
+  const want: [string, string, string, string[]][] = [[THREADS, THREADS_NAME, at("yui.tw"), [fill(K.switch, { previous: at("yui") }), fill(C.confirm.uses_switch, { switches_left: 4 })]]];
+  checkConfirm("one platform, a switch", await waitConfirm(), want, C.confirm.button_declare_single, THREADS_NAME);
+  await screenshot("single-5-confirm-switch");
+  await page.clickButton(C.common.back);
+  const again = await waitAccounts();
+  check(again.mode === "switch" && again.rows[0]?.value === "yui.tw", `上一步: 改成別的帳號 with what was typed (${again.mode}, ${again.rows[0]?.value})`);
+  await page.clickButton(C.common.next);
+  checkConfirm("one platform, a switch again", await waitConfirm(), want, C.confirm.button_declare_single, THREADS_NAME);
+  await finish({
+    label: "one platform, 改成別的帳號",
+    button: C.confirm.button_declare_single,
+    title: C.done.changed,
+    card: [[THREADS_NAME, at("yui.tw")]],
+    record: [[THREADS_NAME, at("yui.tw"), [fill(K.switch, { previous: at("yui") })]]],
+    single: THREADS_NAME,
+  });
+});
+
+await tryStep("Threads only: 收回對 @yui.tw 的宣告; the next day, the field again with what was withdrawn under it", async () => {
+  const st = await toAccountsThreadsOnly();
+  checkDeclared("one platform, switched today", st, [["", at("yui.tw")]], 0);
+  const withdraw = fill(A.withdraw, { account: at("yui.tw") });
+  await page.clickButton(withdraw);
+  const button = fill(C.confirm.button_withdraw, { account: at("yui.tw") });
+  check(button === withdraw, "step 5's button is step 4's words: 收回對 @yui.tw 的宣告");
+  checkConfirm("one platform, withdrawn", await waitConfirm(), [[THREADS, THREADS_NAME, at("yui.tw"), [K.withdraw]]], button, THREADS_NAME);
+  await screenshot("single-5-confirm-withdraw");
+  const submissions: Record<string, unknown>[] = [];
+  await finish({ label: "one platform, 收回", button, title: C.done.withdraw_all, card: [], record: [[THREADS_NAME, at("yui.tw"), [K.withdraw]]], withdrawnLink: true, single: THREADS_NAME, submissions });
+  check(JSON.stringify(submissions.map((s) => s.accounts)) === JSON.stringify([[]]), `收回: the list sent is empty ${JSON.stringify(submissions.map((s) => s.accounts))}`);
+  // 3 records today: the next day, step 4 as for a first declaration, with what was withdrawn and the switches left.
+  await setDay(day + 1);
+  const none = await toAccountsThreadsOnly();
+  check(none.state === "nothing" && none.mode === "fill", `everything withdrawn: ${none.state} ${none.mode}`);
+  check(JSON.stringify(none.lead) === JSON.stringify([A.nothing_now, "填上你要宣告的 Threads 帳號。"]), `everything withdrawn: ${JSON.stringify(none.lead)}`);
+  checkRows("one platform, withdrawn", none.rows, { [THREADS]: [THREADS_NAME, "", [fill(A.row_withdrawn, { last_declared: at("yui.tw") }), count(1)]] });
+  await screenshot("single-4-accounts-nothing");
+  await page.clickButton(C.common.cancel);
+  await waitStep("before", "step 1, after 取消");
 });
 // 6. Storage, connections, policy ---------------------------------------------
 
@@ -2558,9 +2697,14 @@ await tryStep("the production build's step 1: one platform, named", async () => 
     await prod.send("Fetch.enable", { patterns: [{ urlPattern: "http://localhost:61161/*" }, { urlPattern: "http://127.0.0.1:61161/*" }] });
     await prod.goto(prodUrl);
     await prod.waitFor(step("before"), "the production build's step 1");
-    const oneProof = await prod.text("[data-one-proof]");
-    check(oneProof === fill(C.before.one_proof_single, { platform: THREADS_NAME }), `the production build's step 1: "${oneProof}"`);
-    check(oneProof === "一張自然人憑證換一張島民證明，上面寫著這張卡片宣告的 Threads 帳號。", "the production build's step 1 names Threads");
+    // One platform: what the proof says and that it is public is step 5's first sentence, not step 1's.
+    const s1 = await prod.text();
+    check(!(await prod.eval<boolean>(`!!document.querySelector('[data-one-proof]')`)) && !s1.includes(C.before.one_proof) && !s1.includes(fill(C.before.one_proof_single, { platform: THREADS_NAME })), "the production build's step 1: no sentence of what the proof lists");
+    check(
+      [C.before.title, C.before.duration, C.before.prepare_card, C.before.citizens_only, C.before.why_physical, C.before.how_to_get].every((x) => s1.includes(x)) && !s1.includes("我們只收台灣中華民國國民的自然人憑證正卡"),
+      "the production build's step 1: the words of card-proof.md",
+    );
+    await step1Links("the production build's step 1", prod);
     check(!(await prod.eval<boolean>(`!!document.querySelector('[data-listed-together]')`)) && !(await prod.text()).includes(C.before.listed_together), "the production build's step 1 does not say the accounts are listed together");
     await screenshot("single-1-before", prod);
     await prod.eval(`document.querySelectorAll('details').forEach((d) => (d.open = true))`);
@@ -2627,9 +2771,8 @@ await tryStep("the test site's build: the mark of a test log, the test site's he
       `the test site's headers on the page: ${JSON.stringify(doc?.headers)}`,
     );
     check(await tab.eval<boolean>("crossOriginIsolated"), "the test site's build is cross-origin isolated");
-    const oneProof = await tab.text("[data-one-proof]");
-    // Threads only, as the production build (#309): step 1 names the one platform.
-    check(oneProof === fill(C.before.one_proof_single, { platform: THREADS_NAME }), `the test site's build's step 1 is the one of one platform, Threads: "${oneProof}"`);
+    // Threads only, as the production build (#309): step 1 of one platform.
+    check(!(await tab.eval<boolean>(`!!document.querySelector('[data-one-proof]')`)), "the test site's build's step 1 is the one of one platform: no sentence of what the proof lists");
     check(!(await tab.text()).includes(C.before.listed_together), "the test site's build's step 1 does not say the accounts are listed together");
     await screenshot("testsite-1-before", tab);
     await tab.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 800, deviceScaleFactor: 1, mobile: true });

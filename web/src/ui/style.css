@@ -676,12 +676,100 @@ code,
   line-height: 1.75;
 }
 
-.not-yours {
+/* Step 4 when the card declares accounts: the account, largest; with more than one platform, a row each with its name. */
+.current {
+  margin: 8px 0 0;
+}
+
+.current-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.current-row .acct {
+  font-weight: var(--weight-account);
+  font-size: var(--size-h3);
+  line-height: var(--leading-h3);
+  color: var(--ink);
+  word-break: break-all;
+}
+
+.current.list .current-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.current.list .plat-name {
+  flex: 0 0 76px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.current.list .acct {
+  font-size: var(--size-body);
+}
+
+.current-row .row-lines {
+  flex-basis: 100%;
+  font-size: var(--size-small);
+  color: var(--mute);
+}
+
+.last {
+  margin-top: 6px;
+  color: var(--mute);
+}
+
+/* The main button, and under it what it does. */
+.refresh {
   margin: 36px 0 0;
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
+}
+
+.refresh .small {
+  margin-top: 10px;
   font-size: 15px;
-  line-height: 1.75;
+}
+
+/* The other actions: words in ink, one a line, under the main button. */
+.more {
+  display: grid;
+  justify-items: start;
+  margin: 24px 0 0;
+}
+
+.more .linkbtn {
+  color: var(--ink);
+  font-size: var(--size-body);
+}
+
+/* accounts.switch, above its field: a label in the body's typeface, not a heading of the screen. */
+.step h2.switch-title {
+  font-family: var(--font-body);
+  font-size: var(--size-body);
+  margin: 32px 0 0;
+}
+
+/* Step 5: the words to heed, in bold ink (not red: design/DESIGN.md keeps the raspberry red off warnings). */
+strong.heed {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* Step 1: where to get a card, in its question. */
+.asks details .btn {
+  text-decoration: none;
+  margin: 0 0 12px;
+  min-height: var(--min-target);
+  padding: 0 18px;
+  font-size: 15px;
+}
+
+.asks details a[data-moica] {
+  display: inline-block;
+  margin: 0 0 14px;
+  font-size: 15px;
 }
 
 /* Step 5: what the proof log will record, a rule in ink above it ------------------------- */

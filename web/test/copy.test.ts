@@ -46,6 +46,8 @@ const EXAMPLES: Record<string, string> = {
   date: "2026-11-16",
   // done.hung: the link in the sentence.
   open_proof: "打開你的島民證明",
+  // confirm.holder_later: the words in bold.
+  cannot_delete: "所有紀錄公開後無法刪除",
   short_id: "7K2Q9FM4XD",
   request_id: "3f9c2a7e5b1d4c80",
   step: "2",
@@ -74,6 +76,7 @@ const OVERRIDES: Record<string, Record<string, string>> = {
   "accounts.row_no_switches_yet": { switches_left: "5" },
   "accounts.row_used_up": { switches_used: "5" },
   "confirm.uses_switch": { switches_left: "1" },
+  "accounts.switch_limit": { switches_left: "3" },
 };
 /**
  * Values the screen shows on their own, not in a sentence: the example
@@ -89,6 +92,7 @@ const VALUES = new Set([
   "@alice_tw",
   "@carol.tw",
   "alice",
+  "carol.tw",
   "alice-b",
   "test-example",
   EXAMPLES.today!,

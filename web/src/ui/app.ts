@@ -24,14 +24,17 @@
 // A window the browser blocks sends nothing: the screen says so, and the same
 // button can be pressed again once the cardholder allowed the windows.
 //
-// accounts.preview opens the account's page on the platform in a new tab
-// (window.open with noopener and noreferrer): the only place steps 1 to 5
-// send the cardholder elsewhere. They have no link to another page
-// (docs/design/principles.md, principle 1), but for the one written after
-// a stop that the cardholder cannot get past on this page (links.prepare,
-// after stops.component_unreachable, to the site's page /prepare). The new
-// tab gets the account typed and nothing else; this page loads nothing from
-// the platform.
+// Steps 1 to 5 send the cardholder elsewhere in a few places only, each in
+// a new tab with noopener and noreferrer (docs/design/principles.md,
+// principle 1: no link out by default): accounts.preview opens the
+// account's page on the platform (window.open); step 1's question on how to
+// get a card links to a map's search for household registration offices
+// and to MOICA, for someone with no card yet (design/copy/card-proof.md,
+// step 1, why); and the link written after a stop that the cardholder
+// cannot get past on this page (links.prepare, after
+// stops.component_unreachable, to the site's page /prepare). The new tab
+// gets the account typed or a fixed address and nothing else; this page
+// loads nothing from the platform, and asks for no location.
 //
 // Every sentence comes from copy.ts; the platforms, their display names and
 // formats from the server's table (the engine's CardStatus); each
@@ -45,6 +48,9 @@ import { frame } from "./frame.ts";
 import { logo } from "./logo.ts";
 import { qrSvg } from "./qr.ts";
 import {
+  type AccountRowView,
+  type DeclaredView,
+  type FillView,
   type HelpTopic,
   type ItemState,
   type ListItem,
@@ -56,12 +62,14 @@ import {
   beforeView,
   confirmView,
   doneView,
+  editListView,
   firstNotDone,
   itemStates,
   onePlatform,
   progressButtons,
   readItemOf,
   stopMessage,
+  switchView,
 } from "./messages.ts";
 
 /** A card whose component window the screen opens in the click handler (hipki.ts). */
@@ -84,6 +92,16 @@ const STEPS = 6;
 
 /** Where a help link goes: what a card proof needs, a page of the site (/prepare, made by the Worker). */
 const HELP_HREF: Record<HelpTopic, string> = { prepare: "/prepare" };
+
+/**
+ * before.find_office: a map's search for household registration offices
+ * (the word the copy uses for them, percent-encoded), Google Maps' search URL
+ * (https://developers.google.com/maps/documentation/urls/get-started). The
+ * map finds what is near; this page asks for no location.
+ */
+const FIND_OFFICE_HREF = "https://www.google.com/maps/search/?api=1&query=%E6%88%B6%E6%94%BF%E4%BA%8B%E5%8B%99%E6%89%80";
+/** before.how_to_get_moica: MOICA's site (its page on applying blocks automated reading, so it is not checked yet: card-proof.md, step 1). */
+const MOICA_HREF = "https://moica.nat.gov.tw/";
 
 /** A link out of the page: in a new tab, as leaving this page would end the card proof. */
 function newTab(href: string, attrs: Record<string, string>, ...children: (Node | string)[]): HTMLAnchorElement {
@@ -128,7 +146,7 @@ const actions = (...children: (Node | null)[]): HTMLElement => el("div", { class
 const actionsEnd = (...children: (Node | null)[]): HTMLElement => el("div", { class: "actions end" }, ...children);
 const primary = (label: string | DocumentFragment, onClick: (ev: MouseEvent) => void): HTMLButtonElement => button(label, onClick, "btn");
 const secondary = (label: string, onClick: (ev: MouseEvent) => void): HTMLButtonElement => button(label, onClick, "btn ghost");
-const textButton = (label: string, onClick: (ev: MouseEvent) => void): HTMLButtonElement => button(label, onClick, "linkbtn");
+const textButton = (label: string | DocumentFragment, onClick: (ev: MouseEvent) => void): HTMLButtonElement => button(label, onClick, "linkbtn");
 
 /**
  * A list of what the page is doing (steps 2 and 5): each item with its state
@@ -228,17 +246,23 @@ export function startApp(o: AppOptions): void {
         el("p", { class: "lead" }, c.duration),
         el("p", { class: "lead strong" }, c.prepare_card),
         el("p", { class: "lead" }, c.citizens_only),
-        // As plain to see as the two lines above, not in a question to open: it may change whether to go on, and cannot be undone.
-        // By the platforms the device knows (there is no platform table yet): one, named; or more than one, and that their accounts are listed together.
-        el("p", { class: "lead", attrs: { "data-one-proof": "" } }, say(view.oneProof)),
+        // By the platforms the device knows (there is no platform table yet): with more than one, that their accounts are
+        // listed together, as plain to see as the lines above, not in a question to open (it may change whether to go on,
+        // and cannot be undone). With one, nothing: step 5's first sentence says it is made public.
+        view.oneProof ? el("p", { class: "lead", attrs: { "data-one-proof": "" } }, say(view.oneProof)) : null,
         view.listedTogether ? el("p", { class: "lead", attrs: { "data-listed-together": "" } }, c.listed_together) : null,
         actionsEnd(primary(COPY.common.next, () => read())),
         el(
           "div",
           { class: "asks" },
           faq(c.why_physical, c.why_physical_card, c.why_physical_mobile),
-          // The page sends no one elsewhere but to the account's preview: MOICA's page is named, not linked.
-          faq(c.how_to_get, c.how_to_get_counter, c.how_to_get_moica),
+          // Someone with no card yet cannot get past this step: where to get one, in new tabs (card-proof.md, step 1).
+          faq(
+            c.how_to_get,
+            c.how_to_get_counter,
+            newTab(FIND_OFFICE_HREF, { class: "btn ghost", "data-find-office": "" }, c.find_office),
+            newTab(MOICA_HREF, { "data-moica": "" }, c.how_to_get_moica),
+          ),
         ),
       ),
     );
@@ -389,7 +413,8 @@ export function startApp(o: AppOptions): void {
         el("div", { class: "cardname", attrs: { "data-card-read": "" } }, el("span", { class: "k" }, c.card_read), el("span", { class: "name" }, name), el("span", { class: "k" }, c.name_note)),
         el("div", { class: "pinfield" }, el("label", { attrs: { for: "pin" } }, c.label), field),
         message.node,
-        el("ul", { class: "facts" }, el("li", {}, c.purpose), el("li", {}, c.stays), el("li", {}, c.card_and_pin)),
+        // Two of the three things to say before the PIN; the third (who holds the card and the PIN can look the accounts up) is said once, on step 5.
+        el("ul", { class: "facts" }, el("li", {}, c.purpose), el("li", {}, c.stays)),
         // What the card is doing, beside the button it follows from, at the end of the row.
         actions(back, el("div", { class: "go" }, working, confirm)),
       ),
@@ -403,62 +428,163 @@ export function startApp(o: AppOptions): void {
   const cancel = (): HTMLElement => actions(textButton(COPY.common.cancel, () => before()));
 
   /**
-   * Step 4: the card's list, one row per platform of the server's table that
-   * the card's state has an entry for, and a row that cannot be changed for
-   * each account on a platform the device does not know. The cardholder
-   * edits the list in place: nothing changed is card proof again, a row
-   * filled is a new declaration, a row changed a switch, a row emptied a
-   * withdrawal. `typed`: what the rows held when step 5 went back here.
+   * Which screen of step 4: as it opens (accountsView: rows to fill, or what
+   * the card declares and the actions); accounts.switch (one platform);
+   * accounts.edit_list (more than one). `typed`: what the field(s) held when
+   * step 5 went back here.
    */
-  function accounts(f: CardProofFlow, status: CardStatus, typed: Readonly<Record<string, string>> | null = null): void {
-    // Step 3, with the name, is taken down here.
-    const a = COPY.accounts;
-    const view = accountsView(status);
-    const message = messageArea();
-    const fields = new Map<string, { input: HTMLInputElement; why: HTMLElement }>();
+  interface AccountsScreen {
+    mode: "open" | "switch" | "edit";
+    typed?: Readonly<Record<string, string>>;
+  }
 
-    const rowNodes = view.rows.map((r) => {
-      const lines = el("div", { class: "row-lines" }, ...r.lines.map((l) => el("p", { attrs: { "data-row-line": "" } }, say(l))));
-      const why = el("p", { class: "stop", attrs: { role: "alert", "data-row-message": "" } });
-      if (!r.editable) {
-        // A platform the device does not know (kept as the server sent it), or a day with 3 records: the row as it is.
-        return el(
-          "div",
-          { class: "acctrow fixed", attrs: { "data-row": r.platform, "data-fixed": "" } },
-          el("span", { class: "plat-name" }, r.name),
-          el("span", { class: r.raw ? "acct raw" : "acct", attrs: { "data-row-account": "" } }, r.current === "" ? "" : r.prefix + r.current),
-          lines,
-        );
+  /**
+   * Step 4 (design/copy/card-proof.md, step 4). Whatever is pressed, what
+   * goes on is one list (the engine's choose), and step 5 next: the card's
+   * list as it is (accounts.refresh), with one account changed, with it
+   * withdrawn, or the rows as typed.
+   */
+  function accounts(f: CardProofFlow, status: CardStatus, screen: AccountsScreen = { mode: "open" }): void {
+    // Step 3, with the name, is taken down here.
+    if (screen.mode === "switch") return switchScreen(f, status, screen.typed ?? null);
+    if (screen.mode === "edit") return listScreen(f, status, editListView(status), { typed: screen.typed ?? null, editList: true });
+    const view = accountsView(status);
+    if (view.mode === "fill") return listScreen(f, status, view, { typed: screen.typed ?? null, editList: false });
+    declaredScreen(f, status, view);
+  }
+
+  /** The list of step 4 sent as `entries`: step 5, or the reason it cannot be, under a row or under the list. */
+  function choose(f: CardProofFlow, entries: Record<string, string>, comeBack: (status: CardStatus) => void, showUnder: (platform: string | null, m: Message) => void): void {
+    let cq: Consequence;
+    try {
+      cq = f.choose(entries);
+    } catch (e) {
+      if (flow !== f) return; // the wait ran out: step 1 is on screen already
+      if (retryable(f, e)) {
+        const stop = e.stop;
+        // A row's problem under the row; the list's (empty, 3 today) under the list.
+        return showUnder((stop.code === "username" || stop.code === "blocked") && stop.platform ? stop.platform : null, stopMessage(stop));
       }
-      const input = el("input", { attrs: { id: `account-${r.platform}`, type: "text", autocomplete: "off", autocapitalize: "none", spellcheck: "false", "data-account-field": r.platform } });
-      input.value = typed?.[r.platform] ?? r.current;
-      input.addEventListener("keydown", (ev) => {
-        if (ev.key === "Enter") next();
-      });
-      fields.set(r.platform, { input, why });
-      const preview = r.preview
-        ? secondary(a.preview, () => {
-            const u = valid(r.platform);
-            if (u === null || u === "") return;
-            const url = presentationOf(r.platform)!.profileUrl!(u);
-            // A new tab with the account's page: nothing of the card proof goes with it.
-            window.open(url, "_blank", "noopener,noreferrer");
-          })
-        : null;
-      preview?.classList.add("pv");
+      return before(stopMessage(stopOf(e)));
+    }
+    confirmScreen(f, cq, () => goBack(f, comeBack));
+  }
+
+  /** The card's list as it is: each platform the screen offers, its account now or "". */
+  const listNow = (status: CardStatus): Record<string, string> => Object.fromEntries(status.slots.filter((sl) => sl.row !== null).map((sl) => [sl.platform, sl.current ?? ""]));
+
+  /** 3 records of the card today: the sentence, and "back to the beginning" (which drops the PIN, as cancel does). */
+  const dailyLimitBody = (s: Sentence): HTMLElement[] => [el("p", { class: "stop", attrs: { "data-daily-limit": "" } }, say(s)), actions(secondary(COPY.accounts.restart, () => before()))];
+
+  /** Step 4's screen, with the six steps' line above it, and its state for the tests. */
+  function showAccounts(state: string, mode: string, ...children: (Node | null)[]): void {
+    show(4, el("section", { class: "step", attrs: { "data-step": "accounts", "data-state": state, "data-mode": mode } }, ...children));
+  }
+
+  /**
+   * The card declares accounts: what it declares and when it last did,
+   * accounts.refresh (the list as it is), and with one platform
+   * accounts.switch and accounts.withdraw, with more accounts.edit_list.
+   * On a day with 3 records, none of them: the sentence and
+   * accounts.restart.
+   */
+  function declaredScreen(f: CardProofFlow, status: CardStatus, view: DeclaredView): void {
+    const a = COPY.accounts;
+    const message = messageArea();
+    const current = el(
+      "div",
+      { class: view.current.some((c) => c.name !== null) ? "current list" : "current", attrs: { "data-current": "" } },
+      ...view.current.map((c) =>
+        el(
+          "p",
+          { class: "current-row", attrs: { "data-current-row": c.platform } },
+          c.name === null ? null : el("span", { class: "plat-name" }, c.name),
+          el("span", { class: c.raw ? "acct raw" : "acct", attrs: { "data-current-account": "" } }, c.account),
+          c.line ? el("span", { class: "row-lines", attrs: { "data-row-line": "" } }, say(c.line)) : null,
+        ),
+      ),
+    );
+    const here = (s: CardStatus): void => accounts(f, s);
+    const showHere = (_platform: string | null, m: Message): void => message.show(m);
+    const body: (HTMLElement | null)[] = view.dailyLimit
+      ? dailyLimitBody(view.dailyLimit)
+      : [
+          message.node,
+          // The main button: the list as it is, nothing to type.
+          el("div", { class: "refresh" }, primary(a.refresh, () => choose(f, listNow(status), here, showHere)), el("p", { class: "small", attrs: { "data-refresh-note": "" } }, say(view.refreshNote))),
+          el(
+            "div",
+            { class: "more", attrs: { "data-more": "" } },
+            view.switchAccount ? textButton(a.switch, () => accounts(f, status, { mode: "switch" })) : null,
+            // Withdrawn: the list without it (one platform: the empty list).
+            view.withdraw ? textButton(say(view.withdraw), () => choose(f, Object.fromEntries(Object.keys(listNow(status)).map((p) => [p, ""])), here, showHere)) : null,
+            view.editList ? textButton(a.edit_list, () => accounts(f, status, { mode: "edit" })) : null,
+          ),
+          cancel(),
+        ];
+    showAccounts(
+      view.dailyLimit ? "daily_limit" : "declared",
+      "declared",
+      el("h1", {}, say(view.title)),
+      el("p", { class: "status", attrs: { "data-status": "" } }, COPY.accounts.declared_now),
+      current,
+      el("p", { class: "last", attrs: { "data-last": "" } }, ...messageNodes(view.last)),
+      ...body,
+    );
+  }
+
+  /** A row with a field (and a preview), registered in `fields`; or, for a platform the device does not know or on a day with 3 records, the row as it is. */
+  function rowNode(r: AccountRowView, value: string, fields: Map<string, { input: HTMLInputElement; why: HTMLElement }>, o: { onEnter: () => void; valid: (platform: string) => string | null }): HTMLElement {
+    const a = COPY.accounts;
+    const lines = el("div", { class: "row-lines" }, ...r.lines.map((l) => el("p", { attrs: { "data-row-line": "" } }, say(l))));
+    const why = el("p", { class: "stop", attrs: { role: "alert", "data-row-message": "" } });
+    if (!r.editable) {
+      // A platform the device does not know (kept as the server sent it), or a day with 3 records: the row as it is.
       return el(
         "div",
-        { class: "acctrow", attrs: { "data-row": r.platform } },
-        el("label", { class: "plat-name", attrs: { for: `account-${r.platform}` } }, r.name),
-        el("div", { class: "field" }, r.prefix ? el("span", { class: "at" }, r.prefix) : null, input),
-        preview,
+        { class: "acctrow fixed", attrs: { "data-row": r.platform, "data-fixed": "" } },
+        el("span", { class: "plat-name" }, r.name),
+        el("span", { class: r.raw ? "acct raw" : "acct", attrs: { "data-row-account": "" } }, r.current === "" ? "" : r.prefix + r.current),
         lines,
-        why,
       );
+    }
+    const input = el("input", { attrs: { id: `account-${r.platform}`, type: "text", autocomplete: "off", autocapitalize: "none", spellcheck: "false", "data-account-field": r.platform } });
+    input.value = value;
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") o.onEnter();
     });
+    fields.set(r.platform, { input, why });
+    const preview = r.preview
+      ? secondary(a.preview, () => {
+          const u = o.valid(r.platform);
+          if (u === null || u === "") return;
+          const url = presentationOf(r.platform)!.profileUrl!(u);
+          // A new tab with the account's page: nothing of the card proof goes with it.
+          window.open(url, "_blank", "noopener,noreferrer");
+        })
+      : null;
+    preview?.classList.add("pv");
+    return el(
+      "div",
+      { class: "acctrow", attrs: { "data-row": r.platform } },
+      el("label", { class: "plat-name", attrs: { for: `account-${r.platform}` } }, r.name),
+      el("div", { class: "field" }, r.prefix ? el("span", { class: "at" }, r.prefix) : null, input),
+      preview,
+      lines,
+      why,
+    );
+  }
 
-    /** The account typed on a row, tidied (presentationOf); "" for none. Shows the format hint under the row and returns null if it is not in the format. */
-    function valid(platform: string): string | null {
+  /** The fields of a screen, and the account typed on each (tidied, presentationOf), or the format hint under the row. */
+  function fieldSet(status: CardStatus, message: { show: (m: Message | null) => void }) {
+    const fields = new Map<string, { input: HTMLInputElement; why: HTMLElement }>();
+    const showUnder = (platform: string | null, m: Message): void => {
+      const field = platform === null ? undefined : fields.get(platform);
+      if (field) replace(field.why, ...messageNodes(m));
+      else message.show(m);
+    };
+    /** The account typed on a row; "" for none. Shows the format hint under the row and returns null if it is not in the format. */
+    const valid = (platform: string): string | null => {
       const field = fields.get(platform)!;
       const slot = status.slots.find((sl) => sl.platform === platform)!;
       const u = presentationOf(platform)!.normalize(field.input.value);
@@ -468,13 +594,23 @@ export function startApp(o: AppOptions): void {
       }
       showUnder(platform, stopMessage({ code: "username", platform }));
       return null;
-    }
+    };
+    return { fields, showUnder, valid };
+  }
 
-    function showUnder(platform: string, m: Message): void {
-      const field = fields.get(platform);
-      if (field) replace(field.why, ...messageNodes(m));
-      else message.show(m);
-    }
+  /**
+   * Rows to fill, one per platform of the server's table that the card's
+   * state has an entry for, and a row that cannot be changed for each
+   * account on a platform the device does not know: the card declares
+   * nothing (a row filled is a new declaration), or after
+   * accounts.edit_list (each row changed on its own: filled, changed,
+   * emptied). `editList`: opened with accounts.edit_list; accounts.keep goes
+   * back to what the card declares.
+   */
+  function listScreen(f: CardProofFlow, status: CardStatus, view: FillView, o: { typed: Readonly<Record<string, string>> | null; editList: boolean }): void {
+    const message = messageArea();
+    const { fields, showUnder, valid } = fieldSet(status, message);
+    const rowNodes = view.rows.map((r) => rowNode(r, o.typed?.[r.platform] ?? r.current, fields, { onEnter: next, valid }));
 
     function next(): void {
       message.show(null);
@@ -486,49 +622,56 @@ export function startApp(o: AppOptions): void {
         else entries[platform] = u;
       }
       if (!ok) return;
-      let cq: Consequence;
-      try {
-        cq = f.choose(entries);
-      } catch (e) {
-        if (flow !== f) return; // the wait ran out: step 1 is on screen already
-        if (retryable(f, e)) {
-          const stop = e.stop;
-          // A row's problem under the row; the list's (empty, 3 today) under the list.
-          if ((stop.code === "username" || stop.code === "blocked") && stop.platform) return showUnder(stop.platform, stopMessage(stop));
-          return message.show(stopMessage(stop));
-        }
-        return before(stopMessage(stopOf(e)));
-      }
-      confirmScreen(f, cq, () => goBack(f, (st) => accounts(f, st, entries)));
+      // Back from step 5: the same rows, as they were typed.
+      choose(f, entries, (st) => accounts(f, st, { mode: o.editList ? "edit" : "open", typed: entries }), showUnder);
     }
 
     const notes = view.notes.length ? el("div", { class: "tips" }, ...view.notes.map((n) => el("p", {}, ...n.map((x) => say(x))))) : null;
     const body: (HTMLElement | null)[] = view.dailyLimit
-      ? // 3 records of the card today: the list as it is, then this sentence and "back to the beginning" (which drops the PIN, as cancel does).
-        [el("p", { class: "stop", attrs: { "data-daily-limit": "" } }, say(view.dailyLimit)), actions(secondary(a.restart, () => before()))]
-      : [
-          notes,
-          message.node,
-          actionsEnd(primary(COPY.common.next, next)),
-          view.notYours ? el("p", { class: "not-yours", attrs: { "data-not-yours": "" } }, say(view.notYours)) : null,
-          cancel(),
-        ];
+      ? dailyLimitBody(view.dailyLimit)
+      : [notes, message.node, actionsEnd(primary(COPY.common.next, next)), o.editList ? actions(textButton(COPY.accounts.keep, () => accounts(f, status))) : null, cancel()];
     const lead = view.lead.map((line, i) => el("p", { class: i === 0 ? "status" : "", attrs: i === 0 ? { "data-status": "" } : { "data-fact": "" } }, ...line.flatMap((m) => messageNodes(m))));
-    show(
-      4,
-      el(
-        "section",
-        { class: "step", attrs: { "data-step": "accounts", "data-state": view.dailyLimit ? "daily_limit" : view.state } },
-        el("h1", {}, say(view.title)),
-        ...lead,
-        el("div", { class: "acctlist", attrs: { "data-list": "accounts" } }, ...rowNodes),
-        ...body,
-      ),
+    showAccounts(view.dailyLimit ? "daily_limit" : view.state, o.editList ? "edit" : "fill", el("h1", {}, say(view.title)), ...lead, el("div", { class: "acctlist", attrs: { "data-list": "accounts" } }, ...rowNodes), ...body);
+    queueMicrotask(() => [...fields.values()][0]?.input.focus());
+  }
+
+  /** accounts.switch (one platform): the account now, a field for another, what it does and what it costs; accounts.keep goes back. */
+  function switchScreen(f: CardProofFlow, status: CardStatus, typed: Readonly<Record<string, string>> | null): void {
+    const a = COPY.accounts;
+    const view = switchView(status);
+    const message = messageArea();
+    const { fields, showUnder, valid } = fieldSet(status, message);
+    const row = view.row;
+
+    function next(): void {
+      message.show(null);
+      const u = valid(row!.platform);
+      if (u === null) return;
+      // Withdrawing is the other action: an empty field goes nowhere.
+      if (u === "") return showUnder(row!.platform, stopMessage({ code: "blocked", reason: "empty" }));
+      const entries = { ...listNow(status), [row!.platform]: u };
+      choose(f, entries, (st) => accounts(f, st, { mode: "switch", typed: entries }), showUnder);
+    }
+
+    const keep = actions(textButton(a.keep, () => accounts(f, status)));
+    const lines = el("div", { class: "tips", attrs: { "data-switch-lines": "" } }, el("p", {}, ...view.lines.map((l) => say(l))), view.previewNote ? el("p", {}, say(view.previewNote)) : null);
+    showAccounts(
+      "declared",
+      "switch",
+      el("h1", {}, say(view.title)),
+      el("p", { class: "status", attrs: { "data-status": "" } }, say(view.intro)),
+      row ? el("h2", { class: "switch-title" }, a.switch) : null,
+      row ? el("div", { class: "acctlist", attrs: { "data-list": "accounts" } }, rowNode(row, typed?.[row.platform] ?? "", fields, { onEnter: next, valid })) : null,
+      lines,
+      message.node,
+      row ? actionsEnd(primary(COPY.common.next, next)) : null,
+      keep,
+      cancel(),
     );
     queueMicrotask(() => [...fields.values()][0]?.input.focus());
   }
 
-  /** Back from step 5: the engine first, then step 4 with the rows as they were typed. */
+  /** Back from step 5: the engine first, then step 4 as it was left. */
   function goBack(f: CardProofFlow, to: (status: CardStatus) => void): void {
     let status: CardStatus;
     try {
@@ -546,7 +689,9 @@ export function startApp(o: AppOptions): void {
     const c = COPY.confirm;
     const status = f.cardStatus;
     const single = status === null ? null : onePlatform(status);
-    const view = confirmView(cq, single);
+    // The points name the platforms of the screens: the one, or each the device knows of the server's table.
+    const names = status === null ? [] : status.tablePlatforms.map((p) => presentationOf(p)?.name ?? p);
+    const view = confirmView(cq, single, single !== null ? [single] : names);
     const message = messageArea();
     const go = primary(view.button, () => {
       // The component's window for the second signature opens now, in the click.
@@ -581,10 +726,12 @@ export function startApp(o: AppOptions): void {
           pair(el("dt", {}, c.short_id_label), el("dd", {}, sentence(c.short_id, { short_id: status?.shortId ?? "" }))),
         ),
         view.withdrawStays ? el("p", { class: "small", attrs: { "data-withdraw-stays": "" } }, c.withdraw_stays) : null,
-        // As plain to see as the list, above the buttons, apart from the two points below.
+        // More than one platform: as plain to see as the list, above the buttons, apart from the points below.
+        // With one, the first sentence says the account is made public.
         view.listedTogether ? el("p", { class: "public", attrs: { "data-listed-together": "" } }, c.listed_together) : null,
-        view.listedSingle ? el("p", { class: "public", attrs: { "data-listed-single": "" } }, say(view.listedSingle)) : null,
-        el("ul", { class: "facts" }, el("li", {}, c.no_identity), el("li", {}, view.later)),
+        // The points; the words that no record can be deleted in bold ink (confirm.cannot_delete).
+        // Each point in one element: the list item is a grid of the dot and the words.
+        el("ul", { class: "facts", attrs: { "data-points": "" } }, ...view.points.map((pt) => el("li", {}, el("span", {}, say(pt))))),
         message.node,
         actions(secondary(COPY.common.back, back), go),
         cancel(),
