@@ -106,15 +106,23 @@ final class DoneScreenTests: XCTestCase {
             "iamreal.tw/p/7K2Q9FM4XD",
             "複製證明連結",
             "打開 @alice 的 Threads 個人檔案",
+            // The demonstration: what VoiceOver reads in its place, and its one button.
+            "示範：按「複製證明連結」，到 Threads 的個人檔案按「編輯個人檔案」、「連結」、「新增連結」，貼上網址後按「完成」，個人檔案上多了一行連結。",
+            "再看一次",
             "按「編輯個人檔案」", "按「連結」", "按「新增連結」", "在「網址」貼上剛才複製的連結，按右上角的「完成」",
             "如果你換了新的自然人憑證，請把個人檔案的連結換成新的連結。",
             "掛好了嗎？打開你的島民證明看看。",
             "頁面上的個人檔案裡看得到這個連結，就成功了。",
             "下一步",
         ])
-        // One main button: copying the link. The way on is not it, and there is no way back: the record was sent.
-        XCTAssertEqual(inline(screen).map(\.action), [.copyLink, .openProfile("threads"), .openProof])
-        XCTAssertEqual(inline(screen).map(\.main), [true, false, false])
+        // The two buttons side by side, above the demonstration, as on its first screen; the first is the
+        // screen's one main button. The way on is not it, and there is no way back: the record was sent.
+        let pair = try XCTUnwrap(screen.blocks.firstIndex(of: .sideBySide([
+            Button(label: "複製證明連結", action: .copyLink),
+            Button(label: "打開 @alice 的 Threads 個人檔案", action: .openProfile("threads")),
+        ])))
+        guard case .demo = screen.blocks[pair + 1], case .steps = screen.blocks[pair + 2] else { return XCTFail("the buttons, the demonstration, the four steps: \(screen.blocks)") }
+        XCTAssertEqual(inline(screen).map(\.action), [.openProof])
         XCTAssertFalse(screen.mainButton)
         XCTAssertEqual(screen.buttons, [Button(label: "下一步", action: .toRemind)])
         XCTAssertNil(screen.settings)
@@ -140,6 +148,7 @@ final class DoneScreenTests: XCTestCase {
         XCTAssertEqual(inline(screen).map(\.action), [.openProof])
         try CopyDocument.load().check(screen)
         // "沒有看到連結，重新掛上": the whole step, without the sentence of a new card.
+        XCTAssertFalse(screen.blocks.contains { if case .demo = $0 { return true } else { return false } }, "no demonstration on the short step")
         let whole = screens.hang(again, single: "Threads", copied: false, whole: true)
         XCTAssertEqual(whole.step, 6)
         XCTAssertEqual(title(of: whole), "把證明掛上你的 Threads 個人檔案")
@@ -161,6 +170,49 @@ final class DoneScreenTests: XCTestCase {
         // Recorded as something else than step 5 said, or not read.
         XCTAssertFalse(screens.hangIsShort(done(unchanged, [recorded("threads", "switch", "alice")], mismatches: ["threads"]), single: "Threads"))
         XCTAssertFalse(screens.hangIsShort(done(unchanged, nil), single: "Threads"))
+    }
+
+    // The demonstration of step 6 -----------------------------------------------------------------
+
+    private func demo(of screen: Screen) -> HangDemo? {
+        for case .demo(let demo) in screen.blocks { return demo }
+        return nil
+    }
+
+    /// Its one button says what it does: it plays it again while it does not play, and stops it while it does.
+    func testTheDemonstrationsButtonSaysWhatItDoes() throws {
+        let still = try XCTUnwrap(demo(of: screens.hang(again, single: "Threads", copied: false, whole: true)))
+        XCTAssertEqual(still.control, Button(label: "再看一次", action: .playDemo))
+        XCTAssertFalse(still.playing)
+        let playing = try XCTUnwrap(demo(of: screens.hang(again, single: "Threads", copied: false, whole: true, demoPlaying: true)))
+        XCTAssertEqual(playing.control, Button(label: "停止", action: .stopDemo))
+        XCTAssertTrue(playing.playing)
+        try CopyDocument.load().check(screens.hang(again, single: "Threads", copied: false, whole: true, demoPlaying: true))
+    }
+
+    /// The account and the address on the five screens are the card's own; every other word on them is
+    /// one of card-proof.md's list for the demonstration, and the first screen is this step's own.
+    func testTheDemonstrationShowsTheCardsOwnAccountAndAddress() throws {
+        let finished = done([row("threads", "switch", "carol.tw", current: "alice", previous: "alice")], [recorded("threads", "switch", "carol.tw")])
+        let demo = try XCTUnwrap(demo(of: screens.hang(finished, single: "Threads", copied: false)))
+        XCTAssertEqual(demo.account, "@carol.tw")
+        XCTAssertEqual(demo.link, "iamreal.tw/p/7K2Q9FM4XD")
+        XCTAssertEqual(demo.address, "https://iamreal.tw/p/7K2Q9FM4XD")
+        XCTAssertEqual(demo.words.all, [
+            "島民證明的畫面", "把證明掛上你的 Threads 個人檔案", "複製證明連結", "已複製", "打開 @carol.tw 的 Threads 個人檔案",
+            "Threads 的個人檔案（示意）", "編輯個人檔案", "訪客找的就是這一行",
+            "按了「編輯個人檔案」之後（示意）", "名稱", "用戶名稱", "個人簡介", "興趣", "連結", "精選",
+            "按了「連結」之後（示意）", "新增連結",
+            "按了「新增連結」之後（示意）", "完成", "網址", "貼上", "標題（選填）",
+            "按這裡", "再按一次", "再按這裡", "貼在這裡",
+        ])
+        let document = try CopyDocument.load()
+        for sentence in demo.words.all { XCTAssertTrue(document.contains(sentence), "not in design/copy/card-proof.md: \(sentence)") }
+        // More than one platform: still the account on Threads. A card without one has no demonstration.
+        let two = [row("test-example", "refresh", "a-b", current: "a-b", known: false), row("threads", "refresh", "alice", current: "alice")]
+        XCTAssertEqual(self.demo(of: screens.hang(done(two, [recorded("test-example", "refresh", "a-b"), recorded("threads", "refresh", "alice")]), single: nil, copied: false))?.account, "@alice")
+        let none = [row("test-example", "refresh", "a-b", current: "a-b", known: false)]
+        XCTAssertNil(self.demo(of: screens.hang(done(none, [recorded("test-example", "refresh", "a-b")]), single: nil, copied: false)))
     }
 
     func testTheCopiedLinkSaysSo() {

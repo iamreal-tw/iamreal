@@ -564,9 +564,11 @@ struct Screens {
     /// the whole step also where the short one would do ("沒有看到連結，
     /// 重新掛上" was pressed). The same parts as the web page's, but for
     /// what only the page has: the QR code, and "現在可以拔出卡片。" (the
-    /// panel said the card can be taken away when it signed). The four
-    /// steps stand where the demonstration will (#375).
-    func hang(_ done: Flow.Done, single: String?, copied: Bool, whole: Bool = false) -> Screen {
+    /// panel said the card can be taken away when it signed). In the
+    /// order of the page a phone opens to hang it: the link, the two
+    /// buttons side by side, the demonstration, the four steps.
+    /// `demoPlaying`: the demonstration is playing.
+    func hang(_ done: Flow.Done, single: String?, copied: Bool, whole: Bool = false, demoPlaying: Bool = false) -> Screen {
         let kinds = done.answer.kinds
         let link = Block.link("\(host)/p/\(done.shortID)")
         var blocks = mismatch(done)
@@ -587,16 +589,18 @@ struct Screens {
             .title(single.map { copy("hang.title_single", ["platform": $0]) } ?? copy("hang.title")),
             .text(single != nil ? copy("hang.why_single") : copy("done.anyone")),
             link,
-            .button(Button(label: copied ? copy("done.copied") : copy("hang.copy"), action: .copyLink), main: true),
         ]
-        // The public page of each account of the card, on a platform the app knows.
-        blocks += done.accounts.compactMap { account in
+        // Copying the link, and beside it the public page of each account of the card on a platform the app
+        // knows: the order of the demonstration's first screen, which is this one.
+        let profiles = done.accounts.compactMap { account in
             Platform.of(account.platform).map { platform in
-                Block.button(Button(
+                Button(
                     label: copy("done.open_profile", ["account": Platform.handle(account.platform, account.username), "platform": platform.name]),
-                    action: .openProfile(account.platform)), main: false)
+                    action: .openProfile(account.platform))
             }
         }
+        blocks.append(.sideBySide([Button(label: copied ? copy("done.copied") : copy("hang.copy"), action: .copyLink)] + profiles))
+        if let demo = hangDemo(done, playing: demoPlaying) { blocks.append(.demo(demo)) }
         blocks.append(.steps([copy("done.step_edit"), copy("done.step_link"), copy("done.step_add"), copy("done.step_paste")]))
         // A new card's new link, a withdrawn account's link, the other cards that declare an account.
         if done.firstRecord { blocks.append(.small(copy("hang.new_card"))) }
@@ -611,6 +615,51 @@ struct Screens {
         blocks += record(done, single: single)
         // One main button a screen (design/DESIGN.md): copying the link, here.
         return Screen(step: 6, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toRemind)], mainButton: false)
+    }
+
+    /// The demonstration of hanging the link, for the card's account on
+    /// Threads (card-proof.md, the demonstrations); none for a card
+    /// without one. Its first screen is this step's own, with this step's
+    /// words; the other four are the sketches of Threads.
+    func hangDemo(_ done: Flow.Done, playing: Bool) -> HangDemo? {
+        let threads = Platform.threads
+        guard let account = done.accounts.first(where: { $0.platform == threads.id }) else { return nil }
+        let handle = Platform.handle(threads.id, account.username)
+        let link = "\(host)/p/\(done.shortID)"
+        let words = HangDemo.Words(
+            kickOwn: copy("app_demo_hang.kick_own"),
+            title: copy("hang.title_single", ["platform": threads.name]),
+            copy: copy("hang.copy"),
+            copied: copy("done.copied"),
+            open: copy("done.open_profile", ["account": handle, "platform": threads.name]),
+            kickProfile: copy("app_demo_hang.kick_profile"),
+            edit: copy("app_demo_hang.edit"),
+            found: copy("app_demo_hang.found"),
+            kickEdit: copy("app_demo_hang.kick_edit"),
+            rows: [copy("app_demo_hang.row_name"), copy("app_demo_hang.row_username"), copy("app_demo_hang.row_bio"), copy("app_demo_hang.row_interests")],
+            links: copy("app_demo_hang.row_links"),
+            featured: copy("app_demo_hang.row_featured"),
+            kickLinks: copy("app_demo_hang.kick_links"),
+            add: copy("app_demo_hang.add"),
+            kickAdd: copy("app_demo_hang.kick_add"),
+            done: copy("app_demo_hang.done"),
+            url: copy("app_demo_hang.url"),
+            paste: copy("app_demo_hang.paste"),
+            linkTitle: copy("app_demo_hang.link_title"),
+            press: copy("app_demo_hang.press"),
+            pressAgain: copy("app_demo_hang.press_again"),
+            pressThen: copy("app_demo_hang.press_then"),
+            pasteHere: copy("app_demo_hang.paste_here"))
+        return HangDemo(
+            description: copy("app_demo.hang"),
+            control: playing
+                ? Button(label: copy("app_demo.stop"), action: .stopDemo)
+                : Button(label: copy("app_demo.replay"), action: .playDemo),
+            playing: playing,
+            account: handle,
+            link: link,
+            address: "https://" + link,
+            words: words)
     }
 
     /// Step 7: the reminder to come back (card-proof.md, step 7), by what

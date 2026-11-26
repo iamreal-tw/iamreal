@@ -188,6 +188,8 @@ final class CardProofTests: XCTestCase {
             link,
             "複製證明連結",
             "打開 @alice 的 Threads 個人檔案",
+            "示範：按「複製證明連結」，到 Threads 的個人檔案按「編輯個人檔案」、「連結」、「新增連結」，貼上網址後按「完成」，個人檔案上多了一行連結。",
+            "再看一次",
             "按「編輯個人檔案」", "按「連結」", "按「新增連結」", "在「網址」貼上剛才複製的連結，按右上角的「完成」",
             "如果你換了新的自然人憑證，請把個人檔案的連結換成新的連結。",
             "掛好了嗎？打開你的島民證明看看。",
@@ -195,6 +197,28 @@ final class CardProofTests: XCTestCase {
             "下一步",
         ])
         await Snapshot.save(model, as: "6-hang")
+        // The two buttons are side by side, above the demonstration.
+        XCTAssertTrue(model.screen.blocks.contains(.sideBySide([
+            Button(label: "複製證明連結", action: .copyLink),
+            Button(label: "打開 @alice 的 Threads 個人檔案", action: .openProfile("threads")),
+        ])))
+        // The demonstration, with this card's account and the address of its page. It plays when its picture
+        // comes onto the screen (the picture then asks for it, as here): its button stops it, at its last
+        // frame, and then plays it again.
+        let demo = try XCTUnwrap(demonstration(on: model.screen))
+        XCTAssertEqual(demo.account, "@alice")
+        XCTAssertEqual(demo.link, link)
+        XCTAssertEqual(demo.description, Copy.bundled()("app_demo.hang"))
+        model.perform(.playDemo)
+        XCTAssertEqual(demonstration(on: model.screen)?.control.label, Copy.bundled()("app_demo.stop"))
+        try await press("停止", in: model)
+        XCTAssertEqual(demonstration(on: model.screen)?.control.label, Copy.bundled()("app_demo.replay"))
+        XCTAssertEqual(demonstration(on: model.screen)?.playing, false)
+        try await press("再看一次", in: model)
+        XCTAssertEqual(demonstration(on: model.screen)?.playing, true)
+        // Its end, as the picture tells it.
+        model.perform(.stopDemo)
+        XCTAssertEqual(demonstration(on: model.screen)?.control.label, "再看一次")
 
         XCTAssertEqual(asked.configRequests, 1, "the card proof used the config the app asked for when it opened")
         // The card was tapped three times and signed twice; the PIN is gone.
@@ -686,6 +710,8 @@ final class CardProofTests: XCTestCase {
         func within(_ block: Block) -> [Button] {
             switch block {
             case .button(let button, _), .linked(_, let button, _), .action(let button): return [button]
+            case .sideBySide(let buttons): return buttons
+            case .demo(let demo): return [demo.control]
             case .account(let row): return row.preview.map { [$0] } ?? []
             // Under a question: what its answer holds, once it is opened.
             case .question(_, let answer): return answer.flatMap(within)
@@ -729,6 +755,12 @@ final class CardProofTests: XCTestCase {
 
     private func title(of screen: Screen) -> String? {
         for case .title(let title) in screen.blocks { return title }
+        return nil
+    }
+
+    /// The demonstration of step 6.
+    private func demonstration(on screen: Screen) -> HangDemo? {
+        for case .demo(let demo) in screen.blocks { return demo }
         return nil
     }
 

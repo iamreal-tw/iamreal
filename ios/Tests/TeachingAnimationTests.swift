@@ -1,0 +1,79 @@
+import XCTest
+@testable import IamrealApp
+
+/// The demonstration of hanging the link at given moments
+/// (App/TeachingAnimation.swift), against the answers of
+/// spec/vectors/teaching-animation.json, which the site's and the Android
+/// app's implementations are tested against too: with the timeline of
+/// design/motion/hang.json, the state at each case's seconds is the case's,
+/// numbers within the file's tolerance and everything else the same.
+final class TeachingAnimationTests: XCTestCase {
+    private func timeline() throws -> HangTimeline {
+        try JSONDecoder().decode(HangTimeline.self, from: Repository.data("design/motion/hang.json"))
+    }
+
+    func testTheStateAtEveryMomentOfTheVectorsIsTheirs() throws {
+        let vectors = try Repository.vectors("teaching-animation.json")
+        XCTAssertEqual((vectors["timelines"] as? [String: String])?["hang"], "design/motion/hang.json")
+        let tolerance = try XCTUnwrap(vectors["tolerance"] as? Double)
+        let cases = try XCTUnwrap(vectors["hang"] as? [[String: Any]])
+        XCTAssertGreaterThanOrEqual(cases.count, 26)
+        let timeline = try timeline()
+        var variants: Set<String> = []
+        for item in cases {
+            let name = try XCTUnwrap(item["name"] as? String)
+            let variant = try XCTUnwrap(item["variant"] as? String)
+            let seconds = try XCTUnwrap(item["seconds"] as? Double)
+            let expected = try XCTUnwrap(item["state"] as? [String: Any])
+            variants.insert(variant)
+            let state = try TeachingAnimation.hangState(timeline, variant: variant, at: seconds)
+
+            let camera = try XCTUnwrap(expected["camera"] as? [String: Any])
+            XCTAssertEqual(state.camera.from, camera["from"] as? String, name)
+            XCTAssertEqual(state.camera.to, camera["to"] as? String, name)
+            XCTAssertEqual(state.camera.progress, try XCTUnwrap(camera["progress"] as? Double), accuracy: tolerance, name)
+
+            // The same boxes marked, each as much.
+            let marks = try XCTUnwrap(expected["marks"] as? [String: Double])
+            XCTAssertEqual(Set(state.marks.keys), Set(marks.keys), name)
+            for (box, shows) in marks { XCTAssertEqual(state.marks[box] ?? -1, shows, accuracy: tolerance, "\(name): \(box)") }
+
+            if let tap = expected["tap"] as? [String: Any] {
+                let pressed = try XCTUnwrap(state.tap, name)
+                let ring = try XCTUnwrap(tap["ring"] as? [String: Double])
+                XCTAssertEqual(pressed.target, tap["target"] as? String, name)
+                XCTAssertEqual(pressed.pressed, try XCTUnwrap(tap["pressed"] as? Double), accuracy: tolerance, name)
+                XCTAssertEqual(pressed.ring.scale, try XCTUnwrap(ring["scale"]), accuracy: tolerance, name)
+                XCTAssertEqual(pressed.ring.opacity, try XCTUnwrap(ring["opacity"]), accuracy: tolerance, name)
+            } else {
+                XCTAssertTrue(expected["tap"] is NSNull, name)
+                XCTAssertNil(state.tap, name)
+            }
+
+            let states = try XCTUnwrap(expected["states"] as? [String: Double])
+            XCTAssertEqual(Set(state.states.keys), Set(states.keys), name)
+            for (change, gone) in states { XCTAssertEqual(state.states[change] ?? -1, gone, accuracy: tolerance, "\(name): \(change)") }
+            XCTAssertEqual(state.step, expected["step"] as? Int, name)
+        }
+        XCTAssertEqual(variants, ["ios", "android"], "the cases cover both platforms")
+    }
+
+    func testAPlatformTheTimelineDoesNotHaveIsRefused() throws {
+        XCTAssertThrowsError(try TeachingAnimation.hangState(try timeline(), variant: "desktop", at: 1))
+    }
+
+    /// Any moment in any order: asking for one does not change another.
+    func testAMomentDoesNotDependOnTheOneAskedBefore() throws {
+        let timeline = try timeline()
+        let late = try TeachingAnimation.hangState(timeline, variant: "ios", at: 19)
+        let early = try TeachingAnimation.hangState(timeline, variant: "ios", at: 1.7)
+        XCTAssertEqual(try TeachingAnimation.hangState(timeline, variant: "ios", at: 19), late)
+        XCTAssertEqual(try TeachingAnimation.hangState(timeline, variant: "ios", at: 1.7), early)
+        // After the end is the end: the line on the profile, and its label.
+        let end = try TeachingAnimation.hangState(timeline, variant: "ios", at: timeline.duration)
+        XCTAssertEqual(try TeachingAnimation.hangState(timeline, variant: "ios", at: 99), end)
+        XCTAssertEqual(end.states["linkOnProfile"], 1)
+        XCTAssertEqual(end.states["resultLabel"], 1)
+        XCTAssertEqual(end.step, 5)
+    }
+}

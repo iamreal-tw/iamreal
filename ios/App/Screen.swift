@@ -87,6 +87,11 @@ enum Block: Equatable {
     case link(String)
     /// A button among the text; `main`: the screen's main button.
     case button(Button, main: Bool)
+    /// Buttons side by side, the first the screen's main button; one
+    /// under the other where they do not fit side by side.
+    case sideBySide([Button])
+    /// The demonstration of hanging the link (step 6), and its one button.
+    case demo(HangDemo)
     /// A button that looks like a link, on its own line.
     case action(Button)
     /// What the app is doing, beside a spinner.
@@ -111,6 +116,8 @@ enum Block: Equatable {
         case .row(let name, let account, let lines): return [name, account] + lines
         case .pair(let label, let value): return [label, value]
         case .button(let button, _), .action(let button): return [button.label]
+        case .sideBySide(let buttons): return buttons.map(\.label)
+        case .demo(let demo): return [demo.description, demo.control.label]
         case .figure(let figure): return figure.captions.map(\.text) + [figure.description]
         }
     }
@@ -146,6 +153,64 @@ struct ProofCard: Equatable {
     var texts: [String] {
         [label] + rows.flatMap { ($0.name.map { [$0] } ?? []) + [$0.account] } + [shortID]
     }
+}
+
+/// The demonstration of step 6 (design/copy/card-proof.md, the section on
+/// the demonstrations; design/motion/README.md): five screens side by side,
+/// the app's own and four sketches of Threads, and a camera that goes from
+/// copying the link to the line on the profile. What moves and when is the
+/// timeline's (TeachingAnimation); here is what the picture says.
+struct HangDemo: Equatable {
+    /// The words on the five screens, each from the copy.
+    struct Words: Equatable {
+        /// The app's own screen: the small words above it, its title, and the two buttons.
+        var kickOwn: String
+        var title: String
+        var copy: String
+        var copied: String
+        var open: String
+        /// The profile on Threads.
+        var kickProfile: String
+        var edit: String
+        var found: String
+        /// Editing the profile: the rows before the links, the links, the row after.
+        var kickEdit: String
+        var rows: [String]
+        var links: String
+        var featured: String
+        /// The links.
+        var kickLinks: String
+        var add: String
+        /// Adding a link.
+        var kickAdd: String
+        var done: String
+        var url: String
+        var paste: String
+        var linkTitle: String
+        /// The tags under what is to be pressed.
+        var press: String
+        var pressAgain: String
+        var pressThen: String
+        var pasteHere: String
+
+        /// Every one of them, for tests.
+        var all: [String] {
+            [kickOwn, title, copy, copied, open, kickProfile, edit, found, kickEdit] + rows
+                + [links, featured, kickLinks, add, kickAdd, done, url, paste, linkTitle, press, pressAgain, pressThen, pasteHere]
+        }
+    }
+
+    /// What VoiceOver reads in the place of the whole picture.
+    var description: String
+    /// The one button beside it: it stops while the demonstration plays, and plays it again otherwise.
+    var control: Button
+    var playing: Bool
+    /// The card's account on Threads, as the screens write it, and its
+    /// page's address: as the link is shown, and whole as it is pasted.
+    var account: String
+    var link: String
+    var address: String
+    var words: Words
 }
 
 /// One item of a progress list.
@@ -235,6 +300,11 @@ enum Action: Equatable {
     case toFinish
     /// The system's settings, at this app's notifications.
     case openNotificationSettings
+    /// The demonstration of step 6 from its start: its button, or the
+    /// picture coming onto the screen.
+    case playDemo
+    /// The demonstration at its last frame: its button, or its end.
+    case stopDemo
     /// The reminder, as step 7 offers it.
     case turnOnReminder
     /// The screen to choose the reminder's interval and time.
