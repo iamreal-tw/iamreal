@@ -117,8 +117,9 @@
 | 兩個簽章 | `CardProof`，到算完證明為止 | 算完證明、取消、停下來 |
 
 - **不寫磁碟。** 做到一半的過卡只在行程的記憶體裡（`MainActivity` 的 `model`）：不放進系統的狀態保存（`onSaveInstanceState` 交出去的是空的），不寫檔案。app 被系統結束就從第 1 步來
-- **存下來的只有兩樣**，都在 app 自己的偏好設定檔：每把發證金鑰用過的最高清冊編號（`MainActivity.kt` 的 `StoredCrlNumbers`，清冊編號是公開的數字），和提醒開著時的四樣東西（`reminder/Phone.kt` 的 `PreferencesStorage`，「過卡提醒」）
-- **連網路的只有 `backend/Backend.kt`**：後台的四個介面和清冊鏡像的兩種檔案，位置是建置時寫死的。拿題目的那一個請求（`POST /api/v1/challenges`）送出去之後回應的第一行沒有來時（連線被關，或等到逾時），再送一次，第二次還是沒有才寫「伺服器的回應不正確……（代碼 network）」（[#404](https://github.com/iamreal-tw/iamreal/issues/404)）：手機停在第 4、5 步的那幾分鐘，先前留著的連線可能已經不通了。多拿一個題目沒有副作用；送出紀錄的請求不自己重送。連不上伺服器（沒有網路）不重送。最壞的情況是等兩次逾時（各 30 秒）才看到那一句。`ChallengeAgainTest` 對這台電腦上一個手寫回應的伺服器測這幾種情況；模擬器上的過卡測試讓伺服器把一次題目的請求讀完就關掉連線，過卡照常走完。請求不帶 cookie、不帶手機或 app 的任何識別、不回報 app 自己檢查的結果（ADR-0016）。送出去的內容由核心組；核心在檢查都通過之前不算匿名編號（`device-core/README.md`「檢查都通過了」），所以這裡的程式順序寫錯時，帶著匿名編號的請求送不出去
+- **存下來的只有三樣**，都在 app 自己的偏好設定檔，不進備份：每把發證金鑰用過的最高清冊編號（`MainActivity.kt` 的 `StoredCrlNumbers`，清冊編號是公開的數字）；提醒開著時的四樣東西（`reminder/Phone.kt` 的 `PreferencesStorage`，「過卡提醒」）；過卡裝置編號和產生的日子（`MainActivity.kt` 的 `StoredDeviceId`，16 個隨機位元組，台灣的日期起算 31 天後換新的，舊的不留，`flow/Counts.kt`；ADR-0039）
+- **連網路的只有 `backend/Backend.kt`**：後台的四個介面和清冊鏡像的兩種檔案，位置是建置時寫死的。拿題目的那一個請求（`POST /api/v1/challenges`）送出去之後回應的第一行沒有來時（連線被關，或等到逾時），再送一次，第二次還是沒有才寫「伺服器的回應不正確……（代碼 network）」（[#404](https://github.com/iamreal-tw/iamreal/issues/404)）：手機停在第 4、5 步的那幾分鐘，先前留著的連線可能已經不通了。多拿一個題目沒有副作用；送出紀錄的請求不自己重送。連不上伺服器（沒有網路）不重送。最壞的情況是等兩次逾時（各 30 秒）才看到那一句。`ChallengeAgainTest` 對這台電腦上一個手寫回應的伺服器測這幾種情況；模擬器上的過卡測試讓伺服器把一次題目的請求讀完就關掉連線，過卡照常走完。請求不帶 cookie。帶著手機的東西的只有兩種：計數（`POST /api/v1/counts`，見下一點）和送出一筆，送出一筆多帶過卡裝置編號（`device_id`，後台只記在連線紀錄，ADR-0022、ADR-0039）。送出去的內容由核心組；核心在檢查都通過之前不算匿名編號（`device-core/README.md`「檢查都通過了」），所以這裡的程式順序寫錯時，帶著匿名編號的請求送不出去
+- **計數**（`flow/Counts.kt`，`spec/counts.md`；ADR-0032、ADR-0039）：過卡到了表上的哪一步、停下來或要再試一次的原因代碼、感應中途卡片離開（第幾次感應）、下載清冊、建樹、算證明花了多久的分級。一筆一個請求，在另一條執行緒送，不等回應、送不出去不重送，過卡照常。每一筆帶 `client`（`android`）、嘗試編號（一次過卡一個，只在記憶體裡）、過卡裝置編號、系統版本（`Build.VERSION.RELEASE`）、app 版本（`versionName`）、手機型號（`Build.MODEL`，不是使用者替手機取的名字）；版本和型號不合格式的整個不送。內文由核心照步驟表組（`idc_count`），後台會丟掉的那一筆不送。原因是 `Counts.reasonOf` 從停下來的代碼選的，不帶例外、卡片、伺服器的任何文字，也沒有帳號、匿名編號、卡片上的值。停下來（過卡結束）和要再試一次（畫面在同一次過卡讓人再按）分開送；持卡人自己取消不送。不用 AAID、推播權杖，沒有第三方的分析（#94）
 - **碰卡片的只有 `card/` 這一層**：一次感應是一次 `tap`，裡面先 `readCertificates`（不用 PIN），再 `sign`（帶 PIN）。發出去的 app 用 NFC 讀真卡片（「讀卡」）。要的權限多一個 `NFC`，它只讓 app 和貼在手機上的卡片說話
 - 看島民證明、Threads 的個人檔案都是開瀏覽器（或 Threads 的 app），app 裡不載入任何網頁。第 1 步「還沒有自然人憑證，怎麼申辦？」裡的兩個連結也是交給別的 app（`design/copy/card-proof.md`「1. 開始之前」）：「找附近的戶政事務所」交給手機的地圖 app 搜尋「戶政事務所」（`geo:0,0?q=…`；手機上沒有 app 接這種網址時，改開地圖網站的同一個搜尋），另一個開內政部憑證管理中心的網站。這時還沒有讀卡，兩個都不帶任何過卡的資料；app 不要位置的權限，附近是地圖自己判斷的（`ui/Screens.kt` 的 `FIND_OFFICE_MAP`）。完成畫面的「分享」交給系統的分享面板，帶一句話（有後台回的順序號碼就寫「第 N 張」）和這張島民證明的網址
 
@@ -127,7 +128,7 @@
 | 路徑 | 內容 |
 |---|---|
 | `app/src/main/kotlin/tw/iamreal/app/core/` | `DeviceCore`：Kotlin 呼叫核心的唯一入口，每個函式對應 `device-core/include/iamreal_device_core.h` 的一個 C 函式。失敗時丟 `DeviceCoreException`，裡面只有代碼 |
-| `app/src/main/kotlin/tw/iamreal/app/flow/` | `CardProof`：一次過卡，沒有畫面，順序照 `web/src/flow.ts`；每一項檢查和計算都交給核心。`Platforms`：app 自己認得的平台（只有 Threads） |
+| `app/src/main/kotlin/tw/iamreal/app/flow/` | `CardProof`：一次過卡，沒有畫面，順序照 `web/src/flow.ts`；每一項檢查和計算都交給核心。`Counts`：計數和過卡裝置編號。`Platforms`：app 自己認得的平台（只有 Threads） |
 | `app/src/main/kotlin/tw/iamreal/app/card/` | 「卡片」這一層：介面（`Card.kt`），和用 NFC 讀真卡片的三個檔（「讀卡」） |
 | `app/src/main/kotlin/tw/iamreal/app/backend/` | 送給後台和清冊鏡像的請求 |
 | `app/src/main/kotlin/tw/iamreal/app/reminder/` | 過卡提醒：下次提醒的日子怎麼算、存什麼（`Reminders.kt`），日子和時刻的寫法（`When.kt`），系統的鬧鐘、通知和接收器（`Phone.kt`） |
