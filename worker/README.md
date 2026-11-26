@@ -11,13 +11,13 @@
 | 清冊鏡像（[排程做什麼](#排程做什麼)）：每小時抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl`，驗章、建樹，寫清冊存檔的索引 `crl/index.jsonl`。`crl/testdata/` 的每一案和 Go 的 `crl/` 比對過 | |
 | 證明紀錄的 Durable Object：題目表、紀錄、卡片狀態表、證明紀錄的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | |
 | 限流（[限流](#限流)）：照 IP 的上限，題目、卡片現況、送出、公開的讀取、計數、頁面六類分開算，IPv4 照單一位址、IPv6 照 /64，超過回 `429` 和 `Retry-After`，訪客頁面回一頁說明；全站的總量上限，只數開始過卡的那一次 `config?start`；Durable Object 撐不住時介面回 `503` `busy`、頁面回人太多的那一頁 | 兩個 app 對 `429`、`busy` 的處理；WAF 的那一條規則和挑戰頁還沒有在測試網站設過 |
-| 收計數（[計數](#計數)，ADR-0032、ADR-0039）：`POST /api/v1/counts` 照 `spec/counts.md` 的表收，不合的整筆丟掉；收下的交給專門收計數的 Durable Object，每分鐘寫成不公開的儲存桶裡 `count-events/` 底下的一個檔，裡面沒有 IP，留 31 天；每分鐘的明細有上限；每小時公布最舊一檔的日期。送計數的客戶端現在只有網頁版的過卡 | 加總（[#435](https://github.com/iamreal-tw/iamreal/issues/435)）、營運者看數字的那一頁（[#436](https://github.com/iamreal-tw/iamreal/issues/436)）、訪客頁面和兩個 app 送計數（[#275](https://github.com/iamreal-tw/iamreal/issues/275)、[#433](https://github.com/iamreal-tw/iamreal/issues/433)、[#434](https://github.com/iamreal-tw/iamreal/issues/434)）；讀最舊日期的外部檢查還沒打開；這個物件一秒收得了多少還沒量 |
+| 收計數（[計數](#計數)，ADR-0032、ADR-0039）：`POST /api/v1/counts` 照 `spec/counts.md` 的表收，不合的整筆丟掉；收下的交給專門收計數的 Durable Object，每分鐘寫成不公開的儲存桶裡 `count-events/` 底下的一個檔，裡面沒有 IP，留 31 天；每分鐘的明細有上限；每小時公布最舊一檔的日期。送計數的客戶端有網頁版的過卡和訪客頁面（[頁面和檔案](#頁面和檔案)「訪客頁面送計數」） | 加總（[#435](https://github.com/iamreal-tw/iamreal/issues/435)）、營運者看數字的那一頁（[#436](https://github.com/iamreal-tw/iamreal/issues/436)）、兩個 app 送計數（[#433](https://github.com/iamreal-tw/iamreal/issues/433)、[#434](https://github.com/iamreal-tw/iamreal/issues/434)）；島民證明的「下載 app」和商店的來源參數（[#457](https://github.com/iamreal-tw/iamreal/issues/457)）；讀最舊日期的外部檢查還沒打開；這個物件一秒收得了多少還沒量 |
 | 連線紀錄（[連線紀錄](#連線紀錄)）：被算了一次的送出一筆各記一個 R2 物件（請求編號、時間、結果、IP、國家代碼、網路業者的編號、過卡裝置編號；成功的加第幾筆，沒成功的加錯誤代碼和內文），留 31 天，靠儲存桶的生命週期規則；每小時公布最舊一筆的日期，讓外面看得出規則有沒有在刪。其他的請求不記。營運者查詢的指令和收到查詢、刪除請求時的做法（[查連線紀錄](#查連線紀錄)） | 讀那個日期的外部檢查（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）；帶過卡裝置編號的客戶端現在只有網頁版，兩個 app 還沒有 |
 | API 的七個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`、`GET /api/v1/rebuild`、`POST /api/v1/counts`；存著的規則版本和程式不同時、營運者停止收過卡時（[停止和恢復收過卡](#停止和恢復收過卡)），`challenges` 和 `records` 回 `paused` | 限流見上面那一列 |
 | 寫滿 1,000 筆的紀錄檔和它的雜湊清單搬到 R2，讀回來核對過才刪掉 Durable Object 裡的那 1,000 筆（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)） | |
 | 每天台灣時間換日公布證明紀錄：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布證明紀錄](#每天換日公布證明紀錄)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的證明紀錄），重驗通過（[部署後要營運者做的](#每天換日公布證明紀錄)）；清空之後，2026-11-22 公布了營運者用真卡片過卡的那一筆，重驗通過（[#71](https://github.com/iamreal-tw/iamreal/issues/71)） | |
 | 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過；送出一筆時用它驗證 | |
-| 每一種訪客頁面：首頁 `/`、島民證明 `/p/<短編號>`、查詢頁、證明紀錄頁、常見問題、如何驗證證明紀錄、過卡需要什麼、掛上去、複製按鈕的程式，過卡的頁面 `/proof`，和頁面用的衍生表（[頁面和檔案](#頁面和檔案)） | |
+| 每一種訪客頁面：首頁 `/`、島民證明 `/p/<短編號>`、查詢頁、證明紀錄頁、常見問題、如何驗證證明紀錄、過卡需要什麼、掛上去、複製按鈕的程式、計數的程式，過卡的頁面 `/proof`，和頁面用的衍生表（[頁面和檔案](#頁面和檔案)） | |
 | 測試專用的建置和測試的工具；本機用真卡片過卡的指令（[在本機用真卡片過卡](#在本機用真卡片過卡)） | |
 | 部署測試環境的指令。2026-11-19 用它第一次部署到 `test.iamreal.tw`（[第一次部署量到的](#第一次部署量到的)） | 推版本標籤時部署正式環境的工作流程 |
 | 合併到 `main` 時部署測試環境的工作流程（[從 GitHub Actions 部署](#從-github-actions-部署)） | |
@@ -492,6 +492,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `/hang/<短編號>` | 掛上去，帶著一張島民證明（`design/copy/hang.md`） | Worker 產生，短編號讀得成才問證明紀錄 |
 | `/copy.js` | 複製按鈕的程式，只有 `/faq`、`/verify` 和 `/hang/<短編號>` 載入；在常見問題上也展開網址指到的那一題 | Static Assets 直接送 `site/copy.js`，不跑 Worker |
 | `/demo.js` | 掛上去的示範的播放程式（`design/copy/hang.md`「示範」），只有 `/hang` 和 `/hang/<短編號>` 載入 | Static Assets 直接送 `site/demo.js`，不跑 Worker |
+| `/count.js` | 訪客頁面的計數（ADR-0032、ADR-0039，`spec/counts.md`），上面每一頁回 `200` 時都載入 | Static Assets 直接送 `site/count.js`，不跑 Worker |
 | `/pages.css` | 訪客頁面的樣式表 | Static Assets 直接送 `site/pages.css`，不跑 Worker |
 | `/og-image.png` | 連結預覽圖（`design/copy/proof-page.md` 第 8 段「預覽圖」） | Static Assets 直接送 `site/og-image.png`，不跑 Worker |
 | `/favicon.ico` | 網站的圖示：每一頁的 `<link rel="icon">` 指到這裡，瀏覽器和連結預覽也會自己來要（[#356](https://github.com/iamreal-tw/iamreal/issues/356)） | Static Assets 直接送 `site/favicon.ico`，不跑 Worker |
@@ -511,7 +512,14 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 - **樣板和複製按鈕的程式是舊後台的，樣式表照新的設計。** `src/pages/` 的 HTML 照舊後台的樣板逐段搬過來，`site/copy.js` 是舊後台的那一支（後來多了常見問題的幾行）；舊後台刪掉之前，測試核對過 `copy.js` 和當時的 `site/pages.css` 和舊後台的逐位元組相同。之後導覽列、頁尾和整站的外觀換成 `design/DESIGN.md` 的（[#283](https://github.com/iamreal-tw/iamreal/issues/283)）：`site/pages.css` 的 `:root` 每一個值和 `design/tokens.json` 同名的相同，顏色只從那裡來，`760px` 以下換成手機的排法（`test/style-sheet.test.ts`）；各頁自己的排法等各頁的票：首頁、島民證明頁、查詢頁、過卡需要什麼（`/prepare`）、常見問題（`/faq`）、如何驗證證明紀錄（`/verify`）、如何檢查 Threads 帳號的島民證明（`/check`）、掛上去（`/hang`）已經照 `design/DESIGN.md` 排，其他頁現在仍是一欄。畫面上的每一句寫在樣板裡，逐字照 `design/copy/`；測試（[`test/pages.test.ts`](test/pages.test.ts)、[`test/copy.ts`](test/copy.ts)）直接讀 `design/copy/` 的每一段，確認那一種情況的每一句都在頁面上、順序相同。
 - **放進 HTML 的值一律跳脫。** 樣板是 `src/pages/html.ts` 的 `html` 標籤：放進去的字串全部跳脫，只有這個標籤自己產生的片段不跳脫。訪客打的網址、證明紀錄裡的帳號都走這一條。
-- **頁面預設沒有程式**：沒有 `<script>`、沒有行內樣式、沒有事件屬性，不設 cookie。例外只有四頁：常見問題、如何驗證證明紀錄和帶著島民證明的掛上去各載入一支自己網域的程式 `/copy.js`（`<script src="/copy.js" defer>`），掛上去的兩頁（`/hang`、`/hang/<短編號>`）載入示範的播放程式 `/demo.js`（下一點），沒有行內的程式；這四頁的 CSP 多一項 `script-src 'self'`（[頁面送的標頭](#頁面送的標頭)）。程式只讓「複製」的按鈕出現、按了複製；沒有程式時按鈕藏著，要複製的字照樣在頁面上選得起來。常見問題上，程式只做一件事：網址指到某一題（`/faq#<id>`）時，打開那一題的 `<details>`（頁面打開時，和 `#` 後面改變時）。每一題本身是 `<details>`，瀏覽器捲到它但不會打開它（瀏覽器只打開包著目標的 `<details>`）；沒有程式時題目照樣點得開，連到某一題時捲到那一題的題目，只是不自動展開。只收 `GET` 和 `HEAD`，其他方法回 `405`。產生頁面時只讀請求的方法和路徑，證明紀錄頁另外讀網址的查詢（`q`、`after`）。
+- **頁面只有自己網域的程式**：沒有行內的程式、沒有行內樣式、沒有事件屬性，不設 cookie。回 `200` 的每一頁載入計數的程式 `/count.js`（下一點）；常見問題、如何驗證證明紀錄和帶著島民證明的掛上去另外載入 `/copy.js`（`<script src="/copy.js" defer>`），掛上去的兩頁（`/hang`、`/hang/<短編號>`）載入示範的播放程式 `/demo.js`（再下一點）。這些頁的 CSP 多 `script-src 'self'` 和 `connect-src 'self'`（[頁面送的標頭](#頁面送的標頭)）。「找不到」的 `404`、人太多的 `429`、轉址、`405`、`500` 沒有程式。程式只讓「複製」的按鈕出現、按了複製；沒有程式時按鈕藏著，要複製的字照樣在頁面上選得起來。常見問題上，程式只做一件事：網址指到某一題（`/faq#<id>`）時，打開那一題的 `<details>`（頁面打開時，和 `#` 後面改變時）。每一題本身是 `<details>`，瀏覽器捲到它但不會打開它（瀏覽器只打開包著目標的 `<details>`）；沒有程式時題目照樣點得開，連到某一題時捲到那一題的題目，只是不自動展開。只收 `GET` 和 `HEAD`，其他方法回 `405`。產生頁面時只讀請求的方法和路徑，證明紀錄頁另外讀網址的查詢（`q`、`after`）。
+- **訪客頁面送計數**（ADR-0032、ADR-0039，[#275](https://github.com/iamreal-tw/iamreal/issues/275)）：回 `200` 的每一頁在 `<head>` 載入 `<script src="/count.js" defer data-page="…">`，`data-page` 是 `spec/counts.md`「Pages」的代碼；島民證明那一頁多一個 `data-short-id`，是網址裡那張證明的短編號（標準寫法）。HTML 是頁面的種類和網址決定的，每個人看到的仍然相同，快取不受影響（ADR-0023）。程式做的事：
+  - 頁面打開時送一筆 `page`：頁面的種類，島民證明的短編號，`source`。按上一頁、下一頁從瀏覽器的快取回來時不再送。`source` 是 `document.referrer` 的主機名稱，合 `spec/counts.md` 的格式才帶。完整的 `Referer`、網址的查詢和 `#` 後面都不送、不讀
+  - 按了標了 `data-count` 的元素時送那個動作：每一個連到 `/proof` 的連結標 `start_card_proof`，帶著島民證明的掛上去那一頁的「複製連結」標 `copy_proof_link`（`test/pages.ts` 的 `getPage` 檢查每一頁每一個 `/proof` 的連結都有標）。在島民證明那一頁按的，計數也帶短編號，營運者才數得出每張證明帶來幾次開始過卡（#275 2026-11-27 的留言）。「下載 app」的連結還沒有（[#457](https://github.com/iamreal-tw/iamreal/issues/457)）；展開了哪一題常見問題不在表上，不送
+  - 每一筆帶造訪編號、瀏覽器和作業系統的大類（`protocol/src/families.ts`，和過卡的頁面同一份），沒有別的。造訪編號是 16 個隨機位元組，存在分頁的 `sessionStorage`（`iamreal.visit_id`），每次送都重新讀：分頁關掉就沒了；過卡的頁面打開時把它刪掉、不讀（`web/src/counts.ts` 的 `endVisit`），之後再打開的訪客頁面換一個新的。這支程式不讀 `localStorage`，讀不到過卡裝置編號。Do Not Track、Global Privacy Control 照樣送
+  - 請求是 `POST /api/v1/counts`，`credentials: "omit"`、`referrerPolicy: "no-referrer"`、`keepalive`：點了連結離開頁面時也送得出去；不等回應、失敗不重送。頁面本來就是 `Referrer-Policy: no-referrer`，計數的請求不帶這一頁的網址
+  - 擋掉這支程式時頁面照常顯示，只是數不到（`web/test/worker-card-proof.ts` 擋掉它看過）
+  - `site/count.js` 由 `scripts/site-files.ts` 寫出，提交進版控：`protocol/src/families.ts`（去掉型別），`protocol/src/counts.ts` 的三個值（造訪編號的鍵名 `VISIT_ID_KEY`、編號的格式 `COUNT_ID`、來源的格式 `SOURCE`），再接 `count/visitor.js`。`test/count-script.test.ts` 檢查版控裡的那一份就是這樣寫出來的，並在假的頁面裡跑它，看送出的每一筆都是表上收的；在真的瀏覽器裡對本機的 Worker 跑一次是 `web/test/worker-card-proof.ts`
 - **頁面的請求不進連線紀錄**（[連線紀錄](#連線紀錄)只記送出一筆的請求），回答了就不寫任何東西。後台自己出錯時回 `500`（純文字），寫一行：`{event: "internal_error", page, where, error}`，`page` 是哪一種頁面（`home`、`card`、`account`、`proof_log`、`hang`、`faq`、`verify`、`check`、`prepare`、`none`），不含短編號、帳號和網址的任何部分。檔案的請求不跑 Worker，後台的程式對它們什麼都不寫。
 
 ### 讀證明紀錄經過一個介面
@@ -577,7 +585,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 送出去的地方有兩個，值都從那一處來：
 
 - Worker 產生的頁面，由 `src/visitor.ts` 加上。
-- 樣式表、`/copy.js`、`/demo.js`、圖示（`/favicon.ico`）、字型（`/fonts/…`）、連結預覽圖和 `/proof` 的檔案不跑 Worker，標頭寫在 [`site/_headers`](site/_headers)，由 Static Assets 加上。這個檔是 [`scripts/site-files.ts`](scripts/site-files.ts) 從 `src/headers.ts` 的值寫出來的，不手改；`src/headers.ts` 改了之後在這個目錄跑 `node --experimental-strip-types scripts/site-files.ts` 重寫。測試和部署前的檢查都核對版控裡的 `_headers` 和重寫出來的逐字相同。
+- 樣式表、`/copy.js`、`/count.js`、`/demo.js`、圖示（`/favicon.ico`）、字型（`/fonts/…`）、連結預覽圖和 `/proof` 的檔案不跑 Worker，標頭寫在 [`site/_headers`](site/_headers)，由 Static Assets 加上。這個檔是 [`scripts/site-files.ts`](scripts/site-files.ts) 從 `src/headers.ts` 的值寫出來的，不手改；`src/headers.ts` 改了之後在這個目錄跑 `node --experimental-strip-types scripts/site-files.ts` 重寫。測試和部署前的檢查都核對版控裡的 `_headers` 和重寫出來的逐字相同。
 
 每個回應：
 
@@ -585,7 +593,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 |---|---|---|
 | `X-Content-Type-Options` | `nosniff` | 瀏覽器照 `Content-Type` 處理內容，不自己猜 |
 
-訪客的頁面、樣式表、`/copy.js`、`/demo.js` 和字型（程式自己的 CSP 不決定什麼能執行，決定的是載入它的頁面的 CSP）：
+訪客的頁面、樣式表、`/copy.js`、`/count.js`、`/demo.js` 和字型（程式自己的 CSP 不決定什麼能執行，決定的是載入它的頁面的 CSP）：
 
 | 標頭 | 值 | 理由 |
 |---|---|---|
@@ -594,7 +602,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `Cross-Origin-Opener-Policy` | `same-origin` | 開啟這一頁的別的網站，和這一頁開出去的視窗，彼此拿不到對方 |
 | （沒有 `Cross-Origin-Embedder-Policy`、`Document-Isolation-Policy`） | | 送了的話 Threads 的框會被擋 |
 
-載入本站程式的四頁（常見問題、如何驗證證明紀錄、掛上去的兩頁）的 `200`：上面那一組，`Content-Security-Policy` 換成多一項 `script-src 'self'` 的 `default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`，和舊後台的 `scriptPageHeaders` 相同：只跑自己網域的程式，沒有行內的程式、沒有別的網站的。同一個網址的轉址、`405`、`500` 不載入程式，用上面那一組；舊後台是照路徑給，如何驗證證明紀錄和掛上去這兩個網址的每一種回應都帶 `script-src 'self'`（舊後台的常見問題沒有程式）。
+Worker 產生的頁面回 `200` 時（每一頁都載入計數的程式 `/count.js`，有的另外載入 `/copy.js`、`/demo.js`）：上面那一組，`Content-Security-Policy` 換成多兩項的 `default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`。`script-src 'self'`：只跑自己網域的程式，沒有行內的程式、沒有別的網站的，和舊後台的 `scriptPageHeaders` 相同。`connect-src 'self'`：計數送到自己網域的 `POST /api/v1/counts`；頁面上的程式，不論是誰的，都不能把東西送到別的網域。同一個網址的轉址、`404`、`405`、`429`、`500` 不載入程式，用上面那一組。（2026-11-27 改，#275；之前只有載入 `/copy.js`、`/demo.js` 的四頁准程式，其他頁完全不准。這一項改了什麼、換到什麼寫在那張票的 PR 裡：換到的是每一頁有幾個人看、從哪個網域來、按了哪幾個按鈕；代價是每一頁都有一支程式在跑，擋掉它時頁面照常。）
 
 過卡的頁面和它的每個檔案（`/proof`、`/proof/…`）：`Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups` 三個，值和每一項的理由寫在 [`web/README.md`](../web/README.md)「頁面需要的標頭」。[`test/proof-files.test.ts`](test/proof-files.test.ts) 從那份 README 讀出這三個值，確認它們和 `src/headers.ts` 的相同，本機的 workerd 對 `/proof` 的每一種回應（檔案、`301`、`404`、`405`、`304`）送的也一字不差。`connect-src` 裡的資料網域照證明紀錄的種類（`src/headers.ts` 的 `DATA_ORIGINS`、`proofPageHeaders`）：測試的證明紀錄的網站是 `https://test-data.iamreal.tw`，正式的證明紀錄的是 `https://data.iamreal.tw`（舊後台只有後面這一份）。兩份 `web/README.md` 都引用了，測試各比一次。
 
@@ -608,6 +616,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 |---|---|
 | `pages.css` | 訪客頁面的樣式表，在版控裡 |
 | `copy.js` | 複製按鈕的程式，在版控裡 |
+| `count.js` | 訪客頁面的計數，在版控裡，由 `scripts/site-files.ts` 從 `protocol/src/families.ts` 和 `count/visitor.js` 寫出 |
 | `demo.js` | 掛上去的示範的播放程式，在版控裡，由 `scripts/site-files.ts` 從 `src/teaching-animation.ts` 和 `demo/player.js` 寫出 |
 | `fonts/GenRyuMin2TW-B.woff2` | 標題的字型：`design/fonts/` 那份子集的拷貝，在版控裡，由 `scripts/site-files.ts` 拷過來；`test/font.test.ts` 檢查兩份逐位元組相同 |
 | `og-image.png` | 連結預覽圖：`design/screens/og-image.png` 的拷貝，在版控裡，由 `scripts/site-files.ts` 拷過來；`test/pages.test.ts` 和部署前的檢查核對兩份逐位元組相同 |
@@ -633,19 +642,19 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
    這些檢查找的是「放錯了哪一種建置」的幾種已知情況，不是頁面的程式做了什麼；兩種證明紀錄的場合字串都在 `protocol/` 的表裡、每一種建置都有，光找字串分不出簽的是哪一個，所以看的是標示裡那段 JSON 寫的場合字串；它是建置時寫的，不是從打包好的過卡流程讀出來的（`web/test/e2e/ui.ts` 在瀏覽器裡另外看頁面自己說的場合字串）。檔案沒有逐檔的清單和雜湊：`assets/` 多一支或少一支程式、某一支被改過，這裡看不出來。兩個入口每次都清空重建，所以那要建置本身出錯才會發生，結果是測試網站壞掉。電路檔和通用參數的內容這裡不比：頁面自己在用之前核對它們的 SHA-256（`web/README.md`「從伺服器拿到的值」）。正式的證明紀錄的環境這裡一律不過：它要另一種建置和自己的檢查，等有正式環境時再加。
 
-`site/` 裡 `proof/` 以外的檔案照舊由 `checkSiteFiles` 核對：恰好是 `scripts/site-files.ts` 的 `SITE_FILES` 列的那八個；`pages.css`、`copy.js`、`demo.js` 和 `favicon.ico` 要和目前 checkout 的 commit（`HEAD`）裡的那一份逐位元組相同（`git show HEAD:./pages.css`，`deploy-build-checks.ts` 的 `sha256InHead`）。所以部署上傳的是提交過的那一份（GitHub Actions 上就是 `main` 審查過的那一份）：本機 `pnpm run deploy:test` 時這兩個檔有還沒提交的改動、或建置過程改到它們，都過不了；`HEAD` 裡讀不到那一份（不在 git 的 checkout 裡、檔案沒進版控）也不過，不會跳過。改這兩個檔時不用改別的檔；`test/environments.test.ts` 也拿真的設定跑這項檢查，所以改了之前先提交，再跑測試、再部署。
+`site/` 裡 `proof/` 以外的檔案照舊由 `checkSiteFiles` 核對：恰好是 `scripts/site-files.ts` 的 `SITE_FILES` 列的那九個；`pages.css`、`copy.js`、`count.js`、`demo.js` 和 `favicon.ico` 要和目前 checkout 的 commit（`HEAD`）裡的那一份逐位元組相同（`git show HEAD:./pages.css`，`deploy-build-checks.ts` 的 `sha256InHead`）。所以部署上傳的是提交過的那一份（GitHub Actions 上就是 `main` 審查過的那一份）：本機 `pnpm run deploy:test` 時這兩個檔有還沒提交的改動、或建置過程改到它們，都過不了；`HEAD` 裡讀不到那一份（不在 git 的 checkout 裡、檔案沒進版控）也不過，不會跳過。改這兩個檔時不用改別的檔；`test/environments.test.ts` 也拿真的設定跑這項檢查，所以改了之前先提交，再跑測試、再部署。
 
 - 本機的 `pnpm run deploy:test` 結束時（不論有沒有上傳）刪掉 `site/proof/`。單獨跑 `scripts/build-deploy.ts`（GitHub Actions 的做法）會把它留著，因為下一個工作要從那裡拿；留著不影響測試（`checkSiteFiles` 和測試的工具都不看 `proof/`），下一次部署的建置會先清空它。
-- GitHub Actions 上，`build` 工作在自己的 checkout 裡建置、檢查，把 `worker/site/proof/` 交成第二個 artifact（`proof-page`）；`deploy` 工作把它下載到自己 checkout 的同一個位置，wrangler 上傳時和版控裡的八個檔一起讀到（[從 GitHub Actions 部署](#從-github-actions-部署)）。
+- GitHub Actions 上，`build` 工作在自己的 checkout 裡建置、檢查，把 `worker/site/proof/` 交成第二個 artifact（`proof-page`）；`deploy` 工作把它下載到自己 checkout 的同一個位置，wrangler 上傳時和版控裡的九個檔一起讀到（[從 GitHub Actions 部署](#從-github-actions-部署)）。
 - 帶著這份建置的第一次部署是 2026-11-21（`main` 的 `1400e11`，GitHub Actions）。線上看到的在下面「Cloudflare 上看過的」。
 
 設定的每一項：
 
-- **`run_worker_first` 是 `["/*", "!/copy.js", "!/demo.js", "!/favicon.ico", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"]`**：這幾個路徑以外的請求先跑 Worker。`!` 開頭的是排除，排除優先；排除的路徑先找檔案，檔案在就直接送。本機的 workerd 上，排除的路徑不論檔案在不在都不跑 Worker：不在就由 Static Assets 自己回 `404`（空的內容）。Cloudflare 上檔案不在時也是這樣；檔案在的時候還沒看過（線上還沒有 `/proof` 的檔）。測試專用的建置記下每一個跑到 Worker 的請求（`GET /__test/seen`），`test/proof-files.test.ts` 用它確認 `/proof` 的檔案、轉址、`404`、`405` 沒有一個跑到 Worker；`test/pages.test.ts`、`test/site-pages.test.ts` 對樣式表、`/copy.js` 和字型也確認一次，`test/pages.test.ts` 對連結預覽圖也是。
+- **`run_worker_first` 是 `["/*", "!/copy.js", "!/count.js", "!/demo.js", "!/favicon.ico", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"]`**：這幾個路徑以外的請求先跑 Worker。`!` 開頭的是排除，排除優先；排除的路徑先找檔案，檔案在就直接送。本機的 workerd 上，排除的路徑不論檔案在不在都不跑 Worker：不在就由 Static Assets 自己回 `404`（空的內容）。Cloudflare 上檔案不在時也是這樣；檔案在的時候還沒看過（線上還沒有 `/proof` 的檔）。測試專用的建置記下每一個跑到 Worker 的請求（`GET /__test/seen`），`test/proof-files.test.ts` 用它確認 `/proof` 的檔案、轉址、`404`、`405` 沒有一個跑到 Worker；`test/pages.test.ts`、`test/site-pages.test.ts` 對樣式表、`/copy.js`、`/count.js`、`/demo.js` 和字型也確認一次，`test/pages.test.ts` 對連結預覽圖也是。
 - **沒有 `binding`**：Worker 沒有 `ASSETS`，讀不到這些檔，也就沒辦法自己送。部署前的檢查核對 wrangler 列出的 binding 裡沒有它。
 - **`html_handling` 和 `not_found_handling` 都是 `none`**：一個路徑要嘛就是那個檔案，要嘛 `404`；不替目錄找 `index.html`、不把 `.html` 拿掉、沒有替代的頁面。
 - **`_redirects`**：`/proof` 送 `proof/index.html` 的內容（`200`，網址不變）；`/proof/` 和 `/proof/index.html` 轉（`301`）到 `/proof`，和舊後台相同。過卡的說明頁拿掉了（#292），它的網址 `/proof/help.html` 轉（`301`）到 `/prepare`：Android、iOS 的 app 改版之前還連到那裡（「了解更多」「怎麼驗證島民證明」）。查詢字串照樣帶過去（`/proof/help.html?topic=more` 到 `/prepare?topic=more`），`/prepare` 不看它。
-- **`_headers`**：`/proof`、`/proof/*`、`/pages.css`、`/copy.js`、`/demo.js`、`/favicon.ico`、`/fonts/*`、`/og-image.png` 八條規則。本機的 workerd 上規則照路徑套用，不看檔案在不在，所以 `/proof` 底下的 `301`、`404`、`405` 也帶同一組標頭；Cloudflare 的文件只說規則套在靜態檔的回應上；線上 `301` 和 `404` 都帶；`405` 線上有了（`POST /copy.js`），它帶不帶這一組標頭還沒看。樣式表、程式、圖示、字型和連結預覽圖的規則先拿掉 Static Assets 預設的 `Cache-Control` 再設 `no-cache`（同一個標頭設兩次會被接成一個值）：每次用都憑 ETag 再問一次，改了字重新產生子集之後，頁面不會拿到舊的字型。
+- **`_headers`**：`/proof`、`/proof/*`、`/pages.css`、`/copy.js`、`/count.js`、`/demo.js`、`/favicon.ico`、`/fonts/*`、`/og-image.png` 九條規則。本機的 workerd 上規則照路徑套用，不看檔案在不在，所以 `/proof` 底下的 `301`、`404`、`405` 也帶同一組標頭；Cloudflare 的文件只說規則套在靜態檔的回應上；線上 `301` 和 `404` 都帶；`405` 線上有了（`POST /copy.js`），它帶不帶這一組標頭還沒看。樣式表、程式、圖示、字型和連結預覽圖的規則先拿掉 Static Assets 預設的 `Cache-Control` 再設 `no-cache`（同一個標頭設兩次會被接成一個值）：每次用都憑 ETag 再問一次，改了字重新產生子集之後，頁面不會拿到舊的字型。
 
 沒有用 `html_handling: "drop-trailing-slash"`（它也能讓 `/proof` 送 `index.html`）：它會把每個 `.html` 的網址轉走（例如當時的說明頁 `/proof/help.html` 變成 `307` 到 `/proof/help`），連到它們的每個連結都多轉一次。
 
@@ -784,7 +793,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - 不是 JavaScript 的模組恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個
   - `wrangler.jsonc` 每一個環境的 `limits.cpu_ms` 都是鏡像一輪假設自己拿得到的 CPU 時間（`src/round-budget.ts` 的 `ROUND_CPU_MS`，300,000 毫秒）。設定檔裡有幾個環境就讀幾次，每個照 wrangler 讀 `--env <名稱>` 的方式讀；有一個環境沒有設、或是別的數字就不過。這一項用 wrangler 的函式庫在跑檢查的那個程序裡讀設定檔，不另外起指令，也不送請求
   - `wrangler.jsonc` 裡用測試的證明紀錄的環境，`TEST_PROOF_LOG_CLEARED_ON` 是日曆上有的日期，讀法和 Worker 執行時相同（`checkClearedOn`）。寫錯的話部署出去的測試網站全部回 `500`，這一項讓它在部署前就被擋下
-  - `wrangler.jsonc` 每一個環境的 Static Assets（`checkSiteFiles`，讀法同上一項）：`run_worker_first` 是把 `/copy.js`、`/demo.js`、`/favicon.ico`、`/fonts/*`、`/og-image.png`、`/pages.css`、`/proof`、`/proof/*` 排除在外的那一份，沒有 `binding`，`html_handling` 和 `not_found_handling` 是 `none`；那個環境的 `site/_headers` 和 `scripts/site-files.ts` 照它的 `PROOF_LOG_KIND` 寫出來的逐字相同，`site/_redirects` 也是；`site/` 裡 `proof/` 以外的檔案恰好是 `pages.css`、`copy.js`、`fonts/GenRyuMin2TW-B.woff2`、`og-image.png`、`_headers`、`_redirects`，`pages.css` 和 `copy.js` 和 `HEAD` 裡的那一份逐位元組相同，字型和 `design/fonts/` 的子集逐位元組相同。所以把設定改回「每個請求先跑 Worker」、手改一個標頭、測試網站的 `_headers` 少了 `noindex`、`site/` 多了別的檔、或 `pages.css`、`copy.js` 有還沒提交的改動，都過不了
+  - `wrangler.jsonc` 每一個環境的 Static Assets（`checkSiteFiles`，讀法同上一項）：`run_worker_first` 是把 `/copy.js`、`/count.js`、`/demo.js`、`/favicon.ico`、`/fonts/*`、`/og-image.png`、`/pages.css`、`/proof`、`/proof/*` 排除在外的那一份，沒有 `binding`，`html_handling` 和 `not_found_handling` 是 `none`；那個環境的 `site/_headers` 和 `scripts/site-files.ts` 照它的 `PROOF_LOG_KIND` 寫出來的逐字相同，`site/_redirects` 也是；`site/` 裡 `proof/` 以外的檔案恰好是 `scripts/site-files.ts` 的 `SITE_FILES` 列的那九個，`pages.css`、`copy.js`、`count.js`、`demo.js`、`favicon.ico` 和 `HEAD` 裡的那一份逐位元組相同，字型和 `design/fonts/` 的子集逐位元組相同。所以把設定改回「每個請求先跑 Worker」、手改一個標頭、測試網站的 `_headers` 少了 `noindex`、`site/` 多了別的檔、或 `pages.css`、`copy.js` 有還沒提交的改動，都過不了
   - `site/proof/` 裡的過卡頁面另外檢查（`checkProofPages`，[Static Assets](#static-assets) 列了每一項）。它不在 `checkDeployBuild` 裡，因為要先建置頁面；兩種部署的入口（`scripts/build-deploy.ts`、`scripts/deploy-test.ts`）都先呼叫 `buildSite`，建置完就檢查。`test/deploy.test.ts` 讀這兩支腳本，釘住 `buildSite` 在打包、讀權杖、上傳之前
 - [`test/bundle.test.ts`](test/bundle.test.ts) 對新打的部署那一包逐項跑這些檢查，也把測試專用的建置打出來，確認同樣的檢查在那一包會失敗（找得到測試的金鑰、假的內政部和時鐘的開關）。
 
@@ -1211,7 +1220,7 @@ pnpm run deploy:test
 - npm 上的 pnpm 10.16.1：沒有核對雜湊
 - `pnpm-lock.yaml` 裡的套件，包括 wrangler：pnpm 核對 lockfile 記的雜湊，所以換來源換不了內容，但 lockfile 本身就是提交的一部分
 - `pnpm-workspace.yaml`：安裝時一定會讀，設定能改裝進來的套件（例如 `patchedDependencies` 加一個 `patches/` 的修補，在 `--ignore-scripts --ignore-pnpmfile` 之下照樣套到 wrangler 上，試過）。`test/workflows.test.ts` 確認它只有現在的三個鍵、lockfile 沒有 `patchedDependencies` 這類段落、程式庫沒有追蹤 `.npmrc`、`.pnpmfile.cjs`、`patches/`、`worker/` 底下的 `.env*`
-- `worker/site/`：Static Assets 的檔案。`pages.css`、`copy.js`、`demo.js`、`favicon.ico`、`fonts/`、`og-image.png`、`_headers`、`_redirects` 不在 `build` 工作交出來的東西裡，是 `deploy` 工作從自己的 checkout 上傳的；`_headers` 和 `_redirects` 決定這些檔案帶什麼標頭、哪些網址轉到哪裡。`build` 工作的檢查核對過同一個 commit 的這八個檔（`checkSiteFiles`）。`proof/` 底下的過卡頁面是 `build` 工作建置、檢查過再交過來的（`checkProofPages`）
+- `worker/site/`：Static Assets 的檔案。`pages.css`、`copy.js`、`count.js`、`demo.js`、`favicon.ico`、`fonts/`、`og-image.png`、`_headers`、`_redirects` 不在 `build` 工作交出來的東西裡，是 `deploy` 工作從自己的 checkout 上傳的；`_headers` 和 `_redirects` 決定這些檔案帶什麼標頭、哪些網址轉到哪裡。`build` 工作的檢查核對過同一個 commit 的這九個檔（`checkSiteFiles`）。`proof/` 底下的過卡頁面是 `build` 工作建置、檢查過再交過來的（`checkProofPages`）
 - `build` 工作建置過卡頁面時用到的東西，它們決定持卡人在測試網站拿到的頁面：`web/` 和 `protocol/` 的程式、`design/copy/`、lockfile 裡 `web/` 的套件（Vite、bb.js、noir_js），和 `web/scripts/fetch-crs.mjs` 從 Aztec 的 CDN 下載的通用參數（核對 SHA-256）。`build` 工作沒有權杖；它交出去的頁面由部署前的檢查看過幾種已知的錯法，看不到頁面的程式做了什麼
 - `wrangler.jsonc`：上傳時 wrangler 讀它。它不能有 `build.command`：wrangler 在上傳之前會執行它，加了 `--no-bundle` 也一樣（Cloudflare 的文件寫它「will be run as part of `wrangler dev` and `npx wrangler deploy`」，[custom builds](https://developers.cloudflare.com/workers/wrangler/custom-builds/)；wrangler 4.160.1 的 `getEntry`（`src/deployment-bundle/entry.ts`）不看 `--no-bundle` 就呼叫 `runCustomBuild`；用 `--no-bundle --dry-run` 試過，指令跑了）。`test/workflows.test.ts` 檢查設定檔沒有它
 
@@ -1368,7 +1377,7 @@ Durable Object 回 `overloaded`（錯誤帶著 `overloaded: true`，文件說不
 **一、WAF 的那一條限流規則（平時開著）**
 
 - 在哪裡：zone `iamreal.tw` → Security → WAF → Rate limiting rules → Create rule（[rate limiting rules](https://developers.cloudflare.com/waf/rate-limiting-rules/)）。Free 方案只有 1 條、計數期間 10 秒
-- 比對哪些請求：會跑到 Worker、打得到 Durable Object 的路徑合起來。用運算式寫：主機是 `test.iamreal.tw`（正式上線後加 `iamreal.tw`），而且路徑不是 Static Assets 直接送的那幾種（`/proof` 和它底下的檔、`/pages.css`、`/copy.js`、`/demo.js`、`/fonts/`、`/favicon.ico`、`/og-image.png`）
+- 比對哪些請求：會跑到 Worker、打得到 Durable Object 的路徑合起來。用運算式寫：主機是 `test.iamreal.tw`（正式上線後加 `iamreal.tw`），而且路徑不是 Static Assets 直接送的那幾種（`/proof` 和它底下的檔、`/pages.css`、`/copy.js`、`/count.js`、`/demo.js`、`/fonts/`、`/favicon.ico`、`/og-image.png`）
 - 照什麼算：IP（這一層只能照完整的位址，IPv6 的 /64 由 Worker 那一層管）
 - 上限：訂得比 Worker 裡各類的上限合起來寬很多。這一層擋的是單一來源的洪水；細的分法在 Worker。**起始值待定**：WAF 的規則會不會連快取命中的請求一起算，還沒有在測試網站看過（ADR-0026 的 Consequences），看過再定
 - 動作：Block，期間 10 秒（Free 方案的選項）
@@ -1840,8 +1849,9 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `src/page-data.ts` | 頁面讀證明紀錄的介面 `PageData`，和問 Durable Object 的那一個實作 |
 | `src/views.ts` | 頁面用的衍生表：建表、一筆紀錄寫什麼、清空和照一串紀錄重寫、頁面的查詢、數有幾張卡片宣告同一個帳號 |
 | `src/pages/` | 把資料變成 HTML：`html.ts`（跳脫）、`layout.ts`（每一頁的外框、導覽列、頁尾、測試的證明紀錄的標示、程式的 `<script>`）、`home.ts`、`proof.ts`（島民證明）、`account.ts`（查詢頁）、`proof-log-page.ts`（證明紀錄頁和 `?after=` 的讀法）、`record-words.ts`（一筆紀錄做了什麼的寫法，島民證明頁的「全部紀錄」和證明紀錄頁共用）、`faq.ts`（常見問題，首頁的八題也讀它）、`verify.ts`、`hang.ts`、`not-found.ts`（找不到這一頁） |
+| `count/` | 訪客頁面的計數的原始檔 `visitor.js`；送出去的是 `site/count.js` |
 | `demo/` | 掛上去的示範的播放程式的原始檔 `player.js`；送出去的是 `site/demo.js` |
-| `site/` | Static Assets 的檔案，Cloudflare 直接送：`pages.css`、`copy.js`、`demo.js`、`favicon.ico`、`fonts/`、`og-image.png`、`_headers`、`_redirects` 在版控裡，`proof/` 放 `web/` 的建置 |
+| `site/` | Static Assets 的檔案，Cloudflare 直接送：`pages.css`、`copy.js`、`count.js`、`demo.js`、`favicon.ico`、`fonts/`、`og-image.png`、`_headers`、`_redirects` 在版控裡，`proof/` 放 `web/` 的建置 |
 | `src/api.ts` | `/api/` 底下的介面：路徑和方法、每個回應的標頭、每個介面、後台自己出錯時的那一行 |
 | `src/counts.ts` | 收計數的 Durable Object：一分鐘的計數放在記憶體、寫成 `count-events/` 底下的一個檔、每分鐘的上限（[計數](#計數)） |
 | `src/submission.ts` | 讀 `records` 的請求：`malformed`、`scope`、`platform` 各是哪一種 |
@@ -1877,6 +1887,7 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `test/records-real.test.ts` | `cmd/iamreal-verify/testdata/card-proofs/` 的十四份真的證明，從鏡像抓清冊、發題目走到寫入，用部署的那一個驗證器；寫出來的證明紀錄公布之後，Go 建出來的 `iamreal-verify` 配原生的 `bb` 重驗通過（這一項要設 `IAMREAL_BB`、要有 `go`） |
 | `test/records-storage.test.ts` | 同時送出時序號連續、每筆之間重啟、寫到一半失敗、`paused`、`spec/vectors/record-rules.json` 配 Durable Object 的儲存 |
 | `test/rebuild.test.ts` | 從證明紀錄重建：重算的和原本的相同、改壞的一列修回來、跨 1,000 筆中斷後接著做、R2 的檔被改過或不是指紋檔那一行的證明紀錄時不換表、空的物件從 R2 重建、換完重寫卡片狀態檔、用設定值觸發而且只在停止收過卡時；`test/publication-verify.test.ts` 在 Go 重驗之前也重建一次 |
+| `test/count-script.test.ts` | 訪客頁面的計數：`site/count.js` 是 `scripts/site-files.ts` 寫出來的那一份；在假的頁面裡跑，送出的每一筆都是表上收的：頁面、來源只有網域、島民證明的短編號、標了 `data-count` 的動作、造訪編號被過卡的頁面刪掉後換新的 |
 | `test/teaching-animation.test.ts`、`test/demo.test.ts` | 教操作的示範：時間表自己說得通、算法對 `spec/vectors/teaching-animation.json`；`site/demo.js` 和 `src/pages/hang-timeline.ts` 是 `scripts/site-files.ts` 寫出來的那一份，`site/demo.js` 算的狀態和答案相同 |
 | `test/pages.test.ts`、`test/pages.ts`、`test/copy.ts` | 首頁和島民證明的每一種情況：`design/copy/` 的每一句和順序、標頭、轉址、`404`；每一頁共同的：跳脫、方法、正式的證明紀錄、測試的證明紀錄的標示、找不到這一頁；讀 `design/copy/` 的工具 |
 | `test/lookup-pages.test.ts` | 查詢頁和證明紀錄頁的每一種情況：`design/copy/` 的每一句和順序、轉址、`404`、查詢框的每一種輸入、證明紀錄頁一頁一頁接著拿、寫入後下一頁就跟上（Go 的舊後台的 `visitor_test.go` 的案例） |

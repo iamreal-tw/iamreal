@@ -5,8 +5,8 @@
 // sent with the same reader.
 //
 // A count holds nothing but what is here: codes of the table, three random
-// IDs, and three values checked by their format (a short ID, version
-// numbers, a card reader's name). No time, no account, no scoped ID, nothing
+// IDs, and four values checked by their format (a short ID, version
+// numbers, a card reader's name, the domain a visitor came from). No time, no account, no scoped ID, nothing
 // read from a card, a certificate or a CRL, and no text of an error.
 
 /** The clients (GLOSSARY, "client"). */
@@ -157,7 +157,8 @@ export const DURATIONS = ["lt_1s", "1s_3s", "3s_10s", "10s_30s", "30s_60s", "1m_
 /**
  * Where a visitor came from, as far as it is told apart for now: with a
  * `Referer` or without. The classes of apps' built-in browsers wait for a
- * measurement (ADR-0032). No count carries a source yet.
+ * measurement (ADR-0032). A page's count says the first by its `source`, the
+ * `Referer`'s domain, and the second by having none.
  */
 export const SOURCES = ["none", "domain"] as const;
 
@@ -167,6 +168,14 @@ export type Browser = (typeof BROWSERS)[number];
 export const OSES = ["windows", "macos", "linux", "chromeos", "android", "ios", "other"] as const;
 export type Os = (typeof OSES)[number];
 
+/**
+ * Where a visitor's page keeps the visit ID, in the tab's `sessionStorage`
+ * (worker/site/count.js). The card proof page takes it away when it opens,
+ * without reading it: a visitor's page opened after a card proof has a new
+ * one (ADR-0039, "過卡之後換造訪編號").
+ */
+export const VISIT_ID_KEY = "iamreal.visit_id";
+
 /** A random ID: 16 bytes as 32 lowercase hex digits (`visit_id`, `device_id`, `attempt_id`). */
 export const COUNT_ID = /^[0-9a-f]{32}$/;
 /** A short ID as a page writes it: 10 characters of the base32 alphabet (spec/scoped-id.md). */
@@ -175,12 +184,14 @@ const SHORT_ID = /^[0-9A-HJKMNP-TV-Z]{10}$/;
 export const VERSION = /^[0-9]{1,5}(?:\.[0-9]{1,5}){0,3}$/;
 /** A card reader's name: letters, digits and spaces, 1 to 64 of them. */
 export const READER = /^[A-Za-z0-9 ]{1,64}$/;
+/** The domain a visitor came from (`source`): lowercase ASCII letters, digits, dots and hyphens, 1 to 253 of them, the longest a domain name is written in. */
+export const SOURCE = /^[a-z0-9.-]{1,253}$/;
 
 /** A count that was taken: its members in the order of spec/counts.md, and no other. */
 export type Count = Readonly<Record<string, string>>;
 
 /** The members of a count, in the one order a taken count is written in. */
-const ORDER = ["client", "event", "page", "short_id", "step", "reason", "action", "tap", "took", "visit_id", "device_id", "attempt_id", "browser", "os", "browser_version", "os_version", "app_version", "reader"] as const;
+const ORDER = ["client", "event", "page", "short_id", "source", "step", "reason", "action", "tap", "took", "visit_id", "device_id", "attempt_id", "browser", "os", "browser_version", "os_version", "app_version", "reader"] as const;
 type Member = (typeof ORDER)[number];
 
 const has = (list: readonly string[], x: string | undefined): boolean => x !== undefined && list.includes(x);
@@ -213,8 +224,14 @@ const CARD_PROOF: Readonly<Partial<Record<Member, Rule>>> = {
 };
 
 /** Members a count may leave out. `browser` and `os` only where the client is an app, which has none. */
-const optional = (member: Member, client: string): boolean =>
-  member === "browser_version" || member === "os_version" || member === "app_version" || member === "reader" || ((member === "browser" || member === "os") && client !== "web");
+const optional = (member: Member, client: string, event: string): boolean =>
+  member === "browser_version" ||
+  member === "os_version" ||
+  member === "app_version" ||
+  member === "reader" ||
+  member === "source" ||
+  (member === "short_id" && event === "action") ||
+  ((member === "browser" || member === "os") && client !== "web");
 
 /** The rules of one count's members, by what it says happened; null if it says nothing the table has. */
 function rulesOf(c: Readonly<Record<string, string>>): Readonly<Partial<Record<Member, Rule>>> | null {
@@ -222,7 +239,7 @@ function rulesOf(c: Readonly<Record<string, string>>): Readonly<Partial<Record<M
   switch (c["event"]) {
     case "page":
       if (client !== "web") return null;
-      return { page: (v) => has(PAGES, v), ...(c["page"] === "card" && { short_id: (v: string) => SHORT_ID.test(v) }), ...VISITOR };
+      return { page: (v) => has(PAGES, v), ...(c["page"] === "card" && { short_id: (v: string) => SHORT_ID.test(v) }), source: (v) => SOURCE.test(v), ...VISITOR };
     case "step":
       return { step: (v) => isFor(STEPS, v, client), ...CARD_PROOF };
     case "stop":
@@ -231,7 +248,8 @@ function rulesOf(c: Readonly<Record<string, string>>): Readonly<Partial<Record<M
     case "duration":
       return { step: (v) => isFor(TIMED_STEPS, v, client), took: (v) => has(DURATIONS, v), ...CARD_PROOF };
     case "action":
-      if (isFor(VISITOR_ACTIONS, c["action"], client)) return { action: () => true, ...VISITOR };
+      // Pressed on a proof page, a visitor's action carries the page's short ID too.
+      if (isFor(VISITOR_ACTIONS, c["action"], client)) return { action: () => true, short_id: (v) => SHORT_ID.test(v), ...VISITOR };
       if (!isFor(CARD_PROOF_ACTIONS, c["action"], client)) return null;
       return { action: () => true, ...(c["action"] === "tap_dropped" && { tap: (v: string) => has(TAPS, v) }), ...CARD_PROOF };
     default:
@@ -269,7 +287,7 @@ export function readCount(parsed: unknown): Count | null {
       const rule = rules[member];
       if (rule === undefined) continue;
       if (value === undefined) {
-        if (optional(member, count["client"]!)) continue;
+        if (optional(member, count["client"]!, count["event"]!)) continue;
         return null;
       }
       if (!rule(value, count)) return null;

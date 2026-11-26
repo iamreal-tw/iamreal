@@ -13,15 +13,18 @@
 //   carries it too (api.ts). The attempt ID is 16 random bytes kept in
 //   memory, and dropped when the card proof stops or is done.
 // - The browser and the operating system are sent as one of a few names,
-//   worked out here from the `User-Agent`; the text itself is not sent in a
-//   count.
+//   worked out from the `User-Agent` (protocol/src/families.ts, which the
+//   visitors' pages use too); the text itself is not sent in a count.
 // - Sending never holds the card proof up: nothing waits for the request,
 //   and one that fails is not sent again. The request is marked to be kept
 //   alive, so that the last count of a page being left is still sent.
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
-import { type Browser, COUNT_ID, type CardProofAction, type Os, REASONS, type Reason, type Step } from "iamreal-protocol/counts.ts";
+import { COUNT_ID, type CardProofAction, REASONS, type Reason, type Step, VISIT_ID_KEY } from "iamreal-protocol/counts.ts";
+import { familiesOf } from "iamreal-protocol/families.ts";
 import type { Fetch } from "./api.ts";
 import type { Stop } from "./flow.ts";
+
+export { familiesOf };
 
 /** Where the card proof device ID is kept in `localStorage`: `<ID>.<the date it was made on>`. */
 export const DEVICE_ID_KEY = "iamreal.card_proof_device_id";
@@ -60,24 +63,18 @@ export function deviceIdOn(today: Day, storage: IdStorage, random: (bytes: Uint8
   }
 }
 
-/** The browser and the operating system as the table names them, from a `User-Agent`. What it cannot tell is `other`. */
-export function familiesOf(userAgent: string): { browser: Browser; os: Os } {
-  const has = (re: RegExp): boolean => re.test(userAgent);
-  const browser: Browser = has(/\bEdg(?:e|A|iOS)?\//)
-    ? "edge"
-    : has(/\bSamsungBrowser\//)
-      ? "samsung"
-      : has(/\b(?:OPR|Opera)\//)
-        ? "other"
-        : has(/\b(?:Firefox|FxiOS)\//)
-          ? "firefox"
-          : has(/\b(?:Chrome|CriOS)\//)
-            ? "chrome"
-            : has(/\bVersion\/[\d.]+ .*Safari\//)
-              ? "safari"
-              : "other";
-  const os: Os = has(/\bAndroid\b/) ? "android" : has(/\b(?:iPhone|iPad|iPod)\b/) ? "ios" : has(/\bWindows NT\b/) ? "windows" : has(/\bCrOS\b/) ? "chromeos" : has(/\bMac OS X\b|\bMacintosh\b/) ? "macos" : has(/\bLinux\b/) ? "linux" : "other";
-  return { browser, os };
+/**
+ * Ends the tab's visit, as the card proof page opens: the visit ID the
+ * visitors' pages keep in `sessionStorage` is taken away, unread, so that a
+ * visitor's page opened after this one makes a new one (ADR-0039). A
+ * storage that cannot be used has none to take away.
+ */
+export function endVisit(storage: { removeItem(key: string): void }): void {
+  try {
+    storage.removeItem(VISIT_ID_KEY);
+  } catch {
+    // Nothing kept, nothing to end.
+  }
 }
 
 /** The codes the server answers that the table has a reason for. */

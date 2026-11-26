@@ -5,9 +5,9 @@
 // counts a card proof sends step by step are in test/flow.test.ts.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { DEVICE_ID_DAYS, DEVICE_ID_KEY, cardProofCounts, deviceIdOn, familiesOf, reasonOf } from "../src/counts.ts";
+import { DEVICE_ID_DAYS, DEVICE_ID_KEY, cardProofCounts, deviceIdOn, endVisit, familiesOf, reasonOf } from "../src/counts.ts";
 import type { Stop } from "../src/flow.ts";
-import { readCount } from "iamreal-protocol/counts.ts";
+import { VISIT_ID_KEY, readCount } from "iamreal-protocol/counts.ts";
 import { parseDay } from "iamreal-protocol/date.ts";
 import { vectors } from "./vectors.ts";
 
@@ -212,6 +212,28 @@ describe("the card proof device ID's 31 days", () => {
       assert.equal(s.storage.get(DEVICE_ID_KEY), `${NEW}.2026-11-16`);
     });
   }
+});
+
+describe("the visitors' visit, as the card proof page opens (ADR-0039)", () => {
+  test("the visit ID is taken away, and never read", () => {
+    const kept = new Map([[VISIT_ID_KEY, "00112233445566778899aabbccddeeff"], ["other", "x"]]);
+    const storage = {
+      getItem: (): never => assert.fail("the card proof page reads no visit ID"),
+      removeItem: (key: string): void => void kept.delete(key),
+    };
+    endVisit(storage);
+    assert.deepEqual([...kept.keys()], ["other"]);
+  });
+
+  test("a storage that cannot be used is no failure", () => {
+    assert.doesNotThrow(() =>
+      endVisit({
+        removeItem: () => {
+          throw new DOMException("denied", "SecurityError");
+        },
+      }),
+    );
+  });
 });
 
 describe("the browser and the operating system, from a User-Agent", () => {
