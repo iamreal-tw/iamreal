@@ -3095,6 +3095,7 @@ body.hang .playing .steps li.now {
 body.prepare main,
 body.verify main,
 body.check main,
+body.privacy main,
 body.proof main,
 body.account main,
 body.proof-missing main,
@@ -3203,6 +3204,54 @@ body.check .situation h3 {
 body.prepare .situation p,
 body.check .situation p {
   margin: 0;
+}
+
+/* The privacy statement (/privacy) ------------------------------------------- */
+
+/* The width of what a card proof needs (body.prepare main) and its title; then the fourteen sections one under another, each
+   heading over a line of ink as the FAQ's categories are, the text at the measure. */
+body.privacy .title {
+  font-size: var(--size-h2);
+  line-height: 1.3;
+  margin: 56px 0 8px;
+}
+
+body.privacy .intro .small {
+  margin-bottom: 20px;
+}
+
+body.privacy .intro p,
+body.privacy .part p,
+body.privacy .part ul.dots {
+  max-width: var(--measure);
+}
+
+body.privacy .part {
+  margin-top: 64px;
+}
+
+body.privacy .part h2 {
+  margin: 0 0 18px;
+  font-family: var(--font-display);
+  font-weight: var(--weight-heading);
+  font-size: var(--size-h3);
+  line-height: var(--leading-h3);
+  letter-spacing: normal;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--ink);
+}
+
+body.privacy .part p,
+body.privacy .part ul.dots {
+  margin: 0 0 14px;
+}
+
+body.privacy .part ul.dots li {
+  margin: 0 0 10px;
+}
+
+body.privacy strong {
+  color: var(--ink);
 }
 
 /* How to check an account's proof (/check) ------------------------------------------- */
@@ -3991,6 +4040,7 @@ body.account-not-a-name .title {
   body.prepare main,
   body.verify main,
   body.check main,
+  body.privacy main,
   body.proof main,
   body.account main,
   body.proof-missing main,

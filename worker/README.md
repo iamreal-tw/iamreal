@@ -483,6 +483,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `/verify` | 如何驗證證明紀錄（`design/copy/verify.md`） | Worker 產生，不問證明紀錄 |
 | `/check` | 如何檢查 Threads 帳號的島民證明（`design/copy/check.md`） | Worker 產生，不問證明紀錄 |
 | `/prepare` | 過卡需要什麼（`design/copy/prepare.md`） | Worker 產生，不問證明紀錄 |
+| `/privacy` | 隱私權說明（`design/copy/privacy.md`）；每一頁的頁尾和兩個 app 的設定頁連到這裡 | Worker 產生，不問證明紀錄 |
 | `/hang` | 掛上去，從首頁點進來時（`design/copy/hang.md`） | Worker 產生，不問證明紀錄 |
 | `/hang/<短編號>` | 掛上去，帶著一張島民證明（`design/copy/hang.md`） | Worker 產生，短編號讀得成才問證明紀錄 |
 | `/copy.js` | 複製按鈕的程式，只有 `/faq`、`/verify` 和 `/hang/<短編號>` 載入；在常見問題上也展開網址指到的那一題 | Static Assets 直接送 `site/copy.js`，不跑 Worker |
@@ -914,8 +915,16 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 
 1. 同時抓 G2、G3 的清冊，兩份互不等待。每一份從送出請求到收完最多等 5 分鐘：G2 的清冊約 17 MB，每秒 0.5 Mbit 也收得完；排程一次的牆上時間最多 15 分鐘（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)「Wall time limits by invocation type」），等回應的時間不算 CPU 時間（同一頁「CPU time」）。
 2. 收到完整的 `200` 時，算內容的 SHA-256。R2 裡已經有 `crl/<SHA-256>.crl` 就不重存；沒有才寫入。
-3. 下面的情況算失敗，那一份不存任何檔，另一份照常：
-   - 狀態不是 `200`、連不上、超過 5 分鐘
+3. **請求帶條件**（[#266](https://github.com/iamreal-tw/iamreal/issues/266)）。內政部一天簽 4 份清冊，鏡像一天問 24 次，大約 20 次是同一份。寫入一份新的檔時，把內政部那一次回應的 `ETag`、`Last-Modified` 和問的網址記在那個 R2 物件的自訂中繼資料（`source`、`etag`、`last-modified`）。下一輪先列出 `crl/`，每個網址找它最後存進來、帶著這些標頭、而且索引裡是可用清冊（驗過內政部的簽章）的那個檔：有 `ETag` 就帶 `If-None-Match`，沒有 `ETag` 才帶 `If-Modified-Since`，只帶一個。內政部回 `304` 時不下載、不存，那一輪這一份的結果是 `not_modified`，寫出條件所指的那個檔的 SHA-256；那個檔索引裡已經有行就不建樹，還沒有行的（上一輪中斷）照第二步補上。回 `304` 時那個檔要還在儲存桶裡，不在就算失敗
+   - 標頭跟著檔走：檔被刪掉，它的條件也跟著沒有。下一輪用的是同一個網址更早的那個檔的標頭（內政部已經不是那一份，所以整份下載）；那個網址一個帶標頭的檔都沒有時不帶條件
+   - 整份下載回來、發現儲存桶已經有同樣內容的檔時（`already_stored`），如果內政部這一次說的標頭和那個檔記的不同，把檔連同新的標頭重寫一次，下一輪就用新的。少了這一步，內政部把同一份內容重新放上去（`ETag` 變了）之後，到下一份清冊之前每一輪都會整份下載
+   - 不記的：回應沒有 `Content-Length` 的（可能是截斷的，見下面）、標頭不是可見的 ASCII 或超過 256 個字元的。這一版之前存的檔沒有標頭：部署後第一輪照舊整份下載，照上一點把標頭補記上去，第二輪開始帶條件
+   - **只拿驗過章的檔當條件**：內政部的兩個網址是明文 HTTP，路上的人可以回一次假的內容、配上內政部真的 `ETag`。那個檔會被存下來（索引裡是不可用的一行），但不會被拿來當條件，下一輪照樣問到真的那一份。拿它當條件的話，內政部自己會一直回 `304`，到下一份清冊之前鏡像都拿不到真的
+   - 沒有 `ETag`、只有 `Last-Modified` 時，條件是「在那之後有沒有改」：內政部換回比較舊的檔時會回 `304`。現在兩個網址都給 `ETag`，不走這一條
+   - 內政部兩個標頭都不給時，每一輪照舊整份下載、比 SHA-256
+   - 沒帶條件卻收到 `304` 算失敗
+4. 下面的情況算失敗，那一份不存任何檔，另一份照常：
+   - 狀態不是 `200`（帶了條件的 `304` 除外）、連不上、超過 5 分鐘
    - 執行環境回報連線中斷
    - 收到的長度和回應的 `Content-Length` 不同
    - 內容是 0 個位元組
@@ -979,7 +988,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 {"event":"crl_index","at":"2026-11-20T08:00:00.123Z","result":"indexed","sha256":"…","issuer":"G3","crl_number":"2026112016","crl_date":"2026-11-20","root":"…","entries":178020,"keys":178020,"hashes":434659,"read_ms":113,"tree_ms":15657}
 ```
 
-- `crl_mirror` 的 `result` 是 `stored`（新的一份）、`already_stored`（已經有）、`failed`（附 `error`）。
+- `crl_mirror` 的 `result` 是 `stored`（新的一份）、`already_stored`（整份下載了，已經有）、`not_modified`（內政部回 `304`，沒有下載；`sha256` 是鏡像手上的那一份）、`failed`（附 `error`）。
 - `crl_index` 的 `result` 是 `indexed` 或 `failed`（附 `error`）。`entries` 是廢止的筆數，`keys` 是樹裡的鍵數，`hashes` 是建樹算了幾次 Poseidon2；`read_ms` 是從儲存桶讀出來到驗完章，`tree_ms` 是建樹，都是毫秒。**`read_ms` 和 `tree_ms` 只有在本機是準的**：Cloudflare 上時鐘在計算時不前進（見上面「這一輪抓到的檔先做」），這兩個數字都是算完才讀時鐘，中間沒有 I/O，線上會偏小，可能是 0。線上用了多少 CPU 時間看儀表板的 Metrics。
 
 ### 和 Go 的 `crl/` 逐案比對
@@ -1093,6 +1102,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 ### 內政部看得到什麼
 
 - `User-Agent` 是一般的 `Mozilla/5.0 (compatible)`，不帶專案名稱。
+- `If-None-Match` 或 `If-Modified-Since`：值是內政部自己上一次回的 `ETag` 或 `Last-Modified`（[排程做什麼](#排程做什麼)）。
 - Cloudflare 會在 Worker 送出的每個請求加上 `CF-Worker` 標頭，值是這個 Worker 所在 zone 的名稱（[Cloudflare HTTP headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/)），照這份文件會是 `iamreal.tw`；沒有實際看過送到內政部的請求。這一項不是程式決定的；營運者知道並接受，`CONTRIBUTING.md`「工作時對外的請求」把它列為例外。本機的 workerd 會模仿它，值是 Worker 的名稱加 `.example.com`。
 
 ## 測試的工具
@@ -1260,6 +1270,21 @@ pnpm run deploy:test
 - 這些數字來自 `wrangler tail --env test --format json`（同一把權杖）和資料網域的回應標頭。只看了這一次排程，沒有從別的地方對內政部的網址送請求。
 
 還沒看過的：內政部回錯誤、斷線、逾時的時候，Cloudflare 上的行為和本機的 workerd 是不是一樣（「排程做什麼」最後一段寫的那兩件事）。
+
+#### 內政部對條件式請求怎麼回
+
+2026-11-26 19:36（台灣時間）從開發用的電腦對兩個網址各問了三次，都沒有下載內容（[#266](https://github.com/iamreal-tw/iamreal/issues/266)）：
+
+| | G2（`moica.nat.gov.tw`，前面有 CDN：回應帶 `X-CDN: Imperva`） | G3（`crl-moica.moi.gov.tw`） |
+|---|---|---|
+| `HEAD`，不帶條件 | `200`，`ETag: "100cdf3-6612bc6704b40"`，`Last-Modified: Thu, 26 Nov 2026 10:55:01 GMT`，`Content-Length: 16829939`，`Cache-Control: public,max-age=300` | `200`，`ETag: "884f83-6612bc6704b40"`，`Last-Modified` 相同，`Content-Length: 8933251`，`Cache-Control: public,max-age=300` |
+| `HEAD`，同時帶 `If-None-Match` 和 `If-Modified-Since` | `200` | `200` |
+| `GET`，只帶 `If-None-Match` | `304` | `304` |
+
+- 兩個網址都給 `ETag` 和 `Last-Modified`，`GET` 帶 `If-None-Match` 時回 `304`。鏡像送的就是這一種。
+- `HEAD` 同時帶兩個條件時回的是 `200`。是 `HEAD` 的關係還是同時帶兩個的關係，沒有再問；鏡像不走這兩條路。只帶 `If-Modified-Since` 的 `GET` 也沒有問過（鏡像只在沒有 `ETag` 時才這樣問）。
+- 兩個 `ETag` 的後半相同，`Last-Modified` 也相同（18:55 台灣時間），比清冊的 `this_update`（約 17:11）晚：看起來是檔案放上伺服器的時間。
+- **還沒看過的**：從 Cloudflare 問時是不是一樣回 `304`。部署後的第二輪排程起（第一輪補記標頭），看 `crl_mirror` 是不是 `not_modified`。
 
 ## 停止和恢復收過卡
 
@@ -1452,7 +1477,7 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 
 [`test/site-check.ts`](test/site-check.ts) 對部署好的測試網站和它的資料網域只送 `GET`，每檢查一樣印一行（`ok` 或 `FAIL`），有一項不過結束碼是 1。不用卡片、不開瀏覽器、不用權杖，不會對內政部的元件送任何請求，可以隨時重跑。它檢查：
 
-- Worker 產生的每一種頁面（首頁、島民證明的「找不到」、查詢頁、證明紀錄頁、常見問題、如何驗證證明紀錄、如何檢查 Threads 帳號的島民證明、過卡需要什麼、掛上去、「找不到這一頁」）：狀態碼、[頁面送的標頭](#頁面送的標頭)的每一項、不設 cookie、頁面上有測試的證明紀錄的標示和 `noindex`，標示旁的日期是這個 checkout 的 `wrangler.jsonc` 寫的 `TEST_PROOF_LOG_CLEARED_ON`。島民證明用範例的短編號 `7K2Q9FM4XD`，要回 `404`
+- Worker 產生的每一種頁面（首頁、島民證明的「找不到」、查詢頁、證明紀錄頁、常見問題、如何驗證證明紀錄、如何檢查 Threads 帳號的島民證明、過卡需要什麼、隱私權說明、掛上去、「找不到這一頁」）：狀態碼、[頁面送的標頭](#頁面送的標頭)的每一項、不設 cookie、頁面上有測試的證明紀錄的標示和 `noindex`，標示旁的日期是這個 checkout 的 `wrangler.jsonc` 寫的 `TEST_PROOF_LOG_CLEARED_ON`。島民證明用範例的短編號 `7K2Q9FM4XD`，要回 `404`
 - 沒有一頁有不是自己網站的 script：Worker 產生的頁面和 `/proof` 都看。頁面裡每一個 `<script>` 都要有 `src`、而且指到自己網站的路徑；別的網域的、寫在頁面裡的都不過（這個程式庫的頁面沒有寫在頁面裡的 script）
 - 每個請求都照瀏覽器的送法：頁面帶 `Accept: text/html`，其餘帶 `Accept: */*`。Worker 和訪客之間的東西（Cloudflare 的功能）可能只在這種請求上改頁面：2026-11-21 就是這樣，不帶這個標頭的 `curl` 看不到被加進去的 script
 - 樣式表、複製按鈕的程式、圖示、字型、連結預覽圖、過卡的頁面 `/proof` 在不在，和它們帶的 `noindex`、`nosniff`；說明頁的舊網址 `/proof/help.html` 是 `301` 到 `/prepare`

@@ -121,6 +121,7 @@ const LINK_HREFS: Readonly<Record<string, string>> = {
   GitHub: "https://github.com/iamreal-tw/iamreal",
   我要換島民證明: "/proof",
   過卡需要什麼: "/prepare",
+  隱私權說明: "/privacy",
   意見回饋: "https://github.com/iamreal-tw/iamreal/discussions",
 };
 
@@ -263,7 +264,9 @@ export async function getPage(worker: TestWorker, path: string, expect: { test?:
   assert.ok(page.includes(FAVICON_LINK) && page.indexOf(FAVICON_LINK) < page.indexOf("</head>"), `${path}: the icon is /favicon.ico, in the head`);
   checkNavAndFoot(path, page);
   const mark = testProofLogMark(CLEARED_ON);
-  assert.equal(page.includes("測試的證明紀錄"), test, `${path}: says 測試的證明紀錄`);
+  // The mark is outside the page's own text, which may speak of the test log itself (privacy.md, section 13).
+  const frame = page.includes("<main>") ? page.slice(0, page.indexOf("<main>")) + page.slice(page.indexOf("</main>")) : page;
+  assert.equal(frame.includes("測試的證明紀錄"), test, `${path}: says 測試的證明紀錄 outside its own text`);
   assert.equal(page.includes('<meta name="robots" content="noindex">'), test, `${path}: noindex in the page`);
   if (test) {
     assert.ok(page.includes(mark), `${path}: the mark of the test log, with the date`);

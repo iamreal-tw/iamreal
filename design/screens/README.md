@@ -42,6 +42,7 @@
 | `check-desktop.png`、`check-phone.png` | `/check`（如何檢查 Threads 帳號的島民證明；「惡意手法」都折著） | 實作版 |
 | `faq-desktop.png`、`faq-phone.png` | `/faq`（每一題都收著） | 實作版 |
 | `faq-question-desktop.png`、`faq-question-phone.png` | `/faq#threads-knows`（連到某一題：那一題展開） | 實作版 |
+| `privacy-desktop.png`、`privacy-phone.png` | `/privacy`（隱私權說明） | 實作版 |
 | `prepare-desktop.png`、`prepare-phone.png` | `/prepare`（過卡需要什麼） | 實作版 |
 | `og-image.png` | 每一頁的連結預覽圖（`og:image`）。網站送的就是這一張：`worker/site/og-image.png` 是它逐位元組的拷貝（`worker/scripts/site-files.ts`），改這張圖時重跑那支腳本 | 定稿版 |
 
@@ -76,6 +77,7 @@ Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts
 | 截圖 | 畫面 | 版本 |
 |---|---|---|
 | `card-proof-app-1-before-phone.png` | 第 1 步：開始之前 | 實作版（Android） |
+| `card-proof-app-1-paused-phone.png` | 第 1 步：營運者停止收過卡時，那一句在「下一步」的位置 | 實作版（Android） |
 | `card-proof-app-2-read-iphone-phone.png` | 第 2 步：讀取卡片，iPhone 感應位置的示範（停在卡片貼好的那一格） | 實作版（iOS） |
 | `card-proof-app-2-read-android-phone.png` | 第 2 步：讀取卡片，Android，感應位置的示範停在卡片貼好的那一格 | 實作版（Android） |
 | `card-proof-app-2-reading-iphone-phone.png` | 第 2 步：iPhone 感應中，系統的感應面板 | 定稿版 |

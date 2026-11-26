@@ -142,6 +142,9 @@ export function engineFiles(): Record<string, string> {
  *     component and its home page (design/copy/prepare.md, sections 3 and
  *     4). Links only: the CRLs, the one thing fetched from MOICA, are on
  *     plain HTTP and in crl/README.md.
+ *   - The privacy statement's links (design/copy/privacy.md, sections 6, 12
+ *     and 14): its own history on GitHub, and the privacy policies of
+ *     Cloudflare, Apple and Google. Links only.
  *
  * The data domain, which the card proof page's policy lets it fetch from,
  * is not among them: that policy is sent by Static Assets (site/_headers),
@@ -161,6 +164,10 @@ export const PAGE_ADDRESSES: readonly string[] = [
   "https://${site.host}/og-image.png",
   "https://moica.nat.gov.tw/",
   "https://moica.nat.gov.tw/rac_plugin.html",
+  "https://github.com/iamreal-tw/iamreal/commits/main/design/copy/privacy.md",
+  "https://www.cloudflare.com/privacypolicy/",
+  "https://www.apple.com/legal/privacy/",
+  "https://policies.google.com/privacy",
 ];
 
 export function checkAddresses(b: BuildContents): void {

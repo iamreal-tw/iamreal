@@ -116,6 +116,7 @@ const FOOT = html`<footer class="foot">
 <a href="/verify">如何驗證證明紀錄</a>
 <a href="/faq">常見問題</a>
 <a href="/prepare">過卡需要什麼</a>
+<a href="/privacy">隱私權說明</a>
 <a href="https://github.com/iamreal-tw/iamreal/discussions">意見回饋</a>
 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>
 </div>
