@@ -13,15 +13,24 @@
 //   carries it too (api.ts). The attempt ID is 16 random bytes kept in
 //   memory, and dropped when the card proof stops or is done.
 // - The browser and the operating system are sent as one of a few names,
-//   worked out here from the `User-Agent`; the text itself is not sent in a
-//   count.
+//   worked out from the `User-Agent` (protocol/src/families.ts, which the
+//   visitors' pages use too), with the versions it holds (`versionsOf`);
+//   the text itself is not sent in a count.
+// - The card reader's name is the one field the component reports for it,
+//   sent only in its form (letters, digits and spaces, at most 64), with
+//   every count of the attempt once it is known.
+// - How long a timed step took is one of a few durations (`tookOf`), never
+//   the time.
 // - Sending never holds the card proof up: nothing waits for the request,
 //   and one that fails is not sent again. The request is marked to be kept
 //   alive, so that the last count of a page being left is still sent.
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
-import { type Browser, COUNT_ID, type CardProofAction, type Os, REASONS, type Reason, type Step } from "iamreal-protocol/counts.ts";
+import { type Browser, COUNT_ID, type CardProofAction, READER, REASONS, type Reason, type Step, type TimedStep, VERSION, VISIT_ID_KEY, tookOf } from "iamreal-protocol/counts.ts";
+import { browserOf, familiesOf } from "iamreal-protocol/families.ts";
 import type { Fetch } from "./api.ts";
 import type { Stop } from "./flow.ts";
+
+export { familiesOf };
 
 /** Where the card proof device ID is kept in `localStorage`: `<ID>.<the date it was made on>`. */
 export const DEVICE_ID_KEY = "iamreal.card_proof_device_id";
@@ -60,24 +69,66 @@ export function deviceIdOn(today: Day, storage: IdStorage, random: (bytes: Uint8
   }
 }
 
-/** The browser and the operating system as the table names them, from a `User-Agent`. What it cannot tell is `other`. */
-export function familiesOf(userAgent: string): { browser: Browser; os: Os } {
-  const has = (re: RegExp): boolean => re.test(userAgent);
-  const browser: Browser = has(/\bEdg(?:e|A|iOS)?\//)
-    ? "edge"
-    : has(/\bSamsungBrowser\//)
-      ? "samsung"
-      : has(/\b(?:OPR|Opera)\//)
-        ? "other"
-        : has(/\b(?:Firefox|FxiOS)\//)
-          ? "firefox"
-          : has(/\b(?:Chrome|CriOS)\//)
-            ? "chrome"
-            : has(/\bVersion\/[\d.]+ .*Safari\//)
-              ? "safari"
-              : "other";
-  const os: Os = has(/\bAndroid\b/) ? "android" : has(/\b(?:iPhone|iPad|iPod)\b/) ? "ios" : has(/\bWindows NT\b/) ? "windows" : has(/\bCrOS\b/) ? "chromeos" : has(/\bMac OS X\b|\bMacintosh\b/) ? "macos" : has(/\bLinux\b/) ? "linux" : "other";
-  return { browser, os };
+/** Browsers of Chromium's, whose `User-Agent` holds frozen system versions. */
+const CHROMIUM: ReadonlySet<Browser> = new Set(["chrome", "edge", "samsung"]);
+
+/**
+ * The browser's and the system's versions, from a `User-Agent`, as far as
+ * it holds them (ADR-0032; the `User-Agent` only, and nothing else the
+ * browser could be asked):
+ *
+ * - The browser: its major version, and nothing after it. A browser the
+ *   table does not name has none.
+ * - The system: only where the `User-Agent` holds the true one: Windows'
+ *   NT number (10.0 is Windows 10 or 11), iOS but 18.6, and Android in a
+ *   browser that is not Chromium's. Where it holds a frozen value, none is
+ *   sent: none is better than a false one.
+ *   - Chromium's reduced `User-Agent` writes literal values for macOS
+ *     (10_15_7), ChromeOS and Android ("Android 10; K"), "they will not
+ *     update even if a user is on an updated operating system"
+ *     (https://www.chromium.org/updates/ua-reduction/).
+ *   - Firefox caps macOS at 10.15 (https://bugzilla.mozilla.org/show_bug.cgi?id=1679929),
+ *     and so does Safari, which "first started freezing the Mac OS string"
+ *     in 2017: so no browser's macOS version is sent.
+ *   - Safari on iOS 26 "no longer lists the current version of the
+ *     operating system", and writes 18_6
+ *     (https://webkit.org/blog/17333/webkit-features-in-safari-26-0/): a real
+ *     18.6 is not told apart from it.
+ *
+ * A value not in the form of a version (VERSION) is left out, not shortened.
+ */
+export function versionsOf(userAgent: string): { browser_version?: string; os_version?: string } {
+  const { browser, major } = browserOf(userAgent);
+  const { os } = familiesOf(userAgent);
+  const out: { browser_version?: string; os_version?: string } = {};
+  if (browser !== "other" && major !== undefined && VERSION.test(major)) out.browser_version = major;
+  const ios = os === "ios" ? /\bOS (\d+(?:_\d+){0,2}) like Mac OS X/.exec(userAgent)?.[1]?.replaceAll("_", ".") : undefined;
+  const system =
+    os === "windows"
+      ? /\bWindows NT (\d+\.\d+)/.exec(userAgent)?.[1]
+      : ios !== undefined
+        ? ios === "18.6"
+          ? undefined
+          : ios
+        : os === "android" && !CHROMIUM.has(browser)
+          ? /\bAndroid (\d+(?:\.\d+){0,2})/.exec(userAgent)?.[1]
+          : undefined;
+  if (system !== undefined && VERSION.test(system)) out.os_version = system;
+  return out;
+}
+
+/**
+ * Ends the tab's visit, as the card proof page opens: the visit ID the
+ * visitors' pages keep in `sessionStorage` is taken away, unread, so that a
+ * visitor's page opened after this one makes a new one (ADR-0039). A
+ * storage that cannot be used has none to take away.
+ */
+export function endVisit(storage: { removeItem(key: string): void }): void {
+  try {
+    storage.removeItem(VISIT_ID_KEY);
+  } catch {
+    // Nothing kept, nothing to end.
+  }
 }
 
 /** The codes the server answers that the table has a reason for. */
@@ -149,6 +200,14 @@ export interface FlowCounts {
   retry(reason: Reason): void;
   /** An action of the cardholder's. */
   action(action: CardProofAction): void;
+  /** A timed step was done, after `ms` milliseconds: sent as its duration, not the time. */
+  duration(step: TimedStep, ms: number): void;
+  /**
+   * The card reader the card was read in, as the component names it: kept
+   * for the rest of the attempt and sent with each of its counts. A name not
+   * in its form (READER) is none, and is not shortened or rewritten.
+   */
+  reader(name: string | null): void;
   /** The card proof device ID, for the submission of a record; null if none could be made. */
   deviceId(): string | null;
 }
@@ -169,19 +228,21 @@ export interface CountsDeps {
 /** The counts of the card proofs made on one page. */
 export function cardProofCounts(deps: CountsDeps): FlowCounts {
   const { browser, os } = familiesOf(deps.userAgent);
+  const versions = versionsOf(deps.userAgent);
   /** For a browser whose storage cannot be used: one ID while the page is open. */
   let pageId: string | null = null;
   const deviceId = (): string => deviceIdOn(taiwanDay(deps.clock()), deps.storage, deps.random, () => (pageId ??= newId(deps.random)));
-  /** The attempt under way and the steps sent in it; null when the next count begins one. */
-  let attempt: { id: string; steps: Set<Step> } | null = null;
-  const current = (): { id: string; steps: Set<Step> } => (attempt ??= { id: newId(deps.random), steps: new Set() });
+  /** The attempt under way, the steps sent in it and its card reader's name; null when the next count begins one. */
+  type Attempt = { id: string; steps: Set<Step>; reader: string | null };
+  let attempt: Attempt | null = null;
+  const current = (): Attempt => (attempt ??= { id: newId(deps.random), steps: new Set(), reader: null });
 
   const send = (members: Record<string, string>): void => {
     try {
       const device = deviceId();
-      const id = current().id;
+      const { id, reader } = current();
       if (!COUNT_ID.test(device) || !COUNT_ID.test(id)) return;
-      const body = JSON.stringify({ client: "web", ...members, device_id: device, attempt_id: id, browser, os });
+      const body = JSON.stringify({ client: "web", ...members, device_id: device, attempt_id: id, browser, os, ...versions, ...(reader !== null && { reader }) });
       // Not awaited, and its failure is nobody's: a count never holds a card proof up, and is not sent again.
       void Promise.resolve()
         .then(() => deps.fetch("/api/v1/counts", { method: "POST", body, keepalive: true }))
@@ -217,6 +278,17 @@ export function cardProofCounts(deps: CountsDeps): FlowCounts {
     },
     action(action) {
       send({ event: "action", action });
+    },
+    duration(step, ms) {
+      const took = tookOf(ms);
+      if (took !== null) send({ event: "duration", step, took });
+    },
+    reader(name) {
+      try {
+        current().reader = name !== null && READER.test(name) ? name : null;
+      } catch {
+        // Without a random source there is no attempt, and no count to carry it.
+      }
     },
     deviceId() {
       try {

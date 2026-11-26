@@ -134,8 +134,8 @@ export function homePage(numbers: HomeNumbers): Document {
 <p class="stress">你每天看到的討論、動態，背後有多少是真正的台灣人？</p>
 <p>用台灣自然人憑證，換一張島民證明：宣告你的 Threads 帳號是台灣人持有，同時不需要公開你的真實身分。</p>
 </div>
-<p class="actions"><a class="button big" href="/proof">我要換島民證明</a> <a href="/proof-log">看其他人的島民證明</a></p>
-<p class="again">已經換過了？<a href="/proof">更新我的島民證明</a></p>
+<p class="actions"><a class="button big" href="/proof" data-count="start_card_proof">我要換島民證明</a> <a href="/proof-log">看其他人的島民證明</a></p>
+<p class="again">已經換過了？<a href="/proof" data-count="start_card_proof">更新我的島民證明</a></p>
 <p class="small needs">${NEEDS}</p>
 </div>
 <figure class="hero-field">
@@ -299,7 +299,7 @@ ${QUESTIONS.map((q) => html`<details><summary>${q.question}</summary>\n${q.answe
 <p class="kicker">讓台灣的網路討論，多一份真實的力量</p>
 <h2 class="heading"><span class="line">改變網路環境，</span><span class="line">從我們自己開始。</span></h2>
 <p class="lede">讓保護隱私又能驗證的證明，成為台灣網路討論的一種新選擇。加入島民證明，一起改變我們的網路討論環境。</p>
-<p><a class="button big" href="/proof">我要換島民證明</a></p>
+<p><a class="button big" href="/proof" data-count="start_card_proof">我要換島民證明</a></p>
 </div>
 <div>
 <h3 class="steps-title">如何換</h3>

@@ -101,11 +101,17 @@ fn every_case_is_taken_or_dropped_as_the_vectors_say() {
 #[test]
 fn every_duration_is_the_code_of_the_vectors() {
     let v = vectors();
-    let durations = v["durations"].as_array().expect("durations");
+    let durations = v["durations_of"].as_array().expect("durations_of");
     assert!(!durations.is_empty());
     for d in durations {
-        let ms = d["ms"].as_u64().expect("milliseconds");
-        assert_eq!(took(ms), d["took"].as_str().expect("a code"), "{ms} ms");
+        // A time below 0 is no duration: an app's clock that only goes forward gives none.
+        let Some(code) = d["took"].as_str() else {
+            assert!(d["ms"].as_f64().expect("milliseconds") < 0.0, "{d}");
+            continue;
+        };
+        // Whole milliseconds: a fraction dropped stays in its duration, as each starts on a whole one.
+        let ms = d["ms"].as_f64().expect("milliseconds").floor() as u64;
+        assert_eq!(took(ms), code, "{ms} ms");
     }
     assert_eq!(took(u64::MAX), "gt_3m");
 }

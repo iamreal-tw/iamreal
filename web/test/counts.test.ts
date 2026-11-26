@@ -5,9 +5,9 @@
 // counts a card proof sends step by step are in test/flow.test.ts.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { DEVICE_ID_DAYS, DEVICE_ID_KEY, cardProofCounts, deviceIdOn, familiesOf, reasonOf } from "../src/counts.ts";
+import { DEVICE_ID_DAYS, DEVICE_ID_KEY, cardProofCounts, deviceIdOn, endVisit, familiesOf, reasonOf, versionsOf } from "../src/counts.ts";
 import type { Stop } from "../src/flow.ts";
-import { readCount } from "iamreal-protocol/counts.ts";
+import { VISIT_ID_KEY, readCount } from "iamreal-protocol/counts.ts";
 import { parseDay } from "iamreal-protocol/date.ts";
 import { vectors } from "./vectors.ts";
 
@@ -116,8 +116,52 @@ describe("a count as it is sent", () => {
     for (const c of p.sent) {
       assert.deepEqual(readCount(c), c);
       assert.deepEqual([c.client, c.browser, c.os], ["web", "safari", "macos"]);
+      // The browser's major version; no system version (macOS is frozen in a User-Agent).
+      assert.deepEqual([c.browser_version, "os_version" in c], ["18", false]);
     }
     for (const part of ["Mozilla", "605.1.15", "18.1", "10_15_7"]) assert.ok(!JSON.stringify(p.sent).includes(part), part);
+  });
+
+  test("each timed step's duration is one code of the table, sent as a count the table takes; the time itself is in none", async () => {
+    const p = page("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+    p.counts.duration("crl", 2_500);
+    p.counts.duration("tree", 45_123);
+    p.counts.duration("proved", 200_000);
+    // A clock that went back: nothing.
+    p.counts.duration("proved", -5);
+    await settled();
+    assert.deepEqual(
+      p.sent.map((c) => [c.event, c.step, c.took]),
+      [
+        ["duration", "crl", "1s_3s"],
+        ["duration", "tree", "30s_60s"],
+        ["duration", "proved", "gt_3m"],
+      ],
+    );
+    for (const c of p.sent) assert.deepEqual(readCount(c), c);
+    for (const part of ["2500", "45123", "200000"]) assert.ok(!JSON.stringify(p.sent).includes(part), part);
+  });
+
+  test("the card reader's name: in every count of the attempt once it is known, only in its form; another attempt has none until it is told", async () => {
+    const p = page("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+    p.counts.step("read");
+    p.counts.reader("ACS ACR39U ICC Reader 0");
+    p.counts.step("certificates");
+    p.counts.retry("pin_incorrect");
+    p.counts.stop("card_locked");
+    // The next attempt: none until it is told; a name not in its form is no name, not a shortened one.
+    p.counts.step("read");
+    p.counts.reader("Microsoft Usbccid Smartcard Reader (WUDF) 0");
+    p.counts.step("certificates");
+    p.counts.reader("A".repeat(65));
+    p.counts.step("certificate");
+    await settled();
+    assert.deepEqual(
+      p.sent.map((c) => c.reader ?? null),
+      [null, "ACS ACR39U ICC Reader 0", "ACS ACR39U ICC Reader 0", "ACS ACR39U ICC Reader 0", null, null, null],
+    );
+    for (const c of p.sent) assert.deepEqual(readCount(c), c);
+    assert.ok(!JSON.stringify(p.sent).includes("Usbccid"));
   });
 
   test("a storage that refuses to be read or written: the counts go on with an ID that lasts as long as the page", async () => {
@@ -214,6 +258,28 @@ describe("the card proof device ID's 31 days", () => {
   }
 });
 
+describe("the visitors' visit, as the card proof page opens (ADR-0039)", () => {
+  test("the visit ID is taken away, and never read", () => {
+    const kept = new Map([[VISIT_ID_KEY, "00112233445566778899aabbccddeeff"], ["other", "x"]]);
+    const storage = {
+      getItem: (): never => assert.fail("the card proof page reads no visit ID"),
+      removeItem: (key: string): void => void kept.delete(key),
+    };
+    endVisit(storage);
+    assert.deepEqual([...kept.keys()], ["other"]);
+  });
+
+  test("a storage that cannot be used is no failure", () => {
+    assert.doesNotThrow(() =>
+      endVisit({
+        removeItem: () => {
+          throw new DOMException("denied", "SecurityError");
+        },
+      }),
+    );
+  });
+});
+
 describe("the browser and the operating system, from a User-Agent", () => {
   const CASES: [string, string, string][] = [
     ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", "chrome", "windows"],
@@ -236,6 +302,47 @@ describe("the browser and the operating system, from a User-Agent", () => {
     test(`${userAgent || "(empty)"}: ${browser} on ${os}`, () => {
       assert.deepEqual(familiesOf(userAgent), { browser, os });
       assert.ok(TABLE.browsers.includes(browser) && TABLE.oses.includes(os));
+    });
+  }
+});
+
+describe("the versions, from a User-Agent: the browser's major version; the system's only where the User-Agent does not hold a frozen one", () => {
+  // [User-Agent, browser_version, os_version]; null: not sent.
+  const CASES: [string, string | null, string | null][] = [
+    ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", "131", "10.0"],
+    ["Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36", "109", "6.1"],
+    ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.2903.70", "131", "10.0"],
+    ["Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0", "133", "10.0"],
+    // macOS: every browser writes 10.15 (or 10_15_7) whatever the system is.
+    ["Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15", "18", null],
+    ["Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", "131", null],
+    ["Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0", "133", null],
+    ["Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0", "133", null],
+    // ChromeOS, and Android in a browser of Chromium's: frozen.
+    ["Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", "131", null],
+    ["Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36", "131", null],
+    ["Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36", "131", null],
+    ["Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122.0.0.0 Mobile Safari/537.36", "26", null],
+    ["Mozilla/5.0 (Android 14; Mobile; rv:133.0) Gecko/133.0 Firefox/133.0", "133", "14"],
+    ["Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1", "18", "18.1"],
+    ["Mozilla/5.0 (iPhone; CPU iPhone OS 17_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0.6778.73 Mobile/15E148 Safari/604.1", "131", "17.6.1"],
+    ["Mozilla/5.0 (iPad; CPU OS 17_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/133.0 Mobile/15E148 Safari/605.1.15", "133", "17.7"],
+    // iOS 26 writes 18_6 whatever the system is (WebKit's Safari 26.0 post): 18.6 is not told apart from it, so not sent.
+    ["Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1", "26", null],
+    ["Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1", "18", "18.5"],
+    // A browser the table does not name: no version of it.
+    ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36 OPR/101.0.0.0", null, "10.0"],
+    // Not in the form of a version: not sent, not rewritten.
+    ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/1234567.0.0.0 Safari/537.36", null, "10.0"],
+    ["curl/8.7.1", null, null],
+    ["", null, null],
+  ];
+  for (const [userAgent, browserVersion, osVersion] of CASES) {
+    test(`${userAgent || "(empty)"}: ${browserVersion ?? "-"} / ${osVersion ?? "-"}`, () => {
+      const v = versionsOf(userAgent);
+      assert.deepEqual([v.browser_version ?? null, v.os_version ?? null], [browserVersion, osVersion]);
+      // Only the two members, each only when there is one.
+      assert.ok(Object.keys(v).every((k) => k === "browser_version" || k === "os_version"));
     });
   }
 });

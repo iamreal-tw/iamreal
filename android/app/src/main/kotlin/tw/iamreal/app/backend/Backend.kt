@@ -22,8 +22,11 @@ import java.net.URL
  * for a background thread.
  */
 class Backend(private val site: String, private val data: String) {
-    /** `GET /api/v1/config`: the body. */
-    fun config(): ByteArray = request("GET", "$site/api/v1/config", null, API_TIMEOUT_MS, MAX_ANSWER)
+    /**
+     * `GET /api/v1/config`: the body. With [start], `GET /api/v1/config?start`: the one request of a card proof's start, which
+     * the server counts against its site-wide limit (docs/api/card-proof.md, ADR-0026).
+     */
+    fun config(start: Boolean = false): ByteArray = request("GET", if (start) "$site/api/v1/config?start" else "$site/api/v1/config", null, API_TIMEOUT_MS, MAX_ANSWER)
 
     /** `POST /api/v1/card-state` with [body], the core's: the body of the answer. */
     fun cardState(body: ByteArray): ByteArray = request("POST", "$site/api/v1/card-state", body, API_TIMEOUT_MS, MAX_ANSWER)
@@ -191,4 +194,10 @@ class Backend(private val site: String, private val data: String) {
  * [requestId] the answer's `X-Request-Id`, which the screen shows next to
  * the error (docs/api/card-proof.md).
  */
-class ServerException(val code: String, val status: Int, val requestId: String?) : Exception(code)
+class ServerException(val code: String, val status: Int, val requestId: String?) : Exception(code) {
+    /**
+     * The server turned the request away as too many: rate limited (`429`), or the proof log overloaded or too many card proofs
+     * starting (`503` `busy`). The same request can be sent again later (docs/api/card-proof.md, "Rules for every endpoint").
+     */
+    val tooMany: Boolean get() = status == 429 || (status == 503 && code == "busy")
+}

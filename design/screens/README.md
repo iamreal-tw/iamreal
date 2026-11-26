@@ -42,6 +42,7 @@
 | `check-desktop.png`、`check-phone.png` | `/check`（如何檢查 Threads 帳號的島民證明；「惡意手法」都折著） | 實作版 |
 | `faq-desktop.png`、`faq-phone.png` | `/faq`（每一題都收著） | 實作版 |
 | `faq-question-desktop.png`、`faq-question-phone.png` | `/faq#threads-knows`（連到某一題：那一題展開） | 實作版 |
+| `operator-page-desktop.png` | 營運者在自己電腦上看數字的那一頁（`worker/scripts/operator-page.ts`），用固定的假資料（`worker/test/operator-page-browser.ts` 產生）；只有營運者看，不是網站的頁面 | 實作版 |
 | `busy-desktop.png`、`busy-phone.png` | 要讀證明紀錄的頁面，證明紀錄撐不住時（`503`，「現在人太多」；這裡是 `/p/7K2Q9FM4XD`） | 實作版 |
 | `privacy-desktop.png`、`privacy-phone.png` | `/privacy`（隱私權說明） | 實作版 |
 | `prepare-desktop.png`、`prepare-phone.png` | `/prepare`（過卡需要什麼） | 實作版 |
@@ -82,12 +83,15 @@ Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts
 |---|---|---|
 | `card-proof-app-1-before-phone.png` | 第 1 步：開始之前 | 實作版（Android） |
 | `card-proof-app-1-paused-phone.png` | 第 1 步：營運者停止收過卡時，那一句在「下一步」的位置 | 實作版（Android） |
+| `card-proof-app-1-busy-phone.png` | 第 1 步：按「下一步」時人太多（`config?start` 回 `503` `busy`），那一句在「下一步」上面 | 實作版（Android） |
 | `card-proof-app-2-read-iphone-phone.png` | 第 2 步：讀取卡片，iPhone 感應位置的示範（停在卡片貼好的那一格） | 實作版（iOS） |
 | `card-proof-app-2-read-android-phone.png` | 第 2 步：讀取卡片，Android，感應位置的示範停在卡片貼好的那一格 | 實作版（Android） |
 | `card-proof-app-2-reading-iphone-phone.png` | 第 2 步：iPhone 感應中，系統的感應面板 | 定稿版 |
 | `card-proof-app-3-pin-phone.png` | 第 3 步：輸入 PIN | 實作版（Android） |
+| `card-proof-app-3-busy-phone.png` | 第 3 步：卡片簽完、查現況時人太多，「再試一次」 | 實作版（Android） |
 | `card-proof-app-4-accounts-phone.png` | 第 4 步：你的帳號 | 實作版（Android） |
 | `card-proof-app-5-confirm-phone.png` | 第 5 步：確認 | 實作版（Android） |
+| `card-proof-app-5-busy-phone.png` | 第 5 步：拿題目時人太多，「再試一次」「取消」 | 實作版（Android） |
 | `card-proof-app-5-progress-phone.png` | 第 5 步：進行中 | 實作版（Android） |
 | `card-proof-app-6-hang-phone.png` | 第 6 步：掛上去，這張卡片的第一筆紀錄 | 實作版（Android） |
 | `card-proof-app-6-hang-short-phone.png` | 第 6 步：再次過卡的短版 | 實作版（Android） |

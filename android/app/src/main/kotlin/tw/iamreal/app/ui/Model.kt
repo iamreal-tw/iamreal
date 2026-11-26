@@ -59,8 +59,8 @@ internal enum class AccountsMode { OPEN, SWITCH, EDIT }
 /** What stands in the place of step 1: a phone that cannot read a card, or a version of the app that can no longer do a card proof. */
 internal enum class Gate { NO_NFC, TOO_OLD }
 
-/** The buttons under step 5's list when it stopped. */
-internal enum class ProgressButton { NONE, TAP_AGAIN, RESTART }
+/** The buttons under step 5's list when it stopped. RETRY: the server turned a request away as too many, and it is sent again. */
+internal enum class ProgressButton { NONE, TAP_AGAIN, RETRY, RESTART }
 
 /**
  * Step 2's button after a stop: a tap that did not happen is made again on the same card proof; anything else, the server's
@@ -77,11 +77,14 @@ internal fun readButtonAfter(stop: Stop): ReadButton {
 }
 
 /**
- * Step 5's button after a stop. The tap did not get to a signature: the PIN is still there, and the tap is made again. A PIN
- * the card refused, a card that is locked, a card the secure channel cannot be made with: the flow dropped the PIN with
- * everything else, and the only way on is back to the beginning; so for any stop of the server, `paused` among them.
+ * Step 5's button after a stop. Too many people: 再試一次. The tap did not get to a signature: the PIN is still there, and the
+ * tap is made again. A PIN the card refused, a card that is locked, a card the secure channel cannot be made with: the flow
+ * dropped the PIN with everything else, and the only way on is back to the beginning; so for any other stop of the server,
+ * `paused` among them.
  */
 internal fun progressButtonAfter(stop: Stop): ProgressButton {
+    // Too many people: the challenge, or the record, is asked for or sent again (design/copy/card-proof.md, "5. 確認", 進行中).
+    if (stop.tooMany) return ProgressButton.RETRY
     val again = stop.code == "other_card" || (stop.code == "card" && stop.values["reason"] !in CardProof.ENDS_AT_LAST_TAP)
     return if (again) ProgressButton.TAP_AGAIN else ProgressButton.RESTART
 }
@@ -234,6 +237,23 @@ internal class Model(
     var notice by mutableStateOf<String?>(null)
         private set
 
+    /** Step 1's 下一步 was pressed, and the server has not answered yet ([start]). */
+    var starting by mutableStateOf(false)
+        private set
+
+    /**
+     * The server turned the start away as too many (`config?start`, docs/api/card-proof.md): step 1 says so above its 下一步,
+     * which stays, to be pressed again (design/copy/card-proof.md, "1. 開始之前", 人太多的時候).
+     */
+    var startTurnedAway by mutableStateOf(false)
+        private set
+
+    /**
+     * What `config` answered when step 1's 下一步 was last pressed: the card proofs that follow without step 1 (再感應一次卡片, step 3's
+     * 上一步) fall back on it when the server turns their `config` away as too many.
+     */
+    private var startConfig: ByteArray? = null
+
     /** The panel of a tap, or null. */
     var panel by mutableStateOf<CardProof.Tap?>(null)
         private set
@@ -292,6 +312,13 @@ internal class Model(
     var pinEnded by mutableStateOf(false)
         private set
 
+    /**
+     * The card signed and the server turned its state away as too many: 再試一次 asks again, nothing signed again; the PIN is the
+     * flow's, kept for the last tap, and the field is not typed in (design/copy/card-proof.md, "3. 輸入 PIN").
+     */
+    var pinRetry by mutableStateOf(false)
+        private set
+
     // Step 4
     var status by mutableStateOf<CardProof.Status?>(null)
         private set
@@ -317,6 +344,9 @@ internal class Model(
     /** The card has signed: it can be taken away. */
     var signed by mutableStateOf(false)
         private set
+
+    /** The server turned the submission away as too many: step 5's 再試一次 sends the same record again. */
+    private var submitTurnedAway = false
 
     // Steps 6 to 8
     var done by mutableStateOf<CardProof.Done?>(null)
@@ -385,7 +415,8 @@ internal class Model(
         }
     }
 
-    private fun newFlow(): CardProof {
+    /** A new card proof; [started], the start's config it falls back on ([startConfig]). */
+    private fun newFlow(started: ByteArray?): CardProof {
         flow?.cancel()
         return CardProof(object : CardProof.Deps {
             override val backend = this@Model.backend
@@ -400,7 +431,7 @@ internal class Model(
 
             // The one step 1 opened, unless a card was read for it: a card proof started again from step 2 is another.
             override val attempt = this@Model.attempt?.takeIf { !it.begun } ?: this@Model.counts.attempt().also { this@Model.attempt = it }
-        }).also { flow = it }
+        }, started).also { flow = it }
     }
 
     /** Runs a step of [f] off the main thread; [then] and [failed] run on the main thread, unless the card proof is no longer [f]. */
@@ -456,19 +487,46 @@ internal class Model(
 
     // Step 1 ---------------------------------------------------------------------------
 
+    /**
+     * 下一步: the start of a card proof, `config` asked with its mark ([CardProof.begin]) before step 2. Turned away as too many,
+     * step 1 stays and says so; card proofs stopped, step 1 says that in place of 下一步. No answer: on to step 2, which asks again.
+     */
     fun start() {
         // Nothing of a card proof from a screen that stands in the place of step 1.
-        if (gate != null) return
+        if (gate != null || starting) return
+        dropAll()
         notice = null
-        toRead()
+        startTurnedAway = false
+        starting = true
+        val f = newFlow(null)
+        step(
+            f,
+            { f.begin() },
+            {
+                starting = false
+                startConfig = f.startedWith
+                // The reading asks config again, without the mark (CardProof.readCard): asked now, while step 2 comes up.
+                askConfigAgain()
+                toRead(f)
+            },
+            { stop ->
+                starting = false
+                when {
+                    stop.tooMany -> startTurnedAway = true
+                    stop.code == "server" && stop.values["code"] == "paused" -> paused = true
+                }
+            },
+        )
     }
 
     // Step 2 ---------------------------------------------------------------------------
 
-    /** Step 2 with nothing read: a new card proof. */
-    private fun toRead() {
-        dropAll()
-        newFlow()
+    /** Step 2 with nothing read: [begun], the card proof step 1 began; otherwise a new one, which falls back on the start's config. */
+    private fun toRead(begun: CardProof? = null) {
+        if (begun == null) {
+            dropAll()
+            newFlow(startConfig)
+        }
         senseDemo = SenseDemoPlayer(senseJson)
         readItems = items(4, 0, false)
         readMessage = null
@@ -553,6 +611,7 @@ internal class Model(
         pinMessage = null
         pinEnded = false
         pinKept = false
+        pinRetry = false
         step = Step.PIN
     }
 
@@ -590,50 +649,76 @@ internal class Model(
                     typed.fill(0)
                 }
             },
-            { status ->
-                keptPinSince = pin.since
-                pin.clear()
-                pinBusy = null
-                showAccounts(status)
-                main.postDelayed({ checkIdle() }, CardProof.IDLE_MS)
-            },
-            { stop ->
-                pinBusy = null
-                if (replacesStepOne(stop)) return@step
-                pinMessage = messages.stop(stop, Messages.At.PIN)
-                val reason = stop.values["reason"]
-                when {
-                    // The card did not take the PIN, or may have: it is typed again (never sent again by itself).
-                    // Nor is it kept for a card the secure channel cannot be made with: the sentence sends the cardholder to a card reader,
-                    // and another tap needs the PIN typed again (design/copy/card-proof.md, "3. 輸入 PIN", app).
-                    // Nor for an answer of the card the app does not know: it may be its answer to the PIN.
-                    stop.code == "card" && reason in setOf(CardException.Reason.PIN_INCORRECT.name, CardException.Reason.PIN_MAYBE_SENT.name, CardException.Reason.CHANNEL.name, CardException.Reason.OTHER.name) -> {
-                        pin.clear()
-                        pinKept = false
-                    }
-                    // A locked card takes no PIN: the card proof is over.
-                    stop.code == "card" && reason == CardException.Reason.LOCKED.name -> {
-                        pin.clear()
-                        pinKept = false
-                        pinEnded = true
-                    }
-                    // The PIN did not reach a card, or the tap was cancelled: the same PIN, the tap again.
-                    stop.code == "card" || stop.code == "other_card" -> {
-                        // Cancelling the panel is back to the screen as it was; anything else offers the tap again.
-                        // A PIN that was kept stays kept, and its field shut, through a cancelled panel: the card may have taken it already.
-                        val cancelled = reason == CardException.Reason.CANCELLED.name
-                        pinKept = pinKept || !cancelled
-                        if (pinMessage == null && !cancelled) pinMessage = copy.say("common.halted")
-                    }
-                    else -> {
-                        pin.clear()
-                        pinKept = false
-                        pinEnded = true
-                        if (pinMessage == null) pinMessage = copy.say("common.halted")
-                    }
-                }
-            },
+            ::cardStateKnown,
+            ::pinStopped,
         )
+    }
+
+    /** 再試一次 of step 3: the card's state asked again, after the server turned it away as too many. Nothing is signed again. */
+    fun retryCardState() {
+        val f = flow ?: return
+        if (pinExpired()) return stopped(Stop("idle"))
+        pinMessage = null
+        // The card has signed: the line beside the button says what is being done.
+        pinBusy = copy.say("app_pin.signed")
+        step(f, { f.retryCardState() }, ::cardStateKnown, ::pinStopped)
+    }
+
+    /** Step 3 is done: the PIN is the flow's now, kept for the last tap. */
+    private fun cardStateKnown(status: CardProof.Status) {
+        keptPinSince = pin.since ?: keptPinSince
+        pin.clear()
+        pinBusy = null
+        pinRetry = false
+        showAccounts(status)
+        main.postDelayed({ checkIdle() }, CardProof.IDLE_MS)
+    }
+
+    /** Step 3 stopped: what it says under the PIN's field, and the way on. */
+    private fun pinStopped(stop: Stop) {
+        pinBusy = null
+        if (replacesStepOne(stop)) return
+        pinMessage = messages.stop(stop, Messages.At.PIN)
+        pinRetry = false
+        val reason = stop.values["reason"]
+        when {
+            // The card signed, and the server turned its state away as too many: the flow keeps the PIN for the last tap,
+            // and 再試一次 asks again.
+            stop.tooMany -> {
+                keptPinSince = pin.since ?: keptPinSince
+                pin.clear()
+                pinKept = false
+                pinRetry = true
+            }
+            // The card did not take the PIN, or may have: it is typed again (never sent again by itself).
+            // Nor is it kept for a card the secure channel cannot be made with: the sentence sends the cardholder to a card reader,
+            // and another tap needs the PIN typed again (design/copy/card-proof.md, "3. 輸入 PIN", app).
+            // Nor for an answer of the card the app does not know: it may be its answer to the PIN.
+            stop.code == "card" && reason in setOf(CardException.Reason.PIN_INCORRECT.name, CardException.Reason.PIN_MAYBE_SENT.name, CardException.Reason.CHANNEL.name, CardException.Reason.OTHER.name) -> {
+                pin.clear()
+                pinKept = false
+            }
+            // A locked card takes no PIN: the card proof is over.
+            stop.code == "card" && reason == CardException.Reason.LOCKED.name -> {
+                pin.clear()
+                pinKept = false
+                pinEnded = true
+            }
+            // The PIN did not reach a card, or the tap was cancelled: the same PIN, the tap again.
+            stop.code == "card" || stop.code == "other_card" -> {
+                // Cancelling the panel is back to the screen as it was; anything else offers the tap again.
+                // A PIN that was kept stays kept, and its field shut, through a cancelled panel: the card may have taken it already.
+                val cancelled = reason == CardException.Reason.CANCELLED.name
+                pinKept = pinKept || !cancelled
+                if (pinMessage == null && !cancelled) pinMessage = copy.say("common.halted")
+            }
+            else -> {
+                pin.clear()
+                pinKept = false
+                pinEnded = true
+                if (pinMessage == null) pinMessage = copy.say("common.halted")
+            }
+        }
     }
 
     // Step 4 ---------------------------------------------------------------------------
@@ -756,17 +841,33 @@ internal class Model(
     fun declare() {
         val f = flow ?: return
         if (pinExpired()) return stopped(Stop("idle"))
-        var doneCount = 0
-        progressItems = items(4, 0, true)
+        progress(f, 0) { f.declare(it) }
+    }
+
+    /**
+     * 再試一次 under step 5's list, after the server turned a request away as too many: the challenge asked for again, then the
+     * last tap as usual; or, once the card signed and the proof was made, the same record sent again.
+     */
+    fun retryDeclare() {
+        val f = flow ?: return
+        if (!submitTurnedAway) return declare()
+        progress(f, 3) { f.resubmit() }
+    }
+
+    /** Step 5 in progress: [run] on the card proof, the first [from] items of the list done already. */
+    private fun progress(f: CardProof, from: Int, run: (CardProof.Events) -> CardProof.Done) {
+        var doneCount = from
+        submitTurnedAway = false
+        progressItems = items(4, from, true)
         progressMessage = null
         progressRequestId = null
         progressButton = ProgressButton.NONE
-        signed = false
+        if (from == 0) signed = false
         step = Step.PROGRESS
         step(
             f,
             {
-                f.declare(events(f) {
+                run(events(f) {
                     doneCount++
                     if (it == CardProof.Item.SIGNED) signed = true
                     progressItems = items(4, doneCount, true)
@@ -785,6 +886,11 @@ internal class Model(
             { stop ->
                 if (stop.code == "idle") return@step stopped(stop)
                 if (replacesStepOne(stop)) return@step
+                if (stop.tooMany && stop.values["submitting"] == "true") {
+                    // The card signed for the last time and the PIN is gone: nothing of it waits now, only the record.
+                    submitTurnedAway = true
+                    keptPinSince = null
+                }
                 progressItems = items(4, doneCount, false, halted = true)
                 progressMessage = messages.stop(stop, Messages.At.DECLARE)
                 progressRequestId = stop.requestId
@@ -881,6 +987,10 @@ internal class Model(
         keptPinSince = null
         pinBusy = null
         pinMessage = null
+        pinRetry = false
+        submitTurnedAway = false
+        // A start whose answer will not be told any more (step() tells only the card proof that is there): 下一步 is pressed again.
+        starting = false
         name = ""
         status = null
         accountsMode = AccountsMode.OPEN

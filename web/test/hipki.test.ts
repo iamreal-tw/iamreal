@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { CardError } from "../src/card/card.ts";
-import { CLOSE_AGAIN_MS, HipkiCard, certificatesOfReply, replyError, signatureOfReply } from "../src/card/hipki.ts";
+import { CLOSE_AGAIN_MS, HipkiCard, certificatesOfReply, readerOfReply, replyError, signatureOfReply } from "../src/card/hipki.ts";
 
 const b64 = (b: Uint8Array) => Buffer.from(b).toString("base64");
 const certA = Uint8Array.of(0x30, 0x03, 0x02, 0x01, 0x01);
@@ -41,6 +41,22 @@ describe("GetUserCert", () => {
     assert.deepEqual(cardError(() => certificatesOfReply(JSON.stringify({ ret_code: 0x76000006 }))), { code: "no_card", detail: "76000006" });
     assert.deepEqual(cardError(() => certificatesOfReply(JSON.stringify({ ret_code: 0, slots: [] }))), { code: "no_reader", detail: "" });
     assert.deepEqual(cardError(() => certificatesOfReply(JSON.stringify({ ret_code: 0x76100003 }))), { code: "no_reader", detail: "76100003" });
+  });
+
+  test("the card reader's name: the slotDescription of the one slot with a card, as the component wrote it; none otherwise", () => {
+    const token = { serialNumber: "X", certs: [{ certb64: b64(certA) }] };
+    const of = (slots: unknown[]) => readerOfReply(JSON.stringify({ ret_code: 0, slots }));
+    assert.equal(of([{ slotDescription: "ACS ACR39U ICC Reader 0", token }]), "ACS ACR39U ICC Reader 0");
+    // Another reader without a card: the one with the card.
+    assert.equal(of([{ slotDescription: "Empty Reader 0" }, { slotDescription: "Card Reader 1", token }]), "Card Reader 1");
+    // As written: its form is the counts' to check (counts.ts), not rewritten here.
+    assert.equal(of([{ slotDescription: "Microsoft Usbccid Smartcard Reader (WUDF) 0", token }]), "Microsoft Usbccid Smartcard Reader (WUDF) 0");
+    // Two cards, no name, a name that is not a string, a reply that is not a success: none.
+    assert.equal(of([{ slotDescription: "A", token }, { slotDescription: "B", token }]), null);
+    assert.equal(of([{ token }]), null);
+    assert.equal(of([{ slotDescription: 7, token }]), null);
+    assert.equal(readerOfReply(JSON.stringify({ ret_code: 0x76100003 })), null);
+    assert.equal(readerOfReply("not json"), null);
   });
 
   test("a card without certificates: none (the flow says it)", () => {

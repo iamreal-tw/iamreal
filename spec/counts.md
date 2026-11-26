@@ -26,7 +26,8 @@ A count is a JSON object whose values are all strings. Its members:
 | `client` | A code of "Clients" | Every count |
 | `event` | A code of "Events" | Every count |
 | `page` | A code of "Pages" | `page` |
-| `short_id` | A short ID ([`scoped-id.md`](scoped-id.md)) in its one spelling: 10 characters of the base32 alphabet, uppercase | `page`, when `page` is `card`; no other count |
+| `short_id` | A short ID ([`scoped-id.md`](scoped-id.md)) in its one spelling: 10 characters of the base32 alphabet, uppercase | `page`, when `page` is `card`. May be in an `action` of a visitor, pressed on a proof page; no other count |
+| `source` | A domain a visitor came from (see "Sources") | May be in a `page`; no other count |
 | `step` | A code of "Steps", or for `duration` of "Timed steps" | `step`, `duration` |
 | `reason` | A code of "Reasons" | `stop`, `retry` |
 | `action` | A code of "Actions of a card proof" or "Actions of a visitor" | `action` |
@@ -73,6 +74,14 @@ A count is a JSON object whose values are all strings. Its members:
   gave it. It is 1 to 32 characters, each an ASCII letter, a digit, a space,
   or one of `-` `_` `.` `,` `(` `)` `+`. An app leaves out a model that is
   anything else; it does not shorten or rewrite it (ADR-0032, ADR-0039).
+- **A source** is the host of the `Referer` a visitor's page was opened
+  with, as the browser gives it (`document.referrer`): 1 to 253 characters,
+  each a lowercase ASCII letter, a digit, `.` or `-`. Nothing else of the
+  `Referer` is sent: no scheme, port, path or query. A page opened without
+  a `Referer`, or with one whose host is anything else (an IPv6 address, a
+  name in letters outside ASCII), is counted without a source; the client
+  does not shorten or rewrite it. Nothing of the page's own address is
+  read: not its query, not the part after `#`.
 
 ### The card proof device ID
 
@@ -281,10 +290,6 @@ again, and the card proof goes on.
 
 ### Durations
 
-A timed step that took a number of milliseconds is sent as the code whose
-range holds that number: under 1000 is `lt_1s`, 1000 to 2999 is `1s_3s`,
-and so on; 180000 and more is `gt_3m`.
-
 | Code | Meaning |
 |---|---|
 | `lt_1s` | under 1 second |
@@ -295,12 +300,19 @@ and so on; 180000 and more is `gt_3m`.
 | `1m_3m` | 1 minute to under 3 |
 | `gt_3m` | 3 minutes or more |
 
+A client measures a timed step on its own clock, from when the step begins
+to when it is done, and sends the one duration the time falls in: each
+holds its start and not its end, so 999 ms is `lt_1s` and 1000 ms is
+`1s_3s` (`durations_of` in the vectors). The time itself is not sent. A
+step that did not get done sends no duration, and a time below 0 (a clock
+that went back) none either.
+
 ### Sources
 
 Where a visitor came from. Until a measurement shows what the built-in
-browsers of apps send (ADR-0032), sources are only told apart as below, and
-no count carries a source yet: the member that will carry the `Referer`'s
-domain is added with the visitors' pages.
+browsers of apps send (ADR-0032), sources are only told apart as below. A
+`page` without `source` is `none`; one with it is `domain`, and `source`
+is that domain.
 
 | Code | Meaning |
 |---|---|
@@ -336,7 +348,7 @@ Without a version. A client that cannot tell sends `other`.
 
 [`vectors/counts.json`](vectors/counts.json): `table` is every code above
 with the clients it is for; `cases` are parsed counts, each taken or
-dropped; `durations` are numbers of milliseconds and the code each is sent
-as; `device_ids` are a value a device keeps, a moment, 16 random bytes, and
+dropped; `durations_of` are numbers of milliseconds and the duration each
+is (`null`: none); `device_ids` are a value a device keeps, a moment, 16 random bytes, and
 the card proof device ID it uses then and the value it keeps from then on
 (`null`: the one it kept).

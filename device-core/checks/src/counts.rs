@@ -175,6 +175,7 @@ pub const ORDER: &[&str] = &[
     "event",
     "page",
     "short_id",
+    "source",
     "step",
     "reason",
     "action",
@@ -262,6 +263,13 @@ pub fn is_model(v: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b" -_.,()+".contains(&b))
 }
 
+/// A domain a visitor came from: 1 to 253 lowercase ASCII letters, digits, dots and hyphens.
+fn is_source(v: &str) -> bool {
+    (1..=253).contains(&v.len())
+        && v.bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'.' || b == b'-')
+}
+
 /// A short ID as a page writes it: 10 characters of the base32 alphabet.
 fn is_short_id(v: &str) -> bool {
     v.len() == 10
@@ -284,6 +292,7 @@ fn is_for(codes: &[Code], code: &str, client: &str) -> bool {
 enum Rule {
     Page,
     ShortId,
+    Source,
     Step,
     Reason,
     Action,
@@ -304,6 +313,7 @@ impl Rule {
         match self {
             Rule::Page => has(PAGES, v),
             Rule::ShortId => is_short_id(v),
+            Rule::Source => is_source(v),
             Rule::Step => is_for(STEPS, v, client),
             Rule::Reason => is_for(REASONS, v, client),
             // The action was looked at to choose the rules.
@@ -346,8 +356,10 @@ fn card_proof(client: &str) -> Vec<(&'static str, Rule)> {
 }
 
 /// Members a count may leave out. `browser` and `os` only where the client is an app, which has none.
-fn optional(member: &str, client: &str) -> bool {
+fn optional(member: &str, client: &str, event: &str) -> bool {
     READ_FROM_THE_DEVICE.contains(&member)
+        || member == "source"
+        || (member == "short_id" && event == "action")
         || ((member == "browser" || member == "os") && client != "web")
 }
 
@@ -363,6 +375,7 @@ fn rules_of(count: &[(&str, &str)], client: &str) -> Option<Vec<(&'static str, R
             if get(count, "page") == Some("card") {
                 r.push(("short_id", Rule::ShortId));
             }
+            r.push(("source", Rule::Source));
             r.extend_from_slice(VISITOR);
             return Some(r);
         }
@@ -372,7 +385,8 @@ fn rules_of(count: &[(&str, &str)], client: &str) -> Option<Vec<(&'static str, R
         "action" => {
             let action = get(count, "action")?;
             if is_for(VISITOR_ACTIONS, action, client) {
-                let mut r = vec![("action", Rule::Action)];
+                // Pressed on a proof page, a visitor's action carries the page's short ID too.
+                let mut r = vec![("action", Rule::Action), ("short_id", Rule::ShortId)];
                 r.extend_from_slice(VISITOR);
                 return Some(r);
             }
@@ -422,7 +436,7 @@ pub fn read_count<'a>(count: &[(&'a str, &'a str)]) -> Option<Vec<(&'static str,
             continue;
         };
         match value {
-            None if optional(member, client) => {}
+            None if optional(member, client, get(count, "event").unwrap_or("")) => {}
             None => return None,
             Some(v) if rule.holds(v, client) => kept.push((member, v)),
             Some(_) => return None,

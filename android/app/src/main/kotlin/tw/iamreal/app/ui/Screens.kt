@@ -190,7 +190,13 @@ private fun Before(m: Model, outside: Outside) {
     // With one platform nothing more: what the proof says, and that it is public, is step 5's to say.
     for (line in m.messages.beforeSeveral()) Body(line)
     // The operator stopped taking card proofs: said here, before a card is read, in place of common.next (card-proof.md, step 1).
-    if (m.paused) Problem(c.say("before.paused")) else Actions { Button(c.say("common.next"), Modifier.fillMaxWidth(), primary = true) { m.start() } }
+    if (m.paused) {
+        Problem(c.say("before.paused"))
+    } else {
+        // Too many people now: above common.next, which stays to be pressed again (card-proof.md, step 1, 人太多的時候).
+        if (m.startTurnedAway) Problem(c.say("before.busy"))
+        Actions { Button(c.say("common.next"), Modifier.fillMaxWidth(), primary = true, enabled = !m.starting) { m.start() } }
+    }
     Questions {
         Question(c.say("before.why_physical")) {
             Answer(c.say("before.why_physical_card"))
@@ -262,7 +268,7 @@ private fun Pin(m: Model) {
     }
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Subhead(c.say("pin.label"))
-        PinInput(m.pin, enabled = !busy && !m.pinEnded && !m.pinKept, tag = "pin", modifier = Modifier.fillMaxWidth())
+        PinInput(m.pin, enabled = !busy && !m.pinEnded && !m.pinKept && !m.pinRetry, tag = "pin", modifier = Modifier.fillMaxWidth())
     }
     m.pinNote?.let { Problem(it) }
     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -274,6 +280,10 @@ private fun Pin(m: Model) {
         val wide = Modifier.fillMaxWidth()
         if (m.pinEnded) {
             Button(c.say("app_read.restart"), wide, primary = true) { m.readAgain() }
+        } else if (m.pinRetry) {
+            // The card signed; the server turned its state away as too many: asked again, the card not held to the phone again.
+            Button(c.say("progress.retry"), wide, primary = true, enabled = !busy) { m.retryCardState() }
+            Button(c.say("common.back"), wide, enabled = !busy) { m.backToRead() }
         } else if (m.pinKept) {
             Button(c.say("app_read.tap_again"), wide, primary = true, enabled = !busy) { m.confirmCard() }
             Button(c.say("common.back"), wide, enabled = !busy) { m.backToRead() }
@@ -487,6 +497,11 @@ private fun Progress(m: Model) {
         ProgressButton.NONE -> {}
         ProgressButton.TAP_AGAIN -> {
             Actions { Button(c.say("app_read.tap_again"), Modifier.fillMaxWidth(), primary = true) { m.declare() } }
+            TextButton(c.say("common.cancel")) { m.cancel() }
+        }
+        // Too many people: the challenge asked for again, or the record sent again; the card is not read again.
+        ProgressButton.RETRY -> {
+            Actions { Button(c.say("progress.retry"), Modifier.fillMaxWidth(), primary = true) { m.retryDeclare() } }
             TextButton(c.say("common.cancel")) { m.cancel() }
         }
         ProgressButton.RESTART -> Actions { Button(c.say("accounts.restart"), Modifier.fillMaxWidth(), primary = true) { m.cancel() } }

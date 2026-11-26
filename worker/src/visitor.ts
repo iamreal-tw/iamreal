@@ -19,8 +19,14 @@
 // 429 and Retry-After (rate-limit.ts; ADR-0026).
 //
 // The pages are made here, from what `PageData` answers (page-data.ts).
-// Their style sheet (/pages.css), the copy buttons' script that /faq, /verify
-// and /hang/… load (/copy.js), the player of the demonstration that /hang and
+// Every page here that is there (200) loads the counts' script (/count.js,
+// ADR-0032), which sends which page it is, and on the page of a card its
+// short ID, from its <script> element: the HTML is still the same for
+// everyone. The pages that say a thing is not there, and the one that says
+// there were too many requests, load none.
+//
+// Their style sheet (/pages.css), the counts' script (/count.js), the copy
+// buttons' script that /faq, /verify and /hang/… load (/copy.js), the player of the demonstration that /hang and
 // /hang/… load (/demo.js) and the card proof page (/proof and everything
 // under it) are not: they are files of Static Assets, which
 // sends them itself, and a request for one of those paths does not run the
@@ -77,7 +83,7 @@ async function ask<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Which kind of page a path is, for the log: never the short ID or the account in it. */
+/** Which kind of page a path is, for the log and the counts (spec/counts.md, "Pages"): never the short ID or the account in it. */
 type Kind = "home" | "card" | "account" | "proof_log" | "hang" | "faq" | "verify" | "check" | "prepare" | "privacy" | "none";
 
 function kindOf(pathname: string): Kind {
@@ -105,21 +111,27 @@ interface Answer {
 
 const text = (status: number, body: string): Answer => ({ status, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" }, body });
 
-function page(site: Site, status: number, document: Document): Answer {
+/**
+ * A page. One that is there (`counted`: its kind, and the short ID of the
+ * page of a card) loads the counts' script; one that says a thing is not
+ * there does not.
+ */
+function page(site: Site, status: number, document: Document, counted?: Document["count"]): Answer {
+  const d: Document = counted === undefined ? document : { ...document, count: counted };
   let body: string;
   try {
-    body = layout(site, document);
+    body = layout(site, d);
   } catch (e) {
     throw new Internal("render", e);
   }
-  return { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": PROOF_LOG_PAGE_CACHE }, body, script: document.script === true || document.demo === true };
+  return { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": PROOF_LOG_PAGE_CACHE }, body, script: d.script === true || d.demo === true || d.count !== undefined };
 }
 
 /** `GET /`: the home page, with the proof log's two numbers. */
 async function home(site: Site, parts: VisitorParts): Promise<Answer> {
   const numbers = await ask(() => parts.pageData.counts(PLATFORM));
   try {
-    return page(site, 200, homePage(numbers));
+    return page(site, 200, homePage(numbers), { page: "home" });
   } catch (e) {
     throw e instanceof Internal ? e : new Internal("render", e);
   }
@@ -153,7 +165,7 @@ async function card(site: Site, parts: VisitorParts, pathname: string): Promise<
   const found = await ask(() => parts.pageData.cards(short));
   if (found.cards.length === 0) return page(site, 404, proofMissing(site, typed));
   try {
-    return page(site, 200, proofPage(site, short, found));
+    return page(site, 200, proofPage(site, short, found), { page: "card", shortId: short });
   } catch (e) {
     throw e instanceof Internal ? e : new Internal("render", e);
   }
@@ -177,7 +189,7 @@ async function threadsAccount(site: Site, parts: VisitorParts, pathname: string)
   if (!isThreadsUsername(name)) return page(site, 404, notAName());
   if (name !== typed) return redirect(301, `/threads/@${name}`);
   const cards = await ask(() => parts.pageData.account(PLATFORM, name));
-  return page(site, 200, accountPage(name, cards));
+  return page(site, 200, accountPage(name, cards), { page: "account" });
 }
 
 /**
@@ -207,7 +219,7 @@ async function proofLog(site: Site, parts: VisitorParts, query: URLSearchParams)
   }
   const after = badQuery === null && query.has("after") ? readAfter(query.get("after")!) : null;
   const { counts, rows } = await ask(() => parts.pageData.logPart(PLATFORM, after, PAGE_SIZE + 1));
-  return page(site, 200, proofLogPage({ counts, rows: rows.slice(0, PAGE_SIZE), more: rows.length > PAGE_SIZE, after: after !== null, badQuery }));
+  return page(site, 200, proofLogPage({ counts, rows: rows.slice(0, PAGE_SIZE), more: rows.length > PAGE_SIZE, after: after !== null, badQuery }), { page: "proof_log" });
 }
 
 /**
@@ -219,7 +231,7 @@ async function proofLog(site: Site, parts: VisitorParts, query: URLSearchParams)
  * /hang; only a short ID that reads is asked of the proof log.
  */
 async function hang(site: Site, parts: VisitorParts, pathname: string): Promise<Answer> {
-  if (pathname === "/hang") return page(site, 200, hangWithout(site));
+  if (pathname === "/hang") return page(site, 200, hangWithout(site), { page: "hang" });
   const typed = typedAfter(pathname, "/hang/");
   const short = readShortIdInUrl(typed);
   if (short !== null && short !== typed) return redirect(301, `/hang/${short}`);
@@ -227,7 +239,7 @@ async function hang(site: Site, parts: VisitorParts, pathname: string): Promise<
   const { cards } = await ask(() => parts.pageData.cards(short));
   const account = cards.length === 1 ? (cards[0]!.slots.find((s) => s.platform === PLATFORM)?.current ?? null) : null;
   if (account === null) return redirect(302, "/hang");
-  return page(site, 200, hangPage(site, short, account));
+  return page(site, 200, hangPage(site, short, account), { page: "hang" });
 }
 
 /**
@@ -259,11 +271,11 @@ export async function visitor(request: Request, env: Env, parts: VisitorParts): 
     else if (kind === "proof_log") answer = await proofLog(site, parts, searchParams);
     else if (kind === "account") answer = await threadsAccount(site, parts, pathname);
     else if (kind === "hang") answer = await hang(site, parts, pathname);
-    else if (kind === "faq") answer = page(site, 200, faqPage());
-    else if (kind === "verify") answer = page(site, 200, verifyPage());
-    else if (kind === "check") answer = page(site, 200, checkPage(site));
-    else if (kind === "prepare") answer = page(site, 200, preparePage());
-    else if (kind === "privacy") answer = page(site, 200, privacyPage());
+    else if (kind === "faq") answer = page(site, 200, faqPage(), { page: kind });
+    else if (kind === "verify") answer = page(site, 200, verifyPage(), { page: kind });
+    else if (kind === "check") answer = page(site, 200, checkPage(site), { page: kind });
+    else if (kind === "prepare") answer = page(site, 200, preparePage(), { page: kind });
+    else if (kind === "privacy") answer = page(site, 200, privacyPage(), { page: kind });
     else answer = page(site, 404, notFoundPage());
   } catch (e) {
     const cause = e instanceof Internal ? e.cause : e;

@@ -87,30 +87,62 @@ final class MemoryCRLNumbers: CRLNumbers {
 /// A back end that counts the requests for `config` on their way to the real one.
 final class CountingBackend: Backend {
     private let backend: Backend
+    /// The requests for `config` without the mark of a start, and with it.
     private(set) var configRequests = 0
+    private(set) var startRequests = 0
+    /// How many requests were made of each path, turned away or not.
+    private(set) var asked: [String: Int] = [:]
     /// Done before a record is sent on: for a test to change the back end between the challenge and the record.
     var beforeSubmit: (() async throws -> Void)?
     /// The record does not reach the server: as a phone that lost the network.
     var submitFails = false
     /// The server does not answer when asked for its config.
     var configFails = false
+    /// The next requests to a path (`config?start`, `config`, `card-state`,
+    /// `challenges`, `records`) are turned away as the Worker turns one away
+    /// as too many (docs/api/card-proof.md, "Rules for every endpoint"),
+    /// one for each failure, in order, without reaching the server.
+    var turnAway: [String: [BackendFailure]] = [:]
+
+    /// `429` `rate_limited`, as the Worker answers a network over its limit.
+    static let rateLimited = BackendFailure(code: "rate_limited", requestID: "0123456789abcdef", status: 429)
+    /// `503` `busy`, as the Worker answers when the proof log is overloaded or too many card proofs start.
+    static let busy = BackendFailure(code: "busy", requestID: "0123456789abcdef", status: 503)
 
     init(_ backend: Backend) {
         self.backend = backend
     }
 
-    func config() async throws -> Data {
-        configRequests += 1
+    /// Counts a request to `path`, and throws what the test turns it away with.
+    private func request(_ path: String) throws {
+        asked[path, default: 0] += 1
+        if var failures = turnAway[path], !failures.isEmpty {
+            let failure = failures.removeFirst()
+            turnAway[path] = failures
+            throw failure
+        }
+    }
+
+    func config(start: Bool) async throws -> Data {
+        if start { startRequests += 1 } else { configRequests += 1 }
+        try request(start ? "config?start" : "config")
         if configFails { throw BackendFailure(code: "network", requestID: nil) }
-        return try await backend.config()
+        return try await backend.config(start: start)
     }
 
     func crlIndex() async throws -> Data { try await backend.crlIndex() }
     func crl(sha256: String) async throws -> Data { try await backend.crl(sha256: sha256) }
-    func cardState(_ body: Data) async throws -> Data { try await backend.cardState(body) }
-    func challenge() async throws -> String { try await backend.challenge() }
+    func cardState(_ body: Data) async throws -> Data {
+        try request("card-state")
+        return try await backend.cardState(body)
+    }
+    func challenge() async throws -> String {
+        try request("challenges")
+        return try await backend.challenge()
+    }
     func submit(_ body: Data) async throws -> Data {
         try await beforeSubmit?()
+        try request("records")
         if submitFails { throw BackendFailure(code: "network", requestID: nil) }
         return try await backend.submit(body)
     }
