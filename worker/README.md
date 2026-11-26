@@ -914,9 +914,12 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 
 1. 同時抓 G2、G3 的清冊，兩份互不等待。每一份從送出請求到收完最多等 5 分鐘：G2 的清冊約 17 MB，每秒 0.5 Mbit 也收得完；排程一次的牆上時間最多 15 分鐘（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)「Wall time limits by invocation type」），等回應的時間不算 CPU 時間（同一頁「CPU time」）。
 2. 收到完整的 `200` 時，算內容的 SHA-256。R2 裡已經有 `crl/<SHA-256>.crl` 就不重存；沒有才寫入。
-3. **請求帶條件**（[#266](https://github.com/iamreal-tw/iamreal/issues/266)）。內政部一天簽 4 份清冊，鏡像一天問 24 次，大約 20 次是同一份。寫入一份新的檔時，把內政部那一次回應的 `ETag`、`Last-Modified` 和問的網址記在那個 R2 物件的自訂中繼資料（`source`、`etag`、`last-modified`）。下一輪先列出 `crl/`，每個網址找它最後存進來、帶著這些標頭的那個檔：有 `ETag` 就帶 `If-None-Match`，沒有 `ETag` 才帶 `If-Modified-Since`，只帶一個。內政部回 `304` 時不下載、不存、不建樹，那一輪這一份的結果是 `not_modified`，寫出條件所指的那個檔的 SHA-256（那個檔要還在儲存桶裡，不在就算失敗，下一輪不帶條件）
-   - 標頭跟著檔走：檔被刪掉，條件也跟著沒有，下一輪整份下載
-   - 不記的：回應沒有 `Content-Length` 的（可能是截斷的，見下面）、標頭不是可見的 ASCII 或超過 256 個字元的。這一版之前存的檔沒有標頭，所以部署之後要等內政部簽下一份，才開始帶條件
+3. **請求帶條件**（[#266](https://github.com/iamreal-tw/iamreal/issues/266)）。內政部一天簽 4 份清冊，鏡像一天問 24 次，大約 20 次是同一份。寫入一份新的檔時，把內政部那一次回應的 `ETag`、`Last-Modified` 和問的網址記在那個 R2 物件的自訂中繼資料（`source`、`etag`、`last-modified`）。下一輪先列出 `crl/`，每個網址找它最後存進來、帶著這些標頭、而且索引裡是可用清冊（驗過內政部的簽章）的那個檔：有 `ETag` 就帶 `If-None-Match`，沒有 `ETag` 才帶 `If-Modified-Since`，只帶一個。內政部回 `304` 時不下載、不存，那一輪這一份的結果是 `not_modified`，寫出條件所指的那個檔的 SHA-256；那個檔索引裡已經有行就不建樹，還沒有行的（上一輪中斷）照第二步補上。回 `304` 時那個檔要還在儲存桶裡，不在就算失敗
+   - 標頭跟著檔走：檔被刪掉，它的條件也跟著沒有。下一輪用的是同一個網址更早的那個檔的標頭（內政部已經不是那一份，所以整份下載）；那個網址一個帶標頭的檔都沒有時不帶條件
+   - 整份下載回來、發現儲存桶已經有同樣內容的檔時（`already_stored`），如果內政部這一次說的標頭和那個檔記的不同，把檔連同新的標頭重寫一次，下一輪就用新的。少了這一步，內政部把同一份內容重新放上去（`ETag` 變了）之後，到下一份清冊之前每一輪都會整份下載
+   - 不記的：回應沒有 `Content-Length` 的（可能是截斷的，見下面）、標頭不是可見的 ASCII 或超過 256 個字元的。這一版之前存的檔沒有標頭：部署後第一輪照舊整份下載，照上一點把標頭補記上去，第二輪開始帶條件
+   - **只拿驗過章的檔當條件**：內政部的兩個網址是明文 HTTP，路上的人可以回一次假的內容、配上內政部真的 `ETag`。那個檔會被存下來（索引裡是不可用的一行），但不會被拿來當條件，下一輪照樣問到真的那一份。拿它當條件的話，內政部自己會一直回 `304`，到下一份清冊之前鏡像都拿不到真的
+   - 沒有 `ETag`、只有 `Last-Modified` 時，條件是「在那之後有沒有改」：內政部換回比較舊的檔時會回 `304`。現在兩個網址都給 `ETag`，不走這一條
    - 內政部兩個標頭都不給時，每一輪照舊整份下載、比 SHA-256
    - 沒帶條件卻收到 `304` 算失敗
 4. 下面的情況算失敗，那一份不存任何檔，另一份照常：
@@ -1094,6 +1097,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 ### 內政部看得到什麼
 
 - `User-Agent` 是一般的 `Mozilla/5.0 (compatible)`，不帶專案名稱。
+- `If-None-Match` 或 `If-Modified-Since`：值是內政部自己上一次回的 `ETag` 或 `Last-Modified`（[排程做什麼](#排程做什麼)）。
 - Cloudflare 會在 Worker 送出的每個請求加上 `CF-Worker` 標頭，值是這個 Worker 所在 zone 的名稱（[Cloudflare HTTP headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/)），照這份文件會是 `iamreal.tw`；沒有實際看過送到內政部的請求。這一項不是程式決定的；營運者知道並接受，`CONTRIBUTING.md`「工作時對外的請求」把它列為例外。本機的 workerd 會模仿它，值是 Worker 的名稱加 `.example.com`。
 
 ## 測試的工具
@@ -1260,7 +1264,9 @@ pnpm run deploy:test
 - **下載得到**：`https://test-data.iamreal.tw/crl/<SHA-256>.crl` 兩個都回 `200`，`Content-Length` 和上表相同，`Cache-Control` 是 `public, max-age=31536000, immutable`；下載回來重算的 SHA-256 和檔名相同，`openssl crl` 讀得出兩份都是內政部憑證管理中心簽發的清冊。回應沒有 `Content-Type`：鏡像寫入時沒有設。
 - 這些數字來自 `wrangler tail --env test --format json`（同一把權杖）和資料網域的回應標頭。只看了這一次排程，沒有從別的地方對內政部的網址送請求。
 
-### 內政部對條件式請求怎麼回
+還沒看過的：內政部回錯誤、斷線、逾時的時候，Cloudflare 上的行為和本機的 workerd 是不是一樣（「排程做什麼」最後一段寫的那兩件事）。
+
+#### 內政部對條件式請求怎麼回
 
 2026-11-26 19:36（台灣時間）從開發用的電腦對兩個網址各問了三次，都沒有下載內容（[#266](https://github.com/iamreal-tw/iamreal/issues/266)）：
 
@@ -1273,9 +1279,7 @@ pnpm run deploy:test
 - 兩個網址都給 `ETag` 和 `Last-Modified`，`GET` 帶 `If-None-Match` 時回 `304`。鏡像送的就是這一種。
 - `HEAD` 同時帶兩個條件時回的是 `200`。是 `HEAD` 的關係還是同時帶兩個的關係，沒有再問；鏡像不走這兩條路。只帶 `If-Modified-Since` 的 `GET` 也沒有問過（鏡像只在沒有 `ETag` 時才這樣問）。
 - 兩個 `ETag` 的後半相同，`Last-Modified` 也相同（18:55 台灣時間），比清冊的 `this_update`（約 17:11）晚：看起來是檔案放上伺服器的時間。
-- **還沒看過的**：從 Cloudflare 問時是不是一樣回 `304`。部署後等內政部簽下一份清冊，再看之後幾輪排程的 `crl_mirror` 是不是 `not_modified`。
-
-還沒看過的：內政部回錯誤、斷線、逾時的時候，Cloudflare 上的行為和本機的 workerd 是不是一樣（「排程做什麼」最後一段寫的那兩件事）。
+- **還沒看過的**：從 Cloudflare 問時是不是一樣回 `304`。部署後的第二輪排程起（第一輪補記標頭），看 `crl_mirror` 是不是 `not_modified`。
 
 ## 停止和恢復收過卡
 

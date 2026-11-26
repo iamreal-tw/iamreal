@@ -100,22 +100,35 @@ describe("the mirror asks MOICA with a condition", () => {
     assert.deepEqual([sources.G2, sources.G3].map((s) => [s?.result, s?.sha256]), [["not_modified", sha256Hex(G2_B)], ["not_modified", sha256Hex(G3_B)]]);
   });
 
-  test("the same bytes under other headers: downloaded whole, found to be stored already", async () => {
+  test("the same bytes under other headers: downloaded whole once, found to be stored already, and from then on the condition is the new header", async () => {
     worker.moica.serve("G2", G2_B, "with Content-Length", { etag: '"another"' });
-    const { requests, sources, indexed } = await round(worker);
-    assert.deepEqual(conditionsOf(requests, "G2"), { "if-none-match": G2_B_SAID.etag });
-    assert.deepEqual([sources.G2?.result, sources.G2?.sha256], ["already_stored", sha256Hex(G2_B)]);
-    assert.equal(indexed, 0);
+    const first = await round(worker);
+    assert.deepEqual(conditionsOf(first.requests, "G2"), { "if-none-match": G2_B_SAID.etag });
+    assert.deepEqual([first.sources.G2?.result, first.sources.G2?.sha256], ["already_stored", sha256Hex(G2_B)]);
+    assert.equal(first.indexed, 0);
+
+    const index = (await worker.files(INDEX))[0]!.uploaded.getTime();
+    const second = await round(worker);
+    assert.deepEqual(conditionsOf(second.requests, "G2"), { "if-none-match": '"another"' });
+    assert.deepEqual([second.sources.G2?.result, second.sources.G2?.sha256], ["not_modified", sha256Hex(G2_B)]);
+    assert.equal(second.indexed, 0);
+    assert.equal((await worker.files(INDEX))[0]!.uploaded.getTime(), index, "the index is not written again");
   });
 
-  test("the file the condition would be of is gone from the bucket: asked without a condition, downloaded again", async () => {
-    worker.moica.serve("G2", G2_B, "with Content-Length", G2_B_SAID);
+  test("the file the condition was of is gone from the bucket: the condition is of the file before it, which MOICA no longer has, so the new one is downloaded again", async () => {
     await worker.deleteFile(nameOf(G2_B));
     const { requests, sources } = await round(worker);
-    // The file stored last of this address's is now the first one, and MOICA no longer has that.
     assert.deepEqual(conditionsOf(requests, "G2"), { "if-none-match": G2_A_SAID.etag });
     assert.deepEqual([sources.G2?.result, sources.G2?.sha256], ["stored", sha256Hex(G2_B)]);
     assert.ok((await worker.files("crl/")).some((f) => f.key === nameOf(G2_B)));
+  });
+
+  test("no file of an address is left: asked without a condition", async () => {
+    await worker.deleteFile(nameOf(G3_A));
+    await worker.deleteFile(nameOf(G3_B));
+    const { requests, sources } = await round(worker);
+    assert.deepEqual(conditionsOf(requests, "G3"), {});
+    assert.deepEqual([sources.G3?.result, sources.G3?.sha256], ["stored", sha256Hex(G3_B)]);
   });
 });
 
@@ -137,15 +150,6 @@ describe("what the mirror does not make a condition of", () => {
     assert.deepEqual(conditionsOf(requests, "G2"), {});
     assert.deepEqual(conditionsOf(requests, "G3"), {});
     assert.deepEqual([sources.G2?.result, sources.G3?.result], ["already_stored", "already_stored"]);
-  });
-
-  test("a file the archive had before, without what MOICA said of it: no condition until a new file comes", async () => {
-    // G2_A is stored from the answer above, which said nothing; MOICA now says an ETag of the same bytes.
-    worker.moica.serve("G2", G2_A, "with Content-Length", { etag: '"a"' });
-    const { requests, sources } = await round(worker);
-    assert.deepEqual(conditionsOf(requests, "G2"), {});
-    assert.equal(sources.G2?.result, "already_stored");
-    assert.deepEqual(conditionsOf((await round(worker)).requests, "G2"), {});
   });
 
   test("an answer that does not say how long it is: stored, and its headers are not kept", async () => {
@@ -171,5 +175,34 @@ describe("what the mirror does not make a condition of", () => {
     assert.deepEqual(conditionsOf(requests, "G2"), {});
     assert.deepEqual([sources.G2?.result, sources.G2?.error], ["failed", "HTTP status 304"]);
     assert.deepEqual(await written(worker), before);
+  });
+
+  test("a file the archive had before, without what MOICA said of it: one more whole download, which keeps what MOICA says; then a condition", async () => {
+    // G3_A is stored from the answer above, which said nothing: as a file stored before the mirror kept these headers.
+    worker.moica.serve("G3", G3_A);
+    await round(worker);
+    worker.moica.serve("G3", G3_A, "with Content-Length", { etag: '"a"' });
+    const { requests, sources } = await round(worker);
+    assert.deepEqual(conditionsOf(requests, "G3"), {});
+    assert.equal(sources.G3?.result, "already_stored");
+    const next = await round(worker);
+    assert.deepEqual(conditionsOf(next.requests, "G3"), { "if-none-match": '"a"' });
+    assert.equal(next.sources.G3?.result, "not_modified");
+    // The file still says how long it may be cached.
+    for (const f of await worker.files("crl/")) assert.ok(f.cacheControl, f.key);
+  });
+
+  test("an answer that is not a CRL MOICA signed, sent with MOICA's own ETag: stored, listed as not usable, and no condition is made of it", async () => {
+    const real = makeCrl({ issuer: "G3", number: 2026112101n, thisUpdate: FRIDAY, serials: [9n] });
+    const said = { etag: '"real"' };
+    // Somebody on the way answers once in MOICA's place: other bytes of the right length, under the real file's ETag.
+    worker.moica.serve("G3", new TextEncoder().encode("not a CRL at all"), "with Content-Length", said);
+    assert.equal((await round(worker)).sources.G3?.result, "stored");
+    // MOICA itself again: it would answer 304 to that ETag, so the mirror must not ask with it.
+    worker.moica.serve("G3", real, "with Content-Length", said);
+    const { requests, sources } = await round(worker);
+    assert.notDeepEqual(conditionsOf(requests, "G3"), { "if-none-match": said.etag });
+    assert.deepEqual([sources.G3?.result, sources.G3?.sha256], ["stored", sha256Hex(real)]);
+    assert.equal((await round(worker)).sources.G3?.result, "not_modified");
   });
 });

@@ -182,6 +182,7 @@ const META_LAST_MODIFIED = "last-modified";
 
 /** A header value the mirror keeps and sends back: printable ASCII, not long. Anything else is as if MOICA sent none. */
 const KEPT_HEADER = /^[\x20-\x7e]{1,256}$/;
+const keptHeader = (value: string | null | undefined): string | undefined => (typeof value === "string" && KEPT_HEADER.test(value) ? value : undefined);
 
 const INDEX_KEY = "crl/index.jsonl";
 const FILE_KEY = /^crl\/([0-9a-f]{64})\.crl$/;
@@ -431,27 +432,34 @@ interface LastAnswer {
 
 /**
  * For each address, the file stored last of those that came from it with
- * an `ETag` or a `Last-Modified`: what the next request to that address is
- * conditional on. A file of the archive without them (stored before the
- * mirror kept them, or from an answer that had none) is no one's last
- * answer, and its address is asked without a condition.
+ * an `ETag` or a `Last-Modified` and that the index lists as a usable CRL:
+ * what the next request to that address is conditional on.
  *
- * If the archive cannot be listed, every address is asked without a
+ * - A file of the archive without them (from an answer that had none) is no
+ *   one's last answer, and its address is asked without a condition.
+ * - Only a usable CRL, one whose signature the mirror checked: MOICA's
+ *   addresses are plain HTTP, and anyone on the way can answer once with
+ *   other bytes under MOICA's own `ETag`. Were that file a condition, MOICA
+ *   itself would answer 304 to it until its next CRL, and the mirror would
+ *   not fetch the real one. As it is, the next round asks again.
+ *
+ * If the archive cannot be read, every address is asked without a
  * condition: the round then downloads what it may already have, as every
- * round did before.
+ * round did before the mirror asked with conditions.
  */
 async function lastAnswers(bucket: R2Bucket): Promise<ReadonlyMap<string, LastAnswer>> {
   const last = new Map<string, LastAnswer & { readonly uploaded: number }>();
   try {
+    const index = await bucket.get(INDEX_KEY);
+    const usable = new Set(readIndex(index === null ? "" : await index.text()).flatMap((line) => (line.root.startsWith("-") ? [] : [line.sha256])));
     for (let cursor: string | undefined; ; ) {
       const page = await bucket.list({ prefix: "crl/", include: ["customMetadata"], ...(cursor !== undefined && { cursor }) });
       for (const object of page.objects) {
         const name = FILE_KEY.exec(object.key);
         const source = object.customMetadata?.[META_SOURCE];
-        if (!name || source === undefined) continue;
-        const kept = (value: string | undefined): string | undefined => (value !== undefined && KEPT_HEADER.test(value) ? value : undefined);
-        const etag = kept(object.customMetadata?.[META_ETAG]);
-        const lastModified = kept(object.customMetadata?.[META_LAST_MODIFIED]);
+        if (!name || source === undefined || !usable.has(name[1]!)) continue;
+        const etag = keptHeader(object.customMetadata?.[META_ETAG]);
+        const lastModified = keptHeader(object.customMetadata?.[META_LAST_MODIFIED]);
         if (etag === undefined && lastModified === undefined) continue;
         const uploaded = object.uploaded.getTime();
         if ((last.get(source)?.uploaded ?? -Infinity) < uploaded) last.set(source, { sha256: name[1]!, etag, lastModified, uploaded });
@@ -529,19 +537,29 @@ async function fetchOne(source: CrlSource, bucket: R2Bucket, signal: AbortSignal
   if (declared !== null && declared !== String(bytes.byteLength)) throw new Error(`${bytes.byteLength} bytes, Content-Length ${declared}`);
   const sha256 = hexOf(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
   const key = `crl/${sha256}.crl`;
-  // The name is the SHA-256 of the bytes, so a file of this name has these bytes.
-  if (await bucket.head(key)) return { result: "already_stored", sha256 };
-  signal.throwIfAborted(); // nothing is written once the limit has passed
   // What MOICA said of this answer is kept only if the answer said how long it is and was that long: an answer that
   // may have been broken off (see the top of this file) must not be the one a later request is conditional on.
-  const kept = (name: string): string | undefined => {
-    const value = declared === null ? null : response.headers.get(name);
-    return value !== null && KEPT_HEADER.test(value) ? value : undefined;
-  };
-  const etag = kept("ETag");
-  const lastModified = kept("Last-Modified");
-  const customMetadata = etag === undefined && lastModified === undefined ? undefined : { [META_SOURCE]: source.url, ...(etag !== undefined && { [META_ETAG]: etag }), ...(lastModified !== undefined && { [META_LAST_MODIFIED]: lastModified }) };
-  await bucket.put(key, bytes, { httpMetadata: { cacheControl: CACHE_IMMUTABLE }, ...(customMetadata !== undefined && { customMetadata }) });
+  const etag = declared === null ? undefined : keptHeader(response.headers.get("ETag"));
+  const lastModified = declared === null ? undefined : keptHeader(response.headers.get("Last-Modified"));
+  const said: Record<string, string> | undefined =
+    etag === undefined && lastModified === undefined ? undefined : { [META_SOURCE]: source.url, ...(etag !== undefined && { [META_ETAG]: etag }), ...(lastModified !== undefined && { [META_LAST_MODIFIED]: lastModified }) };
+  const file = { httpMetadata: { cacheControl: CACHE_IMMUTABLE }, ...(said !== undefined && { customMetadata: said }) };
+  // The name is the SHA-256 of the bytes, so a file of this name has these bytes.
+  const have = await bucket.head(key);
+  if (have) {
+    // The whole file came although the bucket has it: what the request was conditional on, if anything, is not what
+    // MOICA says of these bytes now (a file stored before the mirror kept this, or bytes MOICA put up again). The
+    // file is written again with what it says now, so that the next request is conditional on that; otherwise
+    // every round until MOICA's next CRL would download it whole.
+    const recorded = have.customMetadata ?? {};
+    if (said !== undefined && [META_SOURCE, META_ETAG, META_LAST_MODIFIED].some((name) => recorded[name] !== said[name])) {
+      signal.throwIfAborted();
+      await bucket.put(key, bytes, file);
+    }
+    return { result: "already_stored", sha256 };
+  }
+  signal.throwIfAborted(); // nothing is written once the limit has passed
+  await bucket.put(key, bytes, file);
   return { result: "stored", sha256 };
 }
 
