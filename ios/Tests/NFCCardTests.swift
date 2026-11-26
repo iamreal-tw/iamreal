@@ -1,3 +1,4 @@
+import CoreNFC
 import XCTest
 @testable import IamrealApp
 
@@ -9,7 +10,13 @@ import XCTest
 /// the tick of a tap that was done (issue #367).
 final class NFCCardTests: XCTestCase {
     private let message = Data("iamreal-test:public:0".utf8)
-    private let failed = "沒有完成，請看 app 畫面上的說明。"
+    private var copy: Copy!
+    /// The one sentence of a tap that stopped.
+    private var failed: String { copy("app_panel.failed") }
+
+    override func setUpWithError() throws {
+        copy = Copy(json: try Repository.data("design/copy/card-proof.json"))
+    }
 
     /// A panel that records what it is told, over a simulated card.
     private final class Panel: CardPanel {
@@ -35,35 +42,49 @@ final class NFCCardTests: XCTestCase {
         func fail(_ message: String) { told.append(.fail(message)) }
     }
 
-    private func reader(_ panel: Panel) throws -> NFCCard {
-        NFCCard(copy: Copy(json: try Repository.data("design/copy/card-proof.json")), available: { true }, open: { panel })
+    /// The card over NFC, with `panel` in the place of the system's.
+    private func card(over panel: Panel, available: Bool = true) -> NFCCard {
+        NFCCard(copy: copy, available: { available }, open: { panel })
     }
 
+    /// The tap ends without what it was for: why.
+    private func stopped(_ tap: () async throws -> Void, file: StaticString = #filePath, line: UInt = #line) async -> CardFailure? {
+        do {
+            try await tap()
+            XCTFail("the tap was done", file: file, line: line)
+            return nil
+        } catch {
+            return error as? CardFailure
+        }
+    }
+
+    /// The sentence the ticket fixed, in the document's table of the system's panel.
     func testTheSentenceIsTheDocuments() throws {
+        XCTAssertEqual(failed, "沒有完成，請看 app 畫面上的說明。")
         let document = try Repository.text("design/copy/card-proof.md")
         XCTAssertTrue(document.contains("| 感應沒有完成 | \(failed) |"))
     }
 
     func testATapThatReadTheCertificatesClosesThePanelAsDone() async throws {
         let panel = Panel(card: try SimulatedGpkiCard())
-        let read = try await reader(panel).tap(.readCertificates) { try await $0.certificates() }
+        let read = try await card(over: panel).tap(.readCertificates) { try await $0.certificates() }
         XCTAssertEqual(read.count, 2)
         XCTAssertEqual(panel.told, [
-            .wait("把自然人憑證貼在 iPhone 背面的上方"),
-            .say("讀取中，不要移動卡片……"),
-            .finish("讀到了，可以拿開卡片"),
+            .wait(copy("app_panel.iphone_wait")),
+            .say(copy("app_panel.reading")),
+            .finish(copy("app_panel.read")),
         ])
     }
 
     func testATapThatSignedClosesThePanelAsDone() async throws {
         let panel = Panel(card: try SimulatedGpkiCard())
         let message = self.message
-        let signature = try await reader(panel).tap(.sign) { try await $0.sign(message, pin: PIN("123456")) }
+        let signature = try await card(over: panel).tap(.sign) { try await $0.sign(message, pin: PIN("123456")) }
         XCTAssertEqual(signature.count, 256)
         XCTAssertEqual(panel.told, [
-            .wait("把自然人憑證貼在 iPhone 背面的上方"),
-            .say("卡片簽章中，不要移動卡片……"),
-            .finish("卡片簽好了，可以拿開卡片"),
+            .wait(copy("app_panel.iphone_wait")),
+            .say(copy("app_panel.signing")),
+            .finish(copy("app_panel.signed")),
         ])
     }
 
@@ -71,14 +92,9 @@ final class NFCCardTests: XCTestCase {
     func testAWrongPINClosesThePanelAsAFailure() async throws {
         let panel = Panel(card: try SimulatedGpkiCard())
         let message = self.message
-        do {
-            _ = try await reader(panel).tap(.sign) { try await $0.sign(message, pin: PIN("654321")) }
-            XCTFail("signed with a wrong PIN")
-        } catch {
-            XCTAssertEqual(error as? CardFailure, .pinIncorrect)
-        }
-        XCTAssertEqual(panel.told.last, .fail(failed))
-        XCTAssertFalse(panel.told.contains { if case .finish = $0 { return true } else { return false } })
+        let why = await stopped { _ = try await self.card(over: panel).tap(.sign) { try await $0.sign(message, pin: PIN("654321")) } }
+        XCTAssertEqual(why, .pinIncorrect)
+        XCTAssertEqual(Array(panel.told.dropFirst(2)), [.fail(failed)])
     }
 
     /// Whatever stops a tap once the card is there, the panel is closed
@@ -94,17 +110,18 @@ final class NFCCardTests: XCTestCase {
             (CardFailure.dropped(pinSent: false), .dropped(pinSent: false)),
             (CardFailure.dropped(pinSent: true), .dropped(pinSent: true)),
             (CardFailure.failed(code: "card_error"), .failed(code: "card_error")),
+            // As Core NFC says it: the card left, the card stopped answering, the connection ran out.
+            (NFCReaderError(.readerTransceiveErrorTagConnectionLost), .dropped(pinSent: false)),
+            (NFCReaderError(.readerTransceiveErrorTagResponseError), .dropped(pinSent: false)),
+            (NFCReaderError(.readerSessionInvalidationErrorSessionTimeout), .dropped(pinSent: false)),
+            (NFCReaderError(.readerErrorUnsupportedFeature), .failed(code: "nfc")),
             (Other(), .failed(code: "nfc")),
         ]
         for purpose in [TapPurpose.readCertificates, .sign] {
             for (thrown, expected) in stops {
                 let panel = Panel(card: try SimulatedGpkiCard())
-                do {
-                    try await reader(panel).tap(purpose) { _ in throw thrown }
-                    XCTFail("the tap was done: \(thrown)")
-                } catch {
-                    XCTAssertEqual(error as? CardFailure, expected)
-                }
+                let why = await stopped { try await self.card(over: panel).tap(purpose) { _ in throw thrown } }
+                XCTAssertEqual(why, expected, "\(thrown)")
                 XCTAssertEqual(Array(panel.told.dropFirst(2)), [.fail(failed)], "\(thrown)")
             }
         }
@@ -113,40 +130,46 @@ final class NFCCardTests: XCTestCase {
     /// Cancelled on the panel: the system has closed it, and the app closes nothing.
     func testATapCancelledOnThePanelIsNotClosedAgain() async throws {
         let panel = Panel(card: try SimulatedGpkiCard())
-        do {
-            try await reader(panel).tap(.readCertificates) { _ in
+        let why = await stopped {
+            try await self.card(over: panel).tap(.readCertificates) { _ in
                 panel.cancelled = true
-                throw CardFailure.failed(code: "nfc")
+                throw NFCReaderError(.readerTransceiveErrorSessionInvalidated)
             }
-            XCTFail("the tap was done")
-        } catch {
-            XCTAssertEqual(error as? CardFailure, .noTap)
         }
+        XCTAssertEqual(why, .noTap)
         XCTAssertEqual(panel.told.count, 2, "waiting and reading, and nothing after: \(panel.told)")
+    }
+
+    /// Cancelled on the panel after the PIN went to the card: a dropped
+    /// tap, since the card may have counted the PIN; the panel is the
+    /// system's to close all the same.
+    func testATapCancelledAfterThePINIsDroppedAndNotClosedAgain() async throws {
+        let panel = Panel(card: try SimulatedGpkiCard())
+        let message = self.message
+        let why = await stopped {
+            try await self.card(over: panel).tap(.sign) { connection in
+                _ = try? await connection.sign(message, pin: PIN("654321"))
+                panel.cancelled = true
+                throw NFCReaderError(.readerTransceiveErrorSessionInvalidated)
+            }
+        }
+        XCTAssertEqual(why, .dropped(pinSent: true))
+        XCTAssertEqual(panel.told.count, 2, "waiting and signing, and nothing after: \(panel.told)")
     }
 
     /// No card came: the system closed the panel, and the app closes nothing.
     func testAPanelThatClosedWithoutACardIsNotClosedAgain() async throws {
         let panel = Panel(card: nil)
-        do {
-            try await reader(panel).tap(.readCertificates) { _ in }
-            XCTFail("the tap was done")
-        } catch {
-            XCTAssertEqual(error as? CardFailure, .noTap)
-        }
-        XCTAssertEqual(panel.told, [.wait("把自然人憑證貼在 iPhone 背面的上方")])
+        let why = await stopped { try await self.card(over: panel).tap(.readCertificates) { _ in } }
+        XCTAssertEqual(why, .noTap)
+        XCTAssertEqual(panel.told, [.wait(copy("app_panel.iphone_wait"))])
     }
 
     /// A phone that cannot read a card now opens no panel.
     func testNoPanelWhenReadingIsNotAvailable() async throws {
         let panel = Panel(card: try SimulatedGpkiCard())
-        let card = NFCCard(copy: Copy(json: try Repository.data("design/copy/card-proof.json")), available: { false }, open: { panel })
-        do {
-            try await card.tap(.readCertificates) { _ in }
-            XCTFail("the tap was done")
-        } catch {
-            XCTAssertEqual(error as? CardFailure, .noTap)
-        }
+        let why = await stopped { try await self.card(over: panel, available: false).tap(.readCertificates) { _ in } }
+        XCTAssertEqual(why, .noTap)
         XCTAssertEqual(panel.told, [])
     }
 }

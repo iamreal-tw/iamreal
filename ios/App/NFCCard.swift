@@ -51,20 +51,20 @@ final class NFCCard: Card {
         let (busy, done) = purpose == .readCertificates
             ? (copy("app_panel.reading"), copy("app_panel.read"))
             : (copy("app_panel.signing"), copy("app_panel.signed"))
-        let reader = open()
+        let panel = open()
         // No card came: the system closed the panel itself.
-        let transport = try await reader.waitForCard(copy("app_panel.iphone_wait"))
-        reader.say(busy)
+        let transport = try await panel.waitForCard(copy("app_panel.iphone_wait"))
+        panel.say(busy)
         let card = GpkiCard(transport)
         do {
             let result = try await body(card)
-            reader.finish(done)
+            panel.finish(done)
             return result
         } catch {
             // Read before the session is ended here, which the system may also report as cancelled.
-            let cancelled = reader.cancelled
+            let cancelled = panel.cancelled
             // Whatever stopped the tap, the panel closes as a failure. Cancelled on the panel, the system has closed it.
-            if !cancelled { reader.fail(copy("app_panel.failed")) }
+            if !cancelled { panel.fail(copy("app_panel.failed")) }
             // Cancelled on the panel once the card was there, before the
             // PIN went out: as before it came. After, the card may have
             // counted the PIN: that is a dropped tap (#172).
@@ -116,7 +116,8 @@ private struct TagTransport: APDUTransport {
 }
 
 /// The panel over the app for one tap, from waiting for a card to the end
-/// of the tap: the system's (TagReader), or a test's.
+/// of the tap: the system's (TagReader), or a test's. NFCCard calls it
+/// from the task of the tap, one call after another.
 protocol CardPanel {
     /// Whether the panel closed because it was cancelled on the panel itself.
     var cancelled: Bool { get }
@@ -183,6 +184,8 @@ private final class TagReader: NSObject, NFCTagReaderSessionDelegate, CardPanel 
 
     func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: Error) {
         if (error as? NFCReaderError)?.code == .readerSessionInvalidationErrorUserCanceled { cancelledOnPanel = true }
+        // The panel is closed: nothing more is said on it, and it is not closed again.
+        self.session = nil
         // Before a card: no card came. After, the commands fail on their own.
         waiting?.resume(throwing: CardFailure.noTap)
         waiting = nil
