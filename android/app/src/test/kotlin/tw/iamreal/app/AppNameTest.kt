@@ -2,19 +2,18 @@ package tw.iamreal.app
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 import java.io.File
 
 /**
- * The name under the icon of each build (ADR-0037) against design/copy/app.md: the two are the same text.
- * And app.json gives each build's name under that build's key (AppCopyTest checks the two files hold the same lines).
+ * The name under the icon of each app (ADR-0040) against design/copy/app.md: the two are the same text.
+ * And app.json gives each app's name under that app's key (AppCopyTest checks the two files hold the same lines).
  */
 class AppNameTest {
     @Test
-    fun `the name under the icon of the store's build is the one design copy gives it`() {
-        assertEquals(written("商店的 build"), nameIn("iamreal.strings.store"))
+    fun `the name under the icon of the production app is the one design copy gives it`() {
+        assertEquals(written("正式 app"), nameIn("iamreal.strings.production"))
     }
 
     @Test
@@ -23,23 +22,26 @@ class AppNameTest {
     }
 
     @Test
-    fun `app json gives each build the name app md gives it`() {
+    fun `app json gives each app the name app md gives it`() {
         val names = JSONObject(File(System.getProperty("iamreal.copy"), "app.json").readText()).getJSONObject("name")
-        assertEquals(written("商店的 build"), names.getString("store"))
+        assertEquals(written("正式 app"), names.getString("production"))
+        assertEquals(written("測試 app"), names.getString("test"))
         assertEquals(written("開發用 build"), names.getString("dev"))
+        assertEquals(setOf("production", "test", "dev"), names.keys().asSequence().toSet())
     }
 
     @Test
-    fun `the two builds have different names`() {
-        assertNotEquals(nameIn("iamreal.strings.store"), nameIn("iamreal.strings.dev"))
+    fun `the three apps have different names`() {
+        val names = listOf(written("正式 app"), written("測試 app"), written("開發用 build"))
+        assertEquals(names.size, names.toSet().size)
     }
 
-    /** The first code block under `### <build>` in "## 主畫面上的名稱" of design/copy/app.md. */
-    private fun written(build: String): String {
+    /** The first code block under `### <app>` in "## 主畫面上的名稱" of design/copy/app.md. */
+    private fun written(app: String): String {
         val copy = File(System.getProperty("iamreal.copy"), "app.md").readText()
-        val section = copy.substringAfter("\n## 主畫面上的名稱\n", "").substringAfter("\n### $build\n", "").substringBefore("\n#")
+        val section = copy.substringAfter("\n## 主畫面上的名稱\n", "").substringAfter("\n### $app\n", "").substringBefore("\n#")
         val block = Regex("```\n(.+)\n```").find(section)
-        assertNotNull("the name of $build in design/copy/app.md", block)
+        assertNotNull("the name of $app in design/copy/app.md", block)
         return block!!.groupValues[1]
     }
 

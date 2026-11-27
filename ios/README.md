@@ -92,17 +92,17 @@
 - 清冊的索引或檔案下載不到時，畫面一律寫「現在拿不到可用的內政部廢止清冊……（代碼 `crl_unavailable`）」，不分是連不上還是 HTTP 的錯誤：`spec/device-checks.md` 把兩種都歸在 `crl_unavailable`，網頁版也一樣
 - `design/copy/card-proof.md` 標了「app 的寫法還沒有定」的句子，先用網頁的那一句：讀卡時的其他錯誤、讀到兩張都通過檢查的憑證、檔案的內容和預期的不同、算不出證明、後台列了而 app 不認得的平台那一列、第 6 步讀不出後台回報每個帳號記成什麼時的那一句；要「再讀一次卡片」的地方，按鈕先用「再感應一次卡片」
 
-主畫面上 app 的名稱，商店的 build 是「島民證明 測試」，開發用 build 是「島民證明 dev」（`design/copy/app.md`，第一版，Android 相同）；正式的名稱在商店頁的那張票定（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。每個畫面最上面有「測試的證明紀錄」的標示（`design/copy/test-site.md`）。
+主畫面上 app 的名稱，正式 app 是「島民證明 封測」，測試 app 是「島民證明 測試」（建置從 #484 起），開發用 build 是「島民證明 dev」（`design/copy/app.md`，第一版，Android 相同）；正式的名稱在商店頁的那張票定（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。每個畫面最上面有「測試的證明紀錄」的標示（`design/copy/test-site.md`）。
 
 ## 環境在建置時寫死
 
 同一個 app 有兩種 build（ADR-0037），識別碼不同，可以同時裝在一支 iPhone 上。專案的兩個組態各做一種：
 
-| | 商店的 build | 開發用 build |
+| | 正式 app | 開發用 build |
 |---|---|---|
 | 組態 | Release | Debug |
 | 識別碼 | `tw.iamreal.app` | `tw.iamreal.app.dev` |
-| 圖示下面的名稱（`design/copy/app.md`） | 島民證明 測試 | 島民證明 dev |
+| 圖示下面的名稱（`design/copy/app.md`） | 島民證明 封測 | 島民證明 dev |
 | 連哪裡 | 上線前：`https://test.iamreal.tw`、`https://test-data.iamreal.tw`（ADR-0028） | 同左，上線後也是 |
 | 卡片簽的場合字串 | 上線前：`iamreal-test:public:0`（核心的 `IDC_PROOF_LOG_TEST`） | 同左，上線後也是 |
 | 怎麼裝 | TestFlight、App Store（從 GitHub Actions 上傳：「上傳到 TestFlight」） | 用線裝（「怎麼用線裝到手機」）；給少數測試者用 Ad Hoc，還沒有做 |

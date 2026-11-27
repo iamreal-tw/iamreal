@@ -619,8 +619,8 @@ tasks.withType<Test>().configureEach {
     // The files an installer carries, where bundleFiles takes them from.
     systemProperty("iamreal.bundled", listOf("../web/circuits", "../verifier/vk", "../device-core/vendor/crs").joinToString(File.pathSeparator) { rootProject.file(it).path })
     systemProperty("iamreal.copy", rootProject.file("../design/copy").path)
-    // The name under the icon of each build: the store's in main/, the development build's in debug/.
-    systemProperty("iamreal.strings.store", file("src/main/res/values/strings.xml").path)
+    // The name under the icon of each app (ADR-0040): the production app's in main/, the development build's in debug/.
+    systemProperty("iamreal.strings.production", file("src/main/res/values/strings.xml").path)
     systemProperty("iamreal.strings.dev", file("src/debug/res/values/strings.xml").path)
     inputs.files("src/main/res/values/strings.xml", "src/debug/res/values/strings.xml")
     inputs.dir(rootProject.file("../spec/vectors"))
