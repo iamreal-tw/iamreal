@@ -6,7 +6,7 @@
 - 只寫繁體中文。給審查人員的說明寫英文：Google 要登入的資料和說明是英文（[Requirements for providing sign in details for review](https://support.google.com/googleplay/android-developer/answer/15748846)）
 - 名稱和完整說明兩個商店共用。兩個 app 寫法不同的地方，這裡寫「手機」，不寫 Android、iPhone
 - 字數照 Google 的上限：簡短說明 80 字、完整說明 4,000 字，全形和半形一樣算一個字（[Add preview assets](https://support.google.com/googleplay/android-developer/answer/9859152)：「Character limits apply to both full-width and half-width characters.」）。程式碼區塊裡的字就是要貼的字，空一行是分段
-- 不寫排名、得獎、使用者的推薦，不重複關鍵字（[Metadata](https://support.google.com/googleplay/android-developer/answer/9898842)）
+- 不寫排名和使用者的推薦，不重複關鍵字（[Metadata](https://support.google.com/googleplay/android-developer/answer/9898842)）
 - 「我們」是營運者（原則「文字的寫法」）
 - `{site}` 是 app 連的網站：上線前是 `test.iamreal.tw`，上線起是 `iamreal.tw`（ADR-0040）。貼的時候換掉；上線那天和商店頁的網址一起改（#491）
 
@@ -79,11 +79,11 @@ Google Play 的「完整說明」、App Store 的「描述」。
 原始碼：github.com/iamreal-tw/iamreal
 ```
 
-- 第一段排在最前面：看的人最容易誤會的是這是政府的 app（原則 2）。Google 不准假稱和政府有關（[Deceptive Behavior](https://support.google.com/googleplay/android-developer/answer/9888077)：「Don't falsely claim affiliation with a government or an established entity when not properly authorized to do so.」）。「個人開發和營運」和 `privacy.md` 第 1 段相同
+- 第一段排在最前面：看的人最容易誤會的是這是政府的 app（原則 2）。Google 不讓 app 假稱和政府有關（[Deceptive Behavior](https://support.google.com/googleplay/android-developer/answer/9888077)：「Don't falsely claim affiliation with a government or an established entity when not properly authorized to do so.」）。「個人開發和營運」和 `privacy.md` 第 1 段相同
 - 島民證明是「公開的頁面」，不寫「網址」：`GLOSSARY.md`「島民證明」是證明和顯示它的頁面
 - 「需要什麼」：國民的正卡、行動自然人憑證不能用，和 `prepare.md` 第 2 段相同；第一代的卡片 app 不能用（`card-proof.md` 第 2 步的 app 停止原因）。「大約 3 分鐘」和過卡提醒的通知（`app.md`）相同
 - 「怎麼過卡」是 app 八步裡要持卡人做事的五步，句子照 `card-proof.md` 第 2 到 6 步。不寫第幾步：商店頁不是過卡的畫面
-- 「留在手機上的」前兩條和 `privacy.md` 第 2、3 段相同。家人那一句照 #154 的結論寫成一句事實，不當主打，也不另外警告在家人的手機上輸入 PIN：風險和輸入在自己的手機上相同，看那支手機可不可信。手機上存的三樣（廢止清冊的版本號、提醒、過卡裝置編號）都不是卡片的資料（`privacy.md` 第 3 段）
+- 「留在手機上的」前兩條和 `privacy.md` 第 2、3 段相同。家人那一句照 #154 的結論寫成一句事實，不當主打，也不另外警告在家人的手機上輸入 PIN：這和輸入在自己的手機上一樣，看那支手機可不可信。手機上存的三樣（廢止清冊的版本號、提醒、過卡裝置編號）都不是卡片的資料（`privacy.md` 第 3 段）
 - 「公開的」：公開的內容照 `privacy.md` 第 4 段（底線 5）；證明和題目不寫，看的人看不懂，也不會因為它們改變要不要裝。「拿到你的卡片和 PIN 的人……」是 `privacy.md` 第 4 段「要知道的事」的第一條，app 在第 5 步確認時才講（`card-proof.md`）。商店頁也寫，是因為它會改變要不要裝
 - 「沒有的」：Android 不帶第三方的程式庫、拿掉 `AD_ID`（`android/README.md`「建置時的檢查」），iOS 沒有第三方的套件、不連結 `AdSupport`（`ios/README.md`）。商店自己收的安裝數和當機報告不是 app 裡的程式（`privacy.md` 第 12 段）
 - 「我們收到的」：IP 位址那一條和 `privacy.md`「先講結論」的第四條相同，那一條會改變要不要過卡。計數用「例如」，完整的清單在 `privacy.md` 第 7 段；過卡裝置編號照同一段。同一支手機連得起來那一句和 `privacy.md` 第 7 段「用自己的手機替家人過卡……」說的是同一件事：家人那一句寫在前面，這裡不寫，就是說得比實際多
@@ -135,11 +135,11 @@ Questions about the app: th33ts@gmail.com
 
 - Google 要「specific instructions for accessing restricted areas of your app」，而且要英文（[Requirements for providing sign in details for review](https://support.google.com/googleplay/android-developer/answer/15748846)）。照票上的三件事寫：要什麼、沒有卡片時看得到哪些畫面、有卡片時每一步做什麼。只描述 app 做什麼，不說它安全、可信
 - 中文的畫面名稱和按鈕照 `card-proof.md`、`app.md` 原樣寫，括號裡是英文：審查人員在畫面上看到的是中文
-- 和內政部的關係只寫一件事實：用的是內政部公開的廢止清冊（`privacy.md` 第 12 段「內政部」）
+- 說到內政部，只寫一件事實：用的是內政部公開的廢止清冊（`privacy.md` 第 12 段「內政部」）
 - 計算的秒數照 `card-proof.md` 第 5 步的 app 段，Android 寫 10
 - 信箱和 `privacy.md` 第 1 段相同
 - 「Before launch……」那一句上線那天拿掉，和完整說明的「上線之前」一起；`{site}` 和完整說明的相同
 
 ### App Store
 
-還沒寫。iPhone 的感應是系統的面板（`card-proof.md`「app：感應的面板」）；#154 的結論是 Apple 要附實機的影片，送 TestFlight 對外審查之前另外拍、另外寫。
+還沒寫。iPhone 的感應是系統的面板（`card-proof.md`「app：感應的面板」）；#154 的結論是 Apple 要附實機的影片，送 TestFlight 對外審查之前，影片另外做，說明另外寫。
