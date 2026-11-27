@@ -670,10 +670,10 @@ async function cardProof(p: Proof): Promise<string> {
     const s = wholeScreen();
     shows(s, "step 3", [NAME, say("pin.name_note")]);
     if (p.thorough) {
-      shows(s, "step 3", [say("pin.title"), say("pin.card_read"), say("pin.label"), say("pin.purpose"), say("app_pin.stays"), say("common.back"), say("pin.confirm_card")]);
+      shows(s, "step 3", [say("pin.title"), say("pin.card_read"), say("pin.label"), say("pin.purpose_single", { platform: THREADS }), say("app_pin.stays"), say("common.back"), say("pin.confirm_card")]);
       check(!s.includes(say("pin.stays")) && !s.includes(say("pin.pin_characters")), "step 3 says 這支手機, and nothing about characters a PIN may not have");
       // Who can look the card's accounts up with the card and the PIN is step 5's to say, once.
-      check(!s.some((t) => t.includes(say("pin.label")) && t !== say("pin.label") && t !== say("pin.title") && t !== say("pin.purpose") && t !== say("app_pin.stays")), "step 3 has the two points and no third");
+      check(!s.some((t) => t.includes(say("pin.label")) && t !== say("pin.label") && t !== say("pin.title") && t !== say("pin.purpose_single", { platform: THREADS }) && t !== say("app_pin.stays")), "step 3 has the two points and no third");
       // Without a PIN, no panel.
       press(say("pin.confirm_card"));
       await waitText(say("app_pin.need_pin"), "the sentence for an empty PIN", 10_000);
@@ -722,7 +722,7 @@ async function cardProof(p: Proof): Promise<string> {
       const account = `@${p.current}`;
       shows(s, "step 4", [say("accounts.declared_now"), account, say("accounts.refresh"), say("accounts.refresh_note"), say("accounts.switch"), say("accounts.withdraw", { account })]);
       check(field("current-threads").text === account, `step 4: the card declares ${account}`);
-      check(!s.includes(say("common.next")) && !s.includes(say("app_accounts.preview")) && !s.includes(say("accounts.keep")), "step 4, an account declared: no field, no 下一步");
+      check(!s.includes(say("common.next")) && !s.includes(say("app_accounts.preview")) && !s.includes(say("common.back")), "step 4, an account declared: no field, no 下一步, no 上一步");
     }
   }
   /** Types an account into the Threads field, which is empty. */
@@ -755,17 +755,17 @@ async function cardProof(p: Proof): Promise<string> {
     {
       shot(`step-4-${p.name}-field`);
       const s = wholeScreen();
-      shows(s, "step 4, after 改成別的帳號,", [step(4), say("accounts.title_single", { platform: THREADS }), inline, say("accounts.switch"), THREADS, "@", say("app_accounts.preview"), ...act.after, say("accounts.preview_note_single_counted", { platform: THREADS }), say("common.next"), say("accounts.keep"), say("common.cancel")]);
+      shows(s, "step 4, after 改成別的帳號,", [step(4), say("accounts.title_single", { platform: THREADS }), inline, say("accounts.switch"), THREADS, "@", say("app_accounts.preview"), ...act.after, say("accounts.preview_note_single_counted", { platform: THREADS }), say("common.next"), say("common.back"), say("common.cancel")]);
       check(!s.includes(say("accounts.refresh")) && !s.includes(say("accounts.declared_now")), "step 4, after 改成別的帳號: no 更新島民證明");
       check(field("account-threads").text === "", "step 4, after 改成別的帳號: the field is empty");
     }
     // An empty field goes nowhere: withdrawing is the other thing to do.
     press(say("common.next"));
     await waitText(say("accounts.need_one"), "step 4: the sentence for an empty field", 10_000);
-    // 不改了: back to what the card declares; then again.
-    press(say("accounts.keep"));
-    await waitText(say("accounts.refresh"), "step 4 again, after 不改了", 10_000);
-    check(!textsOf(visible()).includes(inline), "step 4: 不改了 goes back to what the card declares");
+    // 上一步: back to what the card declares; then again.
+    press(say("common.back"));
+    await waitText(say("accounts.refresh"), "step 4 again, after 上一步", 10_000);
+    check(!textsOf(visible()).includes(inline), "step 4: 上一步 goes back to what the card declares");
     press(say("accounts.switch"));
     await waitText(inline, "step 4 after 改成別的帳號, again", 10_000);
     typeAccount(act.type);

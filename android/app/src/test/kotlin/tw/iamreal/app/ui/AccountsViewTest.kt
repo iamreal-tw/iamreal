@@ -125,7 +125,7 @@ class AccountsViewTest {
         assertEquals(emptyList<String>(), view.row!!.lines)
         assertEquals("改了之後，@alice 不再是這張卡片宣告的帳號。一張卡終身最多更換 5 次，這次之後還可以更換 3 次。", view.cost)
         assertEquals(previewCounted, view.previewNote)
-        assertEquals("不改了", view.keep)
+        assertEquals("上一步", view.keep)
     }
 
     @Test
@@ -142,7 +142,7 @@ class AccountsViewTest {
         assertNull(view.heading)
         assertEquals("已經更換 5 次，這個平台不能再更換。", view.cost)
         assertNull(view.previewNote)
-        assertEquals("不改了", view.keep)
+        assertEquals("上一步", view.keep)
     }
 
     @Test

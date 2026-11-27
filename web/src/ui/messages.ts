@@ -294,6 +294,26 @@ export interface BeforeView {
   listedTogether: boolean;
 }
 
+/** Step 3's sentences that speak of the card's accounts. */
+export interface PinView {
+  /** pin.purpose, or pin.purpose_single with one platform. */
+  purpose: Sentence;
+  /** pin.signing, or pin.signing_single with one platform. */
+  signing: Sentence;
+}
+
+/**
+ * Step 3. The card's accounts are not known yet: as step 1, it goes by the
+ * platforms the device has its own definition of; with one, the sentences
+ * name it (card-proof.md, step 3).
+ */
+export function pinView(known: ReadonlySet<string> = KNOWN_PLATFORMS): PinView {
+  const p = COPY.pin;
+  const only = known.size === 1 ? (presentationOf([...known][0]!)?.name ?? null) : null;
+  if (only === null) return { purpose: say(p.purpose), signing: say(p.signing) };
+  return { purpose: say(p.purpose_single, { platform: only }), signing: say(p.signing_single, { platform: only }) };
+}
+
 /**
  * Step 1. There is no platform table yet, nor the card's accounts: it goes
  * by the platforms the device has its own definition of (src/platforms.ts).

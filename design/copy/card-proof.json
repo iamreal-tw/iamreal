@@ -98,9 +98,11 @@
     "name_note": "（姓名只顯示在這裡，不會送出。）",
     "label": "PIN",
     "purpose": "按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的帳號。",
+    "purpose_single": "按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的 {platform} 帳號。",
     "stays": "PIN、姓名和憑證、卡片的簽章不會離開這台裝置。",
     "confirm_card": "確認卡片",
     "signing": "卡片簽章中，接著查這張卡片目前宣告的帳號……",
+    "signing_single": "卡片簽章中，接著查這張卡片目前宣告的 {platform} 帳號……",
     "pin_incorrect": "PIN 不正確。連續輸入錯誤三次，卡片會被鎖住。",
     "pin_characters": "這一頁不支援含有 +、% 或非英數符號的 PIN。請先到內政部憑證管理中心的網站變更 PIN。"
   },
@@ -121,7 +123,6 @@
     "switch": "改成別的帳號",
     "withdraw": "收回對 {account} 的宣告",
     "edit_list": "修改帳號清單",
-    "keep": "不改了",
     "switch_effect": "改了之後，{account} 不再是這張卡片宣告的帳號。",
     "switch_limit": "一張卡終身最多更換 5 次，這次之後還可以更換 {switches_left} 次。",
     "preview": "預覽個人檔案",
@@ -325,6 +326,7 @@
     "stays": "PIN、姓名和憑證、卡片的簽章不會離開這支手機。",
     "need_pin": "請輸入 PIN。",
     "signed": "卡片簽好了，正在查這張卡片目前宣告的帳號……",
+    "signed_single": "卡片簽好了，正在查這張卡片目前宣告的 {platform} 帳號……",
     "pin_format": "卡片的 PIN 是 6 到 10 個半形的英數字或符號。這個 PIN 沒有送給卡片，請再輸入一次。"
   },
   "app_accounts": {

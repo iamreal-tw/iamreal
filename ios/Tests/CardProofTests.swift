@@ -200,7 +200,7 @@ final class CardProofTests: XCTestCase {
             "輸入 PIN",
             "已讀到卡片", "測試用戶", "（姓名只顯示在這裡，不會送出。）",
             "PIN",
-            "按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的帳號。",
+            "按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的 Threads 帳號。",
             "PIN、姓名和憑證、卡片的簽章不會離開這支手機。",
             "上一步",
             "確認卡片",
@@ -509,8 +509,7 @@ final class CardProofTests: XCTestCase {
             "Threads", "預覽",
             "改了之後，@alice 不再是這張卡片宣告的帳號。", "一張卡終身最多更換 5 次，這次之後還可以更換 4 次。",
             "請預覽你的 Threads 個人檔案，避免打錯帳號。",
-            "下一步",
-            "不改了",
+            "上一步", "下一步",
             "取消",
         ])
         XCTAssertEqual(typed(in: model), "", "the field starts empty")
@@ -525,8 +524,8 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(rows(on: model.screen), [["Threads", "@alice", "不變"]])
         XCTAssertEqual(model.screen.buttons.map(\.label), ["上一步", "更新島民證明"])
         try await press("上一步", in: model)
-        // "不改了": what the card declares again; then to the field once more.
-        try await press("不改了", in: model)
+        // 上一步: what the card declares again; then to the field once more.
+        try await press("上一步", in: model)
         XCTAssertTrue(model.screen.texts.contains("更新島民證明"))
         try await press("改成別的帳號", in: model)
 
@@ -589,7 +588,7 @@ final class CardProofTests: XCTestCase {
         // Changed today, and changing it again today is another switch all the same (rules version 3: no correction).
         try await press("改成別的帳號", in: model)
         XCTAssertTrue(model.screen.texts.contains("一張卡終身最多更換 5 次，這次之後還可以更換 3 次。"))
-        try await press("不改了", in: model)
+        try await press("上一步", in: model)
         try await press("收回對 @carol.tw 的宣告", in: model)
         let shortID = try shortID(on: model.screen)
         XCTAssertEqual(model.screen.texts, [

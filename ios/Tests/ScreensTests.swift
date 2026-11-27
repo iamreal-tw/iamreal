@@ -148,7 +148,7 @@ final class ScreensTests: XCTestCase {
     /// Step 3 says two things under the field; who holds the card and the PIN is step 5's to say.
     func testStepThreeSaysTwoThingsUnderTheField() {
         XCTAssertEqual(Array(screens.pin(name: "王小明", state: .waiting(nil)).texts.suffix(4)), [
-            "按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的帳號。",
+            "按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的 Threads 帳號。",
             "PIN、姓名和憑證、卡片的簽章不會離開這支手機。",
             "上一步", "確認卡片",
         ])
@@ -225,11 +225,11 @@ final class ScreensTests: XCTestCase {
             "Threads", "預覽",
             "改了之後，@alice 不再是這張卡片宣告的帳號。", "一張卡終身最多更換 5 次，這次之後還可以更換 3 次。",
             "請預覽你的 Threads 個人檔案，避免打錯帳號。",
-            "下一步",
-            "不改了",
+            "上一步", "下一步",
             "取消",
         ])
-        XCTAssertEqual(screen.links, [Button(label: "不改了", action: .keep)])
+        XCTAssertEqual(screen.buttons, [Button(label: "上一步", action: .keep), Button(label: "下一步", action: .toConfirm)])
+        XCTAssertEqual(screen.links, [])
         // What it costs, by the switches left.
         func cost(_ status: Flow.CardStatus) -> String? {
             for case .sentences(let sentences) in screens.accounts(status, mode: .switching, typed: [:], errors: [:], message: nil).blocks { return sentences.last }
@@ -238,7 +238,7 @@ final class ScreensTests: XCTestCase {
         XCTAssertEqual(cost(card(used: 4)), "用掉最後一次更換。這次之後，這個平台不能再更換。")
         // None left: no field, and the only ways are back.
         let usedUp = screens.accounts(card(used: 5), mode: .switching, typed: [:], errors: [:], message: nil)
-        XCTAssertEqual(usedUp.texts, ["你的 Threads 帳號", "這張卡片目前宣告 @alice。", "已經更換 5 次，這個平台不能再更換。", "不改了", "取消"])
+        XCTAssertEqual(usedUp.texts, ["你的 Threads 帳號", "這張卡片目前宣告 @alice。", "已經更換 5 次，這個平台不能再更換。", "上一步", "取消"])
         for status in [card(used: 4), card(used: 5)] {
             document.check(screens.accounts(status, mode: .switching, typed: [:], errors: [:], message: nil))
         }
@@ -343,8 +343,7 @@ final class ScreensTests: XCTestCase {
             "Threads", "預覽", "更換過 1 次，還可以更換 4 次。",
             "填上空白的是新宣告，清空是收回，改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。",
             "請預覽你的 Threads 個人檔案，避免打錯帳號。",
-            "下一步",
-            "不改了",
+            "上一步", "下一步",
             "取消",
         ])
         document.check(declared)

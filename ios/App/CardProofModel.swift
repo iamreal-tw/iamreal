@@ -828,7 +828,7 @@ final class CardProofModel: ObservableObject {
     }
 
     /// Another of step 4's screens: "改成別的帳號" with an empty field,
-    /// "修改帳號清單" and "不改了" with the list as it is.
+    /// "修改帳號清單" and its 上一步 with the list as it is.
     private func edit(_ mode: Screens.AccountsMode) {
         guard screen.step == 4, let status, !status.dailyLimit else { return }
         self.mode = mode

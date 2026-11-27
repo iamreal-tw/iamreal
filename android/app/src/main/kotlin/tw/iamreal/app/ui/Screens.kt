@@ -279,7 +279,7 @@ private fun Pin(m: Model) {
     }
     m.pinNote?.let { Problem(it) }
     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Point(c.say("pin.purpose"))
+        Point(m.pinSays("pin.purpose"))
         Point(c.say("app_pin.stays"))
     }
     if (busy && m.pinBusy != "") Small(m.pinBusy!!)
@@ -417,9 +417,12 @@ private fun FillAccounts(m: Model, view: Messages.FillView, outside: Outside) {
     view.dailyLimit?.let { return DailyLimit(m, it, outside) }
     for (note in view.notes) Small(note, colour = Colours.text)
     m.listMessage?.let { Problem(it) }
-    Actions { Button(c.say("common.next"), Modifier.fillMaxWidth(), primary = true) { m.toConfirm() } }
+    Actions {
+        Button(c.say("common.next"), Modifier.fillMaxWidth(), primary = true) { m.toConfirm() }
+        // Opened with 修改帳號清單: 上一步 back to what the card declares, beside 下一步 (card-proof.md, step 4).
+        if (view.editList) Button(c.say("common.back"), Modifier.fillMaxWidth()) { m.keep() }
+    }
     Rule(Modifier.padding(top = 22.dp))
-    if (view.editList) TextButton(c.say("accounts.keep"), action = true) { m.keep() }
     TextButton(c.say("common.cancel")) { m.cancel() }
 }
 
@@ -440,9 +443,12 @@ private fun SwitchAccount(m: Model, view: Messages.SwitchView, outside: Outside)
     Small(view.cost, colour = Colours.text)
     view.previewNote?.let { Small(it, colour = Colours.text) }
     m.listMessage?.let { Problem(it) }
-    if (view.row != null) Actions { Button(c.say("common.next"), Modifier.fillMaxWidth(), primary = true) { m.toConfirm() } }
+    // 上一步 back to what the card declares, beside 下一步 (none when no switch is left); 取消 ends the card proof (card-proof.md, step 4).
+    Actions {
+        if (view.row != null) Button(c.say("common.next"), Modifier.fillMaxWidth(), primary = true) { m.toConfirm() }
+        Button(view.keep, Modifier.fillMaxWidth()) { m.keep() }
+    }
     Rule(Modifier.padding(top = 22.dp))
-    TextButton(view.keep, action = true) { m.keep() }
     TextButton(c.say("common.cancel")) { m.cancel() }
 }
 

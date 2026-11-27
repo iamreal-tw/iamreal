@@ -33,9 +33,8 @@ struct Screen: Equatable {
     /// The last of `buttons` is the screen's main button (design/DESIGN.md,
     /// the components: one main button on a screen).
     var mainButton = true
-    /// Under the buttons, as links, in their order: the way back to the
-    /// screen this one was opened from ("不改了" of step 4), what else can
-    /// be done on step 7.
+    /// Under the buttons, as links, in their order: what else can be done
+    /// on step 7.
     var links: [Button] = []
     /// The way out at the very bottom: drops the PIN and goes back to step 1.
     var cancel: Button?
@@ -289,7 +288,7 @@ enum Action: Equatable {
     case toSwitch
     /// "修改帳號清單" of step 4: a row for each platform.
     case editList
-    /// "不改了": back to what the card declares.
+    /// 上一步 of the screens opened from step 4: back to what the card declares.
     case keep
     /// The app's page in the store, to update it.
     case openStore

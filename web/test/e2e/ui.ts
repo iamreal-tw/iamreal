@@ -770,7 +770,7 @@ async function toAccounts(o: { wrongPinFirst?: boolean; blockClicks?: boolean; s
   check((await whereText()).includes(stepLine(3)), "step 3: 第 3 步，共 7 步");
   const s3 = await page.text();
   check((await page.text("[data-card-read]")) === [C.pin.card_read, "測試用戶", C.pin.name_note].join("\n"), `step 3: the name, and that it stays here: ${JSON.stringify(await page.text("[data-card-read]"))}`);
-  for (const s of [C.pin.purpose, C.pin.stays]) check(s3.includes(s), `step 3, next to the PIN field: "${s}"`);
+  for (const s of [fill(C.pin.purpose_single, { platform: THREADS_NAME }), C.pin.stays]) check(s3.includes(s), `step 3, next to the PIN field: "${s}"`);
   await noLinkOut("step 3");
   if (o.screenshots) await screenshot(`${o.screenshots}-3-pin`);
   if (o.wrongPinFirst) {
@@ -802,7 +802,7 @@ async function toAccounts(o: { wrongPinFirst?: boolean; blockClicks?: boolean; s
   check(componentCount("MakeSignature") === signs + 1, "the first signature");
   const lastSign = component.requests.filter((x) => x.func === "MakeSignature").at(-1)!;
   check(lastSign.tbs === SCOPE && lastSign.pin === PIN, `the first signature: the test log's public scope string (${lastSign.tbs}), with the PIN`);
-  check((await workingSeen()).includes(C.pin.signing), `step 3 said, after 確認卡片, "${C.pin.signing}"`);
+  check((await workingSeen()).includes(fill(C.pin.signing_single, { platform: THREADS_NAME })), `step 3 said, after 確認卡片, "${fill(C.pin.signing_single, { platform: THREADS_NAME })}"`);
   check(!st.main.includes(C.accounts.need_one), "step 4: no message before anything is pressed");
   if (o.screenshots) await screenshot(`${o.screenshots}-4-accounts`);
   return st;
@@ -1355,15 +1355,15 @@ await tryStep("card proof again, nothing changed (the first submission dropped, 
   }
   check(seenConfig.length === 2 && !st.main.includes("Not "), "the server's display names are not shown; the page's own are (config asked by step 1, whether card proofs are stopped, and by step 2)");
   checkDeclared("refresh", st, [[THREADS_NAME, at("alice")]], 0);
-  // 修改帳號清單: each row with its counts, how to change the list; 不改了 goes back.
+  // 修改帳號清單: each row with its counts, how to change the list; 上一步 goes back.
   const edit = await openEdit();
   check(edit.state === "declared" && JSON.stringify(edit.lead) === JSON.stringify([A.current]), `修改帳號清單: ${edit.state} ${JSON.stringify(edit.lead)}`);
   checkRows("refresh", edit.rows, { [EXAMPLE]: [EXAMPLE_NAME, "", [A.row_unused]], [THREADS]: [THREADS_NAME, "alice", [count(0)]] });
   check(edit.main.includes(A.how_change) && edit.main.includes(A.preview_note), "修改帳號清單: how to change the list, the preview");
-  check(JSON.stringify(edit.buttons.filter((b) => b !== A.preview)) === JSON.stringify([C.common.next, A.keep, C.common.cancel]), `修改帳號清單: the buttons ${JSON.stringify(edit.buttons)}`);
+  check(JSON.stringify(edit.buttons.filter((b) => b !== A.preview)) === JSON.stringify([C.common.back, C.common.next, C.common.cancel]), `修改帳號清單: the buttons ${JSON.stringify(edit.buttons)}`);
   await screenshot("refresh-4-accounts-edit");
-  await page.clickButton(A.keep);
-  checkDeclared("refresh, 不改了", await waitAccounts(), [[THREADS_NAME, at("alice")]], 0);
+  await page.clickButton(C.common.back);
+  checkDeclared("refresh, 上一步", await waitAccounts(), [[THREADS_NAME, at("alice")]], 0);
   // 更新島民證明: the list as it is, nothing typed.
   await page.clickButton(A.refresh);
   checkConfirm("refresh", await waitConfirm(), [[THREADS, THREADS_NAME, at("alice"), [K.unchanged]]], C.confirm.button_refresh);
@@ -2110,7 +2110,7 @@ await tryStep("確認卡片 pressed again while the card is confirmed: one signa
       button: [...document.querySelectorAll('main button')].find((b) => b.textContent === ${JSON.stringify(C.pin.confirm_card)})?.disabled ?? null,
       working: document.querySelector('[data-working]')?.innerText ?? "",
     })`);
-    check(during.pin === true && during.button === true && during.back === true && during.working === C.pin.signing, `while the card is confirmed, the PIN field, the button and 上一步 cannot be used: ${JSON.stringify(during)}`);
+    check(during.pin === true && during.button === true && during.back === true && during.working === fill(C.pin.signing_single, { platform: THREADS_NAME }), `while the card is confirmed, the PIN field, the button and 上一步 cannot be used: ${JSON.stringify(during)}`);
     await screenshot("signing-3-pin");
     // Typed and pressed again anyway, with the keyboard and the mouse.
     await confirmPin(PIN);
@@ -2436,7 +2436,7 @@ await tryStep("Threads only, declared: 更新島民證明 (the list as it is), �
   await finish({ label: "one platform, 更新島民證明", button: C.confirm.button_refresh, title: C.done.refresh, card: [[THREADS_NAME, at("yui")]], record: [[THREADS_NAME, at("yui"), [K.unchanged]]], single: THREADS_NAME, short: true, screenshots: "single-refresh" });
 });
 
-await tryStep("Threads only: 改成別的帳號 (@yui to @yui.tw): the limit said only then; 不改了; an empty field; 上一步", async () => {
+await tryStep("Threads only: 改成別的帳號 (@yui to @yui.tw): the limit said only then; 上一步; an empty field; 上一步", async () => {
   const st = await toAccountsThreadsOnly();
   checkDeclared("one platform, declared today", st, [["", at("yui")]], 0);
   await page.clickButton(A.switch);
@@ -2446,16 +2446,16 @@ await tryStep("Threads only: 改成別的帳號 (@yui to @yui.tw): the limit sai
   checkRows("改成別的帳號", sw.rows, { [THREADS]: [THREADS_NAME, "", []] });
   const lines = await page.eval<string[]>(`[...document.querySelectorAll('[data-switch-lines] p')].map((e) => e.innerText)`);
   check(JSON.stringify(lines) === JSON.stringify([fill(A.switch_effect, { account: at("yui") }) + fill(A.switch_limit, { switches_left: 4 }), fill(A.preview_note_single_counted, { platform: THREADS_NAME })]), `改成別的帳號: what it does, the switches left after it ${JSON.stringify(lines)}`);
-  check(JSON.stringify(sw.buttons) === JSON.stringify([A.preview, C.common.next, A.keep, C.common.cancel]), `改成別的帳號: the buttons ${JSON.stringify(sw.buttons)}`);
+  check(JSON.stringify(sw.buttons) === JSON.stringify([A.preview, C.common.back, C.common.next, C.common.cancel]), `改成別的帳號: the buttons ${JSON.stringify(sw.buttons)}`);
   await page.eval(`document.activeElement?.blur()`);
   await screenshot("single-4-accounts-switch");
   // An empty field: nowhere (withdrawing is the other button).
   await page.clickButton(C.common.next);
   const why = (await rowsOnScreen()).find((r) => r.platform === THREADS)?.why;
   check(why === A.need_one && (await page.eval<boolean>(`!!${step("accounts")}`)), `改成別的帳號, empty: "${why}"`);
-  // 不改了: back to what the card declares.
-  await page.clickButton(A.keep);
-  checkDeclared("不改了", await waitAccounts(), [["", at("yui")]], 0);
+  // 上一步: back to what the card declares.
+  await page.clickButton(C.common.back);
+  checkDeclared("上一步", await waitAccounts(), [["", at("yui")]], 0);
   await page.clickButton(A.switch);
   await waitAccounts();
   await typeRows({ [THREADS]: "yui.tw" });

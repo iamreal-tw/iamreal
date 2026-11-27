@@ -119,7 +119,7 @@ internal class Messages(private val c: Copy) {
         val notes: List<String>,
         /** 3 records of the card today: the rows as they are, this sentence, and accounts.restart only. */
         val dailyLimit: String?,
-        /** Opened with accounts.edit_list: accounts.keep goes back to what the card declares. */
+        /** Opened with accounts.edit_list: 上一步 goes back to what the card declares. */
         val editList: Boolean,
     ) : AccountsView()
 
@@ -158,6 +158,7 @@ internal class Messages(private val c: Copy) {
         val cost: String,
         /** accounts.preview_note_single_counted; null without a field. */
         val previewNote: String?,
+        /** 上一步: back to what the card declares. */
         val keep: String,
     )
 
@@ -254,7 +255,7 @@ internal class Messages(private val c: Copy) {
         val now = Platforms.handle(slot.platform, slot.current!!)
         val title = accountsTitle(single)
         val intro = c.say("accounts.declared_inline", "account" to now)
-        val keep = c.say("accounts.keep")
+        val keep = c.say("common.back")
         // Used up: no other account can be declared.
         if (slot.switchesLeft == 0) {
             return SwitchView(title, intro, null, null, c.say("accounts.row_used_up", "switches_used" to slot.switchCount), null, keep)
