@@ -377,11 +377,15 @@ struct ScreenView: View {
     /// be pressed (a tap is under way).
     private func demoFrame<Picture: View>(_ control: Button, @ViewBuilder picture: () -> Picture) -> some View {
         picture()
-            .contentShape(Rectangle())
-            .onTapGesture { if control.enabled { perform(control.action) } }
+            // Pressing the picture: a layer over it that VoiceOver does not see, so that the picture stays its one sentence.
+            .overlay {
+                Color.clear.contentShape(Rectangle())
+                    .onTapGesture { if control.enabled { perform(control.action) } }
+                    .accessibilityHidden(true)
+            }
             .overlay(alignment: .bottomTrailing) {
                 SwiftUI.Button { perform(control.action) } label: {
-                    Text(control.label).font(Theme.body(Theme.sizeKicker)).underline().foregroundColor(Theme.ink.color)
+                    Text(control.label).font(Theme.body(Theme.sizeSmall)).underline().foregroundColor(Theme.ink.color)
                         .padding(.horizontal, 12)
                         .frame(minHeight: Theme.minTarget.value)
                 }
@@ -557,7 +561,9 @@ struct ButtonRow<Content: View>: View {
         }
 
         func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-            let width = proposal.width ?? subviews.map { $0.sizeThatFits(.unspecified).width }.reduce(0, +)
+            // No width, or no end to it: as wide as the buttons side by side would be.
+            let width = proposal.width.flatMap { $0.isFinite ? $0 : nil }
+                ?? subviews.map { $0.sizeThatFits(.unspecified).width }.reduce(0, +) + SideBySide.spacing * CGFloat(max(subviews.count - 1, 0))
             if beside(subviews, width: width) != nil {
                 let half = ProposedViewSize(width: SideBySide.half(width), height: nil)
                 return CGSize(width: width, height: subviews.map { $0.sizeThatFits(half).height }.max() ?? 0)

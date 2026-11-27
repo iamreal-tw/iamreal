@@ -385,7 +385,7 @@ struct Screens {
     }
 
     /// The accounts the card declares now on platforms the app knows: those a link can be hung for.
-    private static func hangable(_ status: Flow.CardStatus) -> [Flow.Account] {
+    static func hangable(_ status: Flow.CardStatus) -> [Flow.Account] {
         status.rows.compactMap { row in
             guard row.known, Platform.of(row.platform) != nil, let current = row.current else { return nil }
             return Flow.Account(platform: row.platform, username: current)
@@ -398,8 +398,8 @@ struct Screens {
     /// notes of one. 上一步 back to step 4, 回到開頭 to step 1. `copied`,
     /// `demoPlaying`, `demoPlayed` as for step 6.
     func hangFromLimit(_ status: Flow.CardStatus, copied: Bool, demoPlaying: Bool = false, demoPlayed: Bool = false) -> Screen {
-        var blocks = hangWhole(Self.hangable(status), shortID: status.shortID, single: Self.onePlatform(status), copied: copied, demoPlaying: demoPlaying, demoPlayed: demoPlayed)
-        blocks += [openingTheProof("done.hung"), .text(copy("done.hung_done"))]
+        let blocks = hangWhole(Self.hangable(status), shortID: status.shortID, single: Self.onePlatform(status), copied: copied, demoPlaying: demoPlaying, demoPlayed: demoPlayed)
+            + hungYet
         return Screen(
             step: 4, inSteps: false, blocks: blocks,
             buttons: [Button(label: copy("common.back"), action: .back), Button(label: copy("accounts.restart"), action: .restart)],
@@ -673,7 +673,7 @@ struct Screens {
     /// played in this card proof.
     func hang(_ done: Flow.Done, single: String?, copied: Bool, whole: Bool = false, demoPlaying: Bool = false, demoPlayed: Bool = false) -> Screen {
         let kinds = done.answer.kinds
-        let link = Block.link("\(host)/p/\(done.shortID)")
+        let link = Block.link(address(done.shortID))
         var blocks = mismatch(done)
         blocks.append(.text(copy("done.recorded_on", ["date": done.date])))
         if kinds == nil { blocks.append(.text(copy("done.kinds_unreadable"))) }
@@ -698,13 +698,19 @@ struct Screens {
                 ? Platform.handle(kind.platform, kind.username) : kind.username
             return Block.small(copy("done.other_cards", ["account": account]))
         }
-        blocks += [openingTheProof("done.hung"), .text(copy("done.hung_done"))]
+        blocks += hungYet
         blocks += record(done, single: single)
         // Reached from the short one by "重新掛上連結": back to it, beside the way on (card-proof.md, step 6, the short one).
         let back = whole && hangIsShort(done, single: single) ? [Button(label: copy("common.back"), action: .back)] : []
         // One main button a screen (design/DESIGN.md): copying the link, here.
         return Screen(step: 6, blocks: blocks, buttons: back + [Button(label: copy("common.next"), action: .toRemind)], mainButton: false)
     }
+
+    /// The card's page, as the screens write it: without the scheme.
+    private func address(_ shortID: String) -> String { "\(host)/p/\(shortID)" }
+
+    /// How to tell the link is on the profile: under the whole of step 6.
+    private var hungYet: [Block] { [openingTheProof("done.hung"), .text(copy("done.hung_done"))] }
 
     /// The whole of step 6 from its title to its four steps, for
     /// `accounts` on platforms the app knows and the card's page
@@ -716,7 +722,7 @@ struct Screens {
         var blocks: [Block] = [
             .title(single.map { copy("hang.title_single", ["platform": $0]) } ?? copy("hang.title")),
             .text(single != nil ? copy("hang.why_single") : copy("done.anyone")),
-            .link("\(host)/p/\(shortID)"),
+            .link(address(shortID)),
         ]
         // Copying the link, and beside it the public page of each account of the card on a platform the app
         // knows: the order of the demonstration's first screen, which is this one.
@@ -747,7 +753,7 @@ struct Screens {
         let threads = Platform.threads
         guard let account = accounts.first(where: { $0.platform == threads.id }) else { return nil }
         let handle = Platform.handle(threads.id, account.username)
-        let link = "\(host)/p/\(shortID)"
+        let link = address(shortID)
         let words = HangDemo.Words(
             title: copy("hang.title_single", ["platform": threads.name]),
             copy: copy("hang.copy"),

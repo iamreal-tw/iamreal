@@ -241,8 +241,8 @@ final class CardProofModel: ObservableObject {
             if let shortID = proofShown { deps.open(proofAddress(shortID)) }
         case .openProfile(let platform):
             // The account of the record sent, or the one the card declares now (step 4 on a day with 3 records).
-            let username = finished?.done.accounts.first(where: { $0.platform == platform })?.username
-                ?? status?.rows.first(where: { $0.platform == platform && $0.known })?.current
+            let accounts = finished?.done.accounts ?? status.map(Screens.hangable) ?? []
+            let username = accounts.first(where: { $0.platform == platform })?.username
             if let username, let address = Platform.of(platform)?.profile(username) { deps.open(address) }
         case .share:
             // The sentence, and on the line under it the card's page (design/copy/card-proof.md, step 8, app).
@@ -575,14 +575,19 @@ final class CardProofModel: ObservableObject {
         }
     }
 
-    /// Drops the card proof under way, and the PIN with it.
-    private func reset() {
+    /// Drops the flow and every PIN in memory: the card signs nothing more in this card proof.
+    private func dropPIN() {
         flow?.cancel()
         flow = nil
         stopPINClock()
         pin?.clear()
         pin = nil
         pinText = ""
+    }
+
+    /// Drops the card proof under way, and the PIN with it.
+    private func reset() {
+        dropPIN()
         name = ""
         status = nil
         mode = .open
@@ -605,6 +610,9 @@ final class CardProofModel: ObservableObject {
         // The whole step 6 shown from step 4 on a day with 3 records: step 4 again.
         if hangingFromLimit, let status {
             hangingFromLimit = false
+            // Shown again by 重新掛上連結, as it was the first time.
+            copied = false
+            demoPlaying = false
             screen = accounts(status)
             return
         }
@@ -840,14 +848,7 @@ final class CardProofModel: ObservableObject {
     private func showAccounts(_ status: CardProofFlow.CardStatus) {
         // The card has had its 3 card proofs today: it signs nothing more in this card proof, so the PIN the flow keeps
         // for the last tap goes now, not when 回到開頭 is pressed (card-proof.md, 今天已經過卡 3 次).
-        if status.dailyLimit {
-            flow?.cancel()
-            flow = nil
-            pin?.clear()
-            pin = nil
-            pinText = ""
-            stopPINClock()
-        }
+        if status.dailyLimit { dropPIN() }
         self.status = status
         mode = .open
         typed = Screens.listNow(status)
