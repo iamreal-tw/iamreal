@@ -73,7 +73,7 @@ const SHAPE = {
   slide: 64,
   /** Each platform's accounts: few, so that cards go back to an account and share one. The same names on both platforms are two accounts. */
   usernames: ["alice", "bob", "carol", "dave"],
-  /** The chance that the day moves on before a record: 18 records a day, a little over 2 of each card, so that a card's fourth of a date is common. */
+  /** The chance that the day moves on before a record: 18 records a day, a little over 2 of each card, so that a card often changes an account on the date of its last card proof. */
   nextDay: 1 / 18,
   /** For each platform of a record, the chance that the card wants another account, and that it wants none there. */
   changeAccount: 0.2,

@@ -19,15 +19,15 @@
 // 4. Clicks through the seven steps like a cardholder (real mouse events,
 //    cdp.ts; design/copy/card-proof.md): one card proof handles the card's
 //    whole list of accounts (ADR-0017). With one card: a first declaration
-//    of one platform; card proof again with nothing changed; a correction
-//    on the day of the first; 3 records today (step 4 keeps the list and
+//    of one platform; card proof again with nothing changed; a switch on
+//    the day of the first (a switch like any other); 3 records today (step 4 keeps the list and
 //    offers nothing but 回到開頭); a second platform added, with 上一步 back
 //    and forth; a switch; one account withdrawn; the server finding 3
 //    records today when the list is sent; everything withdrawn; an empty
 //    list for a card that declares nothing (請至少填一個帳號); both declared
-//    again; a switch the server records as a switch where the screen said a
-//    correction (the card's state changed on its way: the screen tells the
-//    cardholder, kind_mismatch); the third switch; a fourth refused by the
+//    again; the third switch, which the server records as a switch where the
+//    screen said nothing changes (the card's state changed on its way: the
+//    screen tells the cardholder, kind_mismatch); a fourth refused by the
 //    server's policy, which the Worker was started with for this
 //    (RESTRICT_LATE_SWITCHES: switch_restricted); a platform the page does
 //    not know (the config without its row): the account kept in the list as
@@ -143,10 +143,9 @@ for (const n of ["G2", "G3"] as const) writeFileSync(join(issuersDir, `issuer-${
 const yymmdd = (d: Date) => d.toISOString().slice(2, 10).replace(/-/g, "");
 /**
  * The test's clock, the Worker's and the page's together, runs `day` whole
- * days ahead of the machine's (setDay below): a card has at most 3 valid
- * records a day (spec/record-rules.md, check 6), a switch counts once a day
- * (a change on the day of the last one is a correction), and this test makes
- * many with one card. Each day the fake MOICA publishes a CRL dated that day.
+ * days ahead of the machine's (setDay below): the back end writes at most 3
+ * records of a card a day (docs/api/card-proof.md, `daily_limit`), and this
+ * test makes many with one card. Each day the fake MOICA publishes a CRL dated that day.
  *
  * Under those whole days, all three run `AHEAD` of the machine's clock, so
  * that the run starts at noon in Taiwan (clock.ts): what the test expects
@@ -352,12 +351,6 @@ async function setDay(n: number): Promise<void> {
   clockScript = (await page.send("Page.addScriptToEvaluateOnNewDocument", { source: clockSource(n) })).identifier as string;
   await page.eval(`window.__iamrealClockDays = ${n}`).catch(() => undefined);
   console.log(`\n== day ${n}: ${today()}`);
-}
-/** Moves the page's clock alone to `days` (whole or not) ahead of the test's (`testNow`); the Worker's stays. */
-async function setPageClock(days: number): Promise<void> {
-  await page.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: clockScript });
-  clockScript = (await page.send("Page.addScriptToEvaluateOnNewDocument", { source: clockSource(days) })).identifier as string;
-  await page.eval(`window.__iamrealClockDays = ${days}`).catch(() => undefined);
 }
 // "複製連結" writes to the clipboard; the test reads it back.
 await browser.send("Browser.grantPermissions", { origin: PAGE_ORIGIN, permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"] });
@@ -1362,7 +1355,7 @@ await tryStep("card proof again, nothing changed (the first submission dropped, 
   // 修改帳號清單: each row with its counts, how to change the list; 不改了 goes back.
   const edit = await openEdit();
   check(edit.state === "declared" && JSON.stringify(edit.lead) === JSON.stringify([A.current]), `修改帳號清單: ${edit.state} ${JSON.stringify(edit.lead)}`);
-  checkRows("refresh", edit.rows, { [EXAMPLE]: [EXAMPLE_NAME, "", [A.row_unused]], [THREADS]: [THREADS_NAME, "alice", [count(0), A.row_today]] });
+  checkRows("refresh", edit.rows, { [EXAMPLE]: [EXAMPLE_NAME, "", [A.row_unused]], [THREADS]: [THREADS_NAME, "alice", [count(0)]] });
   check(edit.main.includes(A.how_change) && edit.main.includes(A.preview_note), "修改帳號清單: how to change the list, the preview");
   check(JSON.stringify(edit.buttons.filter((b) => b !== A.preview)) === JSON.stringify([C.common.next, A.keep, C.common.cancel]), `修改帳號清單: the buttons ${JSON.stringify(edit.buttons)}`);
   await screenshot("refresh-4-accounts-edit");
@@ -1383,19 +1376,20 @@ await tryStep("card proof again, nothing changed (the first submission dropped, 
   });
 });
 
-await tryStep("a correction on the day of the first declaration (@alice to @alicia: not a switch)", async () => {
+// Another account on the day of the first declaration is a switch like any other (ADR-0018).
+await tryStep("a switch on the day of the first declaration (@alice to @alicia: one switch used)", async () => {
   await toAccounts();
   await typeRows({ [THREADS]: "alicia" });
   const c = await waitConfirm();
-  checkConfirm("correction", c, [[THREADS, THREADS_NAME, at("alicia"), [fill(K.switch, { previous: at("alice") }), C.confirm.switch_not_counted]]], C.confirm.button_declare);
-  await screenshot("correction-5-confirm");
+  checkConfirm("same-day switch", c, [[THREADS, THREADS_NAME, at("alicia"), [fill(K.switch, { previous: at("alice") }), fill(C.confirm.uses_switch, { switches_left: 4 })]]], C.confirm.button_declare);
+  await screenshot("same-day-switch-5-confirm");
   await finish({
-    label: "correction",
+    label: "same-day switch",
     button: C.confirm.button_declare,
     title: C.done.changed,
     card: [[THREADS_NAME, at("alicia")]],
     record: [[THREADS_NAME, at("alicia"), [fill(K.switch, { previous: at("alice") })]]],
-    screenshots: "correction",
+    screenshots: "same-day-switch",
   });
 });
 
@@ -1422,7 +1416,7 @@ await setDay(1);
 await tryStep("a second platform added, with 上一步 back and forth", async () => {
   const st = await toAccounts();
   checkDeclared("add", st, [[THREADS_NAME, at("alicia")]], 1);
-  checkRows("add", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "", [A.row_unused]], [THREADS]: [THREADS_NAME, "alicia", [count(0)]] });
+  checkRows("add", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "", [A.row_unused]], [THREADS]: [THREADS_NAME, "alicia", [count(1)]] });
   const signs = componentCount();
   const states = cardStateCount();
   const challenges = challengeCount();
@@ -1463,7 +1457,7 @@ await tryStep("a switch on Threads (@alicia to @bob)", async () => {
     await waitConfirm(),
     [
       [EXAMPLE, EXAMPLE_NAME, "a-b", [K.unchanged]],
-      [THREADS, THREADS_NAME, at("bob"), [fill(K.switch, { previous: at("alicia") }), fill(C.confirm.uses_switch, { switches_left: 4 })]],
+      [THREADS, THREADS_NAME, at("bob"), [fill(K.switch, { previous: at("alicia") }), fill(C.confirm.uses_switch, { switches_left: 3 })]],
     ],
     C.confirm.button_declare,
   );
@@ -1486,7 +1480,7 @@ await tryStep("a switch on Threads (@alicia to @bob)", async () => {
 
 await tryStep("one account withdrawn (the test-example row emptied)", async () => {
   const st = await toAccounts({ screenshots: "withdraw-one" });
-  checkRows("withdraw one", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0), A.row_today]], [THREADS]: [THREADS_NAME, "bob", [count(1), A.row_today]] });
+  checkRows("withdraw one", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "bob", [count(2)]] });
   await typeRows({ [EXAMPLE]: "" });
   checkConfirm(
     "withdraw one",
@@ -1570,7 +1564,7 @@ await tryStep("everything withdrawn", async () => {
   const st = await toAccounts();
   checkRows("withdraw all", (await openEdit()).rows, {
     [EXAMPLE]: [EXAMPLE_NAME, "", [fill(A.row_withdrawn, { last_declared: "a-b" }), count(0)]],
-    [THREADS]: [THREADS_NAME, "bob", [count(1)]],
+    [THREADS]: [THREADS_NAME, "bob", [count(2)]],
   });
   await screenshot("withdraw-all-4-accounts");
   await typeRows({ [THREADS]: "" });
@@ -1587,7 +1581,7 @@ await tryStep("no account now: an empty list is refused; both declared again (no
   checkAccountsNotes("nothing", st, "nothing");
   checkRows("nothing", st.rows, {
     [EXAMPLE]: [EXAMPLE_NAME, "", [fill(A.row_withdrawn, { last_declared: "a-b" }), count(0)]],
-    [THREADS]: [THREADS_NAME, "", [fill(A.row_withdrawn, { last_declared: at("bob") }), count(1)]],
+    [THREADS]: [THREADS_NAME, "", [fill(A.row_withdrawn, { last_declared: at("bob") }), count(2)]],
   });
   await page.clickButton(C.common.next);
   check((await messageText()) === A.need_one, `下一步 with an empty list, no account now: "${await messageText()}"`);
@@ -1622,16 +1616,14 @@ await tryStep("no account now: an empty list is refused; both declared again (no
 
 await setDay(3);
 
-// The card's state says the Threads account was put there today (its
-// correction_date changed on its way): the screen says the change is a
-// correction, not counted. The proof log records a switch, and step 6 says that
-// what was recorded is not what step 5 said.
-await tryStep("a change the screen called a correction, recorded as a switch (the card's state wrong): kind_mismatch", async () => {
-  // A state the rules can produce (the device does not read one they cannot): as if the card had switched to @bob today.
+// The card's state says the Threads account is @dave already (changed on its way): the screen
+// says nothing changes. The proof log records a switch from @bob, and step 6 says that what was
+// recorded is not what step 5 said.
+await tryStep("a list the screen called unchanged, recorded as a switch (the card's state wrong): kind_mismatch", async () => {
+  // A state the rules can produce (the device does not read one they cannot): as if the card had switched to @dave.
   const undo = await rewrite("*/api/v1/card-state", (b) => {
-    b.platforms.threads.correction_date = today();
-    b.last_card_proof = today();
-    b.proofs_on_last_date = 1;
+    b.platforms.threads.current = "dave";
+    b.platforms.threads.last_declared = "dave";
   });
   let st: AccountsSeen;
   try {
@@ -1639,29 +1631,30 @@ await tryStep("a change the screen called a correction, recorded as a switch (th
   } finally {
     await undo();
   }
-  checkDeclared("correction_date today", st, [[EXAMPLE_NAME, "a-b"], [THREADS_NAME, at("bob")]], 0);
-  checkRows("correction_date today", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "bob", [count(1), A.row_today]] });
-  await typeRows({ [THREADS]: "carol" });
+  checkDeclared("dave already", st, [[EXAMPLE_NAME, "a-b"], [THREADS_NAME, at("dave")]], 1);
+  // 更新島民證明: the list as the screen shows it, nothing typed.
+  await page.clickButton(A.refresh);
   checkConfirm(
-    "said a correction",
+    "said unchanged",
     await waitConfirm(),
     [
       [EXAMPLE, EXAMPLE_NAME, "a-b", [K.unchanged]],
-      [THREADS, THREADS_NAME, at("carol"), [fill(K.switch, { previous: at("bob") }), C.confirm.switch_not_counted]],
+      [THREADS, THREADS_NAME, at("dave"), [K.unchanged]],
     ],
-    C.confirm.button_declare,
+    C.confirm.button_refresh,
   );
   await finish({
     label: "recorded a switch",
-    button: C.confirm.button_declare,
+    button: C.confirm.button_refresh,
     title: C.done.changed,
     card: [
       [EXAMPLE_NAME, "a-b"],
-      [THREADS_NAME, at("carol")],
+      [THREADS_NAME, at("dave")],
     ],
     record: [
       [EXAMPLE_NAME, "a-b", [K.unchanged]],
-      [THREADS_NAME, at("carol"), [fill(K.switch, { previous: at("bob") })]],
+      // kinds.switch names the account the screen took for the current one.
+      [THREADS_NAME, at("dave"), [fill(K.switch, { previous: at("dave") })]],
     ],
     mismatch: [THREADS],
     screenshots: "mismatch",
@@ -1672,42 +1665,9 @@ await tryStep("a change the screen called a correction, recorded as a switch (th
   const expected = await page.text(`dd[data-done-row="${THREADS}"] [data-expected]`);
   const used = await page.text(`dd[data-done-row="${THREADS}"] [data-switch-used]`);
   check(
-    expected === fill(C.done.mismatch_expected, { expected: fill(K.switch, { previous: at("bob") }) + C.confirm.switch_not_counted }) && used === C.done.mismatch_switch_used,
+    expected === fill(C.done.mismatch_expected, { expected: K.unchanged }) && used === C.done.mismatch_switch_used,
     `under the row: what step 5 said ("${expected}"), and that a switch was used ("${used}")`,
   );
-});
-
-// Day 4 -----------------------------------------------------------------------------
-
-await setDay(4);
-
-await tryStep("the third switch (@carol to @dave): 2 left after it", async () => {
-  const st = await toAccounts();
-  checkRows("two switches", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "carol", [count(2)]] });
-  await typeRows({ [THREADS]: "dave" });
-  checkConfirm(
-    "the third",
-    await waitConfirm(),
-    [
-      [EXAMPLE, EXAMPLE_NAME, "a-b", [K.unchanged]],
-      [THREADS, THREADS_NAME, at("dave"), [fill(K.switch, { previous: at("carol") }), fill(C.confirm.uses_switch, { switches_left: 2 })]],
-    ],
-    C.confirm.button_declare,
-  );
-  await screenshot("switch-third-5-confirm");
-  await finish({
-    label: "the third switch",
-    button: C.confirm.button_declare,
-    title: C.done.changed,
-    card: [
-      [EXAMPLE_NAME, "a-b"],
-      [THREADS_NAME, at("dave")],
-    ],
-    record: [
-      [EXAMPLE_NAME, "a-b", [K.unchanged]],
-      [THREADS_NAME, at("dave"), [fill(K.switch, { previous: at("carol") })]],
-    ],
-  });
 });
 
 // Day 5 -----------------------------------------------------------------------------
@@ -1968,49 +1928,8 @@ await tryStep("5 switches: step 4 says none is left; another account typed anywa
   await screenshot("switch-limit-5-progress");
 });
 
-// The card's state says test-example's account was put there today (as if it had been), step 5
-// says changing it is a correction; midnight passes before the button is pressed. On the new date
-// the change is a switch: nothing is signed, the sentence, and 回到開頭 only.
-await tryStep("the date changes while step 5 is up: not signed, stops.date_changed, 回到開頭", async () => {
-  // The page's clock (only the page's) set to 23:59:47 in Taiwan of the test's day, so that midnight
-  // passes for real while step 5 is up, within the PIN's wait (25 s in the test build) from the first signature.
-  const target = Date.parse(`${today()}T23:59:47+08:00`);
-  const midnight = target + 13_000; // 00:00:00 of the next day in Taiwan
-  try {
-    await setPageClock((target - testNow()) / 86_400_000);
-    const undo = await rewrite("*/api/v1/card-state", (b) => {
-      b.platforms[EXAMPLE].correction_date = today();
-      b.last_card_proof = today();
-      b.proofs_on_last_date = 1;
-    });
-    try {
-      await toAccounts();
-    } finally {
-      await undo();
-    }
-    await typeRows({ [EXAMPLE]: "a-c" });
-    const c = await waitConfirm();
-    check(JSON.stringify(c.rows[0]?.kinds) === JSON.stringify([fill(K.switch, { previous: "a-b" }), C.confirm.switch_not_counted]), `step 5 says a correction: ${JSON.stringify(c.rows[0]?.kinds)}`);
-    const pageNow = await page.eval<number>("Date.now()");
-    check(pageNow < midnight, `step 5 is up before midnight (${Math.round((midnight - pageNow) / 1000)} s left)`);
-    await sleep(Math.max(0, midnight - pageNow) + 1000);
-    const signs = componentCount("MakeSignature");
-    const challenges = challengeCount();
-    const before = await recordCount();
-    await page.clickButton(C.confirm.button_declare);
-    const d = await waitDoneOrMessage();
-    check(!d.done && d.item === "server" && d.message === C.stops.date_changed, `under 連上島民證明的伺服器: "${d.message}" (${d.item})`);
-    check(JSON.stringify(await buttonTexts()) === JSON.stringify([A.restart]), `回到開頭 only: ${JSON.stringify(await buttonTexts())}`);
-    await screenshot("date-changed-5-progress");
-    await sleep(500);
-    check(componentCount("MakeSignature") === signs && challengeCount() === challenges && (await recordCount()) === before, "no second signature, no challenge, nothing recorded");
-    await page.clickButton(A.restart);
-    await backAtTheBeginning("回到開頭 after the date changed");
-  } finally {
-    // The page's clock back to the test's whole days.
-    await setPageClock(day);
-  }
-});
+// Since version 3 of the record rules no list does anything else on another date: the check
+// before the challenge (stops.date_changed) has no case left to show here (#510 takes it out).
 
 // 5. Snapshot and re-verification -----------------------------------------------
 
@@ -2018,13 +1937,12 @@ await tryStep("the date changes while step 5 is up: not signed, stops.date_chang
 const KINDS: [string, string][][] = [
   [[THREADS, "first"]],
   [[THREADS, "refresh"]],
-  [[THREADS, "correction"]],
+  [[THREADS, "switch"]],
   [[EXAMPLE, "first"], [THREADS, "refresh"]],
   [[EXAMPLE, "refresh"], [THREADS, "switch"]],
   [[EXAMPLE, "withdraw"], [THREADS, "refresh"]],
   [[THREADS, "withdraw"]],
   [[EXAMPLE, "refresh"], [THREADS, "refresh"]],
-  [[EXAMPLE, "refresh"], [THREADS, "switch"]],
   [[EXAMPLE, "refresh"], [THREADS, "switch"]],
   [[EXAMPLE, "refresh"], [THREADS, "refresh"]],
   [[EXAMPLE, "refresh"], [THREADS, "refresh"]],

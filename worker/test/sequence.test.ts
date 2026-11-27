@@ -60,7 +60,7 @@ const SCENARIO_FLOORS: Record<Scenario, number> = {
   exactly_4_days_back_valid: 60,
   fifth_switch: 165,
   sixth_switch_blocked: 980,
-  switch_on_the_same_date: 190,
+  switch_on_the_same_date: 595,
   declared_again_after_withdrawing_all: 230,
   account_of_several_cards: 3300,
 };

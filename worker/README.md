@@ -449,30 +449,31 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 `proof` 和 `root` 兩邊都照事件的旗標回答（`verifies`、`crl_dates`），不驗證證明，也不讀清冊，所以比到的是檢查的先後和檢查 3 的日期範圍（清冊日期的前 1 天到後 3 天），不是驗證器和清冊存檔。這些由 `test/records.test.ts`（每個錯誤代碼和先後順序、題目、清冊、午夜、`201` 的內容）、`test/records-real.test.ts`（真的證明和鏡像抓的清冊）和 `test/records-storage.test.ts`（同時送出、寫到一半失敗、`paused`）守著。
 
-2026-11-20 跑的結果（種子 1，10,000 筆）：Go、記憶體、Durable Object 三邊**沒有一筆不同**，100 次的證明紀錄最晚有效日期和帳號的卡片數也相同，最後的現況也相同。有效 4,766 筆、無效 5,234 筆：
+2026-11-27 跑的結果（種子 1，10,000 筆，紀錄規則第 3 版）：Go、記憶體、Durable Object 三邊**沒有一筆不同**，100 次的證明紀錄最晚有效日期和帳號的卡片數也相同，最後的現況也相同，Durable Object 每一筆之後 `card-state` 回的 `proofs_on_last_date` 也和照 Go 的結果數的相同。有效 5,021 筆、無效 4,979 筆（第 2 版時是 4,766 和 5,234：拿掉每天 3 筆和更正之後，原本的 `daily_limit` 多半變成有效，用掉的更換變多，`switch_limit` 也跟著變多）：
 
 | 代碼 | 筆數 | | 種類 | 次數（`test-example`／`threads`） |
 |---|---|---|---|---|
 | `proof` | 313 | | `first` | 320（160／160） |
-| `challenge_reused` | 279 | | `refresh` | 5,014（2,534／2,480） |
-| `root` | 292 | | `correction` | 255（127／128） |
-| `date_order` | 1,611 | | `switch` | 1,420（699／721） |
-| `empty` | 233 | | `withdraw` | 929（457／472） |
-| `switch_limit` | 1,311 | | | |
-| `daily_limit` | 1,195 | | | |
+| `challenge_reused` | 279 | | `refresh` | 5,412（2,754／2,658） |
+| `root` | 292 | | `switch` | 1,483（735／748） |
+| `date_order` | 1,413 | | `withdraw` | 984（486／498） |
+| `empty` | 281 | | | |
+| `switch_limit` | 2,401 | | | |
 
 | 情境 | 怎麼數 | 次數 | 下限 |
 |---|---|---|---|
-| 跨午夜 | 有效，日期是證明紀錄裡最晚有效日期的前一天 | 842 | 630 |
-| 日期往回超過 4 天 | `date_order`，日期早於證明紀錄裡最晚有效日期超過 4 天 | 408 | 300 |
-| 剛好往回 4 天而有效 | 有效，日期剛好是證明紀錄裡最晚有效日期的 4 天前 | 79 | 60 |
-| 第 5 次更換 | 一個 `switch` 讓那個名額的 `switch_count` 變成 5 | 223 | 165 |
-| 第 6 次被擋 | `switch_limit` | 1,311 | 980 |
-| 當天更正 | `correction`，任何平台 | 255 | 190 |
-| 全部收回後再宣告 | 有效、清單不是空的，那張卡片之前有有效紀錄、一個帳號都沒宣告 | 307 | 230 |
-| 帳號被兩張以上的卡宣告 | 有效，之後清單裡有一個帳號被兩張以上的卡宣告 | 4,414 | 3,300 |
+| 跨午夜 | 有效，日期是證明紀錄裡最晚有效日期的前一天 | 843 | 630 |
+| 日期往回超過 4 天 | `date_order`，日期早於證明紀錄裡最晚有效日期超過 4 天 | 371 | 300 |
+| 剛好往回 4 天而有效 | 有效，日期剛好是證明紀錄裡最晚有效日期的 4 天前 | 62 | 60 |
+| 第 5 次更換 | 一個 `switch` 讓那個名額的 `switch_count` 變成 5 | 251 | 165 |
+| 第 6 次被擋 | `switch_limit` | 2,401 | 980 |
+| 同一天換帳號 | `switch`，任何平台，日期就是那張卡片在這一筆之前的上次過卡日 | 794 | 595 |
+| 全部收回後再宣告 | 有效、清單不是空的，那張卡片之前有有效紀錄、一個帳號都沒宣告 | 347 | 230 |
+| 帳號被兩張以上的卡宣告 | 有效，之後清單裡有一個帳號被兩張以上的卡宣告 | 4,609 | 3,300 |
 
-量到的時間（Apple Silicon，本機的 workerd 1.20261110.1）：單獨跑這個檔約 107 秒。Go 算答案（含編譯測試）約 0.7 秒，記憶體 0.07 秒，Durable Object 約 106 秒（含啟動 Worker）：每一筆約 10 ms，是套用、重啟、讀 `card-state` 三次往返，加上 100 次讀 `rule-state`。
+下限是 2026-11-20 第 2 版時定的（約是當時次數的四分之三），只有「同一天換帳號」是第 3 版新加的。
+
+量到的時間（Apple Silicon，本機的 workerd 1.20261110.1）：2026-11-20 單獨跑這個檔約 107 秒（2026-11-27 約 126 秒）。Go 算答案（含編譯測試）約 0.7 秒，記憶體 0.07 秒，Durable Object 約 106 秒（含啟動 Worker）：每一筆約 10 ms，是套用、重啟、讀 `card-state` 三次往返，加上 100 次讀 `rule-state`。
 
 ## 頁面和檔案
 
@@ -909,9 +910,9 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 | `vars.COUNT_EVENTS_PER_MINUTE` | `600` | 一分鐘的計數明細最多留幾筆（[計數](#計數)）。0 到 100000 的整數；不是的話收計數的介面回 `500` |
 | `vars.CARD_PROOF_STARTS_PER_MINUTE` | `60` | 全站每分鐘最多幾次開始過卡（[全站的總量上限](#全站的總量上限)）。0 到 100000 的整數；不是的話不擋，即時的輸出寫一行 |
 | `r2_buckets` | `DATA` → `iamreal-test-data` | 公開的檔案，經 `test-data.iamreal.tw` 下載（ADR-0027） |
-| `vars.PROOF_LOG_OBJECT_NAME` | `test-3` | 證明紀錄那個 Durable Object 的名稱。清空測試的證明紀錄時換成下一個號碼，用過的名稱不再用（[清空測試的證明紀錄](#清空測試的證明紀錄)）；維持 `test-` 開頭（[證明紀錄和物件的名稱要對得上](#證明紀錄和物件的名稱要對得上)） |
+| `vars.PROOF_LOG_OBJECT_NAME` | `test-4` | 證明紀錄那個 Durable Object 的名稱。清空測試的證明紀錄時換成下一個號碼，用過的名稱不再用（[清空測試的證明紀錄](#清空測試的證明紀錄)）；維持 `test-` 開頭（[證明紀錄和物件的名稱要對得上](#證明紀錄和物件的名稱要對得上)） |
 | `vars.PROOF_LOG_KIND` | `test` | 這個環境用哪一份證明紀錄，`test` 或 `production`。它決定接受哪個場合字串、平台表是哪一張（ADR-0028）；兩者的內容寫在 `protocol/`，不在設定裡。不是這兩個值、或和 `PROOF_LOG_OBJECT_NAME` 對不上時，五個介面和 Worker 產生的每個頁面都回 `500`（Static Assets 的檔案不跑 Worker，照常送） |
-| `vars.TEST_PROOF_LOG_CLEARED_ON` | `2026-11-23` | 測試的證明紀錄上次清空的日期，每一頁的標示旁寫它（[測試的證明紀錄的標示](#測試的證明紀錄的標示)）。第一次清空是 2026-11-21（紀錄規則的版本從 1 加到 2，[#120](https://github.com/iamreal-tw/iamreal/issues/120)）；第二次是 2026-11-23（Durable Object 的類別改名，migration `v2` 刪掉舊的類別，[#277](https://github.com/iamreal-tw/iamreal/issues/277)）；在那之前寫的是測試網站第一次部署的日期 2026-11-19。清空時和 `PROOF_LOG_OBJECT_NAME` 一起改（[清空測試的證明紀錄](#清空測試的證明紀錄)） |
+| `vars.TEST_PROOF_LOG_CLEARED_ON` | `2026-11-27` | 測試的證明紀錄上次清空的日期，每一頁的標示旁寫它（[測試的證明紀錄的標示](#測試的證明紀錄的標示)）。第一次清空是 2026-11-21（紀錄規則的版本從 1 加到 2，[#120](https://github.com/iamreal-tw/iamreal/issues/120)）；第二次是 2026-11-23（Durable Object 的類別改名，migration `v2` 刪掉舊的類別，[#277](https://github.com/iamreal-tw/iamreal/issues/277)）；第三次是 2026-11-27（紀錄規則的版本從 2 加到 3，拿掉當天的更正，[#509](https://github.com/iamreal-tw/iamreal/issues/509)）；在那之前寫的是測試網站第一次部署的日期 2026-11-19。清空時和 `PROOF_LOG_OBJECT_NAME` 一起改（[清空測試的證明紀錄](#清空測試的證明紀錄)） |
 | `vars.CARD_PROOFS_PAUSED` | `false` | `"true"` 停止收過卡，`"false"` 收（[停止和恢復收過卡](#停止和恢復收過卡)）。營運者在儀表板改；下一次部署寫回這裡的值。不是這兩個值時，API 回 `500` |
 | `vars.REBUILD_PROOF_LOG` | 空字串 | 營運者要的一次重建的名稱，空字串是沒有（[從證明紀錄重建](#從證明紀錄重建)）。1 到 40 個 `A-Za-z0-9._-`；不是的話 API 回 `500`。營運者在儀表板改；下一次部署寫回這裡的值 |
 | `assets`（最上層，每個環境共用） | `./site`，沒有 binding | 樣式表、複製按鈕的程式和過卡頁面的檔案，Cloudflare 直接送，不跑 Worker（[Static Assets](#static-assets)） |

@@ -457,14 +457,14 @@ SLOT  = "PLATFORM":{"current":CURRENT,"last_declared":LAST_DECLARED,"switch_coun
 
 - **Only the slots that are not in the initial state are listed.** A slot
   is in the initial state when all three of its items have their initial
-  value ("State"): `current` and `last_declared` none, `switch_count` 0. Such a slot is never listed, and every other slot of
-  the card is. A platform that is not in `slots` therefore is a slot in
-  the initial state, and the row of a card does not change when a platform
-  is added to the table ([`scope.md`](scope.md), "Adding a platform").
-  In these rules a slot in the initial state and no slot are the same
-  thing: a card has a slot on every platform, and its slots on the
-  platforms where no valid record of the card has had a kind are in the
-  initial state.
+  value ("State"): `current` and `last_declared` none, `switch_count` 0.
+  Such a slot is never listed, and every other slot of the card is. A
+  platform that is not in `slots` therefore is a slot in the initial state,
+  and the row of a card does not change when a platform is added to the
+  table ([`scope.md`](scope.md), "Adding a platform"). In these rules a
+  slot in the initial state and no slot are the same thing: a card has a
+  slot on every platform, and its slots on the platforms where no valid
+  record of the card has had a kind are in the initial state.
 - **Order**: the slots are in ascending order of `PLATFORM`, compared by
   byte values, each strictly greater than the one before it. So no platform
   appears twice.
@@ -494,10 +494,11 @@ slot in the initial state that is listed.
 **The format checks each value by itself**, not whether the row is a state
 these rules can leave. Under these rules a listed slot always has a
 `last_declared`, and `current` is none or that same account; a card with a
-row has at least one slot listed; `switch_count` is at most 5. A row that says otherwise (a `current`
-that is not its `last_declared`, a `switch_count` of 6) is well formed. It is equal to no state a re-verifier computes, so the
-comparison below reports its card. The file exists to show a wrong kept
-state, and a format that refused to write one would hide it.
+row has at least one slot listed; `switch_count` is at most 5. A row that
+says otherwise (a `current` that is not its `last_declared`, a
+`switch_count` of 6) is well formed. It is equal to no state a re-verifier
+computes, so the comparison below reports its card. The file exists to show
+a wrong kept state, and a format that refused to write one would hide it.
 
 ### The file
 
@@ -569,8 +570,9 @@ gets one outcome, by the first line that applies:
 | 7 | otherwise | `different` |
 
 The row and the state are equal when `last_seq`, `last_card_proof` and, on
-every platform of the table, the three items of the slot are equal; a platform the row does not list, or the
-re-verifier's state has no slot for, is a slot in the initial state.
+every platform of the table, the three items of the slot are equal; a
+platform the row does not list, or the re-verifier's state has no slot for,
+is a slot in the initial state.
 
 **Any `different` fails the comparison**, and the re-verifier names the
 card (ADR-0025). **`skipped` is not a failure**: the card is compared with
@@ -699,11 +701,11 @@ from its first record (ADR-0025).
 that can give any record another result (valid or invalid, its kinds, its
 reason code), or that changes which items the state of a card has or what
 an item means. That is every change to "Per record", "State" and "Event
-rules", and to the numbers in them: the 5 switches, the 4 days of check 4, the bounds of check 3
-([`revocation-tree.md`](revocation-tree.md)). Whether the change applies to
-every record or from an effective date makes no difference to the number.
-The specification, the vectors and every implementation change in the same
-pull request (ADR-0030, ADR-0034).
+rules", and to the numbers in them: the 5 switches, the 4 days of check 4,
+the bounds of check 3 ([`revocation-tree.md`](revocation-tree.md)). Whether
+the change applies to every record or from an effective date makes no
+difference to the number. The specification, the vectors and every
+implementation change in the same pull request (ADR-0030, ADR-0034).
 
 This is on purpose also for a change that leaves every stored state as it
 was, such as another number for a limit: the number goes up, and the server
