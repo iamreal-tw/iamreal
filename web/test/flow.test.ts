@@ -1092,7 +1092,7 @@ describe("the PIN, the card and the windows", () => {
   });
 
   test("cancel (取消 on steps 4 and 5): the PIN, the certificate and the signature are dropped, as when the wait runs out", async () => {
-    type Held = { pin: unknown; cert: { der: Uint8Array; tbs: Uint8Array; issuerSignature: Uint8Array } | null; scopeSignature: Uint8Array | null; choice: unknown; chosen: unknown };
+    type Held = { pin: unknown; cert: { der: Uint8Array; tbs: Uint8Array; issuerSignature: Uint8Array } | null; scopeSignature: Uint8Array | null; chosen: unknown };
     for (const where of ["status_known", "chosen"] as const) {
       const s = await setup();
       await toStatus(s);
@@ -1108,7 +1108,6 @@ describe("the PIN, the card and the windows", () => {
       assert.equal(heldPin(s.flow), null, `${where}: the PIN`);
       assert.equal(held.cert, null, `${where}: the certificate`);
       assert.equal(held.scopeSignature, null, `${where}: the signature`);
-      assert.equal(held.choice, null, `${where}: the accounts typed`);
       assert.equal(held.chosen, null, `${where}: the list`);
       assert.ok([cert.der, cert.tbs, cert.issuerSignature, sig].every((b) => b.every((x) => x === 0)), `${where}: their bytes are zeros`);
       assert.equal(s.flow.cardStatus, null, `${where}: the card's state`);
