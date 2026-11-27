@@ -3633,23 +3633,17 @@ body.check .three p {
 
 /* The page of a card (proof-page.md) and the page of an account (account-page.md) ---------------------- */
 
-/* Two columns, the same on both pages. */
+/* Two columns, the same on both pages: the account and the profile on the left; on the right, from the height of the
+   left column, what only grows: the record of a card (proof-page.md, section 3), the list of the cards of an account
+   (account-page.md). It grows down the right column and pushes nothing. A withdrawn card has no profile. */
 body.proof .first,
 body.account .first {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: var(--column-gap);
+  grid-template-rows: auto 1fr;
+  gap: 40px var(--column-gap);
   align-items: start;
   margin-top: 56px;
-}
-
-/* The account and the profile on the left; on the right, from the height of the left column, what only grows: the
-   record of a card (proof-page.md, section 3), the list of the cards of an account (account-page.md). It grows down the
-   right column and pushes nothing. A withdrawn card has no profile. */
-body.proof .first,
-body.account .first {
-  grid-template-rows: auto 1fr;
-  row-gap: 40px;
 }
 
 body.proof .first .claim,
@@ -3665,7 +3659,7 @@ body.account .first .owner {
 }
 
 body.proof .first .last,
-body.account .first .cards-of {
+body.account .first .card-list {
   grid-column: 2;
   grid-row: 1 / span 2;
 }
@@ -3744,18 +3738,13 @@ body.proof .last .yours {
   margin: 4px 0 0;
 }
 
-/* The heading above the profile, on both pages; the address right above the profile. */
+/* The heading above the profile, on both pages: one line when it fits; otherwise broken at its comma or a space, never
+   inside a word (proof-page.md, section 2; account-page.md). */
 body.proof .ask,
 body.account .ask {
   font-size: var(--size-lead);
   line-height: var(--leading-h3);
-  margin: 0 0 6px;
-}
-
-/* One line when it fits; otherwise broken at its comma or a space, never inside a word (proof-page.md, section 2; account-page.md). */
-body.proof .ask,
-body.account .ask {
-  margin-bottom: 12px;
+  margin: 0 0 12px;
   word-break: keep-all;
   overflow-wrap: anywhere;
   text-wrap: balance;
@@ -3843,8 +3832,8 @@ body.account .count {
   color: var(--ink);
 }
 
-/* Right under the count, the sentence that goes with it (principles.md, 查詢頁); broken at its comma, not inside a word. */
-body.account .claim .small {
+/* Right under the count, the sentence that goes with it (principles.md, 查詢頁; with no card, the line on the name); broken at its comma, not inside a word. */
+body.account .count + .small {
   max-width: var(--measure);
   margin-top: 8px;
   line-height: var(--leading-small);
@@ -3896,6 +3885,7 @@ body.account main > .lookup {
 }
 
 body.account .lookup > p,
+body.account .claim > p,
 body.proof-missing .missing p,
 body.account-not-a-name .missing p {
   max-width: var(--measure);
@@ -4213,15 +4203,11 @@ body.account-not-a-name .title {
     padding-bottom: 24px;
   }
 
-  body.proof .first,
-  body.account .first {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   /* On a phone one under another, in this order: the account, the profile, then what only grows, so that it pushes
      nothing down (proof-page.md, account-page.md). */
   body.proof .first,
   body.account .first {
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: none;
     gap: 28px;
   }
@@ -4231,7 +4217,7 @@ body.account-not-a-name .title {
   body.proof .first .last,
   body.account .first .claim,
   body.account .first .owner,
-  body.account .first .cards-of {
+  body.account .first .card-list {
     grid-column: 1;
     grid-row: auto;
   }

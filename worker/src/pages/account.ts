@@ -39,7 +39,7 @@ ${heading}
 <h2 class="ask">${profileLink(username)}上有哪一張的連結，才代表 @${username} 承認那一張。</h2>
 ${embed(username)}
 </section>
-<section class="cards-of">
+<section class="card-list">
 <ul class="cards">
 ${cards.map(
   (c, i) =>

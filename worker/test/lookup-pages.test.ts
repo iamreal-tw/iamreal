@@ -72,6 +72,8 @@ describe("the page of an account", () => {
     const { page } = await getPage(worker, "/threads/@alice");
     wantLines(page, copyLines(block("account-page.md", "2. ", 0)));
     wantEmbed(page, "alice");
+    // Gone with the layout of the page of a card: the owner's question and the line on the scoped IDs.
+    notOnPage(page, "帳號主人承認的是哪一張", "每張自然人憑證對應到唯一的島民編號");
   });
 
   test("a last card proof today is written 今天", async () => {
