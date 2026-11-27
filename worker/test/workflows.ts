@@ -596,12 +596,13 @@ export const ANDROID_JOB_STEPS: YamlMap = {
  * with the script upload-ios.yml and upload-ios-test.yml run (#176, #484),
  * so that a pull request that breaks an archive or its check is seen before
  * an upload is started by hand; the version and builds are fixed ones, each
- * in its app's range, and the check's test is given the same.
+ * in its app's range, and the check's test is given the same. 45 minutes:
+ * with the test app's archive the job took 26 (#496), near the 30 it had.
  */
 const XCODEBUILD = 'xcodebuild -project IamrealApp.xcodeproj -scheme IamrealApp -destination "platform=iOS Simulator,name=iPhone 17" -derivedDataPath build';
 export const IOS_JOB_STEPS: YamlMap = {
   "runs-on": IOS_RUNNER,
-  "timeout-minutes": "30",
+  "timeout-minutes": "45",
   steps: [
     step("actions/checkout"),
     { name: "Install the Rust of rust-toolchain.toml, with the simulator's target", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-apple-ios-sim" },
