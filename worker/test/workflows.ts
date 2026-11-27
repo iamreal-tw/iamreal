@@ -744,12 +744,14 @@ export const APP_ENVIRONMENT = "app-test";
  *   .p12 is removed once imported. The runner is GitHub's and is destroyed
  *   after the job, so nothing removes the keychain;
  * - the profile must be for this app's identifier under the team and allow
- *   the NFC tag reading the app asks for (ios/Config/IamrealApp.entitlements),
- *   and the export options name it for the identifier;
+ *   the NFC tag reading and the associated domains the app asks for
+ *   (ios/Config/IamrealApp.entitlements), and the export options name it
+ *   for the identifier;
  * - the app is signed once without uploading, and the signed app must carry
- *   the NFC entitlement, exactly TAG as the app's entitlements file has it,
- *   no more and no less: what Xcode's signature carries is first seen here
- *   (ios/README.md);
+ *   the entitlements of the app's entitlements file, no more and no less:
+ *   the NFC tag reading, exactly TAG, and the associated domains, exactly
+ *   the test site's app domain, applinks:test-app.iamreal.tw (ADR-0040,
+ *   #532). What Xcode's signature carries is first seen here (ios/README.md);
  * - only the last step has the App Store Connect key: it writes the key to a
  *   file only it reads, and xcodebuild signs again and uploads.
  * Each secret is in the env of the one step that uses it.
@@ -760,6 +762,8 @@ const IOS_PROFILE = '"$RUNNER_TEMP/profile.plist"';
 const IOS_MOBILEPROVISION = '"$RUNNER_TEMP/app.mobileprovision"';
 const IOS_ENTITLEMENTS = '"$RUNNER_TEMP/entitlements.plist"';
 const IOS_ARCHIVE = '-archivePath "$RUNNER_TEMP/IamrealApp.xcarchive"';
+/** The app domain both apps declare until launch (ADR-0040, #532): the test site's. */
+const IOS_APP_DOMAIN = "test-app.iamreal.tw";
 const iosUploadJobs = (app: { archive: { name: string; run: string }; identifier: string; profileSecret: string }): YamlMap => ({
   build: {
     "runs-on": IOS_RUNNER,
@@ -821,6 +825,7 @@ const iosUploadJobs = (app: { archive: { name: string; run: string }; identifier
           `security cms -D -i ${IOS_MOBILEPROVISION} -o ${IOS_PROFILE}`,
           `test "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' ${IOS_PROFILE})" = "$APPLE_TEAM_ID.${app.identifier}"`,
           `/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.nfc.readersession.formats' ${IOS_PROFILE} | grep -qw TAG`,
+          `/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.associated-domains' ${IOS_PROFILE} > /dev/null`,
           `uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' ${IOS_PROFILE})"`,
           'mkdir -p "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" "$HOME/Library/MobileDevice/Provisioning Profiles"',
           `cp ${IOS_MOBILEPROVISION} "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$uuid.mobileprovision"`,
@@ -829,7 +834,7 @@ const iosUploadJobs = (app: { archive: { name: string; run: string }; identifier
         ].join(" && "),
       },
       {
-        name: "Sign without uploading, and check that the app has its NFC entitlement",
+        name: "Sign without uploading, and check that the app has its entitlements",
         env: { APPLE_TEAM_ID: "${{ vars.APPLE_TEAM_ID }}" },
         run: [
           'cp "$RUNNER_TEMP/ios-upload/ExportOptions.plist" "$RUNNER_TEMP/check.plist"',
@@ -839,6 +844,8 @@ const iosUploadJobs = (app: { archive: { name: string; run: string }; identifier
           `codesign -d --entitlements - --xml "$RUNNER_TEMP/ipa/Payload/IamrealApp.app" > ${IOS_ENTITLEMENTS}`,
           `test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.nfc.readersession.formats:0' ${IOS_ENTITLEMENTS})" = TAG`,
           `! /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.nfc.readersession.formats:1' ${IOS_ENTITLEMENTS} > /dev/null 2>&1`,
+          `test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.associated-domains:0' ${IOS_ENTITLEMENTS})" = applinks:${IOS_APP_DOMAIN}`,
+          `! /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.associated-domains:1' ${IOS_ENTITLEMENTS} > /dev/null 2>&1`,
           `test "$(/usr/libexec/PlistBuddy -c 'Print :application-identifier' ${IOS_ENTITLEMENTS})" = "$APPLE_TEAM_ID.${app.identifier}"`,
         ].join(" && "),
       },

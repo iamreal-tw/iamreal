@@ -124,5 +124,13 @@ expect "the address of the production site" "https://iamreal.tw"
 copy
 printf 'idc_testing_session_open\0' >> "$app/IamrealApp"
 expect "the library of the tests" "idc_testing_session_open"
+# The entitlements the upload workflows sign the archive with (#532): the app domain, and only it.
+copy
+rm -rf "$tmp/config"
+cp -R "$here/Config" "$tmp/config"
+plutil -remove com\\.apple\\.developer\\.associated-domains "$tmp/config/IamrealApp.entitlements"
+export IAMREAL_CONFIG_DIR="$tmp/config"
+expect "no app domain in the entitlements the archive is signed with" "Config/IamrealApp.entitlements: the associated domains are none, not applinks:test-app.iamreal.tw"
+unset IAMREAL_CONFIG_DIR
 
 exit $failed

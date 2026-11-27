@@ -337,7 +337,7 @@
 		1A0000000000000000000027 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = Config/IamrealApp.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Config/IamrealAppDev.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2000000;
 				DEVELOPMENT_TEAM = "";

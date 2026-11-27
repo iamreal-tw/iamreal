@@ -62,7 +62,7 @@
 | `App/Bridge.h` | Swift 看得到的 C：只有 `device-core/include/iamreal_device_core.h` |
 | `App/Assets.xcassets` | app 的圖示：記號放在白底上（[#490](https://github.com/iamreal-tw/iamreal/issues/490)），和 Android 的相同。1024×1024、沒有透明度（App Store Connect 不收有透明度的圖示，也不收沒有圖示的 build），由 `android/test/AppIcon.java` 照 Android 的圖示畫出來（`android/README.md`「圖示」），不要手改 |
 | `Config/Shared.xcconfig`、`Config/Test.xcconfig` | 最低的 iOS 版本、只做 iPhone、連結哪一份核心；三種 app 的識別碼和測試網站的環境 |
-| `Config/Info.plist`、`Config/IamrealApp.entitlements` | 讀卡要的宣告（「讀卡的宣告」）。`Info.plist` 的其他項目照專案檔的設定產生，和這個檔合在一起 |
+| `Config/Info.plist`、`Config/IamrealApp.entitlements`、`Config/IamrealAppDev.entitlements` | 讀卡要的宣告（「讀卡的宣告」）和 app 網域（「app 網域」）。`Info.plist` 的其他項目照專案檔的設定產生，和這個檔合在一起；entitlement 檔正式 app 和測試 app 用第一個，開發用 build 用第二個 |
 | `IamrealApp.xcodeproj` | 手寫的 Xcode 專案，兩個 target：`IamrealApp`、`IamrealAppTests`。`App/`、`Tests/` 是跟著資料夾走的群組，加檔案不用改專案檔 |
 | `build-core.sh` | 編 `device-core/` 給 iOS 用，並下載、核對 Barretenberg 的靜態函式庫和參數檔 |
 | `check-app.sh`、`check-app-test.sh` | 建置時的檢查，和它自己的測試 |
@@ -104,6 +104,7 @@ iPhone 有三種 app（ADR-0040），識別碼不同，可以同時裝在一支 
 | 識別碼 | `tw.iamreal.app` | `tw.iamreal.app.test` | `tw.iamreal.app.dev` |
 | 圖示下面的名稱（`design/copy/app.md`） | 島民證明 封測 | 島民證明 測試 | 島民證明 dev |
 | 連哪裡 | 上線前：`https://test.iamreal.tw`、`https://test-data.iamreal.tw`（ADR-0028）。上線起：正式網站 | 測試網站，上線後也是 | 測試網站，上線後也是 |
+| app 網域（「app 網域」） | 上線前：`test-app.iamreal.tw`。上線起：`app.iamreal.tw` | `test-app.iamreal.tw`，上線後也是 | 沒有 |
 | 卡片簽的場合字串 | 上線前：`iamreal-test:public:0`（核心的 `IDC_PROOF_LOG_TEST`） | `iamreal-test:public:0`，上線後也是 | `iamreal-test:public:0`，上線後也是 |
 | build 號碼 | 1 到 999,999：`upload-ios.yml` 的執行編號 | 1,000,000 到 1,999,999：`upload-ios-test.yml` 的執行編號加 1,000,000 | 固定 2,000,000 |
 | 怎麼裝 | TestFlight，上線起也從 App Store（從 GitHub Actions 上傳：「上傳到 TestFlight」） | TestFlight，永遠不上 App Store；上線前只給營運者（ADR-0040） | 用線裝（「怎麼用線裝到手機」） |
@@ -130,12 +131,22 @@ iPhone 有三種 app（ADR-0040），識別碼不同，可以同時裝在一支 
 
 ## 讀卡的宣告
 
-- `Config/IamrealApp.entitlements`：`com.apple.developer.nfc.readersession.formats` 只有 `TAG`（[#85](https://github.com/iamreal-tw/iamreal/issues/85)）。app 的識別碼要在開發者帳號裡開了 NFC Tag Reading，簽出來的 app 才有這一項
+- `Config/IamrealApp.entitlements`（正式 app、測試 app）和 `Config/IamrealAppDev.entitlements`（開發用 build）：`com.apple.developer.nfc.readersession.formats` 只有 `TAG`（[#85](https://github.com/iamreal-tw/iamreal/issues/85)）。app 的識別碼要在開發者帳號裡開了 NFC Tag Reading，簽出來的 app 才有這一項。兩個檔只差在 app 網域（下一節）
 - `Config/Info.plist`：
   - `NFCReaderUsageDescription`：`design/copy/app.md`「讀卡的用途說明（iOS）」那一句
   - `com.apple.developer.nfc.readersession.iso7816.select-identifiers`：`spec/card-channel.md` 的三個應用程式，簽章的那一個排第一。系統照這個順序 SELECT，選到一個就把卡片交給 app；app 之後用名稱 SELECT 的只能是這三個（#85）。卡片管理員的兩個在 iPhone 上選得到（[#89](https://github.com/iamreal-tw/iamreal/issues/89)）
   - `UIRequiredDeviceCapabilities`：`nfc`
-- `Tests/BuildTests.swift` 對 app 的 `Info.plist` 檢查這三項。entitlement 在模擬器上看不出來：用線裝到手機的 build 由 Xcode 簽章時放進去；上傳的 build 見「合併後才驗得到的」
+- `Tests/BuildTests.swift` 對 app 的 `Info.plist` 檢查這三項。entitlement 由 `check-app.sh` 檢查：組態用的那個檔，和模擬器的 build 放在執行檔裡的那一份（`__TEXT,__entitlements`）。用線裝到手機的 build 由 Xcode 簽章時放進去；上傳的 build 見「合併後才驗得到的」
+
+## app 網域
+
+正式 app 和測試 app 的 entitlement 有 `com.apple.developer.associated-domains`，只有一項 `applinks:test-app.iamreal.tw`：在 iPhone 上打開測試網站的 app 網域的任何網址（Universal Links），裝了 app 就打開 app（[#527](https://github.com/iamreal-tw/iamreal/issues/527)、[#532](https://github.com/iamreal-tw/iamreal/issues/532)）。app 網域跟著 app 連的網站（ADR-0040「app 網域跟著連的網站」）：上線前兩個 app 都連測試網站，所以都認它；網站那一邊，`test-app.iamreal.tw/.well-known/apple-app-site-association` 列出這兩個 app（`worker/`）。開發用 build 不認任何 app 網域：它的 App ID 沒有開 Associated Domains，用線裝的人也不用改網站的檔。
+
+- **app 不讀網址。** 從連結打開和從主畫面打開完全相同：`App/` 沒有任何收網址的地方（`onOpenURL`、`onContinueUserActivity`、`NSUserActivity`、app 或 scene 的 delegate），`Info.plist` 也不註冊自己的網址前綴（`CFBundleURLTypes`），`check-app.sh` 擋下這些名稱（[#92](https://github.com/iamreal-tw/iamreal/issues/92)）。所以別人的連結塞不進帳號或任何東西。app 只有一個畫面（`WindowGroup`），系統把它叫到前面：過卡做到一半時被連結打開，畫面停在原本那一步，不重來
+- **檢查。** `check-app.sh` 核對每個組態用的 entitlement 檔（專案檔的 `CODE_SIGN_ENTITLEMENTS`）和檔的內容：正式 app、測試 app 是 `Config/IamrealApp.entitlements`，有 `TAG` 和 `applinks:test-app.iamreal.tw` 這兩項、沒有別的；開發用 build 是 `Config/IamrealAppDev.entitlements`，只有 `TAG`。app 帶著 entitlement 的時候（模擬器的 build 在執行檔裡、簽過章的 app 在簽章裡）也核對 app 帶的那一份。上傳的工作流程用同一個檔簽 ad hoc 的章，簽好之後再核對一次（「上傳到 TestFlight」）
+- **App ID 和描述檔。** 兩個 App ID 都開了 Associated Domains，App Store 描述檔照著重發（[#529](https://github.com/iamreal-tw/iamreal/issues/529)）。App Store 描述檔的 `com.apple.developer.associated-domains` 是 `*`，app 實際宣告哪個網域由 entitlement 檔決定
+- **還沒在手機上確認的**（#527 的實機驗收）：相機掃 QR code、Safari 和 Threads 內建的瀏覽器裡按按鈕會不會打開 app；過卡做到一半時被連結打開是不是停在原本那一步；正式 app 和測試 app 裝在同一支 iPhone 上時開哪一個（Apple 的文件沒有寫）；Apple 的 CDN 抓不抓得到檔（`https://app-site-association.cdn-apple.com/a/v1/test-app.iamreal.tw`）
+- **上線那天**（ADR-0040 Consequences）：正式 app 改用一個自己的 entitlement 檔，`applinks:app.iamreal.tw`，專案檔 Release 的 `CODE_SIGN_ENTITLEMENTS` 指向它，`upload-ios.yml` 簽 ad hoc 的章和核對的那兩步跟著改，`check-app.sh` 給 Release 新的網域和檔名；測試 app 和開發用 build 照舊。網站那一邊，`test-app.iamreal.tw` 的檔拿掉正式 app，`app.iamreal.tw` 的檔列正式 app
 
 一次感應裡做的事（`App/NFCCard.swift`、`App/GpkiCard.swift`）：
 
@@ -288,6 +299,8 @@ app 的最後一個建置階段跑 `check-app.sh`，不過就是建置失敗。�
 - 內建的電路檔、驗證金鑰和程式庫裡的逐位元組相同，參數檔的 SHA-256 等於 `device-core/crs.sha256`
 - app 裡沒有任何執行檔連結 `AdSupport` 或 `AppTrackingTransparency`；沒有 `Frameworks/`；專案檔沒有 Swift 套件。這是「沒有第三方 SDK」能從建置看出來的部分
 - 原始碼沒有 `identifierForVendor`
+- entitlement 是那一種 app 的：讀卡只有 `TAG`；正式 app、測試 app 的 app 網域只有 `test-app.iamreal.tw`，開發用 build 沒有（上面「app 網域」）
+- app 不讀打開它的網址：原始碼沒有 `onOpenURL`、`onContinueUserActivity`、`NSUserActivity`、app 或 scene 的 delegate 這些名稱，`Info.plist` 沒有 `CFBundleURLTypes`
 - `App/` 的原始碼沒有寫 log 或標準輸出的呼叫（`print`、`NSLog`、`os_log`、`Logger`、`FileHandle.standardError`、`fatalError` 等），Debug 也沒有；`device-core/` 兩個套件的 `src/` 沒有 `println!`、`eprintln!`、`dbg!`，也沒有拿 `stdout()`、`stderr()`。所以 release build 自己不輸出 log
 - 模擬器的 Debug 以外的 app，執行檔裡沒有 `idc_testing_session_open` 和測試用函式庫的記號（上面「模擬器的函式庫認測試金鑰」）
 - 原始碼只經過 `App/Bridge.h` 碰 C：它是 app 的 bridging header，內容只有引入 `device-core/` 標頭檔的那一行，`App/` 裡沒有別的 C、Objective-C 或 module map。測試的 target 另有 `Tests/Bridge.h`，內容只有引入測試用標頭檔的那一行。靜態函式庫裡還有 Barretenberg 自己的 C 函式，app 不准呼叫（`device-core/README.md`「Poseidon2 不開放成 C 函式」）
@@ -357,7 +370,7 @@ gh workflow run upload-ios-test.yml --repo iamreal-tw/iamreal --ref main   # 測
 | | `build` | `upload` |
 |---|---|---|
 | 拿得到金鑰 | 不能 | 能：environment `app-test` 的 App Store Connect API 金鑰（開發者角色的團隊金鑰，#161）、Apple Distribution 發布憑證和描述檔（#143），那個 environment 只讓 `main` 上的執行拿 |
-| 跑什麼 | 這個程式庫的程式：`build-core.sh device`，再 `archive.sh`（測試 app 是 `archive.sh --test-app`） | 不取出程式庫、不跑它的任何腳本：解開 `build` 交下來的 tar 檔，把團隊代號寫進 `ExportOptions.plist`，把發布憑證放進自己的鑰匙圈、裝好描述檔，先簽一次檢查 NFC 的 entitlement，再用 Xcode 的 `xcodebuild -exportArchive` 簽章、上傳 |
+| 跑什麼 | 這個程式庫的程式：`build-core.sh device`，再 `archive.sh`（測試 app 是 `archive.sh --test-app`） | 不取出程式庫、不跑它的任何腳本：解開 `build` 交下來的 tar 檔，把團隊代號寫進 `ExportOptions.plist`，把發布憑證放進自己的鑰匙圈、裝好描述檔，先簽一次檢查 entitlement，再用 Xcode 的 `xcodebuild -exportArchive` 簽章、上傳 |
 | 交出去的 | archive 包成一個 tar 檔（artifact 不保留檔案的權限），加 `ExportOptions.plist` | 上傳到 App Store Connect |
 
 - **`archive.sh`** 做 Release（帶 `--test-app` 時 TestApp）的 archive，不簽章（`CODE_SIGNING_ALLOWED=NO`；這個工作沒有能簽章的東西），最後跑 `check-archive.sh`。建置時 `check-app.sh` 照常當最後一個建置階段跑。
@@ -373,9 +386,9 @@ gh workflow run upload-ios-test.yml --repo iamreal-tw/iamreal --ref main   # 測
   | `IOS_APPSTORE_PROFILE_BASE64` | `tw.iamreal.app` 的 App Store 描述檔，base64 | `upload-ios.yml` |
   | `IOS_TEST_APPSTORE_PROFILE_BASE64` | `tw.iamreal.app.test` 的 App Store 描述檔，base64 | `upload-ios-test.yml` |
 
-  描述檔要包含 NFC Tag Reading：`upload` 檢查描述檔是這個 app、這個團隊，而且允許 NFC 的 `TAG`，不是就停。App ID 的能力改了，描述檔就失效要重做（[Enable app capabilities](https://developer.apple.com/help/account/identifiers/enable-app-capabilities/)：「Provisioning profiles that contain a modified App ID become invalid.」）。
+  描述檔要包含 NFC Tag Reading 和 Associated Domains：`upload` 檢查描述檔是這個 app、這個團隊，允許 NFC 的 `TAG`，而且有 Associated Domains，不是就停。App ID 的能力改了，描述檔就失效要重做（[Enable app capabilities](https://developer.apple.com/help/account/identifiers/enable-app-capabilities/)：「Provisioning profiles that contain a modified App ID become invalid.」）。
 - **憑證和描述檔有到期日，到期前要換。** 到期日在 Apple Developer 網站的 Certificates、Profiles 頁上看得到；換的時候營運者重做、換掉上面的 secret。`.p12` 用「鑰匙圈存取」匯出：OpenSSL 3 預設的加密方式做的 `.p12`，`security import` 可能讀不了。撤銷憑證時，App Store 上的 app 不受影響，但已經上傳、還沒送審的 build 可能變成無效（[Certificates overview](https://developer.apple.com/help/account/certificates/certificates-overview/)）。
-- **先簽一次、不上傳，檢查 NFC 的 entitlement。** Xcode 簽出來的 entitlement 要到這裡才看得到；`upload` 先用 `destination` `export` 簽一次，從簽好的 app 讀出 entitlement：`com.apple.developer.nfc.readersession.formats` 要剛好是 `TAG` 一個，和 `Config/IamrealApp.entitlements` 相同，不多不少；識別碼要對，才往下簽章上傳。
+- **先簽一次、不上傳，檢查 entitlement。** Xcode 簽出來的 entitlement 要到這裡才看得到；`upload` 先用 `destination` `export` 簽一次，從簽好的 app 讀出 entitlement，要和 `Config/IamrealApp.entitlements` 相同，不多不少：`com.apple.developer.nfc.readersession.formats` 剛好是 `TAG` 一個，`com.apple.developer.associated-domains` 剛好是 `applinks:test-app.iamreal.tw` 一個（「app 網域」）；識別碼要對，才往下簽章上傳。
 - **團隊代號**是 environment `app-test` 的 variable `APPLE_TEAM_ID`（不是 secret：每個簽過的 app 裡都看得到它）。archive 只有 ad hoc 的章、沒有團隊，匯出要知道用哪個團隊（`xcodebuild -help`：`teamID`「Defaults to the team used to build the archive」）。沒有設這個 variable，`upload` 在拿到金鑰之前就失敗。團隊代號不寫進程式庫（「怎麼用線裝到手機」）。
 - **`manageAppVersionAndBuildNumber` 是 `false`**：版本和 build 用 `archive.sh` 給的，Xcode 不另外改。`uploadSymbols` 是 `true`：Apple 收到當機報告時能還原成函式名稱（[#94](https://github.com/iamreal-tw/iamreal/issues/94)：當機只看商店自己的報告）。
 
@@ -398,6 +411,7 @@ gh workflow run upload-ios-test.yml --repo iamreal-tw/iamreal --ref main   # 測
 - `build` 交下去的 tar 檔、`upload` 解開它和把團隊代號寫進 `ExportOptions.plist`：第一次執行（run 45933174888）都跑過了，失敗在之後的簽章
 - `build` 的指令：`checks-ios.yml` 每次用同樣的 `archive.sh` 做一次 archive、跑 `check-archive-test.sh`，所以拉取請求時就看得到；它沒有包成 tar 檔交下去
 - `upload` 的手動簽章：鑰匙圈、描述檔、Xcode 簽章在 run 46001796708 都跑過了；還沒跑到的是開發者角色的金鑰能不能上傳（[Roles](https://developer.apple.com/help/account/access/roles/) 的「Upload builds」開發者那一欄寫要有 Certificates, Identifiers & Profiles 的權限，API 金鑰算不算有，文件沒有寫）、App Store Connect 收不收這個 build
+- app 網域的 entitlement（#532）：Xcode 用重發的描述檔重簽時帶不帶上 `applinks:test-app.iamreal.tw`，要等 entitlement 進了 `main` 之後兩個工作流程各跑一次才看得到；`upload` 先簽一次的那一步會看
 - 讀卡的 entitlement（`Config/IamrealApp.entitlements`，[#174](https://github.com/iamreal-tw/iamreal/issues/174)）：沒有 ad hoc 簽章時，Xcode 簽出來的 app 沒有 NFC（run 46001796708）。有了 ad hoc 簽章之後，Xcode 重簽時會不會照它帶上 NFC，`upload` 先簽一次的那一步會看；不會的話那一步失敗，不會上傳
 
 ### 上傳之後營運者做的
