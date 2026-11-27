@@ -1,7 +1,8 @@
 // The per-IP limits of ADR-0026, its third layer: Workers' Rate Limiting
 // binding, one binding to a class of request, each with its own limit in
 // wrangler.jsonc ("ratelimits"). What the binding counts is a key this
-// file makes: the class and where the request came from.
+// file makes: the class and where the request came from. Below them, the
+// site-wide limit, which is not a binding (`withinStarts`, starts.ts).
 //
 // - An IPv4 address is counted by itself; an IPv6 address by its /64, since
 //   one machine usually has a whole /64 to take addresses from.
@@ -17,10 +18,16 @@
 // The binding answers yes or no and nothing else: not how many requests are
 // left, nor when the count starts again. Its period here is 60 seconds, so
 // a request that is turned away is told to come back in 60 (`Retry-After`),
-// which is the longest it can take. The count is Cloudflare's, apart in
-// each of its locations and approximate
+// which is the longest it can take. The count is Cloudflare's and
+// approximate
 // (https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/):
-// the limits stop one source's flood, they do not meter anyone.
+// the limits stop one source's flood, they do not meter anyone. Measured on
+// the test site, the count is one to each of Cloudflare's machines, not one
+// to each location: 50 requests over one connection were turned away from
+// the 30th on, 100 that each opened a connection were all let through. So
+// these limits stop a network that sends many requests over one
+// connection; one that opens a connection for each is for the WAF's rule,
+// the second layer of ADR-0026 (README.md, "限流").
 //
 // Nothing is written for a request that is turned away, here or in the
 // connection log (ADR-0022).
@@ -128,18 +135,42 @@ export async function withinLimit(env: Env, kind: RateClass, request: Request): 
  * minute, whoever starts them. A card proof starts when the cardholder
  * presses the button that begins it, and the client then asks for
  * `GET /api/v1/config?start` (docs/api/card-proof.md); only that request
- * is counted here, under one key for the whole site, so the count is of
- * people starting, not of the other times a client asks for `config`.
- * Counted apart in each of Cloudflare's locations, as every limit here: the
- * connections from Taiwan mostly come in through one. A request without an
- * address is counted too: there is no network to leave out.
+ * is counted here, so the count is of people starting, not of the other
+ * times a client asks for `config`. A request without an address is
+ * counted too: there is no network to leave out.
+ *
+ * Not a binding like the limits above: with one key for the whole site, the
+ * binding's count on each of Cloudflare's machines let a minute's limit
+ * through on every machine a request came in on (README.md, "全站的總量上限").
+ * The count is kept by one Durable Object of its own (starts.ts), so it is
+ * one for the whole site, every location together.
  */
-export const STARTS_KEY = "starts";
+const STARTS_OBJECT = "starts";
 
-/** Whether one more card proof may start this minute, and counts it. A binding that fails or is not there lets it start, and says so in the live log. */
+/** The most card proofs a minute may be set to let start. */
+const MOST_STARTS_PER_MINUTE = 100_000;
+
+/**
+ * How many card proofs may start in a minute (`CARD_PROOF_STARTS_PER_MINUTE`,
+ * wrangler.jsonc): plain digits, 0 to 100,000. Throws for anything else.
+ */
+function startsPerMinuteOf(env: Env): number {
+  const set: unknown = (env as { CARD_PROOF_STARTS_PER_MINUTE?: unknown }).CARD_PROOF_STARTS_PER_MINUTE;
+  if (typeof set !== "string" || !/^(0|[1-9][0-9]{0,5})$/.test(set) || Number(set) > MOST_STARTS_PER_MINUTE) throw new Error("CARD_PROOF_STARTS_PER_MINUTE is not a number of starts");
+  return Number(set);
+}
+
+/**
+ * Whether one more card proof may start this minute, and counts it. An
+ * object that fails or is not there, or a setting that cannot be read, lets
+ * it start, and says so in the live log, as a binding of the limits above
+ * does. An overloaded object is one of those: the proof log's object, asked
+ * next, answers `busy` itself when it is overloaded (api.ts).
+ */
 export async function withinStarts(env: Env): Promise<boolean> {
   try {
-    return (await env.RATE_STARTS.limit({ key: STARTS_KEY })).success;
+    const perMinute = startsPerMinuteOf(env);
+    return await env.STARTS.get(env.STARTS.idFromName(STARTS_OBJECT)).start(perMinute);
   } catch (e) {
     console.error(JSON.stringify({ event: "rate_limit_unavailable", class: "starts", error: e instanceof Error ? e.name : "unknown" }));
     return true;

@@ -56,6 +56,8 @@ export interface TestSettings {
   readonly TEST_PROOF_LOG_CLEARED_ON?: string;
   /** How many counts a minute's file holds (src/counts.ts). wrangler.jsonc sets "600". */
   readonly COUNT_EVENTS_PER_MINUTE?: string;
+  /** How many card proofs may start in a minute, the whole site together (src/rate-limit.ts, `withinStarts`). wrangler.jsonc sets "60". */
+  readonly CARD_PROOF_STARTS_PER_MINUTE?: string;
 }
 
 /**

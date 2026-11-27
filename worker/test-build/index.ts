@@ -148,6 +148,9 @@ const FAILING_WRITES = {
 } as const;
 type FailingWrite = keyof typeof FAILING_WRITES;
 
+/** The site-wide limit's object: the deployed one, as it is. */
+export { Starts } from "../src/starts.ts";
+
 /**
  * The counts' object of the test build: the deployed one, whose alarm a
  * test rings when it has moved the clock (`POST /__test/counts/alarm`). The
