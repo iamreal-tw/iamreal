@@ -376,7 +376,7 @@ async function noLinkOut(label: string): Promise<void> {
 }
 const stepLine = (n: number) => fill(C.common.step, { step: n, steps: 7 });
 
-/** Step 1's two links, in the question on how to get a card: a map's search, MOICA's site; each in a new tab, nothing else (card-proof.md, step 1). */
+/** Step 1's two links, in the question on how to get a card: a map's search, MOICA's page on applying; each in a new tab, nothing else (card-proof.md, step 1). */
 const STEP1_LINKS = [
   [C.before.find_office, "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent("戶政事務所")],
   [C.before.how_to_get_moica, "https://moica.nat.gov.tw/rac.html"],

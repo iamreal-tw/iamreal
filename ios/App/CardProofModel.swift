@@ -276,7 +276,7 @@ final class CardProofModel: ObservableObject {
     /// The app asks for no location; what is near is the map's to tell.
     /// Nothing of the card proof goes with it (design/copy/card-proof.md, step 1).
     static let findOffice = URL(string: "https://maps.apple.com/?q=%E6%88%B6%E6%94%BF%E4%BA%8B%E5%8B%99%E6%89%80")!
-    /// MOICA's site: its page on applying is not checked yet (card-proof.md, step 1).
+    /// MOICA's page on applying: who can apply, where and when, what to bring (card-proof.md, step 1).
     static let moica = URL(string: "https://moica.nat.gov.tw/rac.html")!
 
     // The screens that show the reminder ---------------------------------------------

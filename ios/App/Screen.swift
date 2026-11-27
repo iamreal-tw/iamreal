@@ -288,7 +288,7 @@ enum Action: Equatable {
     case openStore
     /// The phone's map, searching for household registration offices (step 1).
     case findOffice
-    /// MOICA's site, in the browser (step 1).
+    /// MOICA's page on applying, in the browser (step 1).
     case howToApply
     /// Tap 3, the proof and the submission.
     case declare

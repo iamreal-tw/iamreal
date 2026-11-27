@@ -142,7 +142,7 @@ final class CardProofTests: XCTestCase {
             "內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）",
             "下一步",
         ])
-        // The two ways to a card: the phone's map, and MOICA's site. Nothing of the app goes with them.
+        // The two ways to a card: the phone's map, and MOICA's page on applying. Nothing of the app goes with them.
         try await press("找附近的戶政事務所", in: model)
         XCTAssertEqual(opened.last?.absoluteString.removingPercentEncoding, "https://maps.apple.com/?q=戶政事務所")
         try await press("內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）", in: model)
