@@ -73,8 +73,8 @@ const MALFORMED = fail(400, "malformed");
  * record with (docs/api/card-proof.md). `503` when nothing is wrong with
  * the request and the back end cannot take it for now: `paused`, no card
  * proof at all; `crl_stale`, none of the record's issuer key, whose newest
- * CRL is too old, while the other issuer key's are taken as ever. `403`
- * for the back end's own policy, `400` otherwise.
+ * CRL is too old, while the other issuer key's are taken as ever. `400`
+ * otherwise.
  */
 const REFUSAL_STATUS: Readonly<Record<SubmissionRefusal | RecordRefusal, number>> = {
   paused: 503,

@@ -26,8 +26,8 @@
 //
 // Whether a record is valid is never decided here: that is the record rules'
 // (protocol/, applyRecord), called with the state this object keeps. What
-// this file decides is the back end's own: the challenge, which roots it
-// takes today, and its policy on switches (docs/api/card-proof.md).
+// this file decides is the back end's own: the challenge and which roots it
+// takes today (docs/api/card-proof.md).
 import { DurableObject } from "cloudflare:workers";
 import { now } from "#target";
 import { encodeBase32 } from "iamreal-protocol/base32.ts";
@@ -659,8 +659,7 @@ export class ProofLog extends DurableObject<Env> {
    * `fields` are the record's fields except `seq`, each in its format. In
    * the order of docs/api/card-proof.md: the challenge again (a record may
    * have been written for it, or it may have expired, while the proof was
-   * being verified); the back end's rule on `smt_root`; the record rules;
-   * the back end's policy on switches.
+   * being verified); the back end's rule on `smt_root`; the record rules.
    *
    * The record's `seq` is the count of records plus one, and its hash needs
    * the `seq`. Hashing gives way to other requests, so the hash is computed

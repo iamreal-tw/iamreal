@@ -317,11 +317,11 @@ Submits one card proof: the card's whole list of accounts.
   submissions. The challenge is looked at twice (below), and a submission
   counts once the challenge passed the first look, wherever it fails after
   that: a proof that does not verify, `crl_stale`, a root that is not
-  accepted, a list the record rules refuse, a
-  `challenge_used` or `challenge_unknown` of the second look, and a `500`
-  when the server's verifier could not run or the record could not be
-  written. One that is `paused`, or `challenge_unknown` or `challenge_used`
-  at the first look, does not count. Neither does one the server fails on
+  accepted, a list the record rules refuse, a `challenge_used` or
+  `challenge_unknown` of the second look, and a `500` when the server's
+  verifier could not run or the record could not be written. One that is
+  `paused`, or `challenge_unknown` or `challenge_used` at the first look,
+  does not count. Neither does one the server fails on
   (`500`) before it has counted it: it could not read its settings or what
   it stores, or the write that counts the submission itself failed. The
   submissions that count are the ones the connection log has an entry for,

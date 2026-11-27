@@ -32,9 +32,8 @@
 //    it is; then the Worker restarted: the fourth and fifth switches
 //    recorded, step 4 saying none is left and refusing another account typed
 //    anyway, and a sixth refused by the record rules (switch_limit). Along
-//    the way: a submission
-//    that did not get through (再試一次), one the server refused (its
-//    request ID on the screen); 回到開頭 and 取消 on steps 4 and 5, then card
+//    the way: a submission that did not get through (再試一次), one the
+//    server refused (its request ID on the screen); 回到開頭 and 取消 on steps 4 and 5, then card
 //    proofs again on the same page with the same proof engine; step 3's
 //    上一步; the PIN's wait running out; a window the browser blocked on each
 //    of the three clicks; every case that stops before the PIN is asked,
@@ -1863,7 +1862,7 @@ await tryStep("the same page after 回到開頭, 取消 and the wait: card proof
 
 await tryStep("the Worker restarted", async () => {
   // The whole Worker and its Durable Object stop and start again: what they stored and the bucket's files stay,
-  // the settings the test gave are gone (worker/test/harness.ts), and the clock is set again with the next request.
+  // and the clock is set again with the next request.
   const before = await recordCount();
   await worker.restart();
   const config = await (await fetch(`${PAGE_ORIGIN}/api/v1/config`)).json();
