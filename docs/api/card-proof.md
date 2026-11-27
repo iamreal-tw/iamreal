@@ -176,7 +176,6 @@ them and from today's date in Taiwan by its own clock:
 | Switches left on a platform, out of 5 | 5 minus that entry's `switch_count` |
 | Whether changing the account on a platform today uses a switch | No if that entry's `correction_date` is today (a correction); yes otherwise |
 | What a list would do on a platform | Its entry against the slot: `first`, `refresh`, `correction`, `switch`, `withdraw`, or blocked ([`spec/record-rules.md`](../../spec/record-rules.md), "Event rules") |
-| Whether the server may refuse a switch the rules allow | Only by an operating policy of the server; there is none by default (`switch_restricted`, below) |
 
 What the device does with it: shows the card's whole list, and lets the
 cardholder change it. Before the card signs, the device shows the whole list
@@ -257,9 +256,8 @@ Submits one card proof: the card's whole list of accounts.
   ([`spec/proof-verification.md`](../../spec/proof-verification.md)); checks
   that `smt_root` is the root of one of the two newest CRLs of `issuer` in
   the mirror and that the newest is at most 3 days old; applies the record
-  rules; applies its own policy on switches (`switch_restricted`). If
-  everything passes it appends the record and marks the challenge as
-  accepted, in one transaction.
+  rules. If everything passes it appends the record and marks the challenge
+  as accepted, in one transaction.
 - Response `201`:
 
   ```
@@ -311,7 +309,6 @@ Submits one card proof: the card's whole list of accounts.
   | `400` | `root` | `smt_root` is not one of the two newest roots of the issuer |
   | `400` | `date_order` | The record rule of that name (check 4): the challenge's date is more than 4 days before the latest date among the valid records of the proof log, or before the card's `last_card_proof`. The second happens to a card that took two challenges around midnight and submitted the later-dated one first; the earlier one cannot be submitted, and the card proof is made again with a new challenge. The whole list is refused; nothing is recorded for any platform |
   | `400` | `empty`, `switch_limit`, `daily_limit` | The record rule of that name. The whole list is refused; nothing is recorded for any platform |
-  | `403` | `switch_restricted` | The record rules accept the record, but the server's operating policy does not accept a switch in it. The whole list is refused |
   | `503` | `crl_stale` | The newest CRL of the record's issuer key is more than 3 days old, or the server has none; no card proof of that issuer key is accepted |
   | `429` | `rate_limited` | The network sent too many submissions in this minute ("Rules for every endpoint"). The submission was not read and does not count |
   | `503` | `busy` | The proof log is overloaded ("Rules for every endpoint"). The same submission can be sent again |
@@ -320,7 +317,7 @@ Submits one card proof: the card's whole list of accounts.
   submissions. The challenge is looked at twice (below), and a submission
   counts once the challenge passed the first look, wherever it fails after
   that: a proof that does not verify, `crl_stale`, a root that is not
-  accepted, a list the record rules refuse, `switch_restricted`, a
+  accepted, a list the record rules refuse, a
   `challenge_used` or `challenge_unknown` of the second look, and a `500`
   when the server's verifier could not run or the record could not be
   written. One that is `paused`, or `challenge_unknown` or `challenge_used`
@@ -362,9 +359,9 @@ Submits one card proof: the card's whole list of accounts.
 
   When several of the later codes apply, the first in this order: `paused`,
   `challenge_unknown`, `challenge_used`, `challenge_attempts`, `proof`,
-  `crl_stale`, `root`, the record rules in their own order, then
-  `switch_restricted`. A proof made for one list and submitted with another
-  is `proof`: the declaration code does not match.
+  `crl_stale`, `root`, the record rules in their own order. A proof made
+  for one list and submitted with another is `proof`: the declaration code
+  does not match.
 
   The challenge is looked at twice: before the proof is verified, and again
   at the moment the record is written. A challenge that passed the first
@@ -404,17 +401,6 @@ Submits one card proof: the card's whole list of accounts.
   `switch_limit` does not say which platform is blocked. The device knows
   from the state it showed; if it is surprised by the code, the state has
   changed, and it asks for it again.
-
-  **`switch_restricted`** is a rule of the server, not of the proof log
-  ([`spec/record-rules.md`](../../spec/record-rules.md), "Not part of these
-  rules"). The record rules give a card 5 switches on each platform. The
-  server may, by its operating policy, refuse a switch that is within the
-  rules' limit. By default it has no such policy. It never refuses on this
-  ground a record without a `switch` (a `first`, `refresh`, `correction` or
-  `withdraw` on every platform). Nobody can check from the proof log why a
-  record was not appended; anybody can check that a record that was
-  appended is within the 5. A device that gets this code shows it as it is:
-  the server did not accept the switch, and the card proof is not recorded.
 
   A device that gets a code it does not know shows it as an error of the
   server, with the request ID, and treats the card proof as not recorded.

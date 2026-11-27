@@ -502,59 +502,6 @@ describe("the record rules", () => {
   });
 });
 
-describe("the back end's policy on switches", () => {
-  /** A card with three switches on threads and a slot on test-example, on day 4. */
-  async function threeSwitches(): Promise<{ card: string; root: string }> {
-    const root = await publishG3(worker);
-    const card = newCard();
-    await mustSubmit(worker, await sub(worker, card, root, "threads:a"), "threads first");
-    for (const [i, u] of ["b", "c", "d"].entries()) {
-      await day(worker, i + 1);
-      await mustSubmit(worker, await sub(worker, card, root, `threads:${u}`), "threads switch");
-    }
-    await mustSubmit(worker, await sub(worker, card, root, "threads:dd"), "threads correction");
-    await day(worker, 4);
-    await mustSubmit(worker, await sub(worker, card, root, "test-example:a-b", "threads:dd"), "test-example first, threads refresh");
-    await mustSubmit(worker, await sub(worker, card, root, "test-example:c-d", "threads:dd"), "test-example correction, threads refresh");
-    return { card, root };
-  }
-
-  test("by default there is none: the fourth and the fifth switch are written, the sixth is the rules' switch_limit", async () => {
-    await fresh();
-    const { card, root } = await threeSwitches();
-    await mustSubmit(worker, await sub(worker, card, root, "test-example:c-d", "threads:e"), "test-example refresh, threads switch");
-    await day(worker, 5);
-    await mustSubmit(worker, await sub(worker, card, root, "test-example:c-d", "threads:f"), "test-example refresh, threads switch");
-    await mustSubmit(worker, await sub(worker, card, root, "test-example:c-d", "threads:ff"), "test-example refresh, threads correction");
-    await day(worker, 6);
-    await wantError(worker, await sub(worker, card, root, "threads:g"), 400, "switch_limit");
-  });
-
-  test("when it is on: a fourth switch the rules accept is 403 switch_restricted and nothing is written; a record without a switch is never refused for it; the rules' own codes come first", async () => {
-    await fresh({ restrictLateSwitches: true });
-    const { card, root } = await threeSwitches();
-    const fourth = await sub(worker, card, root, "test-example:c-d", "threads:e");
-    const before = await state(card);
-    await wantError(worker, fourth, 403, "switch_restricted");
-    assert.deepEqual(await state(card), before);
-    assert.equal(await count(), 7);
-    assert.equal((await checkProofLog(worker)).length, 7);
-    await mustSubmit(worker, { ...fourth, accounts: list("test-example:c-d") }, "test-example refresh, threads withdraw");
-    // The card's third record of the day was written: a fourth is the rules' daily_limit, not the policy's code.
-    await wantError(worker, await sub(worker, card, root, "threads:e"), 400, "daily_limit");
-    await day(worker, 5);
-    await wantError(worker, await sub(worker, card, root, "threads:e"), 403, "switch_restricted");
-    await wantError(worker, await sub(worker, newCard(), root), 400, "empty");
-    // A first switch of another slot is not a late one.
-    await mustSubmit(worker, await sub(worker, card, root, "test-example:e-f"), "test-example switch");
-  });
-
-  test("a value of the setting that is neither true nor false: nothing answers", async () => {
-    await worker.setSettings({ PROOF_LOG_KIND: "test", PROOF_LOG_OBJECT_NAME: await fresh(), RESTRICT_LATE_SWITCHES: "yes" });
-    for (const [method, path] of [["POST", "/api/v1/challenges"], ["GET", "/api/v1/config"], ["POST", "/api/v1/records"]] as const) assert.equal((await worker.fetch(path, { method })).status, 500, path);
-  });
-});
-
 describe("the order of the codes when several apply", () => {
   test("challenge_unknown, challenge_used, challenge_attempts, proof, crl_stale, root, the record rules", async () => {
     await fresh();

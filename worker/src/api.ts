@@ -87,7 +87,6 @@ const REFUSAL_STATUS: Readonly<Record<SubmissionRefusal | RecordRefusal, number>
   empty: 400,
   switch_limit: 400,
   daily_limit: 400,
-  switch_restricted: 403,
 };
 
 const refuse = (code: SubmissionRefusal | RecordRefusal): Reply => fail(REFUSAL_STATUS[code], code);
@@ -182,8 +181,7 @@ async function postChallenge(_request: Request, env: Env): Promise<Reply> {
  *   3. here: the record verifies (`proof`), outside the object, so that a
  *      proof being verified does not hold up the proof log;
  *   4. the object: the challenge again, the back end's rule on `smt_root`
- *      (`crl_stale`, `root`), the record rules, the back end's policy on
- *      switches (`switch_restricted`); then the record is written.
+ *      (`crl_stale`, `root`), the record rules; then the record is written.
  *
  * A verifier that could not run gives no verdict: the answer is `500`, and
  * the object is not asked to write anything.
