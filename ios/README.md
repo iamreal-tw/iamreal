@@ -60,7 +60,7 @@
 | `App/BundledFile.swift` | 包進 app 的檔案 |
 | `App/IamrealApp.swift` | app 的進入點：用上面那些組出這個 build 的過卡 |
 | `App/Bridge.h` | Swift 看得到的 C：只有 `device-core/include/iamreal_device_core.h` |
-| `App/Assets.xcassets` | app 的圖示。暫時的：網站的 `--teal`（`#226977`）一整片，沒有字和圖案，正式的圖示在 [#154](https://github.com/iamreal-tw/iamreal/issues/154) 定。App Store Connect 不收沒有圖示的 build |
+| `App/Assets.xcassets` | app 的圖示：記號放在白底上（[#490](https://github.com/iamreal-tw/iamreal/issues/490)），和 Android 的相同。1024×1024、沒有透明度（App Store Connect 不收有透明度的圖示，也不收沒有圖示的 build），由 `android/test/AppIcon.java` 照 Android 的圖示畫出來（`android/README.md`「圖示」），不要手改 |
 | `Config/Shared.xcconfig`、`Config/Test.xcconfig` | 最低的 iOS 版本、只做 iPhone、連結哪一份核心；三種 app 的識別碼和測試網站的環境 |
 | `Config/Info.plist`、`Config/IamrealApp.entitlements` | 讀卡要的宣告（「讀卡的宣告」）。`Info.plist` 的其他項目照專案檔的設定產生，和這個檔合在一起 |
 | `IamrealApp.xcodeproj` | 手寫的 Xcode 專案，兩個 target：`IamrealApp`、`IamrealAppTests`。`App/`、`Tests/` 是跟著資料夾走的群組，加檔案不用改專案檔 |

@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
-# Puts a signed bundle of tw.iamreal.app on Google Play's internal testing
-# track (ADR-0036, ADR-0037), with the Google Play Developer API
+# Puts a signed bundle of an app on Google Play's internal testing track
+# (ADR-0036, ADR-0040), with the Google Play Developer API
 # (https://developers.google.com/android-publisher), by curl, openssl and
 # jq alone: no action or tool besides what the runner has.
 #
-#   play-upload.sh <signed bundle>
+#   play-upload.sh <package> <signed bundle>
+#
+# <package> is the app's on Google Play, as its workflow names it:
+# tw.iamreal.app (upload-android.yml), tw.iamreal.app.test
+# (upload-android-test.yml). It is the identifier the bundle was built
+# with; Google Play turns away a bundle of another.
 #
 # PLAY_SERVICE_ACCOUNT_JSON is the key of the service account (#162), as
 # Google gives it (JSON). Its permissions in Play Console are the app's
 # "Release apps to testing tracks", which "Does not allow users to publish
-# apps to production on Google Play" (ADR-0036), and two that only read.
+# apps to production on Google Play" (ADR-0036), and two that only read, in
+# each of the two apps (ADR-0040).
 #
 # 1. A token, for a JWT the account's key signs (Google's "Using OAuth 2.0
 #    for Server to Server Applications",
@@ -29,12 +35,17 @@
 # an edit left uncommitted changes nothing and expires.
 set -euo pipefail
 
-if [ "$#" -ne 1 ]; then
-  echo "usage: play-upload.sh <signed bundle>" >&2
+if [ "$#" -ne 2 ]; then
+  echo "usage: play-upload.sh <package> <signed bundle>" >&2
   exit 1
 fi
-bundle=$1
-package=tw.iamreal.app
+package=$1
+bundle=$2
+# A Java package name, as Android's applicationId is: it goes into the API's addresses.
+if ! [[ $package =~ ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$ ]]; then
+  echo "not a package name: $package" >&2
+  exit 1
+fi
 track=internal
 api="https://androidpublisher.googleapis.com/androidpublisher/v3/applications/$package"
 upload_api="https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications/$package"

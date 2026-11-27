@@ -594,6 +594,8 @@ const SIGN_ENV = "        env:\n          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ se
 const PLAY_ENV = "        env:\n          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}\n";
 const BUNDLE_RELEASE = '        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleRelease';
 const UPLOAD_JOBS_PROBLEM = /^upload-android\.yml: the jobs are not exactly the ones in test\/workflows\.ts/;
+const T = "upload-android-test.yml";
+const UPLOAD_TEST_JOBS_PROBLEM = /^upload-android-test\.yml: the jobs are not exactly the ones in test\/workflows\.ts/;
 const SECRETS_PROBLEM = /^the lines with "secrets" in them are/;
 
 const UPLOAD_ANDROID_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
@@ -630,7 +632,7 @@ const UPLOAD_ANDROID_CHANGES: Record<string, { changes: Change[]; problem: RegEx
     problem: SECRETS_PROBLEM,
   },
   "258 the service account's key put into the command": {
-    changes: [replace(A, 'run: bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"', 'run: echo "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" > key.json && bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"')],
+    changes: [replace(A, 'run: bash .github/workflows/play-upload.sh tw.iamreal.app "$RUNNER_TEMP/signed/app-release.aab"', 'run: echo "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" > key.json && bash .github/workflows/play-upload.sh tw.iamreal.app "$RUNNER_TEMP/signed/app-release.aab"')],
     problem: SECRETS_PROBLEM,
   },
   "259 the build job's token given more than the workflow's": {
@@ -656,6 +658,27 @@ const UPLOAD_ANDROID_CHANGES: Record<string, { changes: Change[]; problem: RegEx
   "264 a step of the upload job continuing when signing fails": {
     changes: [replace(A, "      - name: Sign the bundle with the upload key\n", "      - name: Sign the bundle with the upload key\n        continue-on-error: true\n")],
     problem: UPLOAD_JOBS_PROBLEM,
+  },
+  // upload-android-test.yml (#483): the same two jobs, for the test app (ADR-0040).
+  "265 the test app's upload building the production app": {
+    changes: [replace(T, "./gradlew --no-daemon bundleTrial ", "./gradlew --no-daemon bundleRelease ")],
+    problem: UPLOAD_TEST_JOBS_PROBLEM,
+  },
+  "266 the test app's bundle uploaded to the production app": {
+    changes: [replace(T, 'play-upload.sh tw.iamreal.app.test "', 'play-upload.sh tw.iamreal.app "')],
+    problem: UPLOAD_TEST_JOBS_PROBLEM,
+  },
+  "267 the test app's build numbers not above the production app's": {
+    changes: [replace(T, '"$(date -u +%Y-%m-%dT%H:%M:%SZ)" 1000000 >>', '"$(date -u +%Y-%m-%dT%H:%M:%SZ)" 0 >>')],
+    problem: UPLOAD_TEST_JOBS_PROBLEM,
+  },
+  "268 the test app's upload started by a push to main too": {
+    changes: [replace(T, "on:\n  workflow_dispatch:\n", "on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main\n")],
+    problem: /^upload-android-test\.yml: not triggered by hand \(workflow_dispatch\) only/,
+  },
+  "269 the test app's upload key given to its build job, where Gradle runs": {
+    changes: [replace(T, '        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleTrial', `${SIGN_ENV.replace("        env:\n", "")}        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleTrial`)],
+    problem: UPLOAD_TEST_JOBS_PROBLEM,
   },
 };
 

@@ -1,4 +1,4 @@
-// The scripts of .github/workflows/upload-android.yml, run here as its jobs
+// The scripts of .github/workflows/upload-android.yml and upload-android-test.yml, run here as their jobs
 // run them: the version the build gets, the signing of the bundle, and the
 // calls to Google Play's API (with curl replaced by a stand-in that answers
 // as the API does). The workflow itself is checked by test/workflows.test.ts.
@@ -13,9 +13,9 @@ import { WORKER_DIR } from "./build.ts";
 
 const WORKFLOWS_DIR = join(WORKER_DIR, "..", ".github", "workflows");
 
-/** Runs android-version.sh as the build job does: the run's number and the time now. */
-function version(runNumber: string, now: string): { status: number | null; stdout: string; stderr: string } {
-  const r = spawnSync("bash", [join(WORKFLOWS_DIR, "android-version.sh"), runNumber, now], { encoding: "utf8", env: { PATH: process.env.PATH ?? "" } });
+/** Runs android-version.sh as the build job does: the run's number, the time now, and the app's build-number offset (0: the production app's). */
+function version(runNumber: string, now: string, offset = "0"): { status: number | null; stdout: string; stderr: string } {
+  const r = spawnSync("bash", [join(WORKFLOWS_DIR, "android-version.sh"), runNumber, now, offset], { encoding: "utf8", env: { PATH: process.env.PATH ?? "" } });
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };
 }
 
@@ -52,6 +52,30 @@ test("android-version.sh: stops on a run number that is not a build number Googl
 
 test("android-version.sh: the greatest build number Google Play takes is taken", () => {
   assert.equal(version("2100000000", "2026-11-21T03:00:00Z").stdout, "name=2026.11.21\ncode=2100000000\n");
+  assert.equal(version("1100000000", "2026-11-21T03:00:00Z", "1000000000").stdout, "name=2026.11.21\ncode=2100000000\n");
+});
+
+test("android-version.sh: the test app's build is its run's number plus 1,000,000 (upload-android-test.yml, ADR-0040)", () => {
+  assert.equal(version("1", "2026-11-21T03:00:00Z", "1000000").stdout, "name=2026.11.21\ncode=1000001\n");
+  assert.equal(version("42", "2026-11-21T03:00:00Z", "1000000").stdout, "name=2026.11.21\ncode=1000042\n");
+});
+
+test("android-version.sh: stops on an offset that is not a number, or a build number above what Google Play takes", () => {
+  for (const [runNumber, offset] of [
+    ["7", ""],
+    ["7", "-1"],
+    ["7", "01000000"],
+    ["7", "1e6"],
+    ["2100000000", "1"],
+  ] as const) {
+    const r = version(runNumber, "2026-11-21T03:00:00Z", offset);
+    assert.notEqual(r.status, 0, JSON.stringify([runNumber, offset]));
+    assert.equal(r.stdout, "", JSON.stringify([runNumber, offset]));
+  }
+  // Two arguments, as before #483: the offset is not left to a default.
+  const r = spawnSync("bash", [join(WORKFLOWS_DIR, "android-version.sh"), "7", "2026-11-21T03:00:00Z"], { encoding: "utf8", env: { PATH: process.env.PATH ?? "" } });
+  assert.notEqual(r.status, 0);
+  assert.equal(r.stdout, "");
 });
 
 /**
@@ -205,13 +229,13 @@ function serviceAccount(): { json: string; publicKey: string } {
 }
 
 /** Runs play-upload.sh as the upload job does, with curl replaced: the calls it made, in order. */
-function upload(dir: string, json: string, bundle: string, failAt = ""): { status: number | null; stdout: string; stderr: string; calls: Call[] } {
+function upload(dir: string, json: string, bundle: string, failAt = "", packageName = "tw.iamreal.app"): { status: number | null; stdout: string; stderr: string; calls: Call[] } {
   const bin = join(dir, "bin");
   mkdirSync(bin, { recursive: true });
   writeFileSync(join(bin, "curl"), CURL, { mode: 0o755 });
   const log = join(dir, "curl.log");
   rmSync(log, { force: true });
-  const r = spawnSync("bash", [join(WORKFLOWS_DIR, "play-upload.sh"), bundle], {
+  const r = spawnSync("bash", [join(WORKFLOWS_DIR, "play-upload.sh"), packageName, bundle], {
     encoding: "utf8",
     env: { PATH: `${bin}:${process.env.PATH ?? ""}`, CURL_LOG: log, FAIL_AT: failAt, PLAY_SERVICE_ACCOUNT_JSON: json },
   });
@@ -262,6 +286,32 @@ test("play-upload.sh: gets a token with the service account's key, then puts the
   // A POST with no body still says how long its body is (an empty one): a server may want Content-Length.
   assert.equal(apiCalls[3]!.args[apiCalls[3]!.args.indexOf("--data") + 1], "");
   assert.match(r.stdout, /versionCode 7/);
+});
+
+test("play-upload.sh: the test app's bundle goes to tw.iamreal.app.test, the package it is given (upload-android-test.yml)", (t) => {
+  const dir = tempDir(t, "play-upload");
+  const bundle = join(dir, "app-trial.aab");
+  writeFileSync(bundle, "a bundle\n");
+  const r = upload(dir, serviceAccount().json, bundle, "", "tw.iamreal.app.test");
+  assert.equal(r.status, 0, r.stderr);
+  const api = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications/tw.iamreal.app.test";
+  const uploadApi = "https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications/tw.iamreal.app.test";
+  assert.deepEqual(
+    r.calls.map((c) => c.url),
+    ["https://oauth2.googleapis.com/token", `${api}/edits`, `${uploadApi}/edits/an-edit/bundles?uploadType=media`, `${api}/edits/an-edit/tracks/internal`, `${api}/edits/an-edit:commit`],
+  );
+  assert.match(r.stdout, /on the internal track of tw\.iamreal\.app\.test/);
+});
+
+test("play-upload.sh: stops before any call on a package that is not a package name", (t) => {
+  const dir = tempDir(t, "play-upload");
+  const bundle = join(dir, "app-release.aab");
+  writeFileSync(bundle, "a bundle\n");
+  for (const packageName of ["", "tw", "tw.iamreal.app/../other", "tw.iamreal.app?x=1", "Tw.iamreal.app", "tw.iamreal.app "]) {
+    const r = upload(dir, serviceAccount().json, bundle, "", packageName);
+    assert.notEqual(r.status, 0, JSON.stringify(packageName));
+    assert.deepEqual(r.calls, [], JSON.stringify(packageName));
+  }
 });
 
 test("play-upload.sh: stops when Google Play turns the bundle away, and does not commit the edit", (t) => {

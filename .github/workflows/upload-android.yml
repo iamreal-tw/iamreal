@@ -1,33 +1,34 @@
-# Builds the store's build of the Android app (tw.iamreal.app) and puts it
-# on Google Play's internal testing track (ADR-0036, ADR-0037), when the
+# Builds the production app of Android (tw.iamreal.app) and puts it on
+# Google Play's internal testing track (ADR-0036, ADR-0040), when the
 # operator starts it by hand on main: Actions, upload-android, "Run
 # workflow"; or `gh workflow run upload-android.yml --ref main`. A push or a
 # merge uploads nothing. Until launch the build talks to the test site and
-# signs for the test log (android/README.md, the section on the two
-# builds); the checks of the bundle in android/app/build.gradle.kts stop it
-# otherwise.
-# .github/README.md has the details; worker/test/workflows.ts holds this
-# file's two jobs, exactly, and worker/test/workflows.test.ts checks this
-# file against them.
+# signs for the test log (android/README.md, the section on the three apps);
+# the checks of the bundle in android/app/build.gradle.kts stop it
+# otherwise. The test app has a workflow of its own,
+# upload-android-test.yml. .github/README.md has the details;
+# worker/test/workflows.ts holds this file's two jobs, exactly, and
+# worker/test/workflows.test.ts checks this file against them.
 #
 # "build" has no secret. It stops first when the run is not on main. It
 # gives the build its version: the date in Taiwan, 2026.11.21, the same for
 # every run of a day, and the run's number as the build number
-# (android-version.sh). It builds the bundle with that version the way the
-# android check of checks.yml builds the app (no cache here), which runs the
-# checks of the bundle, and hands the bundle on as an artifact.
+# (android-version.sh), below 1,000,000 (the test app's start there). It
+# builds the bundle with that version the way the android check of
+# checks.yml builds the app (no cache here), which runs the checks of the
+# bundle, and hands the bundle on as an artifact.
 #
 # "upload" is the one job of the environment app-test, which GitHub gives
 # its keys to only for jobs on main (#162). It builds nothing and runs no
 # Gradle: it signs the bundle the build job checked with the upload key
-# (android-sign.sh), keeps the signed bundle as an artifact (the API takes
-# no app's first build: the operator uploads that one by hand, from Play
-# Console; .github/README.md), then uploads it with the Google Play
-# Developer API (play-upload.sh). Each secret is in the env of the one step
-# that uses it. What it trusts besides: the pinned actions; the runner's
-# JDK 17 (jarsigner) and its tools (bash, base64, unzip, awk, curl, openssl,
-# jq); the two scripts, from the same commit as this file; and the bundle
-# the build job handed on.
+# (android-sign.sh), keeps the signed bundle as an artifact (for when the
+# API does not take it: the operator uploads it by hand, from Play Console;
+# .github/README.md), then uploads it with the Google Play Developer API
+# (play-upload.sh), to the production app. Each secret is in the env of the
+# one step that uses it. What it trusts besides: the pinned actions; the
+# runner's JDK 17 (jarsigner) and its tools (bash, base64, unzip, awk, curl,
+# openssl, jq); the two scripts, from the same commit as this file; and the
+# bundle the build job handed on.
 name: upload-android
 
 on:
@@ -58,7 +59,7 @@ jobs:
           persist-credentials: false
       - name: The version, the date in Taiwan, and the run's number
         id: version
-        run: bash .github/workflows/android-version.sh "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+        run: bash .github/workflows/android-version.sh "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 0 >> "$GITHUB_OUTPUT"
       - name: Install libc++ (Barretenberg's static library is built with it)
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev
       - name: Install the Rust of rust-toolchain.toml, with the targets of Android
@@ -108,4 +109,4 @@ jobs:
       - name: Upload to Google Play's internal testing
         env:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-        run: bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"
+        run: bash .github/workflows/play-upload.sh tw.iamreal.app "$RUNNER_TEMP/signed/app-release.aab"
