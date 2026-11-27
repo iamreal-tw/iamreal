@@ -40,11 +40,6 @@ enum AppEnvironment {
         #endif
     }
 
-    /// Whether this build goes through a store, the production app's or the
-    /// test app's, and so carries the version given when it was archived
-    /// (the date); the development build does not.
-    static var storeBuild: Bool { app != .development }
-
     /// The number App Store Connect gives the production app,
     /// tw.iamreal.app: digits only, the same whichever site it talks to,
     /// since TestFlight and the App Store are one record there (its

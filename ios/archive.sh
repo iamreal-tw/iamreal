@@ -27,9 +27,9 @@ set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
 usage="usage: archive.sh [--test-app] <path of the archive to make> <build> [<version>]"
-configuration=Release
+configuration=Release app_flag=
 if [ "${1-}" = --test-app ]; then
-  configuration=TestApp
+  configuration=TestApp app_flag=--test-app
   shift
 fi
 archive=${1:?$usage}
@@ -44,8 +44,4 @@ cd "$here"
 xcodebuild archive -project IamrealApp.xcodeproj -scheme IamrealApp -configuration "$configuration" \
   -destination generic/platform=iOS -archivePath "$archive" -derivedDataPath build \
   MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="$build" CODE_SIGNING_ALLOWED=NO
-if [ "$configuration" = TestApp ]; then
-  "$here/check-archive.sh" --test-app "$archive" "$version" "$build"
-else
-  "$here/check-archive.sh" "$archive" "$version" "$build"
-fi
+"$here/check-archive.sh" $app_flag "$archive" "$version" "$build"

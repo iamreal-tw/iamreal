@@ -91,10 +91,10 @@ executable_has() {
 # configuration to this script; run by hand, it goes by Debug, which is what
 # the tests run in.
 case ${CONFIGURATION-Debug} in
-  Debug) want=tw.iamreal.app.dev build="開發用 build" lowest=2000000 above=2000000 ;;
-  Release) want=tw.iamreal.app build="正式 app" lowest=1 above=999999 ;;
-  TestApp) want=tw.iamreal.app.test build="測試 app" lowest=1000000 above=1999999 ;;
-  *) want= build= lowest= above= ; problem "the configuration is $CONFIGURATION, not Debug (the development build), Release (the production app) or TestApp (the test app)" ;;
+  Debug) want=tw.iamreal.app.dev build="開發用 build" lowest=2000000 highest=2000000 ;;
+  Release) want=tw.iamreal.app build="正式 app" lowest=1 highest=999999 ;;
+  TestApp) want=tw.iamreal.app.test build="測試 app" lowest=1000000 highest=1999999 ;;
+  *) want= build= lowest= highest= ; problem "the configuration is $CONFIGURATION, not Debug (the development build), Release (the production app) or TestApp (the test app)" ;;
 esac
 identifier=$(plist CFBundleIdentifier)
 if [ -n "$want" ] && [ "$identifier" != "$want" ]; then
@@ -106,8 +106,9 @@ fi
 # none of the test app's or the development build's.
 number=$(plist CFBundleVersion)
 if [ -n "$lowest" ]; then
-  if ! echo "$number" | grep -q -E '^[1-9][0-9]{0,8}$' || [ "$number" -lt "$lowest" ] || [ "$number" -gt "$above" ]; then
-    problem "the build is $number, not from $lowest to $above, the range of the $build (ADR-0040)"
+  if ! echo "$number" | grep -q -E '^[1-9][0-9]{0,8}$' || [ "$number" -lt "$lowest" ] || [ "$number" -gt "$highest" ]; then
+    if [ "$lowest" = "$highest" ]; then range=$lowest; else range="from $lowest to $highest"; fi
+    problem "the build is $number, not $range, the build number of the $build (ADR-0040)"
   fi
 fi
 # The name under the icon: the first line in a code block under "### <build>"

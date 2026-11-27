@@ -2,17 +2,18 @@
 # and uploads it to App Store Connect, from where TestFlight hands it to
 # testers (ADR-0036, issue #176); upload-ios-test.yml uploads the test
 # app. Only by hand: the operator, or the coding agent on the operator's
-# computer, starts it on main with `gh workflow run upload-ios.yml --ref main`. ios/README.md has the details;
-# worker/test/workflows.ts holds this file's two jobs, exactly, and
-# worker/test/workflows.test.ts checks this file against them.
+# computer, starts it on main with
+# `gh workflow run upload-ios.yml --ref main`. ios/README.md has the
+# details; worker/test/workflows.ts holds this file's two jobs, exactly,
+# and worker/test/workflows.test.ts checks this file against them.
 #
 # "build" has no key. It runs the repository's code: ios/build-core.sh
 # (device-core/ for an iPhone, Barretenberg's library and the CRS checked
 # against their SHA-256), then ios/archive.sh, which archives the Release
 # configuration unsigned, with the date in Taiwan as the version and this
 # workflow's run number as the build, and checks the archive
-# (ios/check-archive.sh: the test site, no fake card, no library of the
-# tests). It hands on the archive, in a tar file so that its files keep
+# (ios/check-archive.sh: the production app's identifier and build range,
+# the test site, no fake card, no library of the tests). It hands on the archive, in a tar file so that its files keep
 # their modes, with ios/ExportOptions.plist.
 #
 # "upload" runs in the environment app-test, whose App Store Connect API key

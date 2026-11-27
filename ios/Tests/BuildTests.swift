@@ -28,7 +28,6 @@ final class BuildTests: XCTestCase {
         XCTAssertEqual(AppEnvironment.pageInStore(appID: AppEnvironment.storeAppID, app: .production)?.absoluteString, "https://apps.apple.com/app/id6837606453")
         // This build, the development one.
         XCTAssertEqual(AppEnvironment.app, .development)
-        XCTAssertFalse(AppEnvironment.storeBuild)
         XCTAssertNil(AppEnvironment.storePage)
     }
 
@@ -55,6 +54,8 @@ final class BuildTests: XCTestCase {
         XCTAssertTrue(projectLevel.contains("SWIFT_ACTIVE_COMPILATION_CONDITIONS = \"$(IAMREAL_ENVIRONMENT) IAMREAL_TEST_APP\";"))
         let environment = try Repository.text("ios/Config/Test.xcconfig")
         XCTAssertTrue(environment.contains("\nIAMREAL_ENVIRONMENT = IAMREAL_ENV_TEST\n"))
+        // And for every configuration: none is given another environment by a condition.
+        XCTAssertFalse(environment.contains("IAMREAL_ENVIRONMENT["))
         XCTAssertTrue(environment.contains("\nIAMREAL_BUNDLE_IDENTIFIER[config=TestApp] = tw.iamreal.app.test\n"))
         // No configuration sets an environment of its own.
         XCTAssertFalse(configurations.contains { $0.contains("IAMREAL_ENVIRONMENT =") })

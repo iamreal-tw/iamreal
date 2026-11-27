@@ -92,7 +92,7 @@ plutil -replace CFBundleVersion -string 1000000 "$tmp/app/IamrealApp.app/Info.pl
 expect "a production app's build of 1,000,000" "the build is 1000000, not from 1 to 999999" CONFIGURATION=Release
 copy
 plutil -replace CFBundleVersion -string 1 "$tmp/app/IamrealApp.app/Info.plist"
-expect "a development build's build of 1" "the build is 1, not from 2000000 to 2000000"
+expect "a development build's build of 1" "the build is 1, not 2000000,"
 
 copy
 plutil -replace CFBundleDisplayName -string "島民證明" "$tmp/app/IamrealApp.app/Info.plist"

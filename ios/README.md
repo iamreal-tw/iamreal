@@ -61,7 +61,7 @@
 | `App/IamrealApp.swift` | app 的進入點：用上面那些組出這個 build 的過卡 |
 | `App/Bridge.h` | Swift 看得到的 C：只有 `device-core/include/iamreal_device_core.h` |
 | `App/Assets.xcassets` | app 的圖示。暫時的：網站的 `--teal`（`#226977`）一整片，沒有字和圖案，正式的圖示在 [#154](https://github.com/iamreal-tw/iamreal/issues/154) 定。App Store Connect 不收沒有圖示的 build |
-| `Config/Shared.xcconfig`、`Config/Test.xcconfig` | 最低的 iOS 版本、只做 iPhone、連結哪一份核心；兩種 build 的識別碼和測試網站的環境 |
+| `Config/Shared.xcconfig`、`Config/Test.xcconfig` | 最低的 iOS 版本、只做 iPhone、連結哪一份核心；三種 app 的識別碼和測試網站的環境 |
 | `Config/Info.plist`、`Config/IamrealApp.entitlements` | 讀卡要的宣告（「讀卡的宣告」）。`Info.plist` 的其他項目照專案檔的設定產生，和這個檔合在一起 |
 | `IamrealApp.xcodeproj` | 手寫的 Xcode 專案，兩個 target：`IamrealApp`、`IamrealAppTests`。`App/`、`Tests/` 是跟著資料夾走的群組，加檔案不用改專案檔 |
 | `build-core.sh` | 編 `device-core/` 給 iOS 用，並下載、核對 Barretenberg 的靜態函式庫和參數檔 |
@@ -349,7 +349,7 @@ gh workflow run upload-ios.yml --repo iamreal-tw/iamreal --ref main        # 正
 gh workflow run upload-ios-test.yml --repo iamreal-tw/iamreal --ref main   # 測試 app
 ```
 
-合併到 `main` 不會上傳。上傳成功之後，App Store Connect 處理完那個 build，TestFlight 的內部群組「營運者」自動收到（[#161](https://github.com/iamreal-tw/iamreal/issues/161)；測試 app 的 App Store Connect 那一筆和它的群組是 #485）。兩個工作流程只差在 archive 的那一步（`archive.sh` 帶不帶 `--test-app`、build 號碼），用同一個 environment `app-test`、同一把金鑰；識別碼來自組態，工作流程和腳本裡都沒有寫。
+合併到 `main` 不會上傳。上傳成功之後，App Store Connect 處理完那個 build，TestFlight 的內部群組「營運者」自動收到（[#161](https://github.com/iamreal-tw/iamreal/issues/161)；測試 app 的 App Store Connect 那一筆和它的群組是 #485）。兩個工作流程只差在 archive 的那一步（`archive.sh` 帶不帶 `--test-app`、build 號碼），用同一個 environment `app-test`、同一把金鑰。識別碼來自組態（`Config/Test.xcconfig`），工作流程和 `archive.sh` 都不給；檢查的腳本（`check-app.sh`、`check-archive.sh`）照組態核對它是不是那一個。
 
 ### 兩個工作
 

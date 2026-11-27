@@ -9,8 +9,8 @@
 #
 # What it checks:
 # - the app is the production app, tw.iamreal.app, or the test app,
-#   tw.iamreal.app.test, with the version and the build it was asked to carry, in the app and in the archive's own record
-#   of it; the version is three integers with no zero in front (App Store
+#   tw.iamreal.app.test, with the version and the build it was asked to
+#   carry, in the app and in the archive's own record of it; the version is three integers with no zero in front (App Store
 #   Connect takes no more: CFBundleShortVersionString is "three
 #   period-separated integers") and the build one;
 # - it has an icon (App Store Connect takes no build without one);
