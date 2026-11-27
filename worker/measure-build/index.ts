@@ -28,27 +28,52 @@
 //   GET  /__measure/short-ids?n=  n short IDs of cards in the views, at random
 //   POST /__measure/crls          gives the object one CRL of G3 dated today, of the made-up root
 //   POST /__measure/write         one write of a made-up card, the object's side of it
+//   POST /__measure/cards-copy?drop=0|1   copies the card state table as the publication does, or drops the copy
 //   POST /__measure/publish-now   makes today's publication due and rings the alarm now
 //   GET  /__measure/count-events?date=YYYY-MM-DD   for each minute file of the day: counts kept, dropped
 import { formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
 import deployed from "../src/index.ts";
 import { COUNT_EVENTS_PREFIX } from "../src/counts.ts";
+import { copyCards, dropCardsCopy } from "../src/card-table.ts";
 import { FINGERPRINT_FILE } from "../src/proof-log-files.ts";
 import { ProofLog as DeployedProofLog, proofLogOf } from "../src/proof-log.ts";
 import { fingerprintLine } from "iamreal-protocol/record.ts";
 import { MEASURE_ROOT, madeUpFields, madeUpFingerprintFile, madeUpLogFile } from "./log.ts";
 
-export { Counts } from "../src/index.ts";
+export { Counts, Starts } from "../src/index.ts";
 
 /** The deployed proof log's object, and what the measurement reads of it and does to it. */
 export class ProofLog extends DeployedProofLog {
-  /** The size of the object's SQLite database in bytes (`databaseSize`), and how many rows each of its tables has. */
-  measureSize(): { database_bytes: number; tables: Record<string, number> } {
+  /**
+   * The size of the object's SQLite database in bytes (`databaseSize`), how
+   * many rows each of its tables has, and the bytes of what each table holds:
+   * the sum of the length of every value, as a BLOB (SQLite's pages, indexes
+   * and the record headers not counted; `dbstat`, which counts them, is not
+   * there in the local workerd). Null if the columns cannot be read.
+   */
+  measureSize(): { database_bytes: number; tables: Record<string, number>; bytes: Record<string, number> | null } {
     const sql = this.ctx.storage.sql;
     const names = sql.exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name").toArray().map((r) => r.name);
     const tables: Record<string, number> = {};
     for (const name of names) tables[name] = sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM "${name.replace(/"/g, '""')}"`).one().n;
-    return { database_bytes: sql.databaseSize, tables };
+
+    const quoted = (name: string): string => `"${name.replace(/"/g, '""')}"`;
+    let bytes: Record<string, number> | null = {};
+    try {
+      for (const name of names) {
+        const columns = sql.exec<{ name: string }>("SELECT name FROM pragma_table_info(?)", name).toArray().map((r) => `COALESCE(LENGTH(CAST(${quoted(r.name)} AS BLOB)), 0)`);
+        bytes[name] = columns.length === 0 ? 0 : sql.exec<{ n: number | null }>(`SELECT SUM(${columns.join(" + ")}) AS n FROM ${quoted(name)}`).one().n ?? 0;
+      }
+    } catch {
+      bytes = null;
+    }
+    return { database_bytes: sql.databaseSize, tables, bytes };
+  }
+
+  /** The copy of the card state table the daily publication makes (card-table.ts, `copyCards`), alone; `drop` drops it. */
+  measureCardsCopy(drop: boolean): void {
+    if (drop) dropCardsCopy(this.ctx.storage.sql);
+    else copyCards(this.ctx.storage.sql);
   }
 
   /** `n` short IDs of cards the views have, at random. */
@@ -96,6 +121,11 @@ const dayOfText = (text: unknown): number => {
   return day;
 };
 
+const fingerprintOf = (text: unknown): string => {
+  if (typeof text !== "string" || !/^[0-9a-f]{64}$/.test(text)) throw new Error("fingerprint: 64 lowercase hex digits");
+  return text;
+};
+
 async function door(request: Request, env: MeasureEnv, pathname: string, url: URL): Promise<Response | null> {
   const log = proofLogOf(env) as unknown as DurableObjectStub<ProofLog>;
   const body = async (): Promise<Record<string, unknown>> => (await request.json()) as Record<string, unknown>;
@@ -103,13 +133,15 @@ async function door(request: Request, env: MeasureEnv, pathname: string, url: UR
     case "POST /__measure/log-file": {
       // In the Worker, not the object: the object must not start before the files are there (it rebuilds when it starts).
       const b = await body();
-      const file = await madeUpLogFile(Number(b["before"]), String(b["fingerprint"]), dayOfText(b["day"]));
+      const file = await madeUpLogFile(Number(b["before"]), fingerprintOf(b["fingerprint"]), dayOfText(b["day"]));
       await env.DATA.put(file.key, file.text);
       return json({ key: file.key, bytes: new TextEncoder().encode(file.text).length, fingerprint: file.fingerprintAfter });
     }
     case "POST /__measure/fingerprints": {
       const b = await body();
-      const file = madeUpFingerprintFile(dayOfText(b["day"]), Number(b["count"]), String(b["fingerprint"]));
+      const count = b["count"];
+      if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0) throw new Error("count: a number of records");
+      const file = madeUpFingerprintFile(dayOfText(b["day"]), count, fingerprintOf(b["fingerprint"]));
       await env.DATA.put(file.key, file.text);
       return json({ key: file.key });
     }
@@ -130,6 +162,9 @@ async function door(request: Request, env: MeasureEnv, pathname: string, url: UR
       const answer = await log.accept(madeUpFields(challenge));
       return answer.outcome === "written" ? json({ seq: answer.record.seq }) : json({ error: answer.code }, 409);
     }
+    case "POST /__measure/cards-copy":
+      await log.measureCardsCopy(url.searchParams.get("drop") === "1");
+      return json({ ok: true });
     case "POST /__measure/publish-now":
       await log.measurePublishNow();
       return json({ ok: true });

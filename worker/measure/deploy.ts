@@ -24,30 +24,21 @@
 // configuration file, wrangler reads no `.env` file, and it makes no
 // resource (the buckets are the operator's, made in the dashboard).
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { WORKER_DIR, WRANGLER, wranglerEnv } from "../scripts/deploy.ts";
+import { WORKER_DIR, WRANGLER, envFileValue, wranglerEnv, wranglerSafeFlags } from "../scripts/deploy.ts";
 import { prepareEngineFiles } from "../scripts/engine-files.ts";
 import { MEASURE_WORKER, writeMeasureConfig } from "./config.ts";
 
 /** The two values of the token file. Throws, naming the variable and never a value, if one is missing or empty. */
 export function measureTokenOf(text: string): { token: string; accountId: string } {
-  const valueOf = (name: string): string => {
-    let value: string | undefined;
-    for (const line of text.split(/\r?\n/)) {
-      const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
-      if (m && m[1] === name) value = m[2]!.replace(/^(["'])(.*)\1$/, "$2");
-    }
-    if (value === undefined || value === "") throw new Error(`the token file has no ${name}`);
-    return value;
-  };
-  return { token: valueOf("CLOUDFLARE_API_TOKEN_MEASURE"), accountId: valueOf("CLOUDFLARE_ACCOUNT_ID") };
+  return { token: envFileValue(text, "CLOUDFLARE_API_TOKEN_MEASURE", "the token file"), accountId: envFileValue(text, "CLOUDFLARE_ACCOUNT_ID", "the token file") };
 }
 
 /** The arguments after `wrangler` for a command and the configuration at `config`. */
 export function measureArgs(command: "deploy" | "secret", config: string): string[] {
-  const common = ["--config", config, "--experimental-provision=false", "--env-file=/dev/null"];
+  const common = ["--config", config, ...wranglerSafeFlags()];
   return command === "deploy" ? ["deploy", ...common] : ["secret", "put", "MEASURE_KEY", "--name", MEASURE_WORKER, ...common];
 }
 
@@ -57,9 +48,9 @@ if (isMain) {
   if ((command !== "deploy" && command !== "secret") || flag !== "--token-file" || file === undefined || rest.length > 0) {
     throw new Error("usage: measure/deploy.ts deploy|secret --token-file <file>");
   }
-  const path = resolve(file);
-  if (path.startsWith(resolve(WORKER_DIR, "..") + "/")) throw new Error("the token file is kept outside the repository");
-  if (!existsSync(path)) throw new Error(`${path} is missing`);
+  if (!existsSync(file)) throw new Error(`${resolve(file)} is missing`);
+  const path = realpathSync(file);
+  if (path.startsWith(realpathSync(join(WORKER_DIR, "..")) + "/")) throw new Error("the token file is kept outside the repository");
   if ((statSync(path).mode & 0o077) !== 0) throw new Error(`${path} can be read by others: chmod 600 it first`);
   const dir = mkdtempSync(join(tmpdir(), "iamreal-measure-"));
   let status = 1;

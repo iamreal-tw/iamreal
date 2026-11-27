@@ -14,19 +14,22 @@
 //             the proof log's object: it rebuilds from these files when it starts
 //   rebuild   starts the object and times its rebuild from the bucket, to `swapped`
 //   size      the object's database size and the rows of each table
-//   pages     島民證明 pages of random cards, more at once at each level
+//   pages     card pages of random cards, more at once at each level
 //   writes    the object's side of a write (measure-build/index.ts), more at once
 //             at each level, with 5 page readers beside it
 //   counts    POST /api/v1/counts, more at once each minute; then what each
 //             minute's file kept
-//   publish   today's publication made due now (#196); the longest a request to
-//             the object waited meanwhile
+//   publish   #196: the copy of the card state table alone, three times, by the
+//             round trip against one of a request that only reads a row; then
+//             today's publication made due now, how long until its line, and
+//             the longest a request to the object waited meanwhile
 //
 // --quick: few records, short levels (the run on this computer, measure/smoke.ts).
 // What it prints has times (UTC) to find the same minutes on the dashboard, and
 // no address. The key is read from the environment and sent only to <url>.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { formatDay, taiwanDay } from "iamreal-protocol/date.ts";
 
 const args = process.argv.slice(2);
 const [base, step] = args;
@@ -48,7 +51,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 const url = (path: string): string => new URL(path, base).toString();
 
 /** Today in Taiwan, YYYY-MM-DD, shifted by `days`. */
-const taiwanDate = (days = 0): string => new Date(Date.now() + 8 * 3_600_000 + days * 86_400_000).toISOString().slice(0, 10);
+const taiwanDate = (days = 0): string => formatDay(taiwanDay(Date.now()) + days);
 
 async function door<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(url(path), { method, headers: { Authorization: `Bearer ${KEY}`, ...(body !== undefined && { "Content-Type": "application/json" }) }, ...(body !== undefined && { body: JSON.stringify(body) }) });
@@ -158,22 +161,26 @@ async function rebuild(): Promise<void> {
 }
 
 async function size(): Promise<void> {
-  const s = await door<{ database_bytes: number; tables: Record<string, number> }>("GET", "/__measure/size");
+  const s = await door<{ database_bytes: number; tables: Record<string, number>; bytes: Record<string, number> | null }>("GET", "/__measure/size");
   const cards = s.tables["cards"] ?? 0;
   say(`size: ${s.database_bytes} bytes; ${cards} cards, ${cards === 0 ? "-" : (s.database_bytes / cards).toFixed(0)} bytes a card, all tables together`);
   say(`size: rows ${JSON.stringify(s.tables)}`);
+  say(`size: bytes each table holds (its values; pages, indexes and record headers not counted) ${s.bytes === null ? "not readable here" : JSON.stringify(s.bytes)}`);
+}
+
+/** A request for the card page of a random card of the views, from a sample asked for once. */
+async function randomCardPage(): Promise<() => Promise<Response>> {
+  const ids = await door<string[]>("GET", `/__measure/short-ids?n=${QUICK ? 50 : 2000}`);
+  return () => fetch(url(`/p/${ids[Math.floor(Math.random() * ids.length)]}`), { headers: { Accept: "text/html" } });
 }
 
 async function pages(): Promise<void> {
-  const ids = await door<string[]>("GET", `/__measure/short-ids?n=${QUICK ? 50 : 2000}`);
-  const page = (): Promise<Response> => fetch(url(`/p/${ids[Math.floor(Math.random() * ids.length)]}`), { headers: { Accept: "text/html" } });
-  await ramp("pages", LEVELS, SECONDS, page);
+  await ramp("pages", LEVELS, SECONDS, await randomCardPage());
 }
 
 async function writes(): Promise<void> {
   await door("POST", "/__measure/crls");
-  const ids = await door<string[]>("GET", `/__measure/short-ids?n=${QUICK ? 50 : 2000}`);
-  const page = (): Promise<Response> => fetch(url(`/p/${ids[Math.floor(Math.random() * ids.length)]}`), { headers: { Accept: "text/html" } });
+  const page = await randomCardPage();
   const write = (): Promise<Response> => fetch(url("/__measure/write"), { method: "POST", headers: { Authorization: `Bearer ${KEY}` } });
   await ramp("writes", QUICK ? [1, 2] : [1, 2, 5, 10, 20, 40, 80], SECONDS, write, page);
 }
@@ -207,18 +214,31 @@ async function counts(): Promise<void> {
 }
 
 async function publish(): Promise<void> {
+  const roundTrip = async (send: () => Promise<unknown>): Promise<number> => {
+    const t = performance.now();
+    await send();
+    return performance.now() - t;
+  };
+  for (let n = 1; n <= 3; n++) {
+    const base = await roundTrip(async () => (await fetch(url("/api/v1/rebuild"))).arrayBuffer());
+    const copy = await roundTrip(() => door("POST", "/__measure/cards-copy?drop=0"));
+    const drop = await roundTrip(() => door("POST", "/__measure/cards-copy?drop=1"));
+    say(`publish: copying the card state table, run ${n}: ${copy.toFixed(0)} ms, dropping the copy ${drop.toFixed(0)} ms, a request that reads one row ${base.toFixed(0)} ms (the round trip in both)`);
+  }
   const today = taiwanDate(0);
   const start = performance.now();
   await door("POST", "/__measure/publish-now");
   say("publish: due now");
   let longest = 0;
+  let polls = 0;
   for (;;) {
+    polls++;
     const t = performance.now();
     const res = await fetch(url("/api/v1/fingerprint"));
     const line = (await res.json()) as { date?: string | null; count?: number };
     longest = Math.max(longest, performance.now() - t);
     if (line.date === today) {
-      say(`publish: the line of ${today} (count ${line.count}) after ${((performance.now() - start) / 1000).toFixed(1)} s; a request to the object waited ${longest.toFixed(0)} ms at most`);
+      say(`publish: the line of ${today} (count ${line.count}) after ${((performance.now() - start) / 1000).toFixed(1)} s; a request to the object waited ${longest.toFixed(0)} ms at most; ${polls} requests of GET /api/v1/fingerprint meanwhile (each reads one row of published: take them off the rows read)`);
       return;
     }
     if (performance.now() - start > 30 * 60_000) throw new Error("publish: no line in 30 minutes");

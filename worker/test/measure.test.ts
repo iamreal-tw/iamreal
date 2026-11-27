@@ -5,7 +5,7 @@
 // closed without the key the operator set. The load itself (measure/load.ts)
 // is not run here.
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { unstable_startWorker } from "wrangler";
@@ -63,6 +63,7 @@ test("no workflow and no script of package.json runs the measurement", () => {
 
 test("the measurement's doors are closed without the key the operator set, with a wrong one and with a short one", async () => {
   prepareEngineFiles();
+  mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
   const dir = mkdtempSync(join(WORKER_DIR, "test-output", "measure-doors-"));
   const key = "k".repeat(40);
   const cwd = process.cwd();

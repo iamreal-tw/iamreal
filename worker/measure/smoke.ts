@@ -7,13 +7,14 @@
 //   node --experimental-strip-types measure/smoke.ts
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { unstable_startWorker } from "wrangler";
+import { WORKER_DIR } from "../scripts/deploy.ts";
 import { prepareEngineFiles } from "../scripts/engine-files.ts";
 import { writeMeasureConfig } from "./config.ts";
 
-const WORKER_DIR = join(import.meta.dirname, "..");
+mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
 const dir = mkdtempSync(join(WORKER_DIR, "test-output", "measure-"));
 const key = randomBytes(32).toString("hex");
 let status = 1;

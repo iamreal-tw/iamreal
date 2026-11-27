@@ -9,7 +9,7 @@
 //     runs the Worker)
 //   - two buckets of its own, made by the operator for the measurement
 //   - no per-IP limits (src/rate-limit.ts lets a request through when the
-//     binding is not there)
+//     binding is not there), and the site-wide limit at the most it can be
 //   - the object's name `test-measure`, card proofs stopped and a rebuild
 //     named, so that the empty object rebuilds from the made-up proof log
 //     when it first starts; the most counts a minute's file holds
@@ -18,8 +18,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { experimental_readRawConfig } from "wrangler";
-
-const WORKER_DIR = join(import.meta.dirname, "..");
+import { WORKER_DIR } from "../scripts/deploy.ts";
 
 /** The only name a build of measure-build/ is deployed as. */
 export const MEASURE_WORKER = "iamreal-measure";
@@ -32,28 +31,22 @@ export const MEASURE_REBUILD = "measure-1";
 
 type Raw = Record<string, unknown>;
 
-/** The test environment of wrangler.jsonc, as written. */
-export function testEnvironment(): Raw {
-  const { rawConfig } = experimental_readRawConfig({ config: join(WORKER_DIR, "wrangler.jsonc") });
-  const env = (rawConfig as { env?: Record<string, Raw> }).env?.["test"];
-  if (env === undefined) throw new Error("wrangler.jsonc has no test environment");
-  return env;
-}
+/** wrangler.jsonc, as written. */
+const deployedConfig = (): Raw => experimental_readRawConfig({ config: join(WORKER_DIR, "wrangler.jsonc") }).rawConfig as Raw;
 
 /** The names the deployed environments have: a measurement is never deployed as one of them. */
 export function deployedNames(): string[] {
-  const { rawConfig } = experimental_readRawConfig({ config: join(WORKER_DIR, "wrangler.jsonc") });
-  const top = rawConfig as { name?: string; env?: Record<string, { name?: string }> };
+  const top = deployedConfig() as { name?: string; env?: Record<string, { name?: string }> };
   return [top.name, ...Object.values(top.env ?? {}).map((e) => e.name)].filter((n): n is string => typeof n === "string");
 }
 
 /** The temporary Worker's configuration, a whole one with no environments. */
 export function measureConfig(): Raw {
-  const { rawConfig } = experimental_readRawConfig({ config: join(WORKER_DIR, "wrangler.jsonc") });
-  const top = rawConfig as Raw;
-  const test = testEnvironment();
+  const top = deployedConfig();
+  const test = (top["env"] as Record<string, Raw> | undefined)?.["test"];
+  if (test === undefined) throw new Error("wrangler.jsonc has no test environment");
   const vars = { ...(test["vars"] as Record<string, string>) };
-  Object.assign(vars, { PROOF_LOG_OBJECT_NAME: "test-measure", CARD_PROOFS_PAUSED: "true", REBUILD_PROOF_LOG: MEASURE_REBUILD, COUNT_EVENTS_PER_MINUTE: "100000" });
+  Object.assign(vars, { PROOF_LOG_OBJECT_NAME: "test-measure", CARD_PROOFS_PAUSED: "true", REBUILD_PROOF_LOG: MEASURE_REBUILD, COUNT_EVENTS_PER_MINUTE: "100000", CARD_PROOF_STARTS_PER_MINUTE: "100000" });
   const config: Raw = {
     name: MEASURE_WORKER,
     main: join(WORKER_DIR, "measure-build", "index.ts"),
@@ -77,6 +70,7 @@ export function measureConfig(): Raw {
 /** Throws unless `config` is the measurement's: its name, its buckets, no schedule, no route. */
 export function checkMeasureConfig(config: Raw): void {
   if (config["name"] !== MEASURE_WORKER) throw new Error(`the measurement is deployed as ${MEASURE_WORKER} and no other Worker`);
+  // Only if wrangler.jsonc itself were ever to name a deployed environment so.
   for (const name of deployedNames()) if (config["name"] === name) throw new Error(`${name} is a deployed environment's Worker`);
   if (config["env"] !== undefined || config["routes"] !== undefined || config["route"] !== undefined || config["triggers"] !== undefined) throw new Error("the measurement has no environments, routes or schedule");
   const buckets = (config["r2_buckets"] as { bucket_name: string }[]).map((b) => b.bucket_name).sort();

@@ -11,7 +11,7 @@
 | 頁面 | 同一個 Durable Object 一秒回答幾個島民證明的頁面 | 同上，每一頁挑一張隨機的卡片，快取沒命中 |
 | 寫入 | 證明紀錄的物件一秒寫得了幾筆（物件那一側），寫的時候頁面慢多少 | 同上 |
 | 計數 | 收計數的物件一秒收多少（[計數](../README.md#計數)） | 不用 |
-| 換日公布 | #196：十萬張卡片時公布多久、這段時間過卡的請求最久等多久 | 重建完的十萬張卡片 |
+| 換日公布 | #196：單獨複製卡片狀態表多久、整次公布多久、這段時間過卡的請求最久等多久、記憶體、多讀多寫的列數 | 重建完的十萬張卡片 |
 
 ## 這是不驗證證明就寫入的建置
 
@@ -34,14 +34,15 @@
 |---|---|
 | `POST /__measure/log-file` | 在 Worker 裡做一個寫滿的紀錄檔（1,000 筆），寫進資料儲存桶。不碰物件：物件第一次啟動時就開始重建，檔要先在 |
 | `POST /__measure/fingerprints` | 寫一行的指紋檔 |
-| `GET /__measure/size` | 物件的 `databaseSize` 和每張表的列數 |
+| `GET /__measure/size` | 物件的 `databaseSize`、每張表的列數、每張表存的值加起來幾個位元組（不含 SQLite 的頁、索引和每一列的標頭：算這些的 `dbstat` 在本機的 workerd 讀不到）。整個物件多大以 `databaseSize` 為準 |
 | `GET /__measure/short-ids?n=` | 隨機的 n 個短編號 |
 | `POST /__measure/crls` | 給物件一份今天的 G3、G2 清冊，樹根是做出來的紀錄用的那一個 |
 | `POST /__measure/write` | 一筆寫入（拿題目、計次、收下），一張新的卡片 |
+| `POST /__measure/cards-copy?drop=0` 或 `1` | 照公布的做法單獨複製卡片狀態表，或刪掉複本。時間從外面量（Cloudflare 上物件裡的時鐘在計算時不走） |
 | `POST /__measure/publish-now` | 讓今天的公布現在就到期：拿掉今天那一行、物件的第一天改成昨天、儲存桶的指紋檔照剩下的行重寫、alarm 現在響 |
 | `GET /__measure/count-events?date=` | 那一天每分鐘的計數明細檔各收了幾筆、超過上限沒留下幾筆 |
 
-設定和部署的 Worker 不同的地方只有這些：物件的名稱 `test-measure`、停止收過卡（重建要）、重建的名稱 `measure-1`、每分鐘的計數上限 100,000（能設的最大值）、沒有照 IP 的上限（綁定不在時放行，每個請求寫一行 `rate_limit_unavailable`，可以接受）、沒有 Static Assets（每個網址都跑 Worker）。停止收過卡只擋網站的介面：寫入的門直接問物件，物件重建完就收。
+設定和部署的 Worker 不同的地方只有這些：物件的名稱 `test-measure`、停止收過卡（重建要）、重建的名稱 `measure-1`、每分鐘的計數上限和全站的總量上限（`CARD_PROOF_STARTS_PER_MINUTE`）都是 100,000（能設的最大值）、沒有照 IP 的上限（綁定不在時放行，每個請求寫一行 `rate_limit_unavailable`，可以接受）、沒有 Static Assets（每個網址都跑 Worker）。停止收過卡只擋網站的介面：寫入的門直接問物件，物件重建完就收。
 
 ## 在本機先跑一次
 
@@ -97,14 +98,16 @@ node --experimental-strip-types measure/smoke.ts
    - 每一步印開始和結束的時間（UTC）：同一段時間到儀表板看下一步
    - 某一步出錯時，從那一步重跑就好（`load.ts <網址> <那一步>`）；**`generate` 之前不要跑會問物件的步驟**，物件第一次啟動時就重建，檔要先在。`generate` 中途斷掉的話，刪掉兩個儲存桶的內容和 Worker（連同物件）重來
 7. 量的同時，或量完當天，在儀表板記下：
-   - Durable Objects → `iamreal-measure` 的 `ProofLog` 那個 namespace → Metrics：重建、寫入、公布那幾段時間的 CPU 時間、記憶體（Memory usage 的 P999；#196 要知道 SQLite 複製表用的記憶體算不算在 128 MB 裡）、rows read / rows written、儲存的大小
+   - Durable Objects → `iamreal-measure` 的 `ProofLog` 那個 namespace → Metrics：重建、寫入、公布那幾段時間的 CPU 時間、rows read / rows written、儲存的大小
+   - 同一頁的 Memory usage（文件說是 V8 isolate 的記憶體，P50 到 P999：[Durable Objects metrics](https://developers.cloudflare.com/durable-objects/observability/metrics-and-analytics/)）在 `publish` 那幾分鐘和之前比。#196 要知道 SQLite 複製表用的記憶體算不算在 isolate 的 128 MB 裡（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)）：`size` 那一步印的 `cards` 表的位元組，複製時如果算在 isolate 裡，這張圖會多出差不多那麼多；沒有多出來，就是不算在這張圖裡（但不等於 Cloudflare 不算它，兩種都記下來）。Workers 的 Metrics 上「Exceeded Memory」有沒有出現也記下來
+   - rows read / rows written 在 `publish` 那幾分鐘的數字：裡面有 `publish` 印的那幾百個 `GET /api/v1/fingerprint`（各讀 `published` 的一列），扣掉
    - Workers & Pages → `iamreal-measure` → Metrics：CPU 時間、錯誤
    - 同一個 namespace 的 `Counts`：計數那一段的 CPU 時間和記憶體
 8. 把第 6 步的檔和第 7 步的數字交給維護者，寫進 `worker/README.md`。檔裡沒有 IP、密碼和帳號；截圖不要有帳號名稱
 
 **量完刪掉（當天）**
 
-9. Workers & Pages → `iamreal-measure` → Settings → Delete。它的 Durable Object（連同十萬張做出來的卡片）跟著刪
+9. Workers & Pages → `iamreal-measure` → Settings → Delete。然後到 Durable Objects 那一頁確認 `iamreal-measure` 的三個 namespace（`ProofLog`、`Counts`、`Starts`，連同十萬張做出來的卡片）都不在了：刪 Worker 時會不會一起刪，文件上沒有查到；還在的話在那一頁刪
 10. R2 → 兩個儲存桶各自先清空（Objects → 全選 → Delete；或 Settings 裡的清空），再 Delete bucket
 11. 刪掉第 3 步的權杖（Manage Account → API Tokens），和那個檔：`rm ~/.config/iamreal/measure.env`
 12. `unset MEASURE_KEY`，關掉那個終端機
