@@ -17,7 +17,7 @@ import (
 // this package, so correcting an error here alone does not change the
 // number; a new version of the re-verification command starts the
 // re-verification from the first record (ADR-0025).
-const RulesVersion = 2
+const RulesVersion = 3
 
 // Reason codes of an invalid record (spec/record-rules.md, "Per record").
 const (
@@ -27,17 +27,15 @@ const (
 	CodeDateOrder       = "date_order"
 	CodeEmpty           = "empty"
 	CodeSwitchLimit     = "switch_limit"
-	CodeDailyLimit      = "daily_limit"
 )
 
 // Kinds of a valid record on one platform (spec/record-rules.md, "Event
 // rules").
 const (
-	KindFirst      = "first"
-	KindRefresh    = "refresh"
-	KindCorrection = "correction"
-	KindSwitch     = "switch"
-	KindWithdraw   = "withdraw"
+	KindFirst    = "first"
+	KindRefresh  = "refresh"
+	KindSwitch   = "switch"
+	KindWithdraw = "withdraw"
 )
 
 // The bounds of the rules, in days.
@@ -50,12 +48,8 @@ const (
 	// A record's date is no earlier than DateOrderDays before the latest
 	// date among the earlier valid records, of any card (check 4).
 	DateOrderDays = 4
-	// At most MaxSwitches switches on each platform, for good ("Switches
-	// and corrections"). A correction is not counted.
+	// At most MaxSwitches switches on each platform, for good ("Switches").
 	MaxSwitches = 5
-	// At most MaxPerDate valid records of a card have the same date
-	// (check 6).
-	MaxPerDate = 3
 )
 
 // ProofVerifier is check 1: whether a record verifies (spec/record.md,
@@ -164,20 +158,13 @@ type slotState struct {
 	current      *string
 	lastDeclared *string
 	switchCount  int
-	// correctionDate is the date of the slot's last valid first or switch;
-	// nil before the first.
-	correctionDate *verifier.Date
 }
 
 // cardState holds exactly the items of the State table of
-// spec/record-rules.md: the card's own two, and one slot per platform.
+// spec/record-rules.md: the card's own one, and one slot per platform.
 type cardState struct {
 	slots         map[string]*slotState // one per platform of the table
 	lastCardProof *verifier.Date
-	// proofsOnLastDate is the number of valid records dated lastCardProof.
-	// A card's dates do not go back (check 4), so it is the only count check
-	// 6 can ask for.
-	proofsOnLastDate int
 	// lastSeq is the seq of the card's last valid record, 0 before the
 	// first. It is not an item of the State table: the card state file
 	// writes it beside the state.
@@ -186,26 +173,15 @@ type cardState struct {
 
 func (cs *cardState) clone() *cardState {
 	c := &cardState{
-		slots:            make(map[string]*slotState, len(cs.slots)),
-		lastCardProof:    cs.lastCardProof,
-		proofsOnLastDate: cs.proofsOnLastDate,
-		lastSeq:          cs.lastSeq,
+		slots:         make(map[string]*slotState, len(cs.slots)),
+		lastCardProof: cs.lastCardProof,
+		lastSeq:       cs.lastSeq,
 	}
 	for p, s := range cs.slots {
 		ns := *s
 		c.slots[p] = &ns
 	}
 	return c
-}
-
-// onDate returns the number of valid records of the card dated d, for a d
-// that check 4 accepts (not before lastCardProof): proofsOnLastDate if d is
-// lastCardProof, 0 if it is later.
-func (cs *cardState) onDate(d verifier.Date) int {
-	if cs.lastCardProof != nil && *cs.lastCardProof == d {
-		return cs.proofsOnLastDate
-	}
-	return 0
 }
 
 // Rules applies the rules to one record at a time, in seq order, and keeps
@@ -369,7 +345,7 @@ func (x *Rules) check(r *verifier.Record) (RecordResult, *cardState, error) {
 	var kinds []PlatformKind
 	for _, p := range x.platforms {
 		u, listed := verifier.AccountOn(r.Accounts, p.ID)
-		kind, account, blocked := applyEntry(next.slots[p.ID], listed, u, d)
+		kind, account, blocked := applyEntry(next.slots[p.ID], listed, u)
 		if blocked {
 			return invalid(CodeSwitchLimit, "platform "+p.ID)
 		}
@@ -380,14 +356,8 @@ func (x *Rules) check(r *verifier.Record) (RecordResult, *cardState, error) {
 	if len(kinds) == 0 {
 		return invalid(CodeEmpty, "")
 	}
-	// 6. Fewer than 3 earlier valid records of its card have its date. The
-	// effects of the event rules (on the copy) are dropped.
-	n := next.onDate(d)
-	if n >= MaxPerDate {
-		return invalid(CodeDailyLimit, fmt.Sprintf("%d valid records dated %s", n, d))
-	}
 	// Check 4 made d no earlier than last_card_proof.
-	next.lastCardProof, next.proofsOnLastDate, next.lastSeq = &d, n+1, r.Seq
+	next.lastCardProof, next.lastSeq = &d, r.Seq
 	res.Valid, res.Kinds = true, kinds
 	return res, next, nil
 }
@@ -395,10 +365,10 @@ func (x *Rules) check(r *verifier.Record) (RecordResult, *cardState, error) {
 // applyEntry applies a record's entry for one platform to the slot of its
 // card on that platform (spec/record-rules.md, "Event rules"): listed says
 // whether the list has an account u there. The first row of the table that
-// applies gives the kind: first, refresh, correction, switch, or blocked. It
-// returns the kind and its account, no kind, or blocked. When blocked, the
-// slot is left in some state; the caller drops the whole copy.
-func applyEntry(s *slotState, listed bool, u string, d verifier.Date) (kind, account string, blocked bool) {
+// applies gives the kind: first, refresh, switch, or blocked. No row reads a
+// date. It returns the kind and its account, no kind, or blocked. When
+// blocked, the slot is left in some state; the caller drops the whole copy.
+func applyEntry(s *slotState, listed bool, u string) (kind, account string, blocked bool) {
 	if !listed {
 		if s.current == nil {
 			return "", "", false
@@ -409,16 +379,13 @@ func applyEntry(s *slotState, listed bool, u string, d verifier.Date) (kind, acc
 	}
 	switch {
 	case s.lastDeclared == nil:
-		s.current, s.lastDeclared, s.correctionDate = &u, &u, &d
+		s.current, s.lastDeclared = &u, &u
 		return KindFirst, u, false
 	case *s.lastDeclared == u:
 		s.current = &u
 		return KindRefresh, u, false
-	case s.correctionDate != nil && *s.correctionDate == d:
-		s.current, s.lastDeclared = &u, &u
-		return KindCorrection, u, false
 	case s.switchCount < MaxSwitches:
-		s.current, s.lastDeclared, s.correctionDate = &u, &u, &d
+		s.current, s.lastDeclared = &u, &u
 		s.switchCount++
 		return KindSwitch, u, false
 	}
@@ -441,20 +408,13 @@ type Slot struct {
 	// SwitchCount is the number of valid switches, 0 to MaxSwitches. It
 	// never decreases.
 	SwitchCount int
-	// CorrectionDate is the date of the slot's last valid first or switch:
-	// a change of account dated that date is a correction.
-	CorrectionDate *verifier.Date
 }
 
 // CardState is the state of one card (spec/record-rules.md, "State"): the
-// card's own items and one slot per platform of the table. A card with no
-// valid record has LastCardProof nil, ProofsOnLastDate 0 and every slot
-// never used.
+// card's own item and one slot per platform of the table. A card with no
+// valid record has LastCardProof nil and every slot never used.
 type CardState struct {
 	LastCardProof *verifier.Date
-	// ProofsOnLastDate is the number of valid records dated LastCardProof
-	// (0 if there is none).
-	ProofsOnLastDate int
 	// Slots has one entry for every platform of the proof log's table, keyed
 	// by platform ID.
 	Slots map[string]Slot
@@ -475,10 +435,6 @@ func cardStateOf(cs *cardState) CardState {
 	out := CardState{Slots: map[string]Slot{}}
 	for p, s := range cs.slots {
 		slot := Slot{SwitchCount: s.switchCount}
-		if s.correctionDate != nil {
-			d := *s.correctionDate
-			slot.CorrectionDate = &d
-		}
 		if s.current != nil {
 			u := *s.current
 			slot.Current = &u
@@ -492,7 +448,6 @@ func cardStateOf(cs *cardState) CardState {
 	if cs.lastCardProof != nil {
 		d := *cs.lastCardProof
 		out.LastCardProof = &d
-		out.ProofsOnLastDate = cs.proofsOnLastDate
 	}
 	return out
 }

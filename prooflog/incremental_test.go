@@ -67,7 +67,7 @@ func TestVectorsOneAtATime(t *testing.T) {
 			if !reflect.DeepEqual(got, c.Results) {
 				t.Errorf("results\n got %+v\nwant %+v", got, c.Results)
 			}
-			// The output, with each card's proofs_on_last_date and slots.
+			// The output, with each card's slots.
 			if got := stateOut(x.State(), x); !reflect.DeepEqual(got, c.State) {
 				g, _ := json.Marshal(got)
 				w, _ := json.Marshal(c.State)
@@ -129,11 +129,11 @@ func TestCard(t *testing.T) {
 	proof := base64.StdEncoding.EncodeToString(make([]byte, verifier.ProofLength))
 	x := prooflog.NewRules(verifier.Test, fakeProofs{1: true, 2: true, 3: true}, everyRootRecognized{})
 	c := x.Card(scope, id)
-	if c.LastCardProof != nil || c.ProofsOnLastDate != 0 || len(c.Slots) != 2 {
+	if c.LastCardProof != nil || len(c.Slots) != 2 {
 		t.Errorf("no record: %+v", c)
 	}
 	for p, s := range c.Slots {
-		if s.Current != nil || s.LastDeclared != nil || s.SwitchCount != 0 || s.CorrectionDate != nil {
+		if s.Current != nil || s.LastDeclared != nil || s.SwitchCount != 0 {
 			t.Errorf("no record, %s: %+v", p, s)
 		}
 	}
@@ -157,10 +157,9 @@ func TestCard(t *testing.T) {
 	c = x.Card(scope, id)
 	th, te := c.Slots["threads"], c.Slots["test-example"]
 	if th.Current != nil || th.LastDeclared == nil || *th.LastDeclared != "bob" ||
-		th.SwitchCount != 1 || th.CorrectionDate == nil || *th.CorrectionDate != date(t, "2026-03-02") ||
+		th.SwitchCount != 1 ||
 		te.Current != nil || te.LastDeclared == nil || *te.LastDeclared != "a-b" || te.SwitchCount != 0 ||
-		te.CorrectionDate == nil || *te.CorrectionDate != date(t, "2026-03-01") ||
-		c.LastCardProof == nil || *c.LastCardProof != date(t, "2026-03-03") || c.ProofsOnLastDate != 1 {
+		c.LastCardProof == nil || *c.LastCardProof != date(t, "2026-03-03") {
 		t.Errorf("%+v %+v %+v", c, th, te)
 	}
 	// The withdrawals of the last record name the accounts withdrawn.
@@ -176,8 +175,8 @@ func TestCard(t *testing.T) {
 	}) {
 		t.Errorf("kinds %+v", res.Kinds)
 	}
-	*th.CorrectionDate = 0
-	if *x.Card(scope, id).Slots["threads"].CorrectionDate != date(t, "2026-03-02") {
+	*th.LastDeclared = "carol"
+	if *x.Card(scope, id).Slots["threads"].LastDeclared != "bob" {
 		t.Errorf("Card returned the rules' own slice")
 	}
 }
