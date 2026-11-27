@@ -395,6 +395,15 @@ export interface TestWorker {
      */
     dropNewestCrls(): Promise<void>;
     /**
+     * Drops the table of when each CRL was first told (test build,
+     * `POST /__test/proof-log/drop-crl-arrivals`): the object is then as one
+     * made by a build that did not have that table yet. `restart()` after
+     * this.
+     */
+    dropCrlArrivals(): Promise<void>;
+    /** Tells the object these newest CRLs, as the CRL mirror does (test build, `PUT /__test/proof-log/newest-crls`). */
+    setNewestCrls(newest: NewestCrls): Promise<void>;
+    /**
      * The rows the object keeps of its records, in the order of `seq`, and
      * the count and the proof log fingerprint of its row of the proof log (test
      * build, `GET /__test/proof-log/stored`). `checkProofLog` of test/records.ts
@@ -702,6 +711,14 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       async dropNewestCrls() {
         const res = await server.fetch("/__test/proof-log/drop-newest-crls", { method: "POST" });
         if (res.status !== 204) throw new Error(`dropping the table of the newest CRLs: HTTP ${res.status}`);
+      },
+      async dropCrlArrivals() {
+        const res = await server.fetch("/__test/proof-log/drop-crl-arrivals", { method: "POST" });
+        if (res.status !== 204) throw new Error(`dropping the table of when each CRL was first told: HTTP ${res.status}`);
+      },
+      async setNewestCrls(newest) {
+        const res = await server.fetch("/__test/proof-log/newest-crls", { method: "PUT", body: JSON.stringify(newest) });
+        if (res.status !== 204) throw new Error(`telling the newest CRLs: HTTP ${res.status}`);
       },
       async setExtraWork(due, everyMs) {
         const res = await server.fetch("/__test/proof-log/extra-work", { method: "PUT", body: JSON.stringify({ due: due.getTime(), every: everyMs }) });

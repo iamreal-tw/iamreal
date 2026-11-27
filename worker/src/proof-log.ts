@@ -38,8 +38,8 @@ import { EMPTY_FINGERPRINT, type FingerprintLine, LINES_PER_FILE, type RecordFie
 import { scopeOf } from "iamreal-protocol/scope.ts";
 import { type CardState, type Kind, RULES_VERSION, applyRecord, newCard } from "iamreal-protocol/record-rules.ts";
 import { CARD_TABLE, copiedCards, copyCards, dropCardsCopy, readCard, recordsOnDate, writeCard } from "./card-table.ts";
-import { type NewestCrls, newestOfEach } from "./crl-index.ts";
-import { ISSUER_NAMES } from "./issuers.ts";
+import { type KnownCrl, type NewestCrls, newestOfEach } from "./crl-index.ts";
+import { ISSUER_NAMES, type IssuerName } from "./issuers.ts";
 import type { CardsOfAccount, CardsOfShortId, Counts, LogPart } from "./page-data.ts";
 import { CACHE_DAILY, CACHE_FULL_FILE, FINGERPRINT_FILE, type FileBucket, type FileHeaders, PROOF_LOG_DIRECTORY, TYPE_JSON_LINES, TYPE_TEXT, cardStateFileKey, lengthAndSha256, readFullFile, writeAndReadBack, writeStreamAndReadBack } from "./proof-log-files.ts";
 import { PUBLISHED_STATES, REBUILD_STATE_TABLE, type RebuildProgress, RebuildRefused, beginRebuild, dropPublishedStates, publishedStatesDate, rebuildProgress, rebuildStep } from "./rebuild.ts";
@@ -61,6 +61,24 @@ export const MAX_SUBMISSIONS = 5;
  * announces it to devices.
  */
 export const CRL_MAX_AGE_DAYS = 3;
+
+/**
+ * How long after the newest CRL of an issuer key was first told to the
+ * object a challenge can be issued and its record still use the second
+ * newest CRL's root (spec/revocation-tree.md, "Who checks what"): the 60
+ * seconds a device can be served the index from the data domain's cache,
+ * and the time between the mirror writing the index and telling the object.
+ */
+export const CRL_SWITCH_GRACE_MS = 2 * 60 * 1000;
+
+/**
+ * How long the object keeps when a CRL was first told, once the mirror no
+ * longer tells it among the newest: longer than any CRL can be the newest
+ * (CRL_MAX_AGE_DAYS after its date, and it is told no earlier than its
+ * `thisUpdate`), so a round of the mirror that tells an older pair again
+ * finds their first times.
+ */
+const CRL_ARRIVAL_KEPT_MS = 7 * 24 * 3600 * 1000;
 
 /**
  * The tables. Every statement can run again on an object that has them.
@@ -134,6 +152,16 @@ export const CRL_MAX_AGE_DAYS = 3;
  * cRLNumber in decimal; `crl_date` its CRL date, `YYYY-MM-DD`. The table
  * came after the others, with SCHEMA_VERSION unchanged: an object that was
  * made without it gets it, empty, when it next starts.
+ *
+ * crl_arrivals: when each CRL among the newest was first told to the object
+ * (`setNewestCrls`), in milliseconds since the epoch on the object's clock;
+ * a CRL is its issuer key, `crl_number` and `root`, as in `newest_crls`. A
+ * row is written once and not changed: told again, a CRL keeps its first
+ * time. Every row of `newest_crls` has one. A row is deleted
+ * CRL_ARRIVAL_KEPT_MS after its time, unless its CRL is among the newest.
+ * The table came after the others, with SCHEMA_VERSION unchanged: an object
+ * made without it gets it when it next starts, with the time of that start
+ * for the CRLs it holds then.
  */
 const TABLES: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS challenges (
@@ -170,6 +198,13 @@ const TABLES: readonly string[] = [
      crl_number TEXT    NOT NULL,
      crl_date   TEXT    NOT NULL,
      PRIMARY KEY (issuer, place)
+   ) WITHOUT ROWID`,
+  `CREATE TABLE IF NOT EXISTS crl_arrivals (
+     issuer     TEXT    NOT NULL,
+     crl_number TEXT    NOT NULL,
+     root       TEXT    NOT NULL,
+     first_ms   INTEGER NOT NULL,
+     PRIMARY KEY (issuer, crl_number, root)
    ) WITHOUT ROWID`,
   `CREATE TABLE IF NOT EXISTS published (
      date        TEXT    PRIMARY KEY,
@@ -495,6 +530,9 @@ export class ProofLog extends DurableObject<Env> {
       if (this.#paused) sql.exec("DELETE FROM retries WHERE work IN ('views', 'publication')");
       // The proof log is published from the date after this one on (`#dailyPublication`); on an object that has the row this changes nothing.
       sql.exec("INSERT OR IGNORE INTO first_day (id, date) VALUES (1, ?)", formatDay(taiwanDay(now().getTime())));
+      // The CRLs it holds count as first told now, on an object made before `crl_arrivals`: a card proof under way
+      // when the build came keeps the second newest CRL's root. On any other object every one has its row already.
+      sql.exec("INSERT OR IGNORE INTO crl_arrivals (issuer, crl_number, root, first_ms) SELECT issuer, crl_number, root, ? FROM newest_crls", now().getTime());
       // An object that starts has its alarm set, once the constructor has returned (`timedWork` is a subclass's to
       // override): the daily publication is due at a time of day, whether or not anything is asked of the object.
       ctx.waitUntil(Promise.resolve().then(() => this.#setAlarmWithoutFailing()));
@@ -650,10 +688,10 @@ export class ProofLog extends DurableObject<Env> {
   }
 
   /** The row of a challenge that has not expired at this moment, or null: not issued here, expired, or already deleted. */
-  #challenge(challenge: string): { submissions: number; accepted: boolean } | null {
+  #challenge(challenge: string): { issuedMs: number; submissions: number; accepted: boolean } | null {
     const row = this.ctx.storage.sql.exec<{ issued_ms: number; submissions: number; accepted: number }>("SELECT issued_ms, submissions, accepted FROM challenges WHERE challenge = ?", challenge).toArray()[0];
     if (row === undefined || now().getTime() - row.issued_ms >= CHALLENGE_LIFETIME_MS) return null;
-    return { submissions: row.submissions, accepted: row.accepted !== 0 };
+    return { issuedMs: row.issued_ms, submissions: row.submissions, accepted: row.accepted !== 0 };
   }
 
   /**
@@ -739,10 +777,14 @@ export class ProofLog extends DurableObject<Env> {
     if (challenge === null) return refused("challenge_unknown");
     if (challenge.accepted) return refused("challenge_used");
 
-    // The back end's rule on the root: one of the two newest CRLs of the issuer, the newest at most 3 days old.
-    const newest = this.newestCrls()[record.issuer].map((crl) => ({ root: crl.root, date: crlDay(crl.crlDate) }));
+    // The back end's rule on the root: the newest CRL of the issuer, at most 3 days old; the second newest only for a
+    // challenge issued before the newest was first told, or at most CRL_SWITCH_GRACE_MS after.
+    const known = this.newestCrls()[record.issuer];
+    const newest = known.map((crl) => ({ root: crl.root, date: crlDay(crl.crlDate) }));
     if (newest.length === 0 || taiwanDay(now().getTime()) > newest[0]!.date + CRL_MAX_AGE_DAYS) return refused("crl_stale");
-    const crlDates = newest.filter((crl) => crl.root === record.smtRoot).map((crl) => crl.date);
+    const switched = this.#firstTold(record.issuer, known[0]!) + CRL_SWITCH_GRACE_MS;
+    const accepted = challenge.issuedMs <= switched ? newest : newest.slice(0, 1);
+    const crlDates = accepted.filter((crl) => crl.root === record.smtRoot).map((crl) => crl.date);
     if (crlDates.length === 0) return refused("root");
 
     // The record rules, on the state this object keeps.
@@ -915,14 +957,32 @@ export class ProofLog extends DurableObject<Env> {
    */
   setNewestCrls(newest: NewestCrls): void {
     this.#checkTables();
+    const time = now().getTime();
+    const sql = this.ctx.storage.sql;
     this.ctx.storage.transactionSync(() => {
-      this.ctx.storage.sql.exec("DELETE FROM newest_crls");
+      sql.exec("DELETE FROM newest_crls");
       for (const issuer of ISSUER_NAMES) {
         for (const [place, crl] of newest[issuer].entries()) {
-          this.ctx.storage.sql.exec("INSERT INTO newest_crls (issuer, place, root, crl_number, crl_date) VALUES (?, ?, ?, ?, ?)", issuer, place, crl.root, crl.crlNumber, crl.crlDate);
+          sql.exec("INSERT INTO newest_crls (issuer, place, root, crl_number, crl_date) VALUES (?, ?, ?, ?, ?)", issuer, place, crl.root, crl.crlNumber, crl.crlDate);
+          // Told again, a CRL keeps its first time: a round that tells an older pair, and then one that tells the newest again, do not make it new.
+          sql.exec("INSERT OR IGNORE INTO crl_arrivals (issuer, crl_number, root, first_ms) VALUES (?, ?, ?, ?)", issuer, crl.crlNumber, crl.root, time);
         }
       }
+      sql.exec(
+        `DELETE FROM crl_arrivals WHERE first_ms < ? AND NOT EXISTS
+           (SELECT 1 FROM newest_crls n WHERE n.issuer = crl_arrivals.issuer AND n.crl_number = crl_arrivals.crl_number AND n.root = crl_arrivals.root)`,
+        time - CRL_ARRIVAL_KEPT_MS,
+      );
     });
+  }
+
+  /** When a CRL among the newest was first told to the object. Every one has its row (`crl_arrivals`). */
+  #firstTold(issuer: IssuerName, crl: KnownCrl): number {
+    const row = this.ctx.storage.sql
+      .exec<{ first_ms: number }>("SELECT first_ms FROM crl_arrivals WHERE issuer = ? AND crl_number = ? AND root = ?", issuer, crl.crlNumber, crl.root)
+      .toArray()[0];
+    if (row === undefined) throw new Error("a CRL among the newest without the time it was first told");
+    return row.first_ms;
   }
 
   /**
