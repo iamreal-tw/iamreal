@@ -227,6 +227,9 @@ class MainActivity : ComponentActivity() {
     /**
      * Opened from the reminder's notification: step 1 says so. A card proof under way is left as it is; from
      * the steps after the submission, back to step 1. Another app could open the app the same way: all it gets is that sentence.
+     *
+     * Opened by an address of the app domain (README.md, "app 網域"): nothing. The address is not read, so
+     * it is the same as opened from the home screen; a card proof under way stays where it was (issue #92).
      */
     private fun handle(intent: Intent?) {
         if (intent?.getBooleanExtra(Phone.FROM_REMINDER, false) != true) return

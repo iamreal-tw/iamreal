@@ -104,17 +104,37 @@ Android 有三種 app（ADR-0040），識別碼不同，三個可以同時裝在
 | 識別碼 | `tw.iamreal.app` | `tw.iamreal.app.test`（`applicationIdSuffix = ".test"`） | `tw.iamreal.app.dev`（`applicationIdSuffix = ".dev"`） |
 | 圖示下面的名稱（`design/copy/app.md`） | 島民證明 封測（`src/main/res/`） | 島民證明 測試（`src/trial/res/`） | 島民證明 dev（`src/debug/res/`） |
 | 連哪裡 | 上線前：`https://test.iamreal.tw`、`https://test-data.iamreal.tw` | 測試網站，上線後也是 | 測試網站，上線後也是 |
+| 打開它的 app 網域（「app 網域」） | 上線前：`test-app.iamreal.tw` | `test-app.iamreal.tw`，上線後也是 | 沒有 |
 | 簽的場合字串 | 上線前：`iamreal-test:public:0` | `iamreal-test:public:0`，上線後也是 | `iamreal-test:public:0`，上線後也是 |
 | 「到 Google Play 更新」開的頁 | `tw.iamreal.app` 的商店頁 | `tw.iamreal.app.test` 的商店頁：從內部測試裝的人在那一頁更新 | 沒有這個按鈕（不在 Google Play 上，和 iOS 的開發用 build 相同），句子照舊 |
 | 怎麼裝 | Google Play 的內部測試（營運者手動觸發 [`upload-android.yml`](../.github/workflows/upload-android.yml)；「上傳到 Google Play」） | Google Play 的內部測試（營運者手動觸發 [`upload-android-test.yml`](../.github/workflows/upload-android-test.yml)） | 用線裝（「怎麼用線裝到手機」） |
 | 顯示的版本 | 上傳時給：台灣的日期（`2026.11.5`，同一天相同） | 同左 | `dev` |
 | build 號碼（`versionCode`） | 上傳工作流程的執行編號，不到 1,000,000 | 它自己的上傳工作流程的執行編號加 1,000,000，1,000,000 以上、不到 2,000,000 | 固定 2,000,000 |
 
-環境寫在每個 build type 自己的 `app/src/<build type>/kotlin/tw/iamreal/app/Environment.kt`：連哪個網站、簽哪一份證明紀錄、商店頁是哪一頁。測試網站的網址和證明紀錄的編號只寫在 `app/src/main/kotlin/tw/iamreal/app/TestSite.kt` 一個地方，各個 `Environment.kt` 引用它。app 裡沒有切換的設定，後台也不能叫它換。Kotlin 呼叫核心時指定的證明紀錄永遠是這一份（`core/DeviceCore.kt`），所以 app 的程式拿不到正式的證明紀錄的場合字串。上線那天用一個 PR 讓正式 app 改連正式網站：改 `app/src/release/` 的那一個，並把 `release` 從 `app/build.gradle.kts` 的 `onTestSite` 拿掉（`checkApk` 只對這一組的 build type 要求連測試網站、不准出現正式網站，`BuildTest` 照它核對網站和場合字串）。測試 app 和開發用 build 的檔、它們在 `onTestSite` 裡的位置都不動；正式網站的設定現在還沒有。
+環境寫在每個 build type 自己的 `app/src/<build type>/kotlin/tw/iamreal/app/Environment.kt`：連哪個網站、簽哪一份證明紀錄、商店頁是哪一頁。測試網站的網址和證明紀錄的編號只寫在 `app/src/main/kotlin/tw/iamreal/app/TestSite.kt` 一個地方，各個 `Environment.kt` 引用它。app 裡沒有切換的設定，後台也不能叫它換。Kotlin 呼叫核心時指定的證明紀錄永遠是這一份（`core/DeviceCore.kt`），所以 app 的程式拿不到正式的證明紀錄的場合字串。上線那天用一個 PR 讓正式 app 改連正式網站：改 `app/src/release/` 的那一個，並把 `release` 從 `app/build.gradle.kts` 的 `onTestSite` 拿掉，它的 app 網域換成 `app.iamreal.tw`（「app 網域」）（`checkApk` 只對這一組的 build type 要求連測試網站、不准出現正式網站，`BuildTest` 照它核對網站和場合字串）。測試 app 和開發用 build 的檔、它們在 `onTestSite` 裡的位置都不動；正式網站的設定現在還沒有。
 
 **build 號碼為什麼這樣編**（ADR-0040「測試網站的最低版本」）：上線那天，測試網站的最低版本（ADR-0035，比的是 `versionCode`）調到 1,000,000，擋住正式 app 上線前每一個還連著測試網站的 build；測試 app 和開發用 build 一律在 1,000,000 以上，擋不到。正式 app 的號碼是它的上傳工作流程的執行編號，到 1,000,000 還要上傳一百萬次。測試 app 的號碼是另一個工作流程自己數的執行編號加 1,000,000，兩個 app 的號碼不會交錯。開發用 build 固定 2,000,000，比正式 app 和測試 app 都大，所以裝了它的手機不會被最低版本擋。`app/build.gradle.kts` 的 `buildNumbers` 寫了每個 build type 的範圍，`checkManifest` 擋住範圍以外的（「建置時的檢查」）。
 
 第四種 build type `fake` 只給模擬器的測試（「模擬器上過一次卡」）：它是開發用 build 換上假卡片和本機的後台，識別碼 `tw.iamreal.app.dev.fake`、名稱和 build 號碼和開發用 build 相同，不會上傳到任何地方。它的「到 Google Play 更新」開正式 app 的商店頁（`app/src/fake/` 的 `Environment.kt`），模擬器的測試照正式 app 和測試 app 的樣子走過這個按鈕。
+
+## app 網域
+
+ADR-0040，`GLOSSARY.md`「app 網域」，規格 [#527](https://github.com/iamreal-tw/iamreal/issues/527)。在手機上打開 app 網域的任何網址，裝了 app 就打開 app（Android App Links）；網址送什麼、沒裝 app 時落在哪一頁，見 [`worker/README.md`「app 網域」](../worker/README.md#app-網域)。
+
+- **誰認哪一個**：app 網域跟著 build 連的網站。正式 app 和測試 app 都連測試網站，所以都認 `test-app.iamreal.tw`；開發用 build（和模擬器測試的 `fake`）不認任何 app 網域，不用公開 debug 金鑰的指紋。宣告寫在那個 build type 自己的 `app/src/release/AndroidManifest.xml`、`app/src/trial/AndroidManifest.xml`，`app/build.gradle.kts` 的 `appDomains` 寫每個 build type 該有的網域，`checkManifest` 照它核對（「建置時的檢查」）。
+- **怎麼宣告**：app 的那一個畫面（`MainActivity`）多一個 `intent-filter`：`VIEW`、`DEFAULT`、`BROWSABLE`，`https`，只有主機、不限路徑，`autoVerify="true"`，系統去抓主機的 `/.well-known/assetlinks.json` 驗證。不註冊自訂的網址前綴（#92）。`test.iamreal.tw` 上的連結（第 6 步的 `/hang/<短編號>`）照舊在瀏覽器裡打開。
+- **從連結打開和從主畫面打開相同**：app 不讀網址裡的任何東西（`MainActivity.kt` 的 `handle`）。畫面只有一份：`MainActivity` 是 `singleTask`，不管是瀏覽器、相機、還是在自己的畫面上直接開它的 app（例如內建的瀏覽器）打開，都是把 app 原本的那一個叫到前面；過卡做到一半時，回到原本的畫面，不重設、不疊出第二份。過卡的狀態本來就只在行程的記憶體裡，app 被系統收掉之後從連結打開，和從主畫面打開一樣從第 1 步開始。
+- **同一支手機上兩個都裝時**：系統交給最後安裝的那一個（[Add Android App Links](https://developer.android.com/training/app-links/add-applinks)「Check for multiple apps associated with the same domain」）。
+- **測試 app 還驗證不過**：它還沒建在 Play Console（[#479](https://github.com/iamreal-tw/iamreal/issues/479)），沒有 Google 產生的簽章金鑰，`assetlinks.json` 還沒列它。在那之前系統不把連結交給測試 app：Android 12 起，沒驗證過的網域在瀏覽器裡打開（[Verify Android App Links](https://developer.android.com/training/app-links/verify-android-applinks)）。
+- **上線那天**：正式 app 改認 `app.iamreal.tw`，和改連正式網站同一個 PR（「三種 app」）：`app/src/release/AndroidManifest.xml` 的主機和 `appDomains` 的 `release` 一起換。測試 app 的不動。
+
+在手機上確認（裝好從 Google Play 下載的 build 之後；Android 14 以下只在安裝或更新時驗證）：
+
+```
+adb shell pm get-app-links tw.iamreal.app        # test-app.iamreal.tw: verified
+adb shell pm get-app-links tw.iamreal.app.test
+adb shell pm verify-app-links --re-verify tw.iamreal.app   # 改了 assetlinks.json 之後重新驗證
+```
 
 ## 上傳到 Google Play
 
@@ -178,7 +198,7 @@ IAMREAL_STORE_SCREENS=$PWD/../android/test-output/store IAMREAL_BB=<bb 6.0.0 的
 | `app/src/main/kotlin/tw/iamreal/app/reminder/` | 過卡提醒：下次提醒的日子怎麼算、存什麼（`Reminders.kt`），日子和時刻的寫法（`When.kt`），系統的鬧鐘、通知和接收器（`Phone.kt`） |
 | `app/src/main/kotlin/tw/iamreal/app/ui/` | 啟動畫面和八步的畫面（Compose）、感應的面板、哪個情況顯示 `design/copy/` 的哪一句、主題的數值（`Theme.kt`）；提醒的畫面和設定頁（`Reminder.kt`） |
 | `app/src/main/kotlin/tw/iamreal/app/TestSite.kt` | 測試網站的網址和測試的證明紀錄的編號，只寫在這裡 |
-| `app/src/release/`、`app/src/trial/`、`app/src/debug/` | 正式 app、測試 app、開發用 build 各自的 `Environment.kt`（連哪個網站、簽哪一份證明紀錄、商店頁），測試 app 和開發用 build 各自的名稱（`res/`；正式 app 的在 `src/main/res/`）。「三種 app」 |
+| `app/src/release/`、`app/src/trial/`、`app/src/debug/` | 正式 app、測試 app、開發用 build 各自的 `Environment.kt`（連哪個網站、簽哪一份證明紀錄、商店頁），測試 app 和開發用 build 各自的名稱（`res/`；正式 app 的在 `src/main/res/`），正式 app 和測試 app 各自的 app 網域（`AndroidManifest.xml`，「app 網域」）。「三種 app」 |
 | `app/src/real/` | 發出去的安裝檔和用線裝的建置接到什麼（`Target.kt`）：`Environment.kt` 的網站、NFC 讀的卡片、核心自己的 session |
 | `app/src/fake/` | 只給模擬器測試的建置（build type `fake`）：假卡片、本機的後台、認測試金鑰的 session，和它自己的 `Environment.kt` |
 | `app/src/testing/` | `TestingCore`：測試用的函式庫才有的那一個函式。只編進 `fake` 和單元測試 |
@@ -253,7 +273,7 @@ $NDK/llvm-readelf -lW app/build/intermediates/merged_native_libs/release/mergeRe
 
 `./gradlew build` 會跑；只做安裝檔時也會跑，不管做的是 APK（`assemble*`、`package*`）還是上傳到 Google Play 用的 bundle（`bundle*`，由 `checkBundle` 看 `.aab` 裡的 manifest、函式庫、內建的檔案和 dex，項目相同）。任何一項不過就失敗（`app/build.gradle.kts`）：
 
-- **合併後的 manifest**（`checkManifest`）：識別碼不是這個 build type 該有的就失敗（`release` 是 `tw.iamreal.app`、`trial` 是 `tw.iamreal.app.test`、`debug` 是 `tw.iamreal.app.dev`、`fake` 是 `tw.iamreal.app.dev.fake`，逐字寫在 `app/build.gradle.kts` 的 `ids`）；build 號碼（`versionCode`）不在這個 build type 的範圍裡就失敗（`release` 1 到 999,999、`trial` 1,000,000 到 1,999,999、`debug` 和 `fake` 2,000,000，寫在 `buildNumbers`；「三種 app」）；任何地方出現 `AD_ID` 就失敗；要的權限只能是 `app/build.gradle.kts` 裡 `allowedPermissions` 列的：網路（`INTERNET`）、讀卡（`NFC`；沒有 NFC 的手機也裝得上，`uses-feature` 寫 `required="false"`）、提醒的通知（`POST_NOTIFICATIONS`）、手機重開時被告知（`RECEIVE_BOOT_COMPLETED`，「過卡提醒」），加上 `androidx.core` 替 app 自己宣告、只有這個 app 拿得到的那一個（`<識別碼>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`）；別的 app 叫得到的元件只能是 app 的那一個畫面。`AndroidManifest.xml` 另外寫了移除 `AD_ID`，之後有程式庫帶進來也會被拿掉；畫面的程式庫帶進來、app 一打開就會自己做的兩件事也在那裡拿掉：找 emoji 字型（手機上有 Google Play services 時會去問它）、安裝啟動用的 profile 和讓開發工具觸發它的接收器
+- **合併後的 manifest**（`checkManifest`）：識別碼不是這個 build type 該有的就失敗（`release` 是 `tw.iamreal.app`、`trial` 是 `tw.iamreal.app.test`、`debug` 是 `tw.iamreal.app.dev`、`fake` 是 `tw.iamreal.app.dev.fake`，逐字寫在 `app/build.gradle.kts` 的 `ids`）；build 號碼（`versionCode`）不在這個 build type 的範圍裡就失敗（`release` 1 到 999,999、`trial` 1,000,000 到 1,999,999、`debug` 和 `fake` 2,000,000，寫在 `buildNumbers`；「三種 app」）；任何地方出現 `AD_ID` 就失敗；要的權限只能是 `app/build.gradle.kts` 裡 `allowedPermissions` 列的：網路（`INTERNET`）、讀卡（`NFC`；沒有 NFC 的手機也裝得上，`uses-feature` 寫 `required="false"`）、提醒的通知（`POST_NOTIFICATIONS`）、手機重開時被告知（`RECEIVE_BOOT_COMPLETED`，「過卡提醒」），加上 `androidx.core` 替 app 自己宣告、只有這個 app 拿得到的那一個（`<識別碼>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`）；別的 app 叫得到的元件只能是 app 的那一個畫面；打開 app 的網址只能是這個 build type 的 app 網域（`appDomains`：`release`、`trial` 是 `test-app.iamreal.tw`，`debug`、`fake` 沒有；「app 網域」），宣告的主機和它正好相同、不多不少、沒有萬用字元，每一個都在 app 的那一個畫面上、`autoVerify`、只有 `VIEW`、`DEFAULT`、`BROWSABLE`、只有 `https`（沒有自訂的網址前綴、沒有 `http`），除了主機不寫路徑、埠或任何別的。`AndroidManifest.xml` 另外寫了移除 `AD_ID`，之後有程式庫帶進來也會被拿掉；畫面的程式庫帶進來、app 一打開就會自己做的兩件事也在那裡拿掉：找 emoji 字型（手機上有 Google Play services 時會去問它）、安裝啟動用的 profile 和讓開發工具觸發它的接收器
 - **安裝檔**（`checkApk`）：原生的函式庫只有我們的那一個，release 只有 `arm64-v8a`；`assets/` 裡的檔案和兩份清單完全相同，不多不少；`.so` 沒有連結 `liblog`。Compose 帶進來的 `androidx.graphics:graphics-path` 有自己的一個原生函式庫（Android 13 以前走訪路徑的線段用的），打包時排除掉；畫面畫的路徑（記號、打勾）只交給系統去畫，不走訪它的線段，模擬器的測試走過每一個畫面。程式庫帶的啟動用 profile 也不放進去
 - **沒有假卡片、不認測試的發證金鑰**（`checkApk`）：`debug`、`release`、`trial` 的 dex 裡出現 `tw/iamreal/app/fake/` 或 `TestingCore`，或 `.so` 裡有測試用函式庫的記號（`device-core/prover/src/lib.rs` 的 `IDC_TESTING_MARK`），就失敗。這兩樣只在 build type `fake` 裡
 - **上線前只連測試網站**（`checkApk`）：`app/build.gradle.kts` 的 `onTestSite` 裡的 build type（現在是 `release`、`trial`、`debug`、`fake`）只連測試網站。`debug`、`release`、`trial` 的 dex 裡沒有測試網站的網址（`https://test.iamreal.tw`）就失敗；這幾種 build 的 dex 裡出現正式網站的網址（`//iamreal.tw`、`//data.iamreal.tw`）或正式的證明紀錄的場合字串（`iamreal:public:`）就失敗。場合字串本身不在 Kotlin 裡，由核心照代表哪一份證明紀錄的數字給；單元測試核對核心給這個 app 的是 `spec/vectors/scope.json` 裡測試的證明紀錄的那一條，三種 app 各自核對（`BuildTest`，「測試」）。這一項的「上線前」：測試 app 和開發用 build 永遠如此，只有正式 app 上線那天離開（`onTestSite`，「三種 app」）。`.so` 裡兩份證明紀錄的場合字串都有（核心是同一份），Kotlin 只傳得出測試的證明紀錄的數字
