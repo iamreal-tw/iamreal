@@ -47,7 +47,7 @@ import { scopeOf } from "iamreal-protocol/scope.ts";
 import type { ProofLogRecord } from "iamreal-protocol/record.ts";
 import { type CardState, type RecordResult, RULES_VERSION, type SlotState, applyRecord } from "iamreal-protocol/record-rules.ts";
 import { type ApiParts, api, isApiPath } from "../src/api.ts";
-import { copyCards, dropCardsCopy, writeCard } from "../src/card-table.ts";
+import { copyCards, dropCardsCopy, recordsOnDate, writeCard } from "../src/card-table.ts";
 import { Counts as DeployedCounts, countsOf } from "../src/counts.ts";
 import { EngineError } from "../src/engine.ts";
 import worker from "../src/index.ts";
@@ -521,7 +521,7 @@ export class ProofLog extends DeployedProofLog {
     this.ctx.storage.transactionSync(() => {
       if (outcome.result.valid) {
         // The back end's count of the card's records of the date, as `accept` keeps it; the rules do not limit it.
-        const onDate = card.lastCardProof === date ? proofsOnLastDate : 0;
+        const onDate = recordsOnDate(card.lastCardProof, proofsOnLastDate, date);
         this.keepRuleState(e.scope_string, e.scoped_id, outcome.card, onDate + 1, e.seq, outcome.latestValidDate);
         const { count } = sql.exec<{ count: number }>("SELECT count FROM proof_log WHERE id = 1").one();
         sql.exec("UPDATE view_state SET seq = ? WHERE id = 1", e.seq - 1);

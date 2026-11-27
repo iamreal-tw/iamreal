@@ -284,8 +284,8 @@ export type CardsSoFar = Map<string, CardState>;
  *
  * Every line is one the back end wrote, so it passed the record rules'
  * checks 1 to 4 when it was written; what it did on each platform is
- * computed again by the same rules (protocol/, `applyList`: checks 5 and 6
- * and the effects), from the states the records before it leave. A line
+ * computed again by the same rules (protocol/, `applyList`: check 5 and
+ * the effects), from the states the records before it leave. A line
  * that is not well formed, or a record the rules do not take, throws: the
  * transaction then leaves the views as they were before this run.
  */

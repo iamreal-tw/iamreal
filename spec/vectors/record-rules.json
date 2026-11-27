@@ -5164,7 +5164,7 @@
       ]
     },
     {
-      "name": "a record dated a day before its card's last card proof is date_order; proofs_on_last_date stays 1",
+      "name": "a record dated a day before its card's last card proof is date_order; the card's last card proof stays",
       "proof_log": "production",
       "events": [
         {

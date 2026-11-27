@@ -39,7 +39,7 @@
 | `key.rs`、`tree.rs` | `spec/revocation-tree.md`「Tree」 | 樹的鍵；樹和「不在樹裡」的路徑，可以分幾份建再合起來 |
 | `circuit_inputs.rs` | `spec/circuit-inputs.md` | 電路的輸入（憑證、發證金鑰、路徑、`current_time`、兩個簽章各自切成的段，和兩個 Barrett 參數），以及裝置預期證明帶的公開輸入 |
 | `hex.rs` | | 寫在程式裡的十六進位常數 |
-| `record_rules.rs` | `spec/record-rules.md` | 紀錄規則：一筆紀錄的六項檢查（`apply_record`）、其中第 5、6 項（`apply_list`，裝置在簽章之前算的那一半）、從第一筆紀錄算起的現況（`MemoryRules`）、版本號 `RULES_VERSION` 和規則裡的數字。規則跟著版本號寫死在這裡（ADR-0035）；平台表不寫死，由呼叫的人傳進來 |
+| `record_rules.rs` | `spec/record-rules.md` | 紀錄規則：一筆紀錄的五項檢查（`apply_record`）、其中第 5 項（`apply_list`，裝置在簽章之前算的那一半）、從第一筆紀錄算起的現況（`MemoryRules`）、版本號 `RULES_VERSION` 和規則裡的數字。規則跟著版本號寫死在這裡（ADR-0035）；平台表不寫死，由呼叫的人傳進來 |
 | `counts.rs` | `spec/counts.md` | 計數的表（步驟、停下來的原因、動作、花了多久的分級……，每一項適用哪些客戶端）；一筆計數收不收，和後台同一套規則；app 送出的那一筆：系統給的版本號、手機型號不合格式的整個不送，不截短也不改寫；花了多久的毫秒數換成分級；過卡裝置編號什麼時候換 |
 | `list_consequence.rs` | `spec/list-consequence.md` | 確認的畫面上每一列的後果：持卡人改過的清單在每個平台上是新宣告、再次過卡、更換還是收回，更換之後還剩幾次；後台今天還收不收這張卡片的紀錄；不認得的平台上的帳號照原樣留在清單裡 |
 

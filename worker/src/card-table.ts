@@ -64,14 +64,14 @@ export interface StoredCard {
 }
 
 /**
- * The number of valid records of the card dated `date`, for a `date` the
- * record rules accept for it (check 4: not before its `last_card_proof`): a
- * card's dates do not go back, so that is `proofs_on_last_date` when `date`
- * is `last_card_proof`, and none when it is later. Null is a card without a
- * valid record.
+ * The number of valid records of a card dated `date`, from its
+ * `last_card_proof` and `proofs_on_last_date`, for a `date` the record rules
+ * accept for it (check 4: not before its `last_card_proof`): a card's dates
+ * do not go back, so that is `proofs_on_last_date` when `date` is
+ * `last_card_proof`, and none when it is later.
  */
-export function proofsOn(stored: StoredCard | null, date: Day): number {
-  return stored !== null && stored.card.lastCardProof === date ? stored.proofsOnLastDate : 0;
+export function recordsOnDate(lastCardProof: Day | null, proofsOnLastDate: number, date: Day): number {
+  return lastCardProof === date ? proofsOnLastDate : 0;
 }
 
 /**

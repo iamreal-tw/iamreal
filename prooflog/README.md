@@ -33,7 +33,7 @@ go test ./prooflog
 
 - `spec/vectors/record.json` 的 `files`：每份檔案照它的 `proof_log`（正式或測試的證明紀錄的表）是有效（指紋相同）或在哪一行、用哪個代碼失敗。
 - `spec/vectors/record.json` 的指紋和公布的證明紀錄（`published_test.go`）：版本字串和空的證明紀錄的指紋；`proof_logs` 每一筆加入後的指紋、整份的指紋和雜湊清單；`generated_proof_log` 在各個筆數的指紋，和 0、1、1,000、1,001、2,001 筆時每個紀錄檔、雜湊清單的檔名、行數、第一筆的 `seq`、第一行和最後一行、SHA-256。
-- `spec/vectors/record-rules.json`：每個案例照它的 `proof_log` 用那份證明紀錄的平台表；事件換成紀錄（先確認是那份證明紀錄裡格式正確的紀錄），`verifies` 由假的 `ProofVerifier` 回答，`crl_dates` 由假的 `CRLArchive` 回答（每筆事件有自己的樹根）。比對每筆的結果（有效的比每個平台的種類）、最後的現況和每張卡片的順序號碼（`ordinals`，`Card` 的 `Ordinal`）。現況裡每張卡片的 `proofs_on_last_date` 和 `slots` 是卡片的狀態，不在規則的輸出裡（`State` 沒有它們），這個測試不比，由 `incremental_test.go` 用 `Card` 比。
+- `spec/vectors/record-rules.json`：每個案例照它的 `proof_log` 用那份證明紀錄的平台表；事件換成紀錄（先確認是那份證明紀錄裡格式正確的紀錄），`verifies` 由假的 `ProofVerifier` 回答，`crl_dates` 由假的 `CRLArchive` 回答（每筆事件有自己的樹根）。比對每筆的結果（有效的比每個平台的種類）、最後的現況和每張卡片的順序號碼（`ordinals`，`Card` 的 `Ordinal`）。現況裡每張卡片的 `slots` 是卡片的狀態，不在規則的輸出裡（`State` 沒有它），這個測試不比，由 `incremental_test.go` 用 `Card` 比。
 
 **卡片狀態檔**（`cardstate_test.go`，讀 `spec/vectors/card-state-file.json`）：
 

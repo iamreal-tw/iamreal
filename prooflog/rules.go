@@ -161,7 +161,8 @@ type slotState struct {
 }
 
 // cardState holds exactly the items of the State table of
-// spec/record-rules.md: the card's own one, and one slot per platform.
+// spec/record-rules.md: the card's last card proof, and one slot per
+// platform.
 type cardState struct {
 	slots         map[string]*slotState // one per platform of the table
 	lastCardProof *verifier.Date

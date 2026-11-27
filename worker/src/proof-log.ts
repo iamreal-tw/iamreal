@@ -37,7 +37,7 @@ import { type Day, formatDay, parseDay, startOfTaiwanDay, taiwanDay } from "iamr
 import { EMPTY_FINGERPRINT, type FingerprintLine, LINES_PER_FILE, type RecordFields, type ProofLogRecord, fingerprintLine, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, recordLine, proofLogFileName } from "iamreal-protocol/record.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
 import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, RULES_VERSION, applyRecord, newCard } from "iamreal-protocol/record-rules.ts";
-import { CARD_TABLE, copiedCards, copyCards, dropCardsCopy, proofsOn, readCard, writeCard } from "./card-table.ts";
+import { CARD_TABLE, copiedCards, copyCards, dropCardsCopy, readCard, recordsOnDate, writeCard } from "./card-table.ts";
 import { type NewestCrls, newestOfEach } from "./crl-index.ts";
 import { ISSUER_NAMES } from "./issuers.ts";
 import type { CardsOfAccount, CardsOfShortId, Counts, LogPart } from "./page-data.ts";
@@ -766,7 +766,7 @@ export class ProofLog extends DurableObject<Env> {
 
     // The back end's limit of records a card a date (settings.ts, `dailyLimit`). Check 4 made the date no earlier
     // than the card's last card proof.
-    const onDate = before.lastCardProof === date ? proofsOnLastDate : 0;
+    const onDate = recordsOnDate(before.lastCardProof, proofsOnLastDate, date);
     if (onDate >= this.settings.dailyLimit) return refused("daily_limit");
 
     // The back end's policy, if it is on: never a record without a switch.

@@ -1,6 +1,6 @@
 //! `idc_list_consequence`, called the way an app calls it: every case of
 //! spec/vectors/list-consequence.json, and every record of
-//! spec/vectors/record-rules.json that reaches checks 5 and 6; then what
+//! spec/vectors/record-rules.json that reaches check 5; then what
 //! only the C function has (the shape of its input, the clock, pointers).
 
 mod common;

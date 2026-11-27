@@ -40,7 +40,7 @@ import type { PlatformRow } from "iamreal-protocol/platforms.ts";
 import { EMPTY_FINGERPRINT, type FingerprintLine, LINES_PER_FILE, fingerprintLine, nextFingerprint, proofLogFileName, readRecordLine, recordHash } from "iamreal-protocol/record.ts";
 import { RULES_VERSION, applyList, newCard } from "iamreal-protocol/record-rules.ts";
 import { sha256Hex } from "iamreal-protocol/bytes.ts";
-import { CARD_TABLE, proofsOn, readCard, writeCard } from "./card-table.ts";
+import { CARD_TABLE, readCard, recordsOnDate, writeCard } from "./card-table.ts";
 import { FINGERPRINT_FILE, type FileBucket, PROOF_LOG_DIRECTORY } from "./proof-log-files.ts";
 import type { ProofLogKind } from "./settings.ts";
 import { VIEW_TABLES, viewOf, writeView } from "./views.ts";
@@ -354,7 +354,7 @@ export async function rebuildStep(storage: RebuildStorage, bucket: FileBucket, p
         const outcome = applyList(parts.platforms, before, record.accounts, date);
         if (!outcome.result.valid) throw new RebuildRefused(`record ${row.seq} is not one the record rules of this build take (${outcome.result.reason})`);
         // The back end's count of the card's records of the date, whatever its daily limit was when they were written.
-        writeCard(to, record.scopeString, record.scopedId, outcome.card, proofsOn(stored, date) + 1, row.seq);
+        writeCard(to, record.scopeString, record.scopedId, outcome.card, recordsOnDate(before.lastCardProof, stored?.proofsOnLastDate ?? 0, date) + 1, row.seq);
         writeView(to, viewOf(record, date, outcome.result.kinds, before, outcome.card));
         if (latest === null || date > latest) latest = date;
         // A challenge is good for ten minutes and carries its date: one of an earlier date than yesterday's has expired.
