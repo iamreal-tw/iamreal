@@ -770,7 +770,8 @@ async function toAccounts(o: { wrongPinFirst?: boolean; blockClicks?: boolean; s
   check((await whereText()).includes(stepLine(3)), "step 3: 第 3 步，共 7 步");
   const s3 = await page.text();
   check((await page.text("[data-card-read]")) === [C.pin.card_read, "測試用戶", C.pin.name_note].join("\n"), `step 3: the name, and that it stays here: ${JSON.stringify(await page.text("[data-card-read]"))}`);
-  for (const s of [fill(C.pin.purpose_single, { platform: THREADS_NAME }), C.pin.stays]) check(s3.includes(s), `step 3, next to the PIN field: "${s}"`);
+  // The test build knows two platforms (test-example too): step 3 does not name one (pinView, ui.test.ts has the one platform).
+  for (const s of [C.pin.purpose, C.pin.stays]) check(s3.includes(s), `step 3, next to the PIN field: "${s}"`);
   await noLinkOut("step 3");
   if (o.screenshots) await screenshot(`${o.screenshots}-3-pin`);
   if (o.wrongPinFirst) {
@@ -802,7 +803,7 @@ async function toAccounts(o: { wrongPinFirst?: boolean; blockClicks?: boolean; s
   check(componentCount("MakeSignature") === signs + 1, "the first signature");
   const lastSign = component.requests.filter((x) => x.func === "MakeSignature").at(-1)!;
   check(lastSign.tbs === SCOPE && lastSign.pin === PIN, `the first signature: the test log's public scope string (${lastSign.tbs}), with the PIN`);
-  check((await workingSeen()).includes(fill(C.pin.signing_single, { platform: THREADS_NAME })), `step 3 said, after 確認卡片, "${fill(C.pin.signing_single, { platform: THREADS_NAME })}"`);
+  check((await workingSeen()).includes(C.pin.signing), `step 3 said, after 確認卡片, "${C.pin.signing}"`);
   check(!st.main.includes(C.accounts.need_one), "step 4: no message before anything is pressed");
   if (o.screenshots) await screenshot(`${o.screenshots}-4-accounts`);
   return st;
@@ -2110,7 +2111,7 @@ await tryStep("確認卡片 pressed again while the card is confirmed: one signa
       button: [...document.querySelectorAll('main button')].find((b) => b.textContent === ${JSON.stringify(C.pin.confirm_card)})?.disabled ?? null,
       working: document.querySelector('[data-working]')?.innerText ?? "",
     })`);
-    check(during.pin === true && during.button === true && during.back === true && during.working === fill(C.pin.signing_single, { platform: THREADS_NAME }), `while the card is confirmed, the PIN field, the button and 上一步 cannot be used: ${JSON.stringify(during)}`);
+    check(during.pin === true && during.button === true && during.back === true && during.working === C.pin.signing, `while the card is confirmed, the PIN field, the button and 上一步 cannot be used: ${JSON.stringify(during)}`);
     await screenshot("signing-3-pin");
     // Typed and pressed again anyway, with the keyboard and the mouse.
     await confirmPin(PIN);

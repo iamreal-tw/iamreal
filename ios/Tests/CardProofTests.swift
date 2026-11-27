@@ -1270,7 +1270,7 @@ final class CardProofTests: XCTestCase {
             }
         }
         let inline = (model.screen.blocks + model.screen.under).flatMap(within)
-        let buttons = (model.screen.top.map { [$0] } ?? []) + model.screen.buttons + model.screen.links + (model.screen.cancel.map { [$0] } ?? []) + inline
+        let buttons = (model.screen.top.map { [$0] } ?? []) + (model.screen.beside.map { [$0] } ?? []) + model.screen.buttons + model.screen.links + (model.screen.cancel.map { [$0] } ?? []) + inline
         let button = try XCTUnwrap(buttons.first { $0.label == label }, "no button \(label) among \(buttons.map(\.label))", file: file, line: line)
         XCTAssertTrue(button.enabled, "\(label) cannot be pressed", file: file, line: line)
         model.perform(button.action)
