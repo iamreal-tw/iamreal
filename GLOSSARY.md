@@ -168,8 +168,16 @@ _Avoid_: 測試名冊、測試紀錄（會被讀成測試跑出來的結果）�
 _Avoid_: 測試版、staging
 
 **開發用 build**:
-識別碼 `tw.iamreal.app.dev`、連測試網站的手機 app，不上傳商店。和商店的 app 不同識別碼，兩個可以同時裝在一支手機上（ADR-0037）。
-_Avoid_: 測試 app、測試版、beta 版
+識別碼 `tw.iamreal.app.dev`、連測試網站的手機 app，不上傳商店，營運者用線裝。和正式 app、測試 app 不同識別碼，三個可以同時裝在一支手機上（ADR-0040）。
+_Avoid_: 測試版、beta 版
+
+**正式 app**:
+識別碼 `tw.iamreal.app` 的手機 app。上線前連測試網站，上線起連正式網站（ADR-0040）。
+_Avoid_: 商店的 app、商店的 build（現在有兩個商店的 app）
+
+**測試 app**:
+識別碼 `tw.iamreal.app.test`、永遠連測試網站的手機 app，從 Google Play 的測試軌道和 TestFlight 裝（ADR-0040）。
+_Avoid_: 測試版、beta 版
 
 **帳號清單**（`accounts`）:
 一張卡片宣告的所有帳號，每個平台最多一個。每次過卡簽的是整份清單；沒有列在清單裡的，就是沒有宣告。
