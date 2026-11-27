@@ -302,6 +302,26 @@ export function beforeView(known: ReadonlySet<string> = KNOWN_PLATFORMS): Before
   return known.size === 1 ? { oneProof: null, listedTogether: false } : { oneProof: say(COPY.before.one_proof), listedTogether: true };
 }
 
+export interface ChooseView {
+  /** What one card is exchanged for: choose.intro_single naming the one platform the device knows; before.one_proof with more than one. */
+  intro: Sentence;
+  /** choose.reader_on_computer: where the reader's way is, on this build's site. */
+  readerOnComputer: Sentence;
+}
+
+/**
+ * The page before step 1, where a site has an app domain (card-proof.md, the
+ * choice of a way): by the platforms the device knows, as step 1 (there is
+ * no platform table yet), and the site the build's links are written with.
+ */
+export function chooseView(known: ReadonlySet<string> = KNOWN_PLATFORMS, domain: string = SITE_DOMAIN): ChooseView {
+  const only = known.size === 1 ? presentationOf([...known][0]!) : undefined;
+  return {
+    intro: only ? say(COPY.choose.intro_single, { platform: only.name }) : say(COPY.before.one_proof),
+    readerOnComputer: say(COPY.choose.reader_on_computer, { domain }),
+  };
+}
+
 // Step 4: the card's list ------------------------------------------------------------
 
 /** Whole days from `from` to `to` (YYYY-MM-DD). */
