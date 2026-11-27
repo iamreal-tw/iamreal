@@ -21,6 +21,7 @@
 // them.
 import { type AppDomain, appDomainProblem, appleAppSiteAssociation, assetLinks } from "./app-domain-setting.ts";
 import { EVERY_RESPONSE, TEST_SITE_HEADERS, VISITOR_HEADERS } from "./headers.ts";
+import type { Site } from "./pages/layout.ts";
 import { noAppPage } from "./pages/no-app.ts";
 import { proofLogSettingsOf } from "./settings.ts";
 
@@ -47,28 +48,31 @@ export const APP_DOMAIN_CACHE = "public, max-age=3600";
  */
 export function appDomain(request: Request, env: Env): Response {
   const { pathname } = new URL(request.url);
-  let site: { testProofLogClearedOn: string | null; host: string };
+  let site: Site | null = null;
   let d: AppDomain;
   try {
+    const settings = proofLogSettingsOf(env);
+    site = { testProofLogClearedOn: settings.testProofLogClearedOn, host: settings.siteHost };
     const setting = settingOf(env);
     const problem = appDomainProblem(setting);
     if (problem !== null) throw new Error(problem);
     d = setting as AppDomain;
-    const settings = proofLogSettingsOf(env);
-    site = { testProofLogClearedOn: settings.testProofLogClearedOn, host: settings.siteHost };
-    // The production log's app domain is made at launch (design/copy/app-domain.md); a deploy build's check keeps it out until then.
-    if (site.testProofLogClearedOn === null) throw new Error("the production log's app domain has no page yet");
   } catch (e) {
     console.error(JSON.stringify({ event: "internal_error", page: "app_domain", where: "settings", error: e instanceof Error ? e.name : "unknown" }));
-    return new Response("internal error\n", { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", ...EVERY_RESPONSE } });
+    // With settings that cannot be read, nothing says this is not a test log's site (as visitor.ts).
+    const test = site === null || site.testProofLogClearedOn !== null ? TEST_SITE_HEADERS : {};
+    return new Response(request.method === "HEAD" ? null : "internal error\n", { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", ...EVERY_RESPONSE, ...test } });
   }
-  const test = site.testProofLogClearedOn !== null ? TEST_SITE_HEADERS : {};
+  const clearedOn = site.testProofLogClearedOn;
   const answer = (status: number, headers: Record<string, string>, body: string): Response =>
-    new Response(request.method === "HEAD" ? null : body, { status, headers: { ...headers, ...EVERY_RESPONSE, ...test } });
+    new Response(request.method === "HEAD" ? null : body, { status, headers: { ...headers, ...EVERY_RESPONSE, ...(clearedOn !== null ? TEST_SITE_HEADERS : {}) } });
   if (request.method !== "GET" && request.method !== "HEAD") return answer(405, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", Allow: "GET, HEAD" }, "method not allowed\n");
   const json = (body: string): Response => answer(200, { "Content-Type": "application/json", "Cache-Control": APP_DOMAIN_CACHE }, body);
   if (pathname === "/.well-known/assetlinks.json") return json(assetLinks(d));
   if (pathname === "/.well-known/apple-app-site-association") return json(appleAppSiteAssociation(d));
   if (pathname === "/.well-known" || pathname.startsWith("/.well-known/")) return answer(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": APP_DOMAIN_CACHE }, "not found\n");
-  return answer(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": APP_DOMAIN_CACHE, ...VISITOR_HEADERS }, noAppPage(site));
+  // The production log's app domain has no page until launch (design/copy/app-domain.md); a deploy build's check keeps the
+  // setting out of a production log's environment until then.
+  if (clearedOn === null) return answer(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": APP_DOMAIN_CACHE }, "not found\n");
+  return answer(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": APP_DOMAIN_CACHE, ...VISITOR_HEADERS }, noAppPage({ ...site, testProofLogClearedOn: clearedOn }));
 }

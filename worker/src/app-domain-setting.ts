@@ -22,9 +22,9 @@ export interface AppDomain {
 }
 
 /** A SHA-256 as Play Console shows a signing key's: 32 bytes in uppercase hex, colons between them. */
-export const SHA256_FINGERPRINT = /^[0-9A-F]{2}(:[0-9A-F]{2}){31}$/;
+const SHA256_FINGERPRINT = /^[0-9A-F]{2}(:[0-9A-F]{2}){31}$/;
 /** An Apple team ID: ten uppercase letters and digits. */
-export const APPLE_TEAM_ID = /^[A-Z0-9]{10}$/;
+const APPLE_TEAM_ID = /^[A-Z0-9]{10}$/;
 /** An app's identifier: reverse-DNS, lowercase. */
 const APP_ID = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/;
 /** A domain name: lowercase labels, nothing else (no port, no path). */

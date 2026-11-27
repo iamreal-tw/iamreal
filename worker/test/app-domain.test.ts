@@ -191,11 +191,23 @@ describe("the page for a phone without the app", () => {
     await post.body?.cancel();
   });
 
-  test("the proof log is asked nothing", async () => {
-    await worker.seen();
-    await (await get(`${APP}/p/7K2Q9FM4XD`)).text();
-    await (await get(`${APP}/.well-known/assetlinks.json`)).text();
-    assert.ok(!worker.logLines().some((l) => l.includes("internal_error")));
+  test("the proof log is asked nothing: with its object turned away as overloaded, every answer is the same", async () => {
+    const paths = ["/", "/p/7K2Q9FM4XD", "/.well-known/assetlinks.json", "/.well-known/apple-app-site-association"];
+    const before = await Promise.all(paths.map(async (p) => (await get(`${APP}${p}`)).text()));
+    await worker.overloadProofLog(true);
+    try {
+      // The site itself does ask it: the overload is on.
+      const home = await get(`${SITE}/`);
+      assert.equal(home.status, 503);
+      await home.body?.cancel();
+      for (const [i, p] of paths.entries()) {
+        const res = await get(`${APP}${p}`);
+        assert.equal(res.status, 200, p);
+        assert.equal(await res.text(), before[i], p);
+      }
+    } finally {
+      await worker.overloadProofLog(false);
+    }
   });
 });
 
@@ -206,8 +218,11 @@ describe("the app domain's setting, as the Worker reads it", () => {
       for (const path of ["/", "/.well-known/assetlinks.json", "/.well-known/apple-app-site-association"]) {
         const res = await get(`${APP}${path}`);
         assert.equal(res.status, 500, path);
+        // A test log's site says noindex in every answer, this one too.
+        assert.deepEqual(ownHeaders(res), { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "x-robots-tag": "noindex" }, path);
         await res.body?.cancel();
       }
+      assert.ok(worker.logLines().some((l) => l.includes('"event":"internal_error","page":"app_domain","where":"settings"')), "one line says so");
       const site = await get(`${SITE}/faq`);
       assert.equal(site.status, 200);
       await site.body?.cancel();

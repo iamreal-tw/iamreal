@@ -18,10 +18,8 @@ import { CSS_PATH, FAVICON_PATH, type Site, testProofLogMark } from "./layout.ts
  */
 export const GOOGLE_PLAY_TEST = "https://play.google.com/apps/testing/tw.iamreal.app";
 
-/** The page of a test log's app domain. There is none of the production log's yet: it is made at launch (app-domain.md). */
-export function noAppPage(site: Site): string {
-  const test = site.testProofLogClearedOn;
-  if (test === null) throw new Error("the production log's app domain has no page yet");
+/** The page of a test log's app domain: a site with the date its log was last cleared on. There is none of the production log's yet: it is made at launch (app-domain.md). */
+export function noAppPage(site: Site & { readonly testProofLogClearedOn: string }): string {
   const title = "「島民證明」測試版 app";
   return html`<!DOCTYPE html>
 <html lang="zh-Hant">
@@ -34,7 +32,7 @@ export function noAppPage(site: Site): string {
 <link rel="icon" href="${FAVICON_PATH}">
 </head>
 <body class="no-app">
-${testProofLogMark(test)}
+${testProofLogMark(site.testProofLogClearedOn)}
 <main>
 <h1 class="title">${title}</h1>
 <p>用手機感應自然人憑證，換一張島民證明。不需要讀卡機。</p>

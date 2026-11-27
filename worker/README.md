@@ -789,7 +789,7 @@ ADR-0040，`GLOSSARY.md`「app 網域」。測試網站的 app 網域 `test-app.
 
 - 只收 `GET`、`HEAD`，其他的方法回 `405`。不轉址，不看 User-Agent，不設 cookie。快取一小時（`Cache-Control: public, max-age=3600`）；Apple 的 CDN 和手機自己還會再留更久（[Supporting associated domains](https://developer.apple.com/documentation/xcode/supporting-associated-domains)）。測試網站上每個回應帶 `X-Robots-Tag: noindex`。
 - **其他主機（`test.iamreal.tw`、本機的 `localhost`）照舊**：兩個檔是找不到的頁面，`404`。所以 `test.iamreal.tw` 上的連結（第 6 步的 `/hang/<短編號>`）照舊在瀏覽器裡打開。
-- **兩個檔不放 Static Assets**：Static Assets 不分主機，放了 `test.iamreal.tw` 也會送。反過來，Static Assets 的檔案在 app 網域上照樣由 Cloudflare 直接送、不跑 Worker：沒裝 app 時的那一頁用的 `/pages.css`、`/fonts/…`、`/favicon.ico` 靠這一點；`/proof` 在 app 網域上打開的也是過卡的頁面，但它問 `/api/` 拿到的是沒裝 app 時的那一頁，走不下去。QR code 和按鈕都只連 `/`。
+- **兩個檔不放 Static Assets**：Static Assets 不分主機，放了 `test.iamreal.tw` 也會送。反過來，Static Assets 的檔案在 app 網域上照樣由 Cloudflare 直接送、不跑 Worker：沒裝 app 時的那一頁用的 `/pages.css`、`/fonts/…`、`/favicon.ico` 靠這一點；`/proof` 在 app 網域上打開的也是過卡的頁面，但它問 `/api/` 拿到的是沒裝 app 時的那一頁，走不下去；`site/_redirects` 的轉址（`/proof/` 等）也照樣轉。所以「其他路徑都是沒裝 app 時的那一頁」不包括這些檔的路徑（`wrangler.jsonc` 的 `run_worker_first` 列的那些）：要讓它們也分主機，Worker 得先跑、再讀 Static Assets 的檔，那就要給 Worker 讀檔的 binding，這是 [Static Assets](#static-assets) 刻意不給的。QR code 和按鈕都只連 `/`。
 - **不問任何 Durable Object，不算照 IP 的上限**：這裡的回答不讀證明紀錄，Apple 的 CDN 和 Google 的驗證從少數幾個 IP 來抓。整個 zone 的 WAF 限流規則照樣算（[營運者的說明](#營運者的說明)）。不送計數（#527）。
 - 設定格式不對時，app 網域的每個請求回 `500`，即時的輸出寫一行 `{"event":"internal_error","page":"app_domain","where":"settings",…}`；網站照常。沒有設定 `APP_DOMAIN` 時，這個主機只是網站的另一個名字。
 
@@ -818,7 +818,7 @@ curl -s https://app-site-association.cdn-apple.com/a/v1/test-app.iamreal.tw     
 curl -s 'https://digitalassetlinks.googleapis.com/v1/assetlinks:check?source.web.site=https://test-app.iamreal.tw&relation=delegate_permission/common.handle_all_urls&target.android_app.package_name=tw.iamreal.app&target.android_app.certificate.sha256_fingerprint=<指紋>'
 ```
 
-最後一行每把指紋各問一次，回 `"linked": true`。兩個檔要在宣告了 app 網域的 app 發出去之前上線：Android 14 以下只在安裝或更新 app 時驗證網域（[Verify Android App Links](https://developer.android.com/training/app-links/verify-android-applinks)）。
+最後一行每把指紋各問一次，回 `"linked": true`。現在只問得到正式 app：測試 app 還沒有指紋（[#479](https://github.com/iamreal-tw/iamreal/issues/479)），補上之後也照這一行問它。兩個檔要在宣告了 app 網域的 app 發出去之前上線：Android 14 以下只在安裝或更新 app 時驗證網域（[Verify Android App Links](https://developer.android.com/training/app-links/verify-android-applinks)）。
 
 ### 上線那天
 
