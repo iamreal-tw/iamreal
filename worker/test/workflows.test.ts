@@ -347,6 +347,9 @@ Object.assign(CHANGES, {
   ],
   "ios-upload 13 the profile not checked for NFC tag reading": [replace(U, " | grep -qw TAG && uuid=", " && uuid=")],
   "ios-upload 14 the test app's profile signing the production app": [replace(U, "secrets.IOS_APPSTORE_PROFILE_BASE64", "secrets.IOS_TEST_APPSTORE_PROFILE_BASE64")],
+  "ios-upload 15 the signed app's NFC entitlement let through with more than TAG": [
+    replace(U, ` && ! /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.nfc.readersession.formats:1' "$RUNNER_TEMP/entitlements.plist" > /dev/null 2>&1`, ""),
+  ],
 });
 
 // The upload of the iPhone's test app (#484): the same rules, its own group, the test app archived with its build numbers.
@@ -360,6 +363,7 @@ Object.assign(CHANGES, {
   "ios-test-upload 5 the production app archived": [replace(UT, IOS_TEST_ARCHIVE, './archive.sh "$RUNNER_TEMP/IamrealApp.xcarchive" "$((GITHUB_RUN_NUMBER + 1000000))"')],
   "ios-test-upload 6 the run number as the build, which takes turns with the production app's": [replace(UT, IOS_TEST_ARCHIVE, './archive.sh --test-app "$RUNNER_TEMP/IamrealApp.xcarchive" "$GITHUB_RUN_NUMBER"')],
   "ios-test-upload 7 the production app's group, so that one waits for the other": [replace(UT, "  group: upload-ios-test\n", "  group: upload-ios\n")],
+  "ios-test-upload 9 the production app's profile signing the test app": [replace(UT, "secrets.IOS_TEST_APPSTORE_PROFILE_BASE64", "secrets.IOS_APPSTORE_PROFILE_BASE64")],
   "ios-test-upload 8 the upload job checking out the repository": [
     replace(UT, IOS_UNPACK_STEP, `      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n${IOS_UNPACK_STEP}`),
   ],

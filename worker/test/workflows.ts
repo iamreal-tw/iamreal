@@ -9,7 +9,9 @@
 // of the repository or of a package's install scripts; the keys of the
 // apps' uploads are only in the upload jobs, which build nothing
 // (upload-android.yml, upload-android-test.yml: in the env of the two steps
-// that use them; upload-ios.yml, upload-ios-test.yml: the certificate and the profile in the env of the two steps that use them, the App Store Connect key in the last step);
+// that use them; upload-ios.yml, upload-ios-test.yml: the distribution
+// certificate and the profile in the env of the two steps that use them, the
+// App Store Connect key in the last step);
 // every action is one of a short list at a fixed commit, and a pull
 // request's checks can only read. It is a whitelist: the files are read by
 // a reader of a small part of YAML (below) and anything outside that part
@@ -17,8 +19,8 @@
 // android jobs of checks.yml, the jobs of cache.yml, the two jobs of
 // upload-android.yml and of upload-android-test.yml, the two jobs of
 // upload-ios.yml and of upload-ios-test.yml (only the upload job in the
-// environment with the App Store Connect key, and that key in its last step
-// only), the two jobs of reverify.yml, and the one job each of
+// environment with the App Store Connect key, the distribution certificate
+// and the profile, and the key in its last step only), the two jobs of reverify.yml, and the one job each of
 // checks-ios.yml and checks-circuits.yml, must be exactly the ones written
 // here.
 //
@@ -741,7 +743,8 @@ export const APP_ENVIRONMENT = "app-test";
  *   the NFC tag reading the app asks for (ios/Config/IamrealApp.entitlements),
  *   and the export options name it for the identifier;
  * - the app is signed once without uploading, and the signed app must carry
- *   the NFC entitlement: the archive is unsigned, so this is the first place
+ *   the NFC entitlement, exactly TAG as the app's entitlements file has it,
+ *   no more and no less: the archive is unsigned, so this is the first place
  *   it can be seen (ios/README.md);
  * - only the last step has the App Store Connect key: it writes the key to a
  *   file only it reads, and xcodebuild signs again and uploads.
@@ -750,8 +753,10 @@ export const APP_ENVIRONMENT = "app-test";
 const IOS_UPLOAD_ARTIFACT: YamlMap = { name: "ios-upload", path: "${{ runner.temp }}/ios-upload" };
 const IOS_KEYCHAIN = '"$RUNNER_TEMP/signing.keychain-db"';
 const IOS_PROFILE = '"$RUNNER_TEMP/profile.plist"';
-const IOS_EXPORT = '-archivePath "$RUNNER_TEMP/IamrealApp.xcarchive" -exportOptionsPlist';
-const iosUploadJobs = (app: { archive: { name: string; run: string }; identifier: string; profile: string }): YamlMap => ({
+const IOS_MOBILEPROVISION = '"$RUNNER_TEMP/app.mobileprovision"';
+const IOS_ENTITLEMENTS = '"$RUNNER_TEMP/entitlements.plist"';
+const IOS_ARCHIVE = '-archivePath "$RUNNER_TEMP/IamrealApp.xcarchive"';
+const iosUploadJobs = (app: { archive: { name: string; run: string }; identifier: string; profileSecret: string }): YamlMap => ({
   build: {
     "runs-on": IOS_RUNNER,
     "timeout-minutes": "30",
@@ -799,16 +804,16 @@ const iosUploadJobs = (app: { archive: { name: string; run: string }; identifier
       },
       {
         name: `Install the App Store profile of ${app.identifier} and name it in the export options`,
-        env: { [app.profile]: `\${{ secrets.${app.profile} }}`, APPLE_TEAM_ID: "${{ vars.APPLE_TEAM_ID }}" },
+        env: { [app.profileSecret]: `\${{ secrets.${app.profileSecret} }}`, APPLE_TEAM_ID: "${{ vars.APPLE_TEAM_ID }}" },
         run: [
-          `printf '%s' "$${app.profile}" | base64 --decode > "$RUNNER_TEMP/app.mobileprovision"`,
-          `security cms -D -i "$RUNNER_TEMP/app.mobileprovision" -o ${IOS_PROFILE}`,
+          `printf '%s' "$${app.profileSecret}" | base64 --decode > ${IOS_MOBILEPROVISION}`,
+          `security cms -D -i ${IOS_MOBILEPROVISION} -o ${IOS_PROFILE}`,
           `test "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' ${IOS_PROFILE})" = "$APPLE_TEAM_ID.${app.identifier}"`,
           `/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.nfc.readersession.formats' ${IOS_PROFILE} | grep -qw TAG`,
           `uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' ${IOS_PROFILE})"`,
           'mkdir -p "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" "$HOME/Library/MobileDevice/Provisioning Profiles"',
-          'cp "$RUNNER_TEMP/app.mobileprovision" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$uuid.mobileprovision"',
-          'cp "$RUNNER_TEMP/app.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision"',
+          `cp ${IOS_MOBILEPROVISION} "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$uuid.mobileprovision"`,
+          `cp ${IOS_MOBILEPROVISION} "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision"`,
           `/usr/libexec/PlistBuddy -c 'Add :provisioningProfiles dict' -c "Add :provisioningProfiles:${app.identifier} string $uuid" "$RUNNER_TEMP/ios-upload/ExportOptions.plist"`,
         ].join(" && "),
       },
@@ -818,11 +823,12 @@ const iosUploadJobs = (app: { archive: { name: string; run: string }; identifier
         run: [
           'cp "$RUNNER_TEMP/ios-upload/ExportOptions.plist" "$RUNNER_TEMP/check.plist"',
           'plutil -replace destination -string export "$RUNNER_TEMP/check.plist"',
-          `xcodebuild -exportArchive ${IOS_EXPORT} "$RUNNER_TEMP/check.plist" -exportPath "$RUNNER_TEMP/check"`,
+          `xcodebuild -exportArchive ${IOS_ARCHIVE} -exportOptionsPlist "$RUNNER_TEMP/check.plist" -exportPath "$RUNNER_TEMP/check"`,
           'unzip -q "$RUNNER_TEMP"/check/*.ipa -d "$RUNNER_TEMP/ipa"',
-          'codesign -d --entitlements - --xml "$RUNNER_TEMP/ipa/Payload/IamrealApp.app" > "$RUNNER_TEMP/entitlements.plist"',
-          `/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.nfc.readersession.formats' "$RUNNER_TEMP/entitlements.plist" | grep -qw TAG`,
-          `test "$(/usr/libexec/PlistBuddy -c 'Print :application-identifier' "$RUNNER_TEMP/entitlements.plist")" = "$APPLE_TEAM_ID.${app.identifier}"`,
+          `codesign -d --entitlements - --xml "$RUNNER_TEMP/ipa/Payload/IamrealApp.app" > ${IOS_ENTITLEMENTS}`,
+          `test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.nfc.readersession.formats:0' ${IOS_ENTITLEMENTS})" = TAG`,
+          `! /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.nfc.readersession.formats:1' ${IOS_ENTITLEMENTS} > /dev/null 2>&1`,
+          `test "$(/usr/libexec/PlistBuddy -c 'Print :application-identifier' ${IOS_ENTITLEMENTS})" = "$APPLE_TEAM_ID.${app.identifier}"`,
         ].join(" && "),
       },
       {
@@ -835,7 +841,7 @@ const iosUploadJobs = (app: { archive: { name: string; run: string }; identifier
         run: [
           "umask 077",
           `printf '%s\\n' "$APP_STORE_CONNECT_API_KEY_P8" > "$RUNNER_TEMP/key.p8"`,
-          `xcodebuild -exportArchive ${IOS_EXPORT} "$RUNNER_TEMP/ios-upload/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" -authenticationKeyPath "$RUNNER_TEMP/key.p8" -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID"`,
+          `xcodebuild -exportArchive ${IOS_ARCHIVE} -exportOptionsPlist "$RUNNER_TEMP/ios-upload/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" -allowProvisioningUpdates -authenticationKeyPath "$RUNNER_TEMP/key.p8" -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID"`,
         ].join(" && "),
       },
     ],
@@ -844,12 +850,12 @@ const iosUploadJobs = (app: { archive: { name: string; run: string }; identifier
 export const IOS_UPLOAD_JOBS: YamlMap = iosUploadJobs({
   archive: { name: "Archive the production app and check it", run: './archive.sh "$RUNNER_TEMP/IamrealApp.xcarchive" "$GITHUB_RUN_NUMBER"' },
   identifier: "tw.iamreal.app",
-  profile: "IOS_APPSTORE_PROFILE_BASE64",
+  profileSecret: "IOS_APPSTORE_PROFILE_BASE64",
 });
 export const IOS_TEST_UPLOAD_JOBS: YamlMap = iosUploadJobs({
   archive: { name: "Archive the test app and check it", run: './archive.sh --test-app "$RUNNER_TEMP/IamrealApp.xcarchive" "$((GITHUB_RUN_NUMBER + 1000000))"' },
   identifier: "tw.iamreal.app.test",
-  profile: "IOS_TEST_APPSTORE_PROFILE_BASE64",
+  profileSecret: "IOS_TEST_APPSTORE_PROFILE_BASE64",
 });
 
 /**
