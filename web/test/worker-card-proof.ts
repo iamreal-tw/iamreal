@@ -235,15 +235,12 @@ try {
   await visitor.goto(`${ORIGIN}/p/${short}`);
   await shot(visitor, "card-desktop.png", 1100);
   await shot(visitor, "card-phone.png", 390);
-  // 全部紀錄 is folded: opened, so that its rows are among the text.
-  await visitor.eval(`document.querySelectorAll('details').forEach((d) => (d.open = true))`);
   const card = squash(await visitor.text("body"));
   for (const line of section("1. ")) check(card.includes(squash(line)), `the page of the card says "${line}"`);
-  // Section 4: its heading and the four rows of labels and values, for the first card proof of a card that never switched.
-  const facts = section("4. ")
-    .slice(0, 5)
-    .map((l) => l.replace("2026-03-02", today).replace("4 次", "1 次").replace("更換過 1 次", "更換過 0 次"));
-  for (const line of [`上次過卡：今天（${today}）`, ...section("2. ").slice(1), `iamreal.tw/p/${short}`, ...facts, `${today}　新宣告：@alice`]) {
+  // Section 2's heading and the address to look for; section 3: the last card proof today, its heading, the one record of
+  // the first card proof and the two small lines after it.
+  const record = section("3. ");
+  for (const line of [section("2. ")[0]!, `iamreal.tw/p/${short}`, `上次過卡：今天（${today}）`, record[1]!, `${today}　新宣告：@alice`, ...record.slice(-2)]) {
     check(card.includes(squash(line)), `the page of the card says "${line}"`);
   }
   // The mark of a test log (design/copy/test-site.md), with the date of the Worker's setting in place of the example's.

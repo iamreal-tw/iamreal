@@ -494,13 +494,13 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `/demo.js` | 掛上去的示範的播放程式（`design/copy/hang.md`「示範」），只有 `/hang` 和 `/hang/<短編號>` 載入 | Static Assets 直接送 `site/demo.js`，不跑 Worker |
 | `/count.js` | 訪客頁面的計數（ADR-0032、ADR-0039，`spec/counts.md`），上面每一頁回 `200` 時都載入 | Static Assets 直接送 `site/count.js`，不跑 Worker |
 | `/pages.css` | 訪客頁面的樣式表 | Static Assets 直接送 `site/pages.css`，不跑 Worker |
-| `/og-image.png` | 連結預覽圖（`design/copy/proof-page.md` 第 8 段「預覽圖」） | Static Assets 直接送 `site/og-image.png`，不跑 Worker |
+| `/og-image.png` | 連結預覽圖（`design/copy/proof-page.md` 第 7 段「預覽圖」） | Static Assets 直接送 `site/og-image.png`，不跑 Worker |
 | `/favicon.ico` | 網站的圖示：每一頁的 `<link rel="icon">` 指到這裡，瀏覽器和連結預覽也會自己來要（[#356](https://github.com/iamreal-tw/iamreal/issues/356)） | Static Assets 直接送 `site/favicon.ico`，不跑 Worker |
 | `/proof` | 過卡的頁面：`web/` 建置的 `index.html`；`/proof/` 和 `/proof/index.html` 轉（`301`）到 `/proof` | Static Assets 直接送 `site/proof/` 的檔，不跑 Worker |
 | `/proof/…` | 那份建置的其他檔案 | 同上 |
 | 其他網址 | 「找不到這一頁」（`design/copy/not-found.md`），`404` | Worker 產生，不問證明紀錄 |
 
-**連結預覽圖每一頁都是同一張。** 有連結預覽（`og:title`）的每一頁，`<head>` 都多五行：`og:image` 是 `https://<網站的網域>/og-image.png`（測試的證明紀錄是 `test.iamreal.tw`，正式的是 `iamreal.tw`，`src/settings.ts` 的 `SITE_HOSTS`），加上 `og:image:type`、`og:image:width`、`og:image:height`（`image/png`、1200、630）和替代文字 `og:image:alt`（逐字照 `design/copy/proof-page.md` 第 8 段）。圖是 `design/screens/og-image.png` 的拷貝，上面沒有帳號名稱、日期、島民編號，不隨頁面改變。沒有連結預覽的頁面（查詢頁打了不合 Threads 格式的名稱）也沒有圖。過卡的頁面 `/proof` 是 `web/` 的建置，沒有連結預覽，也沒有圖。`test/pages.ts` 的 `getPage` 對每一頁檢查這五行。
+**連結預覽圖每一頁都是同一張。** 有連結預覽（`og:title`）的每一頁，`<head>` 都多五行：`og:image` 是 `https://<網站的網域>/og-image.png`（測試的證明紀錄是 `test.iamreal.tw`，正式的是 `iamreal.tw`，`src/settings.ts` 的 `SITE_HOSTS`），加上 `og:image:type`、`og:image:width`、`og:image:height`（`image/png`、1200、630）和替代文字 `og:image:alt`（逐字照 `design/copy/proof-page.md` 第 7 段）。圖是 `design/screens/og-image.png` 的拷貝，上面沒有帳號名稱、日期、島民編號，不隨頁面改變。沒有連結預覽的頁面（查詢頁打了不合 Threads 格式的名稱）也沒有圖。過卡的頁面 `/proof` 是 `web/` 的建置，沒有連結預覽，也沒有圖。`test/pages.ts` 的 `getPage` 對每一頁檢查這五行。
 
 **圖示每一頁都是同一個。** 每一頁的 `<head>` 都有 `<link rel="icon" href="/favicon.ico">`（`src/pages/layout.ts` 的 `FAVICON_PATH`；過卡的頁面 `/proof` 也是，`web/index.html`），指到 Static Assets 送的 `site/favicon.ico`：瀏覽器和 Threads 這類連結預覽不看那一行、直接要 `/favicon.ico` 的，拿到的也是同一個檔（Threads 怎麼取圖示還不知道，兩種都放）。圖案是頁首的記號（`LOGO`），顏色照 `design/tokens.json`，16、32、48 像素三張 PNG 包在一個 ICO 裡，由 `scripts/favicon.ts` 用這台電腦的 Chrome 畫（改了記號時手動跑；部署和建置都不跑）。和 `pages.css`、`copy.js` 一樣在版控裡，帶訪客頁面的標頭、`Cache-Control: no-cache` 和 `ETag`；`Content-Type` 是 Static Assets 照副檔名給的。兩個 app 的圖示是同一個記號放在白底上（[#490](https://github.com/iamreal-tw/iamreal/issues/490)）。
 

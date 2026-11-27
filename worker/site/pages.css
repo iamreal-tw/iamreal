@@ -3655,19 +3655,36 @@ body.check .three p {
 
 /* The page of a card (proof-page.md) and the page of an account (account-page.md) ---------------------- */
 
-/* The first screen: sections 1 and 2 (or the list of an account) on the left, the account owner's question and the profile on the right. */
+/* Two columns. The page of an account: the list on the left, the account owner's question and the profile on the right. */
 body.proof .first,
-body.account .first,
-body.proof .second {
+body.account .first {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
   gap: var(--column-gap);
   align-items: start;
+  margin-top: 56px;
 }
 
-body.proof .first,
-body.account .first {
-  margin-top: 56px;
+/* The page of a card: sections 1 and 2 on the left, section 3 on the right from the height of the title, so that its
+   record, which only grows, grows down the right column and pushes nothing (proof-page.md). A withdrawn card has no section 2. */
+body.proof .first {
+  grid-template-rows: auto 1fr;
+  row-gap: 40px;
+}
+
+body.proof .first .claim {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+body.proof .first .owner {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+body.proof .first .last {
+  grid-column: 2;
+  grid-row: 1 / span 2;
 }
 
 body.proof .title,
@@ -3702,26 +3719,14 @@ body.proof .ordinal {
   color: var(--mute);
 }
 
-body.proof .scope {
-  max-width: var(--measure);
-  margin: 24px 0 0;
-  line-height: var(--leading-small);
-}
-
 /* The last card proof: as prominent as the title, the same for any number of days; the date one size smaller. */
-body.proof .last {
-  margin-top: 44px;
-  padding-top: 36px;
-  border-top: 1px solid var(--line);
-}
-
 body.proof .last .when {
   font-family: var(--font-display);
   font-weight: var(--weight-heading);
   font-size: var(--size-h3);
   line-height: var(--leading-h3);
   color: var(--ink);
-  margin-bottom: 12px;
+  margin: 0 0 4px;
 }
 
 body.proof .last .when .date {
@@ -3737,7 +3742,26 @@ body.proof .last .small {
   line-height: var(--leading-small);
 }
 
-/* The question of the account owner: a heading, the sentence, the address right above the profile. */
+/* The record's heading: in the body's typeface, the size of the rows, bold. */
+body.proof .last .records {
+  margin: 32px 0 8px;
+  font-family: var(--font-body);
+  font-size: var(--size-kicker);
+  font-weight: 700;
+  line-height: var(--leading-kicker);
+  color: var(--ink);
+}
+
+/* The two small lines after the record: the advice, then the links for the holder. */
+body.proof .last .advice {
+  margin: 16px 0 0;
+}
+
+body.proof .last .yours {
+  margin: 4px 0 0;
+}
+
+/* The account owner's question: one heading, broken after its comma rather than inside a word; the address right above the profile. */
 body.proof .ask,
 body.account .ask {
   font-size: var(--size-lead);
@@ -3745,7 +3769,13 @@ body.account .ask {
   margin: 0 0 6px;
 }
 
-body.proof .owner > p:not(.small, .backlink),
+body.proof .ask {
+  margin-bottom: 12px;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
 body.account .owner > p {
   font-size: var(--size-kicker);
   line-height: var(--leading-kicker);
@@ -3764,81 +3794,6 @@ body.proof iframe.threads-profile,
 body.account iframe.threads-profile {
   max-width: none;
   margin-bottom: 16px;
-}
-
-body.proof .owner .small {
-  line-height: var(--leading-small);
-  margin-bottom: 8px;
-}
-
-body.proof .owner .yours {
-  margin-top: 20px;
-}
-
-/* Sections 4 and 5 side by side, under a line across the page. */
-/* Sections apart by --section each side of a line (design/DESIGN.md, 版面). */
-body.proof .second,
-body.proof .mine {
-  margin-top: var(--section);
-  padding-top: var(--section);
-  border-top: 1px solid var(--line);
-}
-
-body.proof .second .record {
-  grid-column: 1;
-}
-
-body.proof .second .how-to-check {
-  grid-column: 2;
-}
-
-/* After several cards, section 5 alone: on the left, as the sections above it. */
-body.proof .second .how-to-check:only-child {
-  grid-column: 1;
-}
-
-body.proof .record h2,
-body.proof .how-to-check h2 {
-  font-size: var(--size-h3);
-  line-height: var(--leading-h3);
-  margin: 0 0 20px;
-}
-
-body.proof .record h2 {
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--ink);
-  margin-bottom: 0;
-}
-
-/* The three facts: a label on the left, the value on the right. */
-body.proof .facts {
-  margin: 0;
-}
-
-body.proof .facts > div {
-  display: grid;
-  grid-template-columns: 9.5em minmax(0, 1fr);
-  gap: 0 16px;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-body.proof .facts dt {
-  color: var(--mute);
-}
-
-body.proof .facts dd {
-  margin: 0;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-body.proof .history summary {
-  cursor: pointer;
-  color: var(--ink);
-  font-weight: 700;
-  padding: 20px 0 8px;
-  min-height: var(--min-target);
 }
 
 body.proof .log {
@@ -3862,7 +3817,7 @@ body.proof .log time,
   white-space: nowrap;
 }
 
-/* Several cards behind one short ID: each its own first screen and record, under its longer beginning of the scoped ID. */
+/* Several cards behind one short ID: each its own sections 1 to 3, under its longer beginning of the scoped ID. */
 body.proof .many {
   margin-top: 56px;
 }
@@ -3887,9 +3842,16 @@ body.proof .one-of-many .first {
   margin-top: 24px;
 }
 
-/* Getting one's own: under a line across the page, no box. */
+/* Getting one's own (proof-page.md, section 4): under a line across the page, no box; no single character left on the last line. */
+body.proof .mine {
+  margin-top: 64px;
+  padding-top: 64px;
+  border-top: 1px solid var(--line);
+}
+
 body.proof .mine p:first-child {
   max-width: var(--measure);
+  text-wrap: pretty;
 }
 
 /* The page of an account: the count not enlarged; each card a row, the link right after its beginning of the scoped ID. */
@@ -4269,10 +4231,32 @@ body.account-not-a-name .title {
   }
 
   body.proof .first,
-  body.account .first,
-  body.proof .second {
+  body.account .first {
     grid-template-columns: minmax(0, 1fr);
     gap: 56px;
+  }
+
+  /* On a phone sections 1, 2 and 3 one under another, in that order: the account, the profile, then the last card proof
+     and the record, which only grows, so that it pushes nothing down (proof-page.md). */
+  body.proof .first {
+    grid-template-rows: none;
+    gap: 28px;
+  }
+
+  body.proof .first .claim,
+  body.proof .first .owner,
+  body.proof .first .last {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  body.proof .first .last {
+    padding-top: 28px;
+    border-top: 1px solid var(--line);
+  }
+
+  body.proof .last .records {
+    margin-top: 20px;
   }
 
   body.proof .first,
@@ -4282,22 +4266,14 @@ body.account-not-a-name .title {
     margin-top: 28px;
   }
 
-  body.proof .second .record,
-  body.proof .second .how-to-check {
-    grid-column: 1;
-  }
-
-  body.proof .second,
   body.proof .mine {
-    margin-top: var(--section-phone);
-    padding-top: var(--section-phone);
+    margin-top: 40px;
+    padding-top: 40px;
   }
 
   body.proof .title,
   body.account .title,
-  body.proof .last .when,
-  body.proof .record h2,
-  body.proof .how-to-check h2 {
+  body.proof .last .when {
     font-size: var(--size-h3-phone);
   }
 
@@ -4321,11 +4297,6 @@ body.account-not-a-name .title {
     font-size: var(--size-lead-phone);
   }
 
-  body.proof .facts > div {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  body.proof .owner > p:not(.small, .backlink),
   body.account .owner > p,
   body.account .meta,
   body.proof .log,

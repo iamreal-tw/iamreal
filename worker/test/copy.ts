@@ -44,7 +44,7 @@ export function block(file: string, heading: string, n = 0): string[] {
   return blocks[n]!;
 }
 
-/** home.md's 〈需要什麼〉, which proof-page.md section 5a quotes. */
+/** home.md's 〈需要什麼〉. */
 export function needs(): string {
   const b = block("home.md", "需要什麼");
   assert.equal(b.length, 1);
@@ -148,10 +148,10 @@ export function wantPreview(page: string, title: string, site: string | null): v
   assert.equal(firstMatch(OG_SITE, page), site, "og:site_name");
 }
 
-/** The alt text of the image of every page's link preview (proof-page.md, section 8, 預覽圖; its code block 1 is the words on the image). */
+/** The alt text of the image of every page's link preview (proof-page.md, section 7, 預覽圖; its code block 1 is the words on the image). */
 export function previewImageAlt(): string {
-  assert.ok(copySection("proof-page.md", "8. ").includes("\n### 預覽圖\n"), "proof-page.md section 8 has 預覽圖");
-  const alt = block("proof-page.md", "8. ", 2);
+  assert.ok(copySection("proof-page.md", "7. ").includes("\n### 預覽圖\n"), "proof-page.md section 7 has 預覽圖");
+  const alt = block("proof-page.md", "7. ", 2);
   assert.equal(alt.length, 1, "the alt text is one line");
   return alt[0]!;
 }
