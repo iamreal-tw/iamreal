@@ -3,6 +3,7 @@
 // web/test/e2e/cdp.ts reads a page. Nothing here is linked into the app,
 // and nothing is ever sent to a device that is not an emulator.
 import { execFileSync } from "node:child_process";
+import { crc32, deflateSync } from "node:zlib";
 
 export interface Node {
   text: string;
@@ -89,6 +90,43 @@ export class Emulator {
   /** The screen as a PNG. */
   screenshot(): Buffer {
     return execFileSync(this.#adb, ["-s", this.serial, "exec-out", "screencap", "-p"], { maxBuffer: 64 << 20 });
+  }
+
+  /**
+   * The screen as a PNG of 24-bit colour with no alpha, which is what Google Play takes for a screenshot (`screencap -p` writes RGBA).
+   * Made from screencap's raw pixels: its header (width, height and pixel format, then on Android 11 and later the colour space)
+   * and the pixels, four bytes each, of which the fourth is dropped. Each row is written unfiltered.
+   */
+  screenshotRgb(): Buffer {
+    const raw = execFileSync(this.#adb, ["-s", this.serial, "exec-out", "screencap"], { maxBuffer: 64 << 20 });
+    const [width, height, format] = [raw.readUInt32LE(0), raw.readUInt32LE(4), raw.readUInt32LE(8)];
+    // RGBA_8888 or RGBX_8888, Android's PixelFormat 1 and 2.
+    if (format !== 1 && format !== 2) throw new Error(`screencap's pixels are of format ${format}, not RGBA_8888 or RGBX_8888`);
+    const header = raw.length - width * height * 4;
+    if (header !== 12 && header !== 16) throw new Error(`screencap gave ${raw.length} bytes for ${width}x${height}`);
+    const rows = Buffer.alloc(height * (1 + width * 3));
+    for (let y = 0; y < height; y++) {
+      let to = y * (1 + width * 3) + 1;
+      for (let from = header + y * width * 4, end = from + width * 4; from < end; from += 4) {
+        rows[to++] = raw[from]!;
+        rows[to++] = raw[from + 1]!;
+        rows[to++] = raw[from + 2]!;
+      }
+    }
+    const chunk = (type: string, data: Buffer): Buffer => {
+      const body = Buffer.concat([Buffer.from(type, "latin1"), data]);
+      const length = Buffer.alloc(4);
+      length.writeUInt32BE(data.length);
+      const crc = Buffer.alloc(4);
+      crc.writeUInt32BE(crc32(body));
+      return Buffer.concat([length, body, crc]);
+    };
+    // Width, height, 8 bits a sample, colour type 2 (RGB), the one compression, the one filter method, no interlace.
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(width, 0);
+    ihdr.writeUInt32BE(height, 4);
+    ihdr.set([8, 2, 0, 0, 0], 8);
+    return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
   }
 
   tap(node: { x: number; y: number }): void {
