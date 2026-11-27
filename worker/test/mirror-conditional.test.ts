@@ -90,7 +90,8 @@ describe("the mirror asks MOICA with a condition", () => {
     assert.deepEqual(conditionsOf(requests, "G3"), { "if-modified-since": G3_A_SAID.lastModified });
     assert.deepEqual([sources.G2, sources.G3].map((s) => [s?.result, s?.sha256]), [["stored", sha256Hex(G2_B)], ["stored", sha256Hex(G3_B)]]);
     assert.equal(indexed, 2);
-    assert.deepEqual((await worker.files("crl/")).map((f) => f.key), [nameOf(G2_A), nameOf(G2_B), nameOf(G3_A), nameOf(G3_B), INDEX].sort());
+    // The archive's files and its index; the patches of the two pairs are in test/mirror-patches.test.ts.
+    assert.deepEqual((await worker.files("crl/")).map((f) => f.key).filter((key) => !key.startsWith("crl/patches/")), [nameOf(G2_A), nameOf(G2_B), nameOf(G3_A), nameOf(G3_B), INDEX].sort());
   });
 
   test("the next round is conditional on the new file", async () => {

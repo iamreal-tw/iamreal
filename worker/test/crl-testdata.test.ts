@@ -14,7 +14,7 @@
 // its public half exists); its G3 key is the test's own.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { after, before, test } from "node:test";
@@ -107,6 +107,11 @@ test("the index the Go crl/ rebuilds from the files in the bucket is the same by
     const crls = (await worker.files("crl/")).filter((f) => f.key.endsWith(".crl"));
     assert.equal(crls.length, cases.length + OTHERS.length);
     for (const f of crls) writeFileSync(join(dir, basename(f.key)), f.bytes);
+    // The CRL patches the mirror wrote, in their subdirectory, which is not part of the archive (spec/revocation-tree.md, "Files").
+    const patches = await worker.files("crl/patches/");
+    assert.ok(patches.length > 0, "the mirror wrote patches of the usable CRLs");
+    mkdirSync(join(dir, "patches"));
+    for (const f of patches) writeFileSync(join(dir, "patches", basename(f.key)), f.bytes);
     const g3 = join(dir, ".g3.der"); // a name starting with "." is not a file of the archive
     writeFileSync(g3, testIssuerSpki("G3"));
     const go = spawnSync("go", ["run", "./cmd/iamreal-crl", "index", "-key-g2", join(CRL_TESTDATA, "issuer-public-key.der"), "-key-g3", g3, dir], { cwd: join(WORKER_DIR, ".."), encoding: "utf8" });

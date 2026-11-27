@@ -581,7 +581,7 @@ export function checkProofPages(pages: Readonly<Record<string, ConfiguredProofPa
     assert.ok(kind === "test" || kind === "production", `PROOF_LOG_KIND of the ${env} environment is test or production`);
     assert.ok(clearedOn === undefined || typeof clearedOn === "string", `TEST_PROOF_LOG_CLEARED_ON of the ${env} environment is text`);
     try {
-      checkProofPage(page, kind, clearedOn ?? null);
+      checkProofPage(page, kind, clearedOn ?? null, APP_DOMAINS[kind]?.host ?? null);
     } catch (e) {
       throw new assert.AssertionError({ message: `the ${env} environment: ${(e as Error).message}` });
     }

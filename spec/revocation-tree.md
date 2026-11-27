@@ -183,7 +183,9 @@ conditional request, so an unchanged file is neither downloaded nor stored.
 It keeps every distinct CRL it has seen, as the original bytes, and publishes
 all of them with an index (issuer, `thisUpdate`, `nextUpdate`, SHA-256 of the
 file, root). The index is a convenience: anyone re-verifying downloads the
-CRL, checks MOICA's signature, and rebuilds the root.
+CRL, checks MOICA's signature, and rebuilds the root. For each usable CRL it
+also publishes a patch that gives the file from the issuer's previous one
+("CRL patches"), so that a re-verifier need not download every file whole.
 
 **The device**
 
@@ -264,7 +266,8 @@ then `crl_number` as a number with `-` before every number, then `sha256`.
 in it. Every other regular file in the directory whose name does not start
 with `.` is a CRL file of the archive and has exactly one line, usable or
 not, so the archive and the index can be checked against each other.
-Subdirectories are not part of the archive. The mirror stores only files it
+Subdirectories are not part of the archive (the mirror's `patches/` is one:
+"CRL patches"). The mirror stores only files it
 has not seen (by SHA-256), so no two lines are the same. Two different files
 with the same CRL number get two lines.
 
@@ -281,6 +284,61 @@ the rebuilt index does not need them. One that trusts the index without
 rebuilding it checks every line's form, and that `root` is below `p`; there
 a missing or malformed index is an error, since nothing else can stand in
 for it.
+
+## CRL patches
+
+A **CRL patch** gives a usable CRL file of the archive from the previous one
+of the same issuer key. It is a shortcut for downloading, not part of the
+archive: the index does not list patches, re-verifying needs only the CRL
+files, and what a patch gives counts only if it has the SHA-256 of the file
+it stands for. So a re-verifier does not have to trust a patch, nor whoever
+made it.
+
+**Which pairs.** The previous CRL of a usable CRL is the one just before it
+among the usable CRLs of the same `issuer`, in the order of the index
+("Order": `crl_number` as a number, then `sha256`). A file that is not usable
+has no patch and is no file's previous CRL. The first usable CRL of each
+issuer key has none.
+
+**Where.** In the subdirectory `patches/` of the archive's directory, named
+`PREVIOUS-FILE.patch`: the SHA-256 of the previous CRL file, `-`, the SHA-256
+of the file the patch gives, each as 64 lowercase hex digits. Two adjacent
+usable lines of one issuer in the index give the name, so a reader does not
+list the directory. `patches/` is a subdirectory, so it is not part of the
+archive ("Files"), and copying the archive does not copy it. A patch may be
+missing, and there may be patches of pairs that are no longer adjacent, after
+a file was added to the archive between them; neither changes what the
+archive is.
+
+**Format.** A patch is a sequence of instructions, nothing before, between
+or after them. Each instruction is one byte that says which it is, followed
+by numbers of 4 bytes each, unsigned and big-endian:
+
+| Instruction | Bytes | Gives |
+|---|---|---|
+| Copy | `00`, `START`, `LENGTH` | `LENGTH` bytes of the previous file, starting at its byte `START` (the first byte is 0) |
+| Write | `01`, `LENGTH`, then `LENGTH` bytes | those bytes |
+
+The file is what the instructions give, one after the other. A `LENGTH` of 0
+gives nothing, and an empty patch gives an empty file. A copy does not start
+before the previous copy ended (the first may start anywhere): copies go
+forward through the previous file and never overlap. So the file a patch
+gives is at most as long as the previous file and the patch together, and
+giving it takes time and memory in proportion to those two.
+
+**A patch that cannot be used.** A reader treats the whole patch as
+unusable if
+
+- a copy ends past the end of the previous file, or starts before the
+  previous copy ended;
+- an instruction, or the bytes a write says follow, runs past the end of the
+  patch;
+- an instruction starts with a byte other than `00` and `01`;
+- the file it gives does not have the SHA-256 its name gives.
+
+A reader that finds a patch unusable or missing downloads the file whole.
+How a patch is made is not part of this specification: many patches give the
+same file, and they differ only in size.
 
 ## Test vectors
 
@@ -299,3 +357,6 @@ whose times are spelled in many ways, CRLs with an extension whose
 identifier is at and past each line of "Object identifiers", and CRLs with
 an element that holds more than it has, each with its line of the archive
 index (`times/expected.json`).
+[`vectors/crl-patch.json`](vectors/crl-patch.json): CRL patches ("CRL
+patches") with the previous file, the file each gives and its name, and
+patches that cannot be used, with the previous file each is read against.

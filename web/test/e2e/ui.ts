@@ -82,6 +82,7 @@ import { DEVICE_ID_KEY } from "../../src/counts.ts";
 import { CLOSE_AGAIN_MS } from "../../src/card/hipki.ts";
 import { STORAGE_KEY_PREFIX } from "../../src/storage.ts";
 import { COPY, fill } from "../../src/ui/copy.ts";
+import { qrCode } from "../../src/ui/qr.ts";
 import { CERT_POLICIES, KEY_USAGE_ENCRYPTION, AUTHORITY_KEY_ID, SUBJECT_KEY_ID, buildTbs, certificate, name, subjectDirectoryAttributes } from "../fixtures/certs.ts";
 import { makeCrl } from "../fixtures/crls.ts";
 import { type TestKey, hex, makeKey } from "../fixtures/der-build.ts";
@@ -731,8 +732,8 @@ async function toRead(o: { screenshots?: string } = {}): Promise<void> {
   check((await whereText()).includes(stepLine(1)), `step 1: "${await whereText()}"`);
   check((await page.text("header b")) === C.common.service_name && (await page.text("header [data-site]")) === C.common.site_name, `the header: the mark, "${C.common.service_name}" and the site, as the visitor pages write them`);
   check((await page.eval<number>(`document.querySelectorAll("header a").length`)) === 0, "the header links nowhere: the card proof's screens send no one elsewhere");
-  check(!s1.includes(C.app.use_reader) && !s1.includes(C.app.use_phone), "step 1: no choice of device before the app is out");
-  check(JSON.stringify(await buttonTexts()) === JSON.stringify([C.common.next]), `step 1: no 上一步 (the first screen), only 下一步 ${JSON.stringify(await buttonTexts())}`);
+  check(!s1.includes(C.choose.title) && !s1.includes(C.choose.use_reader), "step 1: no choice of a way on a site with no app domain");
+  check(JSON.stringify(await buttonTexts()) === JSON.stringify([C.common.next]), `step 1: no 上一步 (the first screen on a site with no app domain), only 下一步 ${JSON.stringify(await buttonTexts())}`);
   check(!(await page.eval<boolean>(`!!document.querySelector('#pin') || !!document.querySelector('[data-account-field]')`)), "step 1: no PIN field, no account field");
   if (o.screenshots) {
     await page.eval(`document.querySelectorAll('details').forEach((d) => (d.open = true))`);
@@ -2985,9 +2986,58 @@ await tryStep("the production build's step 1: one platform, named", async () => 
   }
 });
 
+/** The test site's app domain (design/copy/app-domain.md, src/target-test-site.ts): what the choice of a way links to. */
+const TEST_APP_LINK = "https://test-app.iamreal.tw/";
+
+/** The dark modules of the code of `text` as qrSvg draws them (src/ui/qr.ts; qrCode matches qrcodegen, test/qr.test.ts). */
+const qrPath = (text: string): string =>
+  qrCode(text)
+    .modules.flatMap((row, y) => row.flatMap((dark, x) => (dark ? [`M${x + 4} ${y + 4}h1v1h-1z`] : [])))
+    .join("");
+
+/**
+ * The choice of a way before step 1 (card-proof.md), on the test site's build: on a computer, the phone's way with the
+ * QR code of the app domain's link, "or", the reader's way; not numbered. On a phone's width, the app's button alone.
+ */
+async function checkWays(tab: Page): Promise<void> {
+  const ch = C.choose;
+  check(!(await tab.eval<boolean>(`!!document.querySelector("[data-where]")`)), "the choice of a way is not numbered");
+  check((await tab.eval<string>("document.title")) === ch.title, `the choice of a way: its title "${await tab.eval<string>("document.title")}"`);
+  const wide = await tab.text();
+  const intro = fill(ch.intro_single, { platform: "Threads" });
+  const onComputer = [ch.title, intro + ch.same_proof, ch.by_phone, ch.by_phone_what, ch.scan, ch.opens_app, ch.rest_on_phone, ch.or, ch.by_reader, ch.by_reader_what, ch.use_reader];
+  for (const t of onComputer) check(wide.includes(t), `the choice of a way, on a computer, says "${t}"`);
+  const order = onComputer.map((t) => wide.indexOf(t));
+  check(order.every((at, i) => i === 0 || at > order[i - 1]!), `the choice of a way, on a computer: the phone's way first, then the reader's ${JSON.stringify(order)}`);
+  for (const t of [ch.use_app, ch.opens_app_short, fill(ch.reader_on_computer, { domain: "test.iamreal.tw" })]) check(!wide.includes(t), `the choice of a way, on a computer, does not say "${t}"`);
+  check(!wide.includes(fill(C.common.step, { step: 1, steps: 7 })), "the choice of a way: no 第 1 步");
+  const code = await tab.eval<{ link: string; d: string; shown: boolean }>(`(() => {
+    const q = document.querySelector("[data-way='phone'] [data-qr]");
+    return { link: q?.dataset.qr ?? "", d: q?.querySelector("path.qr-dark")?.getAttribute("d") ?? "", shown: !!q && q.getBoundingClientRect().width > 0 };
+  })()`);
+  check(code.shown && code.link === TEST_APP_LINK, `the QR code is on the screen, of the app domain's link: ${JSON.stringify(code.link)}`);
+  check(code.d === qrPath(TEST_APP_LINK), "the QR code drawn is the code of https://test-app.iamreal.tw/, module for module");
+  await screenshot("testsite-0-ways", tab);
+  // A phone's width: the same page, the app's way alone.
+  await tab.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 800, deviceScaleFactor: 1, mobile: true });
+  try {
+    const narrow = await tab.text();
+    const onPhone = [ch.title, intro, ch.use_app, ch.opens_app_short, fill(ch.reader_on_computer, { domain: "test.iamreal.tw" })];
+    for (const t of onPhone) check(narrow.includes(t), `the choice of a way, on a phone, says "${t}"`);
+    for (const t of [ch.same_proof, ch.by_phone, ch.scan, ch.or, ch.by_reader, ch.use_reader]) check(!narrow.includes(t), `the choice of a way, on a phone, does not say "${t}"`);
+    check(!(await tab.eval<boolean>(`(() => { const q = document.querySelector("[data-qr]"); return !!q && q.getBoundingClientRect().width > 0; })()`)), "the choice of a way, on a phone: no QR code");
+    const button = await tab.eval<{ href: string; target: string; shown: boolean; text: string }[]>(`[...document.querySelectorAll("#app a")].filter((a) => a.getBoundingClientRect().width > 0).map((a) => ({ href: a.getAttribute("href"), target: a.target, shown: true, text: a.textContent }))`);
+    check(JSON.stringify(button) === JSON.stringify([{ href: TEST_APP_LINK, target: "", shown: true, text: ch.use_app }]), `the choice of a way, on a phone: one link, the app's button, to the app domain in this tab ${JSON.stringify(button)}`);
+    check((await tab.eval<number>(`[...document.querySelectorAll("#app button")].filter((b) => b.getBoundingClientRect().width > 0).length`)) === 0, "the choice of a way, on a phone: no button of the reader's way");
+    await screenshot("testsite-0-ways-phone", tab);
+  } finally {
+    await tab.send("Emulation.clearDeviceMetricsOverride");
+  }
+}
+
 // The test site's build (mode "testsite"), served as a deploy serves it: by a Worker's Static Assets, with the
-// headers of a test log's site. Opened to step 1 only, nothing clicked: MOICA's keys and the real component's
-// address are in this build, so any request to the component is failed and counted (there should be none).
+// headers of a test log's site. Opened to the choice of a way and step 1 only, nothing else clicked: MOICA's keys and
+// the real component's address are in this build, so any request to the component is failed and counted (there should be none).
 await tryStep("the test site's build: the mark of a test log, the test site's headers", async () => {
   const CLEARED_ON = "2026-10-31";
   const siteDist = join(out, "dist-testsite");
@@ -3016,6 +3066,18 @@ await tryStep("the test site's build: the mark of a test log, the test site's he
     const home = await markOf(tab);
     check(home?.text === mark, `the Worker's home page has the mark: "${home?.text}"`);
     await tab.goto(`${testSite.origin}/proof`);
+    // The test site has an app domain: the card proof starts with the choice of a way; the reader's way goes to step 1,
+    // whose 上一步 comes back to it.
+    await tab.waitFor(step("choose"), "the test site's build's choice of a way");
+    await checkWays(tab);
+    await tab.clickButton(C.choose.use_reader);
+    await tab.waitFor(step("before"), "the test site's build's step 1");
+    check((await tab.text("[data-where]")).includes(stepLine(1)), `the reader's way goes to 第 1 步: "${await tab.text("[data-where]")}"`);
+    const s1Buttons = await tab.eval<string[]>(`[...document.querySelectorAll("main button")].map((b) => b.textContent)`);
+    check(JSON.stringify(s1Buttons) === JSON.stringify([C.common.back, C.common.next]), `step 1 after the choice of a way: 上一步 and 下一步 ${JSON.stringify(s1Buttons)}`);
+    await tab.clickButton(C.common.back);
+    await tab.waitFor(step("choose"), "上一步 on step 1: the choice of a way again");
+    await tab.clickButton(C.choose.use_reader);
     await tab.waitFor(step("before"), "the test site's build's step 1");
     const shown = await markOf(tab);
     check(mark !== copy && shown !== null && shown.first && shown.text === mark && shown.date === CLEARED_ON, `the card proof page has the same mark, above everything else, its date in an element of its own: ${JSON.stringify(shown)}`);

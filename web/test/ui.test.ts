@@ -24,6 +24,7 @@ import {
   type Sentence,
   accountsView,
   beforeView,
+  chooseView,
   confirmView,
   daysBetween,
   doneView,
@@ -447,6 +448,17 @@ describe("your accounts (step 4)", () => {
     assert.deepEqual([t(one.purpose), t(one.signing)], ["按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的 Threads 帳號。", "卡片簽章中，接著查這張卡片目前宣告的 Threads 帳號……"]);
     const more = pinView(new Set(["test-example", "threads"]));
     assert.deepEqual([t(more.purpose), t(more.signing)], ["按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的帳號。", "卡片簽章中，接著查這張卡片目前宣告的帳號……"]);
+  });
+
+  test("the choice of a way, before step 1: the platform named when the device knows one; the site's own page for a reader", () => {
+    // The production build knows Threads only, and its site is iamreal.tw.
+    const one = chooseView();
+    assert.equal(t(one.intro), "一張自然人憑證換一張島民證明，上面寫著這張卡片宣告的 Threads 帳號。");
+    assert.equal(t(one.readerOnComputer), "有讀卡機的話，請用電腦打開 iamreal.tw/proof。");
+    // More than one: step 1's sentence of what the proof lists.
+    assert.equal(t(chooseView(new Set(["test-example", "threads"])).intro), "一張自然人憑證換一張島民證明，上面列出這張卡片宣告的帳號，每個平台最多一個。");
+    // The test site's build writes its own site.
+    assert.equal(t(chooseView(KNOWN_PLATFORMS, "test.iamreal.tw").readerOnComputer), "有讀卡機的話，請用電腦打開 test.iamreal.tw/proof。");
   });
 
   test("days between two dates", () => {

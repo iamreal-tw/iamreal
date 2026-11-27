@@ -3,7 +3,7 @@
 import "./style.css";
 import { HipkiCard } from "../card/hipki.ts";
 import { endVisitorsVisit, pageCounts, startEngine } from "../index.ts";
-import { COMPONENT_ORIGIN } from "../target.ts";
+import { APP_LINK, COMPONENT_ORIGIN } from "../target.ts";
 import { startApp } from "./app.ts";
 
 /** Step timings as performance measures: they stay in this page (for the headless test's measurements). */
@@ -20,4 +20,4 @@ endVisitorsVisit();
 // The page was opened: the first count of a card proof (spec/counts.md, `open`).
 pageCounts().step("open");
 const prover = startEngine((step, ms) => onTiming(`engine_${step}`, ms));
-startApp({ root: document.getElementById("app")!, prover, card: new HipkiCard(COMPONENT_ORIGIN), onTiming });
+startApp({ root: document.getElementById("app")!, prover, card: new HipkiCard(COMPONENT_ORIGIN), appLink: APP_LINK, onTiming });
