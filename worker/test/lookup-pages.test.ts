@@ -42,8 +42,13 @@ async function exampleCards(withB: boolean): Promise<void> {
 function wantEmbed(page: string, username: string): void {
   const want = `<iframe class="threads-profile" src="https://www.threads.com/@${username}/embed/" title="Threads 個人檔案：@${username}" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" credentialless></iframe>`;
   assert.equal(page.split("<iframe").length - 1, 1, "one frame");
-  assert.ok(page.includes(want), `the frame is ${want}`);
+  // Right under the heading, whose 個人檔案 is the way to the profile on Threads; no sentence after it (account-page.md).
+  assert.ok(page.includes(`<a href="https://www.threads.com/@${username}">個人檔案</a>`), "個人檔案 links to the profile on Threads");
+  assert.ok(page.includes(`</h2>\n${want}\n</section>`), `the frame is ${want}, right under the heading, with nothing after it`);
 }
+
+/** account-page.md section 3's line of no card. */
+const noCard = (): string => copyLines(block("account-page.md", "3. "))[1]!;
 
 describe("the page of an account", () => {
   test("one card: section 1 of account-page.md, the profile, the link to the card, the preview", async () => {
@@ -67,6 +72,8 @@ describe("the page of an account", () => {
     const { page } = await getPage(worker, "/threads/@alice");
     wantLines(page, copyLines(block("account-page.md", "2. ", 0)));
     wantEmbed(page, "alice");
+    // Gone with the layout of the page of a card: the owner's question and the line on the scoped IDs.
+    notOnPage(page, "帳號主人承認的是哪一張", "每張自然人憑證對應到唯一的島民編號");
   });
 
   test("a last card proof today is written 今天", async () => {
@@ -348,13 +355,13 @@ describe("the proof log page", () => {
     await freshProofLog(worker, { clearedOn: CLEARED_ON });
     const root = await publishG3(worker);
     const card = cardStarting(CARD_A);
-    wantLines((await getPage(worker, "/threads/@alice")).page, ["沒有自然人憑證把名額給這個帳號。"]);
+    wantLines((await getPage(worker, "/threads/@alice")).page, [noCard()]);
     wantLines((await getPage(worker, "/proof-log")).page, ["現在有 0 張島民證明"]);
     await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
     wantLines((await getPage(worker, "/threads/@alice")).page, ["有 1 張自然人憑證", "島民編號 7K2Q9FM4XD 開頭 看這張島民證明 2026-11-20 起 上次過卡 今天"]);
     wantLines((await getPage(worker, "/proof-log")).page, ["現在有 1 張島民證明，其中 1 張在過去三個月內過卡。", row("2026-11-20", CARD_A, "新宣告", "alice")]);
     await mustSubmit(worker, await sub(worker, card, root, "threads:bob"), "threads switch");
-    wantLines((await getPage(worker, "/threads/@alice")).page, ["沒有自然人憑證把名額給這個帳號。"]);
+    wantLines((await getPage(worker, "/threads/@alice")).page, [noCard()]);
     wantLines((await getPage(worker, "/threads/@bob")).page, ["有 1 張自然人憑證"]);
     const proofLog = (await getPage(worker, "/proof-log")).page;
     wantLines(proofLog, ["現在有 1 張島民證明", row("2026-11-20", CARD_A, "更換", "alice", "bob"), row("2026-11-20", CARD_A, "新宣告", "alice")]);
