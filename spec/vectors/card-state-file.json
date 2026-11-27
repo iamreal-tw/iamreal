@@ -2100,11 +2100,11 @@
     },
     {
       "name": "a row the rules cannot leave differs from every computed state",
-      "note": "The row is well formed; that it is not a state of the rules shows here.",
+      "note": "The row is well formed; that it is not a state of the rules (current is not last_declared) shows here.",
       "proof_log": "production",
       "count": 1,
       "verified": 1,
-      "content": "{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"0400000000000000000000000000000000000000000000000000\",\"last_seq\":1,\"last_card_proof\":\"2026-11-04\",\"slots\":{\"threads\":{\"current\":\"alice\",\"last_declared\":\"alice\",\"switch_count\":0}}}\n",
+      "content": "{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"0400000000000000000000000000000000000000000000000000\",\"last_seq\":1,\"last_card_proof\":\"2026-11-04\",\"slots\":{\"threads\":{\"current\":\"bob\",\"last_declared\":\"alice\",\"switch_count\":0}}}\n",
       "computed": [
         {
           "scope_string": "iamreal:public:0_______________",

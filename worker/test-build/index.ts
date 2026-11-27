@@ -350,14 +350,14 @@ export class ProofLog extends DeployedProofLog {
   }
 
   /** Writes a row of the card state table as it is given (src/card-table.ts): how a test stores a state the rules cannot have left. */
-  testWriteCard(scopeString: string, scopedId: string, card: CardState, seq: number): void {
-    writeCard(this.ctx.storage.sql, scopeString, scopedId, card, seq);
+  testWriteCard(scopeString: string, scopedId: string, card: CardState, proofsOnLastDate: number, seq: number): void {
+    writeCard(this.ctx.storage.sql, scopeString, scopedId, card, proofsOnLastDate, seq);
   }
 
   /** Writes rows of the card state table as they are given, in one transaction: how a measurement fills the table with many cards. */
-  testWriteCards(cards: readonly { scopeString: string; scopedId: string; card: CardState; seq: number }[]): void {
+  testWriteCards(cards: readonly { scopeString: string; scopedId: string; card: CardState; proofsOnLastDate: number; seq: number }[]): void {
     this.ctx.storage.transactionSync(() => {
-      for (const c of cards) writeCard(this.ctx.storage.sql, c.scopeString, c.scopedId, c.card, c.seq);
+      for (const c of cards) writeCard(this.ctx.storage.sql, c.scopeString, c.scopedId, c.card, c.proofsOnLastDate, c.seq);
     });
   }
 
@@ -509,7 +509,7 @@ export class ProofLog extends DeployedProofLog {
     const date = parseChallenge(e.challenge);
     if (date === null) throw new Error("the event's challenge is not a challenge");
     const challengeUsed = sql.exec("SELECT 1 FROM test_used_challenges WHERE challenge = ?", e.challenge).toArray().length > 0;
-    const { card, latestValidDate } = this.ruleState(e.scope_string, e.scoped_id);
+    const { card, proofsOnLastDate, latestValidDate } = this.ruleState(e.scope_string, e.scoped_id);
     const outcome = applyRecord({
       platforms: this.settings.platforms,
       record: { accounts: e.accounts, date, verifies: e.verifies },
@@ -520,7 +520,9 @@ export class ProofLog extends DeployedProofLog {
     });
     this.ctx.storage.transactionSync(() => {
       if (outcome.result.valid) {
-        this.keepRuleState(e.scope_string, e.scoped_id, outcome.card, e.seq, outcome.latestValidDate);
+        // The back end's count of the card's records of the date, as `accept` keeps it; the rules do not limit it.
+        const onDate = card.lastCardProof === date ? proofsOnLastDate : 0;
+        this.keepRuleState(e.scope_string, e.scoped_id, outcome.card, onDate + 1, e.seq, outcome.latestValidDate);
         const { count } = sql.exec<{ count: number }>("SELECT count FROM proof_log WHERE id = 1").one();
         sql.exec("UPDATE view_state SET seq = ? WHERE id = 1", e.seq - 1);
         writeView(sql, viewOf({ seq: e.seq, scopeString: e.scope_string, scopedId: e.scoped_id }, date, outcome.result.kinds, card, outcome.card));
@@ -716,19 +718,15 @@ export default {
     if (route === "PUT /__test/proof-log/card" || route === "PUT /__test/proof-log/cards") {
       const many = route === "PUT /__test/proof-log/cards";
       const body = (await request.json()) as CardToWrite | CardToWrite[];
-      const cards: { scopeString: string; scopedId: string; card: CardState; seq: number }[] = [];
+      const cards: { scopeString: string; scopedId: string; card: CardState; proofsOnLastDate: number; seq: number }[] = [];
       for (const c of many ? (body as CardToWrite[]) : [body as CardToWrite]) {
         const slots = new Map<string, SlotState>();
-        for (const [platform, s] of Object.entries(c.platforms)) {
-          const slot = slotOfJson(s);
-          if (slot === null) return new Response(null, { status: 400 });
-          slots.set(platform, slot);
-        }
-        cards.push({ scopeString: c.scope_string, scopedId: c.scoped_id, card: { lastCardProof: parseDay(c.last_card_proof), proofsOnLastDate: c.proofs_on_last_date, slots }, seq: c.seq });
+        for (const [platform, s] of Object.entries(c.platforms)) slots.set(platform, slotOfJson(s));
+        cards.push({ scopeString: c.scope_string, scopedId: c.scoped_id, card: { lastCardProof: parseDay(c.last_card_proof), slots }, proofsOnLastDate: c.proofs_on_last_date, seq: c.seq });
       }
       const proofLog = testProofLogOf(env);
       if (many) await proofLog.testWriteCards(cards);
-      else await proofLog.testWriteCard(cards[0]!.scopeString, cards[0]!.scopedId, cards[0]!.card, cards[0]!.seq);
+      else await proofLog.testWriteCard(cards[0]!.scopeString, cards[0]!.scopedId, cards[0]!.card, cards[0]!.proofsOnLastDate, cards[0]!.seq);
       return done();
     }
     if (route === "POST /__test/proof-log/cards-copy") {

@@ -51,8 +51,8 @@ final class CardProofTests: XCTestCase {
 
     /// A first declaration, a card proof again, a switch and a withdrawal,
     /// in that order: the proof log then holds `first`, `refresh`, `switch`,
-    /// `withdraw` on Threads. The switch is on the next day: on the day of
-    /// the declaration it would be a correction.
+    /// `withdraw` on Threads. The switch is on the next day: the back end
+    /// writes at most 3 records of a card a day.
     func testACardDeclaresComesAgainSwitchesAndWithdraws() async throws {
         try await backend.setClock(now)
         // Card proofs stopped and taken again (#394, #402): the first declaration is the card proof that goes through after.

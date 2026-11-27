@@ -107,8 +107,7 @@ fn the_answers_are_read_as_for_a_list() {
 
 #[test]
 fn what_the_function_refuses() {
-    let state =
-        json!({"last_card_proof": null, "proofs_on_last_date": 0, "platforms": {}, "count": 0});
+    let state = json!({"last_card_proof": null, "proofs_on_last_date": 0, "daily_limit": 3, "platforms": {}, "count": 0});
     // Known platforms that are not a list of platform IDs, none twice.
     for known in [
         json!("threads"),

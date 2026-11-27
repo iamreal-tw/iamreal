@@ -43,14 +43,14 @@ final class ScreensTests: XCTestCase {
     /// A card that has declared nothing, on the one platform the app knows.
     private let newCard = Flow.CardStatus(
         shortID: "7K2Q9FM4XD", lastCardProof: nil, daysSince: nil, dailyLimit: false, knownPlatforms: ["threads"],
-        rows: [Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: nil, switchCount: 0, switchesLeft: 5, correctionToday: false)])
+        rows: [Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: nil, switchCount: 0, switchesLeft: 5)])
 
     /// A card that declares @alice, `days` days after its last card proof,
     /// with `used` of its 5 switches used.
-    private func card(days: Int = 12, used: Int = 1, today: Bool = false, dailyLimit: Bool = false) -> Flow.CardStatus {
+    private func card(days: Int = 12, used: Int = 1, dailyLimit: Bool = false) -> Flow.CardStatus {
         Flow.CardStatus(
             shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-04", daysSince: days, dailyLimit: dailyLimit, knownPlatforms: ["threads"],
-            rows: [Flow.StatusRow(platform: "threads", known: true, current: "alice", lastDeclared: "alice", switchCount: used, switchesLeft: 5 - used, correctionToday: today)])
+            rows: [Flow.StatusRow(platform: "threads", known: true, current: "alice", lastDeclared: "alice", switchCount: used, switchesLeft: 5 - used)])
     }
 
     private func consequence(_ kind: String, _ username: String, switchesLeft: Int? = nil) -> Flow.Consequence {
@@ -173,7 +173,7 @@ final class ScreensTests: XCTestCase {
     func testStepFourOfACardThatWithdrewEverything() {
         let withdrawn = Flow.CardStatus(
             shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-04", daysSince: 12, dailyLimit: false, knownPlatforms: ["threads"],
-            rows: [Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: "bob", switchCount: 1, switchesLeft: 4, correctionToday: false)])
+            rows: [Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: "bob", switchCount: 1, switchesLeft: 4)])
         let screen = screens.accounts(withdrawn, typed: ["threads": ""], errors: [:], message: nil)
         XCTAssertEqual(screen.texts, [
             "你的 Threads 帳號",
@@ -235,11 +235,10 @@ final class ScreensTests: XCTestCase {
             return nil
         }
         XCTAssertEqual(cost(card(used: 4)), "用掉最後一次更換。這次之後，這個平台不能再更換。")
-        XCTAssertEqual(cost(card(used: 5, today: true)), "今天才宣告的帳號，今天改掉不另外算一次更換。")
-        // None left, and the account was not put there today: no field, and the only ways are back.
+        // None left: no field, and the only ways are back.
         let usedUp = screens.accounts(card(used: 5), mode: .switching, typed: [:], errors: [:], message: nil)
         XCTAssertEqual(usedUp.texts, ["你的 Threads 帳號", "這張卡片目前宣告 @alice。", "已經更換 5 次，這個平台不能再更換。", "不改了", "取消"])
-        for status in [card(used: 4), card(used: 5, today: true), card(used: 5)] {
+        for status in [card(used: 4), card(used: 5)] {
             document.check(screens.accounts(status, mode: .switching, typed: [:], errors: [:], message: nil))
         }
     }
@@ -265,8 +264,8 @@ final class ScreensTests: XCTestCase {
     /// screens speak of more than one platform, and the list is changed row by row.
     func testStepFourWithAPlatformTheAppDoesNotKnow() {
         let rows = [
-            Flow.StatusRow(platform: "test-example", known: false, current: "alice-b", lastDeclared: "alice-b", switchCount: 0, switchesLeft: 5, correctionToday: false),
-            Flow.StatusRow(platform: "threads", known: true, current: "alice", lastDeclared: "alice", switchCount: 1, switchesLeft: 4, correctionToday: false),
+            Flow.StatusRow(platform: "test-example", known: false, current: "alice-b", lastDeclared: "alice-b", switchCount: 0, switchesLeft: 5),
+            Flow.StatusRow(platform: "threads", known: true, current: "alice", lastDeclared: "alice", switchCount: 1, switchesLeft: 4),
         ]
         let status = Flow.CardStatus(shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-04", daysSince: 12, dailyLimit: false, knownPlatforms: ["threads"], rows: rows)
         let declared = screens.accounts(status, typed: [:], errors: [:], message: nil)

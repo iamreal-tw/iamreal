@@ -106,17 +106,18 @@ fn table(platforms: &Value) -> Vec<Platform> {
         .collect()
 }
 
-/// A card's state as `card-state` sends it.
+/// A card's state as `card-state` sends it, from a server whose daily limit
+/// no card reaches: the record rules alone decide.
 fn card_state(card: &Card) -> Value {
     let date = |d: Option<Date>| d.map_or(Value::Null, |d| json!(d.to_string()));
     json!({
         "last_card_proof": date(card.last_card_proof),
-        "proofs_on_last_date": card.proofs_on_last_date,
+        "proofs_on_last_date": u64::from(card.last_card_proof.is_some()),
+        "daily_limit": 9_007_199_254_740_991_u64,
         "platforms": card.slots.iter().map(|(p, s)| (p.clone(), json!({
             "current": s.current,
             "last_declared": s.last_declared,
             "switch_count": s.switch_count,
-            "correction_date": date(s.correction_date),
         }))).collect::<serde_json::Map<_, _>>(),
         "count": 1,
     })
@@ -137,12 +138,9 @@ fn every_case_of_the_vectors_that_reaches_the_event_rules() {
             .zip(c["results"].as_array().unwrap())
         {
             let (scope, id) = (text(e, "scope_string"), text(e, "scoped_id"));
-            // The device computes checks 5 and 6 only; checks 1 to 4 are the server's.
+            // The device computes check 5 only; checks 1 to 4 are the server's.
             let reason = want["reason"].as_str();
-            if matches!(
-                reason,
-                None | Some("empty" | "switch_limit" | "daily_limit")
-            ) {
+            if matches!(reason, None | Some("empty" | "switch_limit")) {
                 let got = consequence(
                     &platforms,
                     &card_state(&rules.card(scope, id)),
@@ -200,11 +198,7 @@ fn every_case_of_the_vectors_that_reaches_the_event_rules() {
             );
         }
     }
-    assert_eq!(
-        seen.len(),
-        4,
-        "valid, empty, switch_limit and daily_limit: {seen:?}"
-    );
+    assert_eq!(seen.len(), 3, "valid, empty and switch_limit: {seen:?}");
 }
 
 #[test]
@@ -234,8 +228,8 @@ fn every_case_of_list_consequence_json() {
 const THREADS: &str =
     r#"[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}]"#;
 
-/// The example of docs/api/card-proof.md: bob on threads, 1 switch used, its last switch on 2026-03-02.
-const BOB: &str = r#"{"last_card_proof":"2026-11-04","proofs_on_last_date":1,"platforms":{"threads":{"current":"bob","last_declared":"bob","switch_count":1,"correction_date":"2026-03-02"}},"count":137}"#;
+/// The example of docs/api/card-proof.md: bob on threads, 1 switch used.
+const BOB: &str = r#"{"last_card_proof":"2026-11-04","proofs_on_last_date":1,"daily_limit":3,"platforms":{"threads":{"current":"bob","last_declared":"bob","switch_count":1}},"count":137}"#;
 
 fn threads(card_state: &str, accounts: &str, today: &str) -> Result<Value, i32> {
     call(
@@ -249,7 +243,7 @@ fn threads(card_state: &str, accounts: &str, today: &str) -> Result<Value, i32> 
 #[test]
 fn the_list_is_in_the_shape_of_a_record_s_accounts() {
     let two = r#"[{"platform":"test-example","display_name":"Example (no real service)","username_format":"[a-z0-9-]{1,20}"},{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}]"#;
-    let both = r#"{"last_card_proof":null,"proofs_on_last_date":0,"platforms":{"test-example":{"current":null,"last_declared":null,"switch_count":0,"correction_date":null},"threads":{"current":null,"last_declared":null,"switch_count":0,"correction_date":null}},"count":0}"#;
+    let both = r#"{"last_card_proof":null,"proofs_on_last_date":0,"daily_limit":3,"platforms":{"test-example":{"current":null,"last_declared":null,"switch_count":0},"threads":{"current":null,"last_declared":null,"switch_count":0}},"count":0}"#;
     let now = noon("2026-11-16");
     let ordered = br#"[{"platform":"test-example","username":"bob"},{"platform":"threads","username":"bob"}]"#;
     assert!(call(two.as_bytes(), both.as_bytes(), ordered, now).is_ok());
@@ -302,15 +296,19 @@ fn an_answer_is_read_in_one_way() {
 
 #[test]
 fn the_date_is_taiwan_s_whatever_the_time_zone_of_the_device() {
-    let today = BOB.replace("2026-11-04", "2026-03-02");
+    // Three records dated 2026-03-02: the server writes none more that date.
+    let today = BOB
+        .replace("2026-11-04", "2026-03-02")
+        .replace(r#""proofs_on_last_date":1"#, r#""proofs_on_last_date":3"#);
     let carol = r#"[{"platform":"threads","username":"carol"}]"#;
-    // 2026-03-02T15:59:59Z is 23:59:59 in Taiwan, still the date of the switch; a second later it is not.
-    let at = |now: i64| {
-        call(THREADS.as_bytes(), today.as_bytes(), carol.as_bytes(), now).unwrap()["rows"][0]["kind"].clone()
-    };
+    // 2026-03-02T15:59:59Z is 23:59:59 in Taiwan, still that date; a second later it is not.
+    let at = |now: i64| call(THREADS.as_bytes(), today.as_bytes(), carol.as_bytes(), now).unwrap();
     let midnight = noon("2026-03-03") - 12 * 3600;
-    assert_eq!(at(midnight - 1), json!("correction"));
-    assert_eq!(at(midnight), json!("switch"));
+    assert_eq!(
+        at(midnight - 1),
+        json!({"valid": false, "reason": "daily_limit"})
+    );
+    assert_eq!(at(midnight)["rows"][0]["kind"], json!("switch"));
     // A clock outside the years a challenge can carry.
     assert_eq!(
         call(THREADS.as_bytes(), BOB.as_bytes(), b"[]", 0),

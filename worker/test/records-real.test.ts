@@ -30,8 +30,7 @@ const crl = (name: string): Uint8Array => new Uint8Array(readFileSync(join(CARD_
 describe("fourteen card proofs with real proofs, from the challenge to the proof log", () => {
   let worker: TestWorker;
   before(async () => {
-    // The policy on late switches is on: card proof 10 is a fourth switch (cmd/iamreal-verify/testdata/card-proofs/README.md).
-    worker = await startWorker({ issuers: cardProofIssuers(), settings: { RESTRICT_LATE_SWITCHES: "true" } });
+    worker = await startWorker({ issuers: cardProofIssuers() });
     // MOICA publishes A (G2) and B (G3) on 2026-11-20, C (G3) on 2026-11-21.
     worker.moica.serve("G2", crl("A-G2.crl"));
     worker.moica.serve("G3", crl("B-G3.crl"));
@@ -85,19 +84,22 @@ describe("fourteen card proofs with real proofs, from the challenge to the proof
     assert.deepEqual((await worker.proofLog.stored()).records.map((r) => r.record_hash), written.map((w) => w.recordHash));
 
     // The state the back end answers.
-    const never = { current: null, last_declared: null, switch_count: 0, correction_date: null };
+    const never = { current: null, last_declared: null, switch_count: 0 };
     assert.deepEqual(await cardState(worker, cardProofs[0]!.body.scoped_id), {
       last_card_proof: "2026-11-23",
       proofs_on_last_date: 1,
-      platforms: { "test-example": never, threads: { current: null, last_declared: "alice", switch_count: 0, correction_date: "2026-11-20" } },
+      daily_limit: 3,
+      platforms: { "test-example": never, threads: { current: null, last_declared: "alice", switch_count: 0 } },
       count: 11,
     });
+    // threads: alice_ on the day of alice (card proof 3) is the first of its five switches.
     assert.deepEqual(await cardState(worker, cardProofs[1]!.body.scoped_id), {
       last_card_proof: "2026-11-24",
       proofs_on_last_date: 3,
+      daily_limit: 3,
       platforms: {
-        "test-example": { current: null, last_declared: "c-d", switch_count: 1, correction_date: "2026-11-21" },
-        threads: { current: null, last_declared: "dave", switch_count: 3, correction_date: "2026-11-23" },
+        "test-example": { current: null, last_declared: "c-d", switch_count: 1 },
+        threads: { current: null, last_declared: "erin", switch_count: 5 },
       },
       count: 11,
     });

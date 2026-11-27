@@ -4,8 +4,8 @@
 
 use iamreal_device_checks::date::Date;
 use iamreal_device_checks::record_rules::{
-    Account, Card, MemoryRecord, MemoryRules, Platform, RULES_VERSION, RecordResult, possible_card,
-    possible_slot,
+    Account, Card, MemoryRecord, MemoryRules, Platform, RULES_VERSION, RecordResult,
+    possible_last_card_proof, possible_slot,
 };
 use iamreal_device_checks::username_format::UsernameFormat;
 use serde_json::{Value, json};
@@ -29,10 +29,6 @@ fn text<'a>(v: &'a Value, key: &str) -> &'a str {
 
 fn date(s: &str) -> Date {
     Date::parse(s.as_bytes()).unwrap_or_else(|| panic!("the date {s}"))
-}
-
-fn date_text(d: Option<Date>) -> Value {
-    d.map_or(Value::Null, |d| json!(d.to_string()))
 }
 
 /// The platform table of `proof_log` (spec/scope.md): the rows of
@@ -87,7 +83,6 @@ fn slots_out(card: &Card) -> Value {
                     "current": s.current,
                     "last_declared": s.last_declared,
                     "switch_count": s.switch_count,
-                    "correction_date": date_text(s.correction_date),
                 }),
             )
         })
@@ -109,7 +104,6 @@ fn state_out(rules: &MemoryRules) -> Value {
                         "scoped_id": c.scoped_id,
                         "last_card_proof": c.last_card_proof.to_string(),
                         "accounts": c.accounts.iter().map(|a| json!({"platform": a.platform, "username": a.username})).collect::<Vec<_>>(),
-                        "proofs_on_last_date": card.proofs_on_last_date,
                         "slots": slots_out(&card),
                     })
                 }).collect::<Vec<_>>(),
@@ -195,7 +189,7 @@ fn every_case_record_by_record() {
                 .last_card_proof
                 .map_or(date(text(e, "date")), |d| d.max(date(text(e, "date"))));
             assert!(
-                possible_card(after.last_card_proof, after.proofs_on_last_date, today),
+                possible_last_card_proof(after.last_card_proof, today),
                 "{name}, event {}",
                 i + 1
             );

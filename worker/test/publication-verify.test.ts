@@ -62,10 +62,10 @@ describe("a proof log published over three days, re-verified by Go's iamreal-ver
     };
 
     // 2026-11-20: 998 records, among them cards that change their list on later days.
-    const [corrects, switches, withdraws, both] = [newCard(), newCard(), newCard(), newCard()];
-    for (const card of [corrects, switches, withdraws]) await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
+    const [sameDay, switches, withdraws, both] = [newCard(), newCard(), newCard(), newCard()];
+    for (const card of [sameDay, switches, withdraws]) await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
     await mustSubmit(worker, await sub(worker, both, root, "test-example:b-oth", "threads:both"), "test-example first, threads first");
-    await mustSubmit(worker, await sub(worker, corrects, root, "threads:carol"), "threads correction");
+    await mustSubmit(worker, await sub(worker, sameDay, root, "threads:carol"), "threads switch");
     await fillTo(LINES_PER_FILE - 2);
     assert.equal(await noteFingerprint(), 998);
     await midnight("2026-11-21");
@@ -169,7 +169,7 @@ describe("a proof log published over three days, re-verified by Go's iamreal-ver
 
       // The state Go computed of the cards that changed their lists is what the back end answers for them (those the
       // two records after the last line did not touch).
-      for (const card of [corrects, switches, both]) {
+      for (const card of [sameDay, switches, both]) {
         const state = (await cardState(worker, card)) as { last_card_proof: string; platforms: Record<string, { current: string | null }> };
         const accounts = Object.keys(state.platforms).sort().flatMap((platform) => (state.platforms[platform]!.current === null ? [] : [{ platform, username: state.platforms[platform]!.current }]));
         assert.deepEqual(cards.find((c) => c.scoped_id === card), { scoped_id: card, last_card_proof: state.last_card_proof, accounts });

@@ -62,7 +62,7 @@ export interface CardsOfShortId {
 /** One card that gives its place on a platform to an account now. */
 export interface AccountCard {
   readonly scopedId: string;
-  /** The date of the record from which the card gives its place to the account: a first declaration, a switch, a correction, or declaring it again after a withdrawal. */
+  /** The date of the record from which the card gives its place to the account: a first declaration, a switch, or declaring it again after a withdrawal. */
   readonly since: Day;
   /** The card's last card proof. */
   readonly lastCardProof: Day;

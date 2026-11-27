@@ -19,8 +19,7 @@
 //    site and the data domain. It also
 //    takes `PUT /__app-test/clock` (an ISO time): from then on the Worker's
 //    clock shows that time. The tests move it to the next day between card
-//    proofs, as a card may have 3 records a day and a switch on the day of
-//    the declaration is a correction. And `PUT /__app-test/paused` (`true`
+//    proofs, as the back end writes at most 3 records of a card a day. And `PUT /__app-test/paused` (`true`
 //    or `false`): from then on the operator has stopped taking card proofs,
 //    or taken them again (`CARD_PROOFS_PAUSED`, worker/README.md, "停止和恢復
 //    收過卡"), for the tests of #394's screens.

@@ -39,6 +39,12 @@ export interface ProofLogSettings {
    */
   readonly minApp: MinAppJson;
   /**
+   * The most records of one card the back end writes with one date
+   * (docs/api/card-proof.md, `daily_limit`; ADR-0018): DAILY_LIMITS of this
+   * proof log. `card-state` sends it to devices.
+   */
+  readonly dailyLimit: number;
+  /**
    * The back end's policy on late switches (docs/api/card-proof.md,
    * `switch_restricted`): when true, a record the record rules accept is
    * refused if a switch in it would be the fourth or fifth of its slot.
@@ -90,6 +96,16 @@ export interface ProofLogSettings {
 export const SITE_HOSTS: Readonly<Record<ProofLogKind, string>> = { production: "iamreal.tw", test: "test.iamreal.tw" };
 
 /**
+ * The most records of one card each proof log's back end writes with one
+ * date (`daily_limit`, docs/api/card-proof.md). It is the back end's rule,
+ * not the record rules' (ADR-0018): it protects the service, and a record
+ * already in the proof log is judged by the record rules alone. This is the
+ * one place the numbers are written; the test site has its own
+ * (README.md, "設定檔").
+ */
+export const DAILY_LIMITS: Readonly<Record<ProofLogKind, number>> = { production: 3, test: 3 };
+
+/**
  * What is wrong with the two settings, or null: `PROOF_LOG_KIND` is "test" or
  * "production", and `PROOF_LOG_OBJECT_NAME` starts with `test-` exactly when it
  * is "test". The text names the settings, never their values.
@@ -124,5 +140,5 @@ export function proofLogSettingsOf(env: Env): ProofLogSettings {
   // Declared in wrangler.jsonc as the empty string; any other value that is not a name is a mistake made on the dashboard.
   const rebuild: unknown = (env as { REBUILD_PROOF_LOG?: unknown }).REBUILD_PROOF_LOG;
   if (rebuild !== undefined && (typeof rebuild !== "string" || !/^[A-Za-z0-9._-]{0,40}$/.test(rebuild))) throw new Error("REBUILD_PROOF_LOG is not a name");
-  return { rebuildName: rebuild === undefined || rebuild === "" ? null : rebuild, kind, platforms: platformsOf(kind), minApp: MIN_APP[kind], restrictLateSwitches: restrict === "true", cardProofsPaused: paused === "true", testProofLogClearedOn: kind === "test" ? (cleared as string) : null, siteHost: SITE_HOSTS[kind] };
+  return { rebuildName: rebuild === undefined || rebuild === "" ? null : rebuild, kind, platforms: platformsOf(kind), minApp: MIN_APP[kind], dailyLimit: DAILY_LIMITS[kind], restrictLateSwitches: restrict === "true", cardProofsPaused: paused === "true", testProofLogClearedOn: kind === "test" ? (cleared as string) : null, siteHost: SITE_HOSTS[kind] };
 }

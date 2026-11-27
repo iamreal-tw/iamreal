@@ -37,11 +37,11 @@ B 和 C 廢止的序號相同，所以樹根相同。兩張卡片的序號都不
 | 7 | 2026-11-23 09:00 | G3 的卡 | `test-example:c-d`、`threads:dave` | `201` `test-example refresh, threads switch`（第 4 次） |
 | 8 | 2026-11-23 10:00 | G2 的卡 | （空的清單） | `201` `threads withdraw` |
 | 9 | 2026-11-23 10:30 | G2 的卡 | （空的清單） | `400` `empty`（這張卡片已經沒有帳號） |
-| 10 | 2026-11-24 09:00 | G3 的卡 | `test-example:c-d`、`threads:erin` | `403` `switch_restricted`（證明驗得過、紀錄規則接受；`threads` 第 5 次更換，測試開了限制晚的更換的政策（`RESTRICT_LATE_SWITCHES`），所以拒絕） |
+| 10 | 2026-11-24 09:00 | G3 的卡 | `test-example:c-d`、`threads:erin` | `201` `test-example refresh, threads switch`（`threads` 第 5 次，最後一次） |
 | 11 | 2026-11-24 09:30 | G3 的卡 | `test-example:c-d` | `201` `test-example refresh, threads withdraw` |
-| 12 | 2026-11-24 11:00 | G3 的卡 | `test-example:c-d`、`threads:dave` | `201` `test-example refresh, threads refresh` |
-| 13 | 2026-11-24 11:30 | G3 的卡 | （空的清單） | `201` `test-example withdraw, threads withdraw` |
-| 14 | 2026-11-24 12:00 | G3 的卡 | `threads:dave` | `400` `daily_limit`（證明驗得過、紀錄規則接受；後台不寫入一張卡片同一天的第 4 筆，G3 的卡這一天已經寫入 3 筆。第 10 次被拒，不算） |
+| 12 | 2026-11-24 11:00 | G3 的卡 | `test-example:c-d`、`threads:dave` | `400` `switch_limit`（證明驗得過；上一次宣告的是 `erin`，換成 `dave` 是第 6 次更換） |
+| 13 | 2026-11-24 11:30 | G3 的卡 | （空的清單） | `201` `test-example withdraw`（`threads` 在第 11 次已經收回） |
+| 14 | 2026-11-24 12:00 | G3 的卡 | `threads:dave` | `400` `switch_limit`（證明驗得過；同第 12 次。G3 的卡這一天已經寫入 3 筆，後台的 `daily_limit` 也會擋，但紀錄規則先套） |
 
 G2 的卡的清冊 A 是 2026-11-20 的，所以 G2 的過卡都在 11-23 以前（之後後台會回 `crl_stale`）。
 

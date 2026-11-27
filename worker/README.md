@@ -118,12 +118,12 @@ pnpm local                       # 可加 --port 8080、--data <目錄>
 
 `src/card-table.ts` 的 `readCard` 讀出一列之後，照 `spec/record-rules.md`「State」和這份證明紀錄的平台表檢查，不合就丟例外，`card-state` 回 `500`；壞掉的狀態不交給任何人：
 
-- `last_card_proof` 是日期；`proofs_on_last_date` 是 1 到 3；`last_seq` 至少是 1
+- `last_card_proof` 是日期；`proofs_on_last_date` 至少是 1（不設上限：一天幾筆是後台的設定，寫入那時的上限可能和現在不同）；`last_seq` 至少是 1
 - 每個名額的平台在平台表裡
-- `switch_count` 是 0 到 5；日期是日期；名額的各項彼此說得通，也和上次過卡日說得通（`protocol/` 的 `possibleSlot`：例如 `current` 有值時等於 `last_declared`、`correction_date` 不晚於上次過卡日）
+- `switch_count` 是 0 到 5；名額的各項彼此說得通，也和上次過卡日說得通（`protocol/` 的 `possibleSlot`：例如 `current` 有值時等於 `last_declared`、有帳號就有上次過卡日）
 - `current` 和 `last_declared` 合那個平台的帳號格式
 
-3 和 5 這兩個上限用的是 `protocol/src/record-rules.ts` 的常數。`writeCard` 寫入時不做這些檢查：它寫的是規則的函式交出來的狀態。
+5 這個上限用的是 `protocol/src/record-rules.ts` 的常數。`writeCard` 寫入時不做這些檢查：它寫的是規則的函式交出來的狀態。
 
 ### Durable Object 裡存的
 
@@ -141,7 +141,7 @@ pnpm local                       # 可加 --port 8080、--data <目錄>
 | `cards_copy` | 公布途中才有：卡片狀態表在公布那一刻的複本，欄位和 `cards` 相同 | 同 `cards` |
 | `proof_log` | 整份證明紀錄，只有一列 | `count`（筆數）、`fingerprint`（指紋）、`latest_valid_date`（證明紀錄裡最晚的有效日期）、`rules_version`（卡片狀態是照哪一版規則算的）、`schema_version`（這些表是照哪一版建的） |
 
-- `cards` 的欄位就是 `spec/record-rules.md`「State」的項目，加上 `last_seq`。`slots` 是一個 JSON 物件，鍵是平台代號，每個值恰好是 `current`、`last_declared`、`switch_count`、`correction_date`，名稱和寫法跟 `card-state` 回應的 `platforms` 相同。只存事實（更換過幾次），不存結論（還能不能換）。沒有有效紀錄的卡片沒有列。
+- `cards` 的欄位就是 `spec/record-rules.md`「State」的項目，加上 `last_seq` 和 `proofs_on_last_date`（這張卡片日期是 `last_card_proof` 的有效紀錄有幾筆）。後者不是紀錄規則的狀態，是後台自己的上限要讀的（[送出一筆](#送出一筆)的 `daily_limit`），卡片狀態檔不寫它；放在同一列，是因為它和規則的狀態在同一個交易裡跟著每一筆有效紀錄改。`slots` 是一個 JSON 物件，鍵是平台代號，每個值恰好是 `current`、`last_declared`、`switch_count`，名稱和寫法跟 `card-state` 回應的 `platforms` 相同。只存事實（更換過幾次），不存結論（還能不能換）。沒有有效紀錄的卡片沒有列。
 - 這張表只放紀錄規則的狀態，和頁面用的衍生表（`view_` 開頭的五張，見[頁面用的衍生表](#頁面用的衍生表)）分開：衍生表可以整份重建，規則的狀態錯了會收下拿不掉的紀錄。
 - `records` 是送出一筆（[#67](https://github.com/iamreal-tw/iamreal/issues/67)）加的新表，表的版本沒有變；在它之前建的物件下一次啟動時補上這張表。`fingerprint` 每一筆都存，切檔時最後一筆的那個值記進 `full_files`，下一檔的雜湊清單第一行就是它（`spec/record.md`「Record hash lists」），不必從頭重算。
 - `full_files` 是搬檔（[#149](https://github.com/iamreal-tw/iamreal/issues/149)）加的新表，表的版本也沒有變。一檔的 1,000 筆從 `records` 刪掉和這張表多一列是同一個交易，所以每一筆紀錄不是還在 `records`，就是它那一檔列在這裡（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)）。列是連續的：`records_before` 是 0、1000、2000……，`records` 的第一筆緊接在最後一列那一檔之後。
@@ -218,9 +218,10 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 | 1 | Worker（`src/submission.ts`） | 讀請求、檢查每個欄位的格式。不問 Durable Object，不算一次送出 | `malformed`、`scope`、`platform` |
 | 2 | Durable Object（`beginSubmission`） | 檢查題目，算一次送出 | `paused`、`challenge_unknown`、`challenge_used`、`challenge_attempts` |
 | 3 | Worker（`src/record-proof.ts`） | 從紀錄的欄位重建公開輸入，驗證證明。在 Durable Object 外面做，驗證的時候證明紀錄不被佔住 | `proof` |
-| 4 | Durable Object（`accept`） | 再看一次題目；檢查清冊；套紀錄規則；套後台自己的更換政策；寫入 | `challenge_unknown`、`challenge_used`、`crl_stale`、`root`、`date_order`、`empty`、`switch_limit`、`daily_limit`、`switch_restricted` |
+| 4 | Durable Object（`accept`） | 再看一次題目；檢查清冊；套紀錄規則；套後台自己一天的筆數上限和更換政策；寫入 | `challenge_unknown`、`challenge_used`、`crl_stale`、`root`、`date_order`、`empty`、`switch_limit`、`daily_limit`、`switch_restricted` |
 
-- **後台自己不判斷一筆紀錄有效或無效。** 第 4 段把存著的卡片狀態、證明紀錄裡最晚的有效日期、樹根對到的清冊日期交給 `protocol/` 的 `applyRecord`，照它的結果回。這個檔自己決定的只有後台自己的事：題目、今天收哪些樹根、更換政策。
+- **後台自己不判斷一筆紀錄有效或無效。** 第 4 段把存著的卡片狀態、證明紀錄裡最晚的有效日期、樹根對到的清冊日期交給 `protocol/` 的 `applyRecord`，照它的結果回。這個檔自己決定的只有後台自己的事：題目、今天收哪些樹根、一天的筆數上限、更換政策。
+- **一天的筆數上限**（ADR-0018）：紀錄規則接受的一筆，如果這張卡片日期是同一天的有效紀錄已經寫入 `dailyLimit` 筆（`src/settings.ts` 的 `DAILY_LIMITS`，正式和測試的證明紀錄現在都是 3），就不寫入，回 `400` `daily_limit`。數的是 `cards` 那一列的 `proofs_on_last_date`：一張卡片的日期不往回（檢查 4），所以同一天的筆數只要記最後那一天的。規則先套：會被規則擋下的一筆回規則的代碼，不是 `daily_limit`。這是後台的政策，不是紀錄規則：已經在證明紀錄裡的紀錄只照紀錄規則判斷，重驗也不看這個數字。`card-state` 把這張卡片的筆數和上限一起回，裝置在要 PIN 之前就知道今天滿了沒有。
 - **題目**：發出滿 10 分鐘就是不認得（剛好 10 分鐘也是）。已經寫入過一筆的題目是 `challenge_used`，不計次。第 6 次送出起是 `challenge_attempts`：第 2 段每通過一次就加一，不管後來停在哪一段，第 4 段再看題目時擋下的（`challenge_used`、`challenge_unknown`）和回 `500` 的（驗證器跑不起來、第 4 段出錯）也算。第 1 段擋下的、`paused` 的、第 2 段就是 `challenge_unknown` 或 `challenge_used` 的不計次；計次的那一次寫入自己失敗（`500`）也沒有計到。
 - **第 4 段為什麼再看一次題目**：驗證證明的那段時間，同一個題目可能已經被另一個請求寫入（回 `challenge_used`），也可能剛好過期（回 `challenge_unknown`）。同一個題目同時送兩次，只有一次寫入。過期是照寫入那一刻的時鐘看的：第 2 段時還差 1 毫秒到 10 分鐘、驗證完已經滿 10 分鐘的那一次，回 `challenge_unknown`、不寫入、已經算一次。這一點比 Go 的舊後台嚴，是有意的：它只在第一次看題目時看過期，寫入時只看題目是不是已經用過。
 - **清冊**：`issuer` 那把發證金鑰在鏡像裡沒有可用的清冊，或最新一份的清冊日期加 3 天早於今天（台灣日期），是 `crl_stale`；`smt_root` 不是最新兩份其中一份的樹根，是 `root`。紀錄規則的檢查 3 拿到的清冊日期，是這兩份裡樹根相同的那幾份的日期。重驗的人用的是整份清冊存檔，日期只會更多，所以後台收下的紀錄重驗時這一項一定過。
@@ -384,7 +385,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 
 | | [`test/publication-verify.test.ts`](test/publication-verify.test.ts) | [`test/records-real.test.ts`](test/records-real.test.ts) 的第二項 |
 |---|---|---|
-| 證明紀錄 | 假卡片 2,005 筆，三天：第一天 998 筆；第二天再 2 筆，剛好寫滿第一檔（那一次公布沒有最後一檔可寫）；第三天到 2,003 筆；之後 2 筆沒有任何一行涵蓋，是在最後一次公布寫卡片狀態檔的途中寫進來的（改一張檔裡有的卡片、一張新卡片）。有更正、更換、收回、兩個平台 | `cmd/iamreal-verify/testdata/card-proofs/` 的 11 筆，五天，最後一天之後公布一次（前面幾天物件自己的 alarm 剛好響了的話，那幾天也各有一行） |
+| 證明紀錄 | 假卡片 2,005 筆，三天：第一天 998 筆；第二天再 2 筆，剛好寫滿第一檔（那一次公布沒有最後一檔可寫）；第三天到 2,003 筆；之後 2 筆沒有任何一行涵蓋，是在最後一次公布寫卡片狀態檔的途中寫進來的（改一張檔裡有的卡片、一張新卡片）。有當天的更換、隔天的更換、收回、兩個平台 | `cmd/iamreal-verify/testdata/card-proofs/` 的 11 筆，五天，最後一天之後公布一次（前面幾天物件自己的 alarm 剛好響了的話，那幾天也各有一行） |
 | 證明 | 佔位的位元組；後台用替身驗證器，Go 用它測試的假驗證器 | 真的證明；後台用部署的驗證器，Go 用原生的 `bb`（要設 `IAMREAL_BB`） |
 | 清冊存檔 | 後台的鏡像從假的內政部抓來寫進 R2 的；Go 用測試的發證金鑰重新驗章、建樹 | 同左，發證金鑰是 `cmd/iamreal-verify/testdata/card-proofs/` 的 |
 | Go 怎麼跑 | `go test -run '^TestWorkerData$' ./cmd/iamreal-verify`：指令的 `run`，只給 `-proof-log test -data <R2 的模擬抄下來的目錄>` | `go build -tags iamrealtest` 建出來的執行檔，`-data` 加測試建置才有的 `-test-issuers` |
@@ -417,9 +418,9 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 1. **產生一串紀錄。** [`test/sequence.ts`](test/sequence.ts) 的 `generateSequence` 從種子（現在是 1）產生 10,000 筆測試的證明紀錄（兩個平台）的事件。它不知道規則，只記得每張卡片在每個平台想宣告哪個帳號，讓規則的各種情況常常發生：160 張卡片，同一時間只有 8 張在送、每 64 筆換一張，偶爾是剛離開的卡片回來送一筆、日期是 4 天前；每個平台 4 個帳號名稱；一天約 18 筆，日期大多是當天，常常是前一天（午夜前拿的題目），有時往回 2 到 8 天（沒超過和超過檢查 4 的 4 天）、有時往後 1 到 3 天；有時是空的清單、重送最近 30 筆之一的題目、證明不過、沒有一份清冊的日期對得上（含差一天就對得上的）。亂數是自己寫的 mulberry32，只用 32 位元的整數運算，不用 Node 內建的，所以同一個種子產生的序列不隨 Node 的版本改變；同一個種子長一點的序列，開頭就是短的那一串。
 2. **Go 算答案。** 測試把序列寫進 `worker/test-output/sequence-…/events.json`，跑 `go test -count=1 -run '^TestSequenceAnswers$' ./prooflog`，環境變數 `IAMREAL_PROOF_LOG_SEQUENCE` 指到那個目錄。`prooflog/sequence_test.go` 用 `prooflog.Rules` 一筆一筆套用，寫同一個目錄的 `answers.json`。兩個檔的格式見下面「交換的檔」。`test-output/` 不進版控（`worker/.gitignore`）：每一項都過時刪掉這個目錄；有任何一項失敗（包括 Go 那邊失敗、最後的現況不同）時留著，失敗的訊息寫著路徑。
-3. **比每一筆。** 每一筆的結果（有效或無效、代碼、每個平台的種類）和那張卡片在這一筆之後的狀態（`last_card_proof`、`proofs_on_last_date`、每個名額的 `current`、`last_declared`、`switch_count`、`correction_date`；沒有有效紀錄的卡片是空的狀態）。
+3. **比每一筆。** 每一筆的結果（有效或無效、代碼、每個平台的種類）和那張卡片在這一筆之後的狀態（`last_card_proof`、每個名額的 `current`、`last_declared`、`switch_count`；沒有有效紀錄的卡片是空的狀態）。
    - 記憶體那一次另外每一筆比證明紀錄裡最晚的有效日期，每 100 筆比一次每個帳號底下的卡片數（`account_cards`），最後比整個現況（每張卡片的清單，每個帳號底下的卡片）。
-   - Durable Object 那一次，每一筆走測試專用建置的 `POST /__test/proof-log/rule-event`，接著重啟證明紀錄的 Durable Object，再從 `POST /api/v1/card-state` 讀那張卡片。`rule-event` 對有效的一筆除了寫卡片的狀態，也照送出一筆的同一段程式寫衍生表（`viewOf`、`writeView`）：數卡片查的是衍生表。這個入口不存紀錄，所以寫完把衍生表記的筆數放回證明紀錄的筆數，物件重啟時才不會當成衍生表沒跟上、拿不存在的紀錄去重建。每 100 筆（共 100 次，最後一筆也是）再從 `POST /__test/proof-log/rule-state` 讀證明紀錄裡最晚的有效日期（`ruleState` 讀出來給規則的那一個）和每個帳號底下的卡片數（部署的 `accountCards` 那一句查詢數的，就是 `201` 回應裡的 `account_cards`：查衍生表 `view_slots`，不讀卡片狀態表；有哪些帳號則是從卡片狀態表列出來的，所以這一步同時比了兩張表對不對得上），和 Go 的比。
+   - Durable Object 那一次，每一筆走測試專用建置的 `POST /__test/proof-log/rule-event`，接著重啟證明紀錄的 Durable Object，再從 `POST /api/v1/card-state` 讀那張卡片；它的 `proofs_on_last_date`（後台自己數的，不是規則的狀態）另外和照 Go 的結果數出來的筆數比。`rule-event` 對有效的一筆除了寫卡片的狀態，也照送出一筆的同一段程式寫衍生表（`viewOf`、`writeView`）：數卡片查的是衍生表。這個入口不存紀錄，所以寫完把衍生表記的筆數放回證明紀錄的筆數，物件重啟時才不會當成衍生表沒跟上、拿不存在的紀錄去重建。每 100 筆（共 100 次，最後一筆也是）再從 `POST /__test/proof-log/rule-state` 讀證明紀錄裡最晚的有效日期（`ruleState` 讀出來給規則的那一個）和每個帳號底下的卡片數（部署的 `accountCards` 那一句查詢數的，就是 `201` 回應裡的 `account_cards`：查衍生表 `view_slots`，不讀卡片狀態表；有哪些帳號則是從卡片狀態表列出來的，所以這一步同時比了兩張表對不對得上），和 Go 的比。
 4. **遇到第一筆不同就停**，訊息寫第幾筆、哪張卡片、哪個欄位、兩邊的值，例如（把 `accountCards` 的查詢故意改成最多回 1 時）：
 
    ```

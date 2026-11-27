@@ -64,8 +64,7 @@ in [`list-consequence.md`](list-consequence.md), "Input".
    element is an object with
    - `platform`, a platform ID ([`scope.md`](scope.md): 1 to 21 characters
      of `a-z`, `0-9`, `-`),
-   - `kind`, one of the strings `first`, `refresh`, `correction`, `switch`,
-     `withdraw`,
+   - `kind`, one of the strings `first`, `refresh`, `switch`, `withdraw`,
    - `username`, a string of 1 or more printable ASCII characters (U+0020
      to U+007E) without `"` and `\`,
 

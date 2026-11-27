@@ -22,7 +22,7 @@
 //                 answered from one index. For a slot with an account that
 //                 is the card's last card proof: a valid record has a kind
 //                 on every slot that has an account before it (refresh,
-//                 switch, correction or withdraw), so every valid record of
+//                 switch or withdraw), so every valid record of
 //                 the card writes it.
 //   view_history  one row per valid record and platform on which it has a kind;
 //                 the proof log page lists it by `seq` (view_history_log)
@@ -133,7 +133,7 @@ interface SlotChange {
   readonly switchCount: number;
   /**
    * Whether this record starts the slot giving its place to `after`: a
-   * first declaration, a switch, a correction, or declaring again after a
+   * first declaration, a switch, or declaring again after a
    * withdrawal. A refresh of the current account does not.
    */
   readonly since: boolean;
@@ -171,7 +171,7 @@ export function viewOf(record: { seq: number; scopeString: string; scopedId: str
       before: b.lastDeclared,
       after: a.current,
       switchCount: a.switchCount,
-      since: kind === "first" || kind === "switch" || kind === "correction" || (kind === "refresh" && afterWithdrawal),
+      since: kind === "first" || kind === "switch" || (kind === "refresh" && afterWithdrawal),
     };
   });
   return { seq: record.seq, scopeString: record.scopeString, scopedId: record.scopedId, date, lastCardProof: after.lastCardProof, changes };

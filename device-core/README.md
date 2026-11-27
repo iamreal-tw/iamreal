@@ -41,7 +41,7 @@
 | `hex.rs` | | 寫在程式裡的十六進位常數 |
 | `record_rules.rs` | `spec/record-rules.md` | 紀錄規則：一筆紀錄的六項檢查（`apply_record`）、其中第 5、6 項（`apply_list`，裝置在簽章之前算的那一半）、從第一筆紀錄算起的現況（`MemoryRules`）、版本號 `RULES_VERSION` 和規則裡的數字。規則跟著版本號寫死在這裡（ADR-0035）；平台表不寫死，由呼叫的人傳進來 |
 | `counts.rs` | `spec/counts.md` | 計數的表（步驟、停下來的原因、動作、花了多久的分級……，每一項適用哪些客戶端）；一筆計數收不收，和後台同一套規則；app 送出的那一筆：系統給的版本號、手機型號不合格式的整個不送，不截短也不改寫；花了多久的毫秒數換成分級；過卡裝置編號什麼時候換 |
-| `list_consequence.rs` | `spec/list-consequence.md` | 確認的畫面上每一列的後果：持卡人改過的清單在每個平台上是新宣告、再次過卡、更正、更換還是收回，更換之後還剩幾次；不認得的平台上的帳號照原樣留在清單裡 |
+| `list_consequence.rs` | `spec/list-consequence.md` | 確認的畫面上每一列的後果：持卡人改過的清單在每個平台上是新宣告、再次過卡、更換還是收回，更換之後還剩幾次；後台今天還收不收這張卡片的紀錄；不認得的平台上的帳號照原樣留在清單裡 |
 
 | 檔案（`prover/src/`） | 內容 |
 |---|---|
@@ -184,7 +184,7 @@ Android 另外有一層 JNI，把這些 C 函式包成 Kotlin 呼叫得到的函
 | `idc_scope_string` | 這份證明紀錄的場合字串（31 個位元組），卡片第一次簽的就是它 |
 | `idc_declaration_code` | 帳號清單和題目的宣告碼（31 個位元組），卡片第二次簽的就是它。清單沒照平台排序、同一個平台兩次、題目不是唯一的寫法，都是 `IDC_ERR_INPUT` |
 | `idc_list_consequence` | 持卡人改過的清單在每個平台上的後果（JSON），給確認的畫面（`spec/list-consequence.md`）。收 `config` 的 `platforms` 和 `card-state` 的回應（照後台送來的原樣）、app 有自己那一份的平台、持卡人的清單、裝置時鐘的現在；讀不懂的回應、清單裡不是提供改的平台，都是 `IDC_ERR_INPUT`。回傳卡片要簽的整份清單（交給 `idc_declaration_code`）和每一列，或不能簽的理由（`username`、`empty`、`switch_limit`、`daily_limit`）。形狀寫在標頭檔 |
-| `idc_card_status` | 這張卡片的現況（JSON），給「你的帳號」那個畫面：上次過卡的日期和到今天幾天、今天是不是已經 3 筆、每個提供改的平台現在的帳號、上一次宣告的帳號、更換過幾次、還剩幾次、今天改是不是更正，以及裝置不認得的平台上原樣保留的帳號。輸入和讀法同 `idc_list_consequence`，算法是 `spec/list-consequence.md` 的「The card's state, as shown」。它不判斷任何一份清單收不收。讀不懂的回應是 `IDC_ERR_INPUT`，錯誤只有代碼。形狀寫在標頭檔 |
+| `idc_card_status` | 這張卡片的現況（JSON），給「你的帳號」那個畫面：上次過卡的日期和到今天幾天、後台今天是不是已經不再寫入這張卡片的紀錄（`card-state` 的 `proofs_on_last_date` 和 `daily_limit`）、每個提供改的平台現在的帳號、上一次宣告的帳號、更換過幾次、還剩幾次，以及裝置不認得的平台上原樣保留的帳號。輸入和讀法同 `idc_list_consequence`，算法是 `spec/list-consequence.md` 的「The card's state, as shown」。它不判斷任何一份清單收不收。讀不懂的回應是 `IDC_ERR_INPUT`，錯誤只有代碼。形狀寫在標頭檔 |
 | `idc_short_id` | 匿名編號的短編號：文字形式的前 10 個字元（`spec/scoped-id.md`）。收查現況的請求裡那 52 個字元；不是唯一寫法的匿名編號是 `IDC_ERR_INPUT`。匿名編號本身只有 `idc_session_card_state_request` 算得出來 |
 | `idc_min_app` | 這一版 app 能不能過卡（`spec/min-app.md`）：收 `GET /api/v1/config` 的內文、是哪一個 app（`IDC_CLIENT_ANDROID`、`IDC_CLIENT_IOS`）、app 自己的 build、手機的時鐘，回 `{"verdict":…}`：`ok`（照常）、`ok_until`（照常，帶起算日 `from`）、`stop`（不讀卡、不要 PIN，請更新；也帶起算日 `from`，畫面要寫）、`unreadable`（讀不懂，也不往下）。內文不是 JSON 也是 `unreadable`，不是錯誤 |
 | `idc_count` | app 要送的一筆計數（`POST /api/v1/counts` 的內文，`spec/counts.md`）：收每個值都是字串的 JSON 物件，系統給的版本號、手機型號不合格式的拿掉，剩下的要是後台會收的一筆，照表的順序寫出來；不是的話是 `IDC_ERR_INPUT`（app 的程式寫錯了，沒有東西可以送）。兩個 app 送的每一筆都經過它 |

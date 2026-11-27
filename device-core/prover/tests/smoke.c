@@ -44,8 +44,8 @@ int main(void) {
     static const char platforms[] =
         "[{\"platform\":\"threads\",\"display_name\":\"Threads\",\"username_format\":\"[a-z0-9._]{1,30}\"}]";
     static const char state[] =
-        "{\"last_card_proof\":null,\"proofs_on_last_date\":0,\"platforms\":{\"threads\":"
-        "{\"current\":null,\"last_declared\":null,\"switch_count\":0,\"correction_date\":null}},\"count\":0}";
+        "{\"last_card_proof\":null,\"proofs_on_last_date\":0,\"daily_limit\":3,\"platforms\":{\"threads\":"
+        "{\"current\":null,\"last_declared\":null,\"switch_count\":0}},\"count\":0}";
     static const char known[] = "[\"threads\"]";
     if (idc_list_consequence((const uint8_t *)platforms, strlen(platforms), (const uint8_t *)state,
                              strlen(state), (const uint8_t *)known, strlen(known),

@@ -60,7 +60,7 @@ const SCENARIO_FLOORS: Record<Scenario, number> = {
   exactly_4_days_back_valid: 60,
   fifth_switch: 165,
   sixth_switch_blocked: 980,
-  correction: 190,
+  switch_on_the_same_date: 190,
   declared_again_after_withdrawing_all: 230,
   account_of_several_cards: 3300,
 };
@@ -97,10 +97,9 @@ const answer = (): Answer => ({
   result: { valid: true, kinds: [{ platform: "threads", kind: "switch" }] },
   card: {
     last_card_proof: "2026-03-02",
-    proofs_on_last_date: 1,
     slots: {
-      "test-example": { current: null, last_declared: null, switch_count: 0, correction_date: null },
-      threads: { current: "bob", last_declared: "bob", switch_count: 1, correction_date: "2026-03-02" },
+      "test-example": { current: null, last_declared: null, switch_count: 0 },
+      threads: { current: "bob", last_declared: "bob", switch_count: 1 },
     },
   },
 });
@@ -117,15 +116,15 @@ describe("firstDifference: which field of a record's answer differs", () => {
   });
 
   test("the result: valid against invalid, then the reason, then the kinds", () => {
-    assert.deepEqual(firstDifference(answer(), { ...answer(), result: { valid: false, reason: "daily_limit" } }), { field: "result.valid", want: true, got: false });
+    assert.deepEqual(firstDifference(answer(), { ...answer(), result: { valid: false, reason: "switch_limit" } }), { field: "result.valid", want: true, got: false });
     assert.deepEqual(firstDifference({ ...answer(), result: { valid: false, reason: "root" } }, { ...answer(), result: { valid: false, reason: "date_order" } }), { field: "result.reason", want: "root", got: "date_order" });
-    assert.deepEqual(firstDifference(answer(), { ...answer(), result: { valid: true, kinds: [{ platform: "threads", kind: "correction" }] } }), { field: "result.kinds[0].kind", want: "switch", got: "correction" });
+    assert.deepEqual(firstDifference(answer(), { ...answer(), result: { valid: true, kinds: [{ platform: "threads", kind: "refresh" }] } }), { field: "result.kinds[0].kind", want: "switch", got: "refresh" });
   });
 
   test("a slot one side does not have, an item one side does not have", () => {
     const got = answer();
     delete got.card.slots["test-example"];
-    assert.deepEqual(firstDifference(answer(), got), { field: 'card.slots["test-example"]', want: { current: null, last_declared: null, switch_count: 0, correction_date: null }, got: undefined });
+    assert.deepEqual(firstDifference(answer(), got), { field: 'card.slots["test-example"]', want: { current: null, last_declared: null, switch_count: 0 }, got: undefined });
     assert.deepEqual(firstDifference(answer(), { ...answer(), result: { valid: true, kinds: [] } }), { field: "result.kinds[0]", want: { platform: "threads", kind: "switch" }, got: undefined });
   });
 });
@@ -138,15 +137,15 @@ describe("statistics: the reason codes and kinds of a sequence's results", () =>
       { valid: true, kinds: [{ platform: "threads", kind: "refresh" }] },
     ]);
     assert.equal(s.valid, 2);
-    assert.deepEqual(s.reasons, { proof: 0, challenge_reused: 0, root: 1, date_order: 0, empty: 0, switch_limit: 0, daily_limit: 0 });
-    assert.deepEqual(s.kinds, { first: 1, refresh: 1, correction: 0, switch: 0, withdraw: 1 });
+    assert.deepEqual(s.reasons, { proof: 0, challenge_reused: 0, root: 1, date_order: 0, empty: 0, switch_limit: 0 });
+    assert.deepEqual(s.kinds, { first: 1, refresh: 1, switch: 0, withdraw: 1 });
     assert.deepEqual(s.byPlatform, { "test-example withdraw": 1, "threads first": 1, "threads refresh": 1 });
   });
 });
 
 describe("scenarios: the cases a sequence must hold often, counted from its events and Go's answers", () => {
-  const slot = (current: string | null, lastDeclared = current, switchCount = 0): SlotJson => ({ current, last_declared: lastDeclared, switch_count: switchCount, correction_date: lastDeclared === null ? null : "2026-03-01" });
-  const card = (lastCardProof: string | null, threads: SlotJson): CardJson => ({ last_card_proof: lastCardProof, proofs_on_last_date: 1, slots: { "test-example": slot(null), threads } });
+  const slot = (current: string | null, lastDeclared = current, switchCount = 0): SlotJson => ({ current, last_declared: lastDeclared, switch_count: switchCount });
+  const card = (lastCardProof: string | null, threads: SlotJson): CardJson => ({ last_card_proof: lastCardProof, slots: { "test-example": slot(null), threads } });
   const event = (seq: number, scopedId: string, date: string, username?: string): SequenceEvent => ({
     seq,
     scope_string: scopeOf("test"),
@@ -169,9 +168,9 @@ describe("scenarios: the cases a sequence must hold often, counted from its even
       event(6, "A", "2026-03-06", "alice"), // and declares again; alice has two cards again
       event(7, "C", "2026-03-06", "carol"), // the fifth switch
       event(8, "C", "2026-03-07", "dave"), // the sixth, blocked
-      event(9, "C", "2026-03-06", "erin"), // a correction
+      event(9, "A", "2026-03-06", "erin"), // a switch on the date of A's last card proof
     ];
-    const results: ResultJson[] = [kinds("first"), kinds("first"), kinds("first"), { valid: false, reason: "date_order" }, kinds("withdraw"), kinds("refresh"), kinds("switch"), { valid: false, reason: "switch_limit" }, kinds("correction")];
+    const results: ResultJson[] = [kinds("first"), kinds("first"), kinds("first"), { valid: false, reason: "date_order" }, kinds("withdraw"), kinds("refresh"), kinds("switch"), { valid: false, reason: "switch_limit" }, kinds("switch")];
     const cards = [
       card("2026-03-05", slot("alice")),
       card("2026-03-04", slot("alice")),
@@ -181,7 +180,7 @@ describe("scenarios: the cases a sequence must hold often, counted from its even
       card("2026-03-06", slot("alice")),
       card("2026-03-06", slot("carol", "carol", 5)),
       card("2026-03-06", slot("carol", "carol", 5)),
-      card("2026-03-06", slot("erin", "erin", 5)),
+      card("2026-03-06", slot("erin", "erin", 1)),
     ];
     const latest = ["2026-03-05", "2026-03-05", "2026-03-05", "2026-03-05", "2026-03-05", "2026-03-06", "2026-03-06", "2026-03-06", "2026-03-06"];
     assert.deepEqual(scenarios(events, { results: results.map((r, i) => ({ ...r, seq: i + 1 })), cards: cards.map((c, i) => ({ ...c, scope_string: scopeOf("test"), scoped_id: events[i]!.scoped_id })), latest_valid_dates: latest }), {
@@ -190,7 +189,7 @@ describe("scenarios: the cases a sequence must hold often, counted from its even
       exactly_4_days_back_valid: 1,
       fifth_switch: 1,
       sixth_switch_blocked: 1,
-      correction: 1,
+      switch_on_the_same_date: 1,
       declared_again_after_withdrawing_all: 1,
       account_of_several_cards: 2,
     });
@@ -263,8 +262,8 @@ describe(`a sequence of ${LENGTH} records of seed ${SEED}: Go's prooflog/ gives 
   /** Go's answer for the i-th record, in the shape compared. */
   const goAnswer = (i: number): Answer => {
     const { valid, kinds, reason } = go.results[i]!;
-    const { last_card_proof, proofs_on_last_date, slots } = go.cards[i]!;
-    return { result: { valid, ...(kinds && { kinds }), ...(reason && { reason }) }, card: { last_card_proof, proofs_on_last_date, slots } };
+    const { last_card_proof, slots } = go.cards[i]!;
+    return { result: { valid, ...(kinds && { kinds }), ...(reason && { reason }) }, card: { last_card_proof, slots } };
   };
   /** Fails, naming the record, its card, the field and both values. */
   const fail = (side: string, i: number, e: SequenceEvent, d: Difference): never =>
@@ -318,8 +317,8 @@ describe(`a sequence of ${LENGTH} records of seed ${SEED}: Go's prooflog/ gives 
     const state = memory.output().map((scope) => ({
       scope_string: scope.scopeString,
       cards: scope.cards.map((c) => {
-        const { proofs_on_last_date, slots } = cardJsonOf(memory.card(scope.scopeString, c.scopedId));
-        return { scoped_id: c.scopedId, last_card_proof: formatDay(c.lastCardProof), accounts: c.accounts, proofs_on_last_date, slots };
+        const { slots } = cardJsonOf(memory.card(scope.scopeString, c.scopedId));
+        return { scoped_id: c.scopedId, last_card_proof: formatDay(c.lastCardProof), accounts: c.accounts, slots };
       }),
       accounts: scope.accounts.map((a) => ({ platform: a.platform, username: a.username, cards: a.cards.map((c) => ({ scoped_id: c.scopedId, last_card_proof: formatDay(c.lastCardProof) })) })),
     }));
@@ -339,6 +338,8 @@ describe(`a sequence of ${LENGTH} records of seed ${SEED}: Go's prooflog/ gives 
     worker = await startWorker();
     await freshProofLog(worker, { kind: "test" });
     let checkpoints = 0;
+    /** The back end's count of each card's valid records dated its last card proof, counted here from Go's results. */
+    const onLastDate = new Map<string, { date: string; n: number }>();
     for (const [i, e] of sequence.events.entries()) {
       let got: Answer;
       let atCheckpoint: { latest: string | null; accounts: AccountCount[] } | undefined;
@@ -348,7 +349,12 @@ describe(`a sequence of ${LENGTH} records of seed ${SEED}: Go's prooflog/ gives 
         // A state the object refuses to read (src/card-table.ts, readCard) is a `500` here.
         const { platforms, last_card_proof, proofs_on_last_date } = (await cardState(worker, e.scoped_id, e.scope_string)) as { platforms: CardJson["slots"]; last_card_proof: string | null; proofs_on_last_date: number };
         const result: ResultJson = r.valid ? { valid: true, kinds: r.kinds! } : { valid: false, reason: r.reason! };
-        got = { result, card: { last_card_proof, proofs_on_last_date, slots: platforms } };
+        got = { result, card: { last_card_proof, slots: platforms } };
+        const key = `${e.scope_string} ${e.scoped_id}`;
+        const was = onLastDate.get(key);
+        if (go.results[i]!.valid) onLastDate.set(key, { date: e.date, n: was?.date === e.date ? was.n + 1 : 1 });
+        const want = onLastDate.get(key)?.n ?? 0;
+        if (proofs_on_last_date !== want) fail("Durable Object", i, e, { field: "proofs_on_last_date", want, got: proofs_on_last_date });
         if (checkpoint(e.seq) !== undefined) {
           const rules = await worker.proofLog.ruleState(e.scope_string, e.scoped_id);
           atCheckpoint = { latest: rules.latest_valid_date, accounts: rules.accounts.map((a) => ({ scope_string: e.scope_string, ...a })) };

@@ -214,20 +214,21 @@ describe("the proof log page", () => {
   });
 
   test("every kind of record as the table of 清單 writes it; a card's 3 valid records of one day, all of them; a record refused is not listed", async () => {
-    assert.equal(table().size, 7, "the table of 清單 has the 7 rows this test writes");
+    // 更正 is a row no record has had since version 3 of the record rules (ADR-0018); the copy loses it in #510.
+    assert.equal(table().size, 7, "the table of 清單 has the 6 rows this test writes, and 更正");
     const e = cardStarting("E000000000");
     await pagesWorld(worker, "2026-10-08", [
       r("2026-10-01", e, "threads:bob"),
       r("2026-10-02", e, "threads:bob"),
       r("2026-10-03", e, "threads:alice"),
-      r("2026-10-03", e, "threads:dave"), // a correction
+      r("2026-10-03", e, "threads:dave"), // another on the day of a switch: a switch too
       r("2026-10-04", e), // a withdrawal
       r("2026-10-05", e, "threads:dave"), // declared again
       r("2026-10-06", e),
       r("2026-10-07", e, "threads:carol.tw"), // another, after a withdrawal: a switch
       r("2026-10-08", e, "threads:erin"),
       r("2026-10-08", e),
-      r("2026-10-08", e, "threads:frank"), // another, after a withdrawal, the day of a switch: a correction
+      r("2026-10-08", e, "threads:frank"), // another, after a withdrawal, the day of a switch: a switch too
     ]);
     // A fourth card proof of the card that day is refused (daily_limit): nothing is written, so nothing is listed.
     const root = await publishCrl(worker, { issuer: "G3", number: parseDay("2026-10-08")!, thisUpdate: tw("2026-10-08", "05:00:00"), serials: [11, 12] });
@@ -235,14 +236,14 @@ describe("the proof log page", () => {
     const { page } = await getPage(worker, "/proof-log");
     const id = "E000000000";
     wantLines(page, [
-      row("2026-10-08", id, "更正", "erin", "frank"),
+      row("2026-10-08", id, "收回之後宣告別的帳號", "erin", "frank"),
       row("2026-10-08", id, "收回", "erin"),
       row("2026-10-08", id, "更換", "carol.tw", "erin"),
       row("2026-10-07", id, "收回之後宣告別的帳號", "dave", "carol.tw"),
       row("2026-10-06", id, "收回", "dave"),
       row("2026-10-05", id, "收回之後宣告回同一個帳號", "dave"),
       row("2026-10-04", id, "收回", "dave"),
-      row("2026-10-03", id, "更正", "alice", "dave"),
+      row("2026-10-03", id, "更換", "alice", "dave"),
       row("2026-10-03", id, "更換", "bob", "alice"),
       row("2026-10-02", id, "再次過卡", "bob"),
       row("2026-10-01", id, "新宣告", "bob"),
@@ -353,11 +354,11 @@ describe("the proof log page", () => {
     await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
     wantLines((await getPage(worker, "/threads/@alice")).page, ["有 1 張自然人憑證", "島民編號 7K2Q9FM4XD 開頭 看這張島民證明 2026-11-20 起 上次過卡 今天"]);
     wantLines((await getPage(worker, "/proof-log")).page, ["現在有 1 張島民證明，其中 1 張在過去三個月內過卡。", row("2026-11-20", CARD_A, "新宣告", "alice")]);
-    await mustSubmit(worker, await sub(worker, card, root, "threads:bob"), "threads correction");
+    await mustSubmit(worker, await sub(worker, card, root, "threads:bob"), "threads switch");
     wantLines((await getPage(worker, "/threads/@alice")).page, ["沒有自然人憑證把名額給這個帳號。"]);
     wantLines((await getPage(worker, "/threads/@bob")).page, ["有 1 張自然人憑證"]);
     const proofLog = (await getPage(worker, "/proof-log")).page;
-    wantLines(proofLog, ["現在有 1 張島民證明", row("2026-11-20", CARD_A, "更正", "alice", "bob"), row("2026-11-20", CARD_A, "新宣告", "alice")]);
+    wantLines(proofLog, ["現在有 1 張島民證明", row("2026-11-20", CARD_A, "更換", "alice", "bob"), row("2026-11-20", CARD_A, "新宣告", "alice")]);
   });
 
   test("with an object that answers nothing, the page is 500, and a lookup that goes to a page of an account is answered without it", async () => {
