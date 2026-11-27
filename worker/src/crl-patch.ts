@@ -83,10 +83,20 @@ export async function restore(previous: Uint8Array, patch: Uint8Array, sha256: s
 /**
  * How long a run of bytes the two files must share for `makePatch` to see
  * it, and the stride at which it indexes `previous`. A CRL entry of MOICA's
- * is about 40 bytes, its serial number 16 of them, so 32 bytes hold some of
- * a serial number wherever they start.
+ * is 49 or 50 bytes, its serial number 16 of them.
  */
 const BLOCK = 32;
+/**
+ * The shortest run `makePatch` copies. Between two serial numbers in
+ * MOICA's CRLs lie 33 bytes: an entry's revocation time and reason code,
+ * and the start of the next entry. They are the same for every entry
+ * revoked in the same second, and a CRL ordered by serial number has those
+ * entries all over the file (worker/README.md, "清冊差異檔量到的"). So a
+ * run of 32 bytes may be found far ahead of where it belongs; one of 64
+ * holds bytes of a serial number. Runs the two files share where nothing
+ * changed are thousands of bytes.
+ */
+const MIN_COPY = 64;
 /** The base of the rolling hash; BASE ** BLOCK, mod 2^32, takes a byte out of it. */
 const BASE = 0x01000193;
 const BASE_TO_BLOCK = (() => {
@@ -107,9 +117,10 @@ function hashAt(bytes: Uint8Array, at: number): number {
  * multiple of BLOCK, grows a run it finds as far as the bytes agree both
  * ways, and copies it; the bytes between are written. Since the copies go
  * forward through `previous`, a run is used only if it is past the last
- * copy. Of runs of `previous` with the same hash, the first is kept: in a
- * CRL the runs that repeat are of a revocation date and the bytes around
- * it, and the first keeps the copy from jumping ahead. A run left out only
+ * copy, and only if, grown, it is at least MIN_COPY bytes: in a CRL the
+ * runs that repeat are of a revocation date and the bytes around it, and
+ * copying one would jump ahead over the bytes still to come. Of runs of
+ * `previous` with the same hash, the first is kept; a run left out only
  * makes the patch larger.
  */
 export function makePatch(previous: Uint8Array, next: Uint8Array): Uint8Array<ArrayBuffer> {
@@ -155,13 +166,17 @@ export function makePatch(previous: Uint8Array, next: Uint8Array): Uint8Array<Ar
         end++;
         q++;
       }
-      out.write(next.subarray(pending, start));
-      out.copy(p, q - p);
-      copied = q;
-      pending = end;
-      j = end;
-      if (j + BLOCK <= next.length) h = hashAt(next, j);
-      continue;
+      // A run this short is taken for a run that repeats (see above), which may lie anywhere ahead: copying it
+      // would leave every byte of `previous` before it out of reach.
+      if (end - start >= MIN_COPY) {
+        out.write(next.subarray(pending, start));
+        out.copy(p, q - p);
+        copied = q;
+        pending = end;
+        j = end;
+        if (j + BLOCK <= next.length) h = hashAt(next, j);
+        continue;
+      }
     }
     if (j + BLOCK < next.length) h = (Math.imul(h, BASE) - Math.imul(next[j]!, BASE_TO_BLOCK) + next[j + BLOCK]!) | 0;
     j++;

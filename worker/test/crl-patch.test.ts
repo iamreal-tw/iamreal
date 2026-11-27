@@ -79,3 +79,19 @@ test("a patch the mirror makes gives the file for files that share nothing, or a
   assert.deepEqual(applyPatch(repeated, makePatch(repeated, shifted)), shifted);
   assert.deepEqual(applyPatch(shifted, makePatch(shifted, repeated)), repeated);
 });
+
+test("a run that repeats further on in the previous file is not copied from there: the bytes before it stay in reach", () => {
+  // As in a CRL ordered by serial number: the bytes of an entry around its revocation date are the same for
+  // every entry revoked in that second, wherever it is. Here an entry of that second is added where there was
+  // none, and the previous file's first entry of that second comes 1,016 bytes later. It starts at a multiple
+  // of 32, where the patch maker looks up runs of the previous file.
+  const bytes = (seed: number, n: number): Uint8Array =>
+    Uint8Array.from(Array.from({ length: Math.ceil(n / 32) }, (_, i) => [...createHash("sha256").update(`${seed} ${i}`).digest()]).flat().slice(0, n));
+  const [r1, r2, r3] = [bytes(1, 2016), bytes(2, 2000), bytes(3, 2000)];
+  const repeated = bytes(4, 48);
+  const previous = Uint8Array.from([...r1, ...repeated, ...r2, ...repeated, ...r3]);
+  const next = Uint8Array.from([...r1.subarray(0, 1000), ...repeated, ...r1.subarray(1000), ...repeated, ...r2, ...repeated, ...r3]);
+  const patch = makePatch(previous, next);
+  assert.deepEqual(applyPatch(previous, patch), next);
+  assert.ok(patch.length < 200, `${patch.length} bytes`);
+});
