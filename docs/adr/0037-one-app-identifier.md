@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: superseded by ADR-0040
 ---
 
 # 手機 app 只有一個識別碼；連測試網站的是不上傳商店的開發用 build
+
+> 由 ADR-0040 取代：改成兩個商店的 app，測試 app 永遠連測試網站。
 
 Android 和 iOS 各只有一個商店上的 app，識別碼 `tw.iamreal.app`。這一份取代 ADR-0036 裡「兩個 app」的做法（測試 app `tw.iamreal.app.test` 加正式 app），連帶改掉 ADR-0036 的「誰建置、誰上傳」和「例外：Google Play 的封閉測試」兩段。ADR-0036 其餘的部分（只從 GitHub Actions 上傳、建置和上傳分開、Android 簽章金鑰自己產生、可重現的建置）照舊。
 
