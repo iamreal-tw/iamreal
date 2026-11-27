@@ -723,9 +723,13 @@ export const APP_ENVIRONMENT = "app-test";
  * ios/archive.sh, which archives the app unsigned and checks it
  * (ios/check-archive.sh): the production app with the run number as its
  * build, or with --test-app the test app with the run number and 1,000,000
- * (ADR-0040). The identifier is the configuration's. It hands on the archive
- * in a tar file, so that its files keep their modes (an artifact does not
- * keep them), with ios/ExportOptions.plist.
+ * (ADR-0040). The identifier is the configuration's. The archive is unsigned
+ * and so carries no entitlements, and the export signs only with what it
+ * finds on the app (#143: the first signed app had no NFC tag reading), so
+ * the app is then signed ad hoc, with no key and no team, with
+ * ios/Config/IamrealApp.entitlements. It hands on the archive in a tar file,
+ * so that its files keep their modes (an artifact does not keep them), with
+ * ios/ExportOptions.plist.
  * "upload" is the only job in the environment app-test. It does not check
  * out the repository and runs no script of it: it unpacks the tar file and
  * runs Xcode's export, which signs and uploads. The App Store Connect key, a
@@ -744,8 +748,8 @@ export const APP_ENVIRONMENT = "app-test";
  *   and the export options name it for the identifier;
  * - the app is signed once without uploading, and the signed app must carry
  *   the NFC entitlement, exactly TAG as the app's entitlements file has it,
- *   no more and no less: the archive is unsigned, so this is the first place
- *   it can be seen (ios/README.md);
+ *   no more and no less: what Xcode's signature carries is first seen here
+ *   (ios/README.md);
  * - only the last step has the App Store Connect key: it writes the key to a
  *   file only it reads, and xcodebuild signs again and uploads.
  * Each secret is in the env of the one step that uses it.
@@ -765,6 +769,13 @@ const iosUploadJobs = (app: { archive: { name: string; run: string }; identifier
       { name: "Install the Rust of rust-toolchain.toml, with the iPhone's target", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-apple-ios" },
       { name: "Build device-core/ for the iPhone", "working-directory": "ios", run: "./build-core.sh device" },
       { name: app.archive.name, "working-directory": "ios", run: app.archive.run },
+      {
+        name: "Sign the app ad hoc with its entitlements, for the export to read",
+        run: [
+          'codesign --force --sign - --timestamp=none --entitlements ios/Config/IamrealApp.entitlements "$RUNNER_TEMP/IamrealApp.xcarchive/Products/Applications/IamrealApp.app"',
+          'codesign --verify "$RUNNER_TEMP/IamrealApp.xcarchive/Products/Applications/IamrealApp.app"',
+        ].join(" && "),
+      },
       {
         name: "Pack the archive, keeping its files' modes, with the export options",
         run: 'mkdir "$RUNNER_TEMP/ios-upload" && tar -C "$RUNNER_TEMP" -cf "$RUNNER_TEMP/ios-upload/IamrealApp.xcarchive.tar" IamrealApp.xcarchive && cp ios/ExportOptions.plist "$RUNNER_TEMP/ios-upload/"',

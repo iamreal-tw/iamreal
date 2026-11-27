@@ -350,6 +350,9 @@ Object.assign(CHANGES, {
   "ios-upload 15 the signed app's NFC entitlement let through with more than TAG": [
     replace(U, ` && ! /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.nfc.readersession.formats:1' "$RUNNER_TEMP/entitlements.plist" > /dev/null 2>&1`, ""),
   ],
+  "ios-upload 16 the archive handed on without the app's entitlements": [
+    replace(U, '      - name: Sign the app ad hoc with its entitlements, for the export to read\n        run: codesign --force --sign - --timestamp=none --entitlements ios/Config/IamrealApp.entitlements "$RUNNER_TEMP/IamrealApp.xcarchive/Products/Applications/IamrealApp.app" && codesign --verify "$RUNNER_TEMP/IamrealApp.xcarchive/Products/Applications/IamrealApp.app"\n', ""),
+  ],
 });
 
 // The upload of the iPhone's test app (#484): the same rules, its own group, the test app archived with its build numbers.
