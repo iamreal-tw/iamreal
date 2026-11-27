@@ -769,7 +769,6 @@ test-example    alice-b
 
 iamreal.tw/p/7K2Q9FM4XD
 [ 複製證明連結 ]　[ 打開 Threads ]
-（示範）
 1　按「編輯個人檔案」
 2　按「連結」
 3　按「新增連結」
