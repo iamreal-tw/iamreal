@@ -45,6 +45,7 @@ import type { Card } from "../card/card.ts";
 import { COPY, fill, parts } from "./copy.ts";
 import { button, el, replace, sentence } from "./dom.ts";
 import { frame } from "./frame.ts";
+import { cardPath, hangPath } from "../platforms.ts";
 import { logo } from "./logo.ts";
 import { qrSvg } from "./qr.ts";
 import {
@@ -521,8 +522,16 @@ export function startApp(o: AppOptions): void {
   /** The card's list as it is: each platform the screen offers, its account now or "". */
   const listNow = (status: CardStatus): Record<string, string> => Object.fromEntries(status.slots.filter((sl) => sl.row !== null).map((sl) => [sl.platform, sl.current ?? ""]));
 
-  /** 3 records of the card today: the sentence, and "back to the beginning" (which drops the PIN, as cancel does). */
-  const dailyLimitBody = (s: Sentence): HTMLElement[] => [el("p", { class: "stop", attrs: { "data-daily-limit": "" } }, say(s)), actions(secondary(COPY.accounts.restart, () => before()))];
+  /**
+   * 3 records of the card today: the sentence; the card's page (done.open_proof, as on step 6) and hang.rehang to the
+   * page that hangs its link, since nothing more is done in this card proof today (card-proof.md, step 4, 3 records today);
+   * and "back to the beginning" (which drops the PIN, as cancel does). hang.rehang leaves this page: the PIN goes with it.
+   */
+  const dailyLimitBody = (s: Sentence, shortId: string): HTMLElement[] => [
+    el("p", { class: "stop", attrs: { "data-daily-limit": "" } }, say(s)),
+    el("p", { class: "look" }, ...parts(COPY.hang.look, { open_proof: COPY.done.open_proof }).map((p) => (p.placeholder === null ? p.text : newTab(`/${cardPath(shortId)}`, { "data-open-proof": "" }, p.text)))),
+    actions(el("a", { class: "btn ghost", attrs: { href: `/${hangPath(shortId)}`, "data-hang-again": "" } }, COPY.hang.rehang), secondary(COPY.accounts.restart, () => before())),
+  ];
 
   /** Step 4's screen, with the seven steps' line above it, and its state for the tests. */
   function showAccounts(state: string, mode: string, ...children: (Node | null)[]): void {
@@ -555,7 +564,7 @@ export function startApp(o: AppOptions): void {
     const here = (s: CardStatus): void => accounts(f, s);
     const showHere = (_platform: string | null, m: Message): void => message.show(m);
     const body: (HTMLElement | null)[] = view.dailyLimit
-      ? dailyLimitBody(view.dailyLimit)
+      ? dailyLimitBody(view.dailyLimit, status.shortId)
       : [
           message.node,
           // The main button: the list as it is, nothing to type.
@@ -677,7 +686,7 @@ export function startApp(o: AppOptions): void {
 
     const notes = view.notes.length ? el("div", { class: "tips" }, ...view.notes.map((n) => el("p", {}, ...n.map((x) => say(x))))) : null;
     const body: (HTMLElement | null)[] = view.dailyLimit
-      ? dailyLimitBody(view.dailyLimit)
+      ? dailyLimitBody(view.dailyLimit, status.shortId)
       : [notes, message.node, actionsEnd(primary(COPY.common.next, next)), o.editList ? actions(textButton(COPY.accounts.keep, () => accounts(f, status))) : null, cancel()];
     const lead = view.lead.map((line, i) => el("p", { class: i === 0 ? "status" : "", attrs: i === 0 ? { "data-status": "" } : { "data-fact": "" } }, ...line.flatMap((m) => messageNodes(m))));
     showAccounts(view.dailyLimit ? "daily_limit" : view.state, o.editList ? "edit" : "fill", el("h1", {}, say(view.title)), ...lead, el("div", { class: "acctlist", attrs: { "data-list": "accounts" } }, ...rowNodes), ...body);
