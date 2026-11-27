@@ -2381,7 +2381,7 @@ await tryStep("Threads only: a first declaration (the field alone)", async () =>
     !st.main.includes(A.switches_limited) && !st.main.includes(A.one_per_platform) && !st.main.includes(A.fill_one),
     "step 4, one platform, a first declaration: no rules of switching, not the sentences of more than one",
   );
-  check(st.main.includes(A.preview_note), "step 4, one platform: the preview");
+  check(st.main.includes(fill(A.preview_note_single, { platform: THREADS_NAME })), "step 4, one platform: the preview, with the switches a typo costs");
   check((await page.eval<string>("document.title")) === "你的 Threads 帳號", "step 4, one platform: the page's title");
   check(JSON.stringify(st.buttons) === JSON.stringify([A.preview, C.common.next, C.common.cancel]), `step 4, one platform: the buttons ${JSON.stringify(st.buttons)}`);
   await screenshot("single-4-accounts");
@@ -2445,7 +2445,7 @@ await tryStep("Threads only: 改成別的帳號 (@yui to @yui.tw): the limit sai
   check(JSON.stringify(sw.lead) === JSON.stringify([fill(A.declared_inline, { account: at("yui") })]), `改成別的帳號: ${JSON.stringify(sw.lead)}`);
   checkRows("改成別的帳號", sw.rows, { [THREADS]: [THREADS_NAME, "", []] });
   const lines = await page.eval<string[]>(`[...document.querySelectorAll('[data-switch-lines] p')].map((e) => e.innerText)`);
-  check(JSON.stringify(lines) === JSON.stringify([fill(A.switch_effect, { account: at("yui") }) + fill(A.switch_limit, { switches_left: 4 }), A.preview_note]), `改成別的帳號: what it does, the switches left after it ${JSON.stringify(lines)}`);
+  check(JSON.stringify(lines) === JSON.stringify([fill(A.switch_effect, { account: at("yui") }) + fill(A.switch_limit, { switches_left: 4 }), fill(A.preview_note_single_counted, { platform: THREADS_NAME })]), `改成別的帳號: what it does, the switches left after it ${JSON.stringify(lines)}`);
   check(JSON.stringify(sw.buttons) === JSON.stringify([A.preview, C.common.next, A.keep, C.common.cancel]), `改成別的帳號: the buttons ${JSON.stringify(sw.buttons)}`);
   await page.eval(`document.activeElement?.blur()`);
   await screenshot("single-4-accounts-switch");

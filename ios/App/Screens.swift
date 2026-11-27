@@ -281,9 +281,13 @@ struct Screens {
             error: errors[row.platform]))
     }
 
-    private func previewNote(_ single: String?) -> [Block] {
+    /// The sentence under the fields about the preview, naming the
+    /// platform (the app knows Threads alone). With the switches a typo
+    /// costs, unless the screen already says how many are left
+    /// (`counted`; card-proof.md, step 4).
+    private func previewNote(_ single: String?, counted: Bool) -> [Block] {
         guard let name = single ?? Platform.known.first?.name else { return [] }
-        return [.text(copy("app_accounts.preview_note", ["platform": name]))]
+        return [.text(copy(counted ? "accounts.preview_note_single_counted" : "accounts.preview_note_single", ["platform": name]))]
     }
 
     private var cancel: Button { Button(label: copy("common.cancel"), action: .restart) }
@@ -331,7 +335,8 @@ struct Screens {
         if single == nil {
             blocks.append(.text((never ? copy("accounts.one_per_platform") : copy("accounts.how_change")) + copy("accounts.switches_limited")))
         }
-        blocks += previewNote(single)
+        // A row never declared on one platform says no count: the full sentence.
+        blocks += previewNote(single, counted: single == nil || !never)
         return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toConfirm)], cancel: cancel)
     }
 
@@ -427,7 +432,7 @@ struct Screens {
         ]
         if let message { blocks.append(.message(message)) }
         blocks.append(.sentences([copy("accounts.switch_effect", ["account": now]), cost]))
-        blocks += previewNote(single)
+        blocks += previewNote(single, counted: true)
         return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toConfirm)], links: [keep], cancel: cancel)
     }
 
@@ -438,7 +443,7 @@ struct Screens {
         blocks += fields(status, typed: typed, errors: errors, lines: true)
         if let message { blocks.append(.message(message)) }
         blocks.append(.text(copy("accounts.how_change") + copy("accounts.switches_limited")))
-        blocks += previewNote(single)
+        blocks += previewNote(single, counted: true)
         return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toConfirm)], links: [keep], cancel: cancel)
     }
 

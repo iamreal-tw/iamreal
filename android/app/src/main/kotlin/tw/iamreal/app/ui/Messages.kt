@@ -156,14 +156,19 @@ internal class Messages(private val c: Copy) {
         val row: AccountRow?,
         /** Below the field: what changing it does and what it uses up; or that no switch is left. */
         val cost: String,
-        /** app_accounts.preview_note; null without a field. */
+        /** accounts.preview_note_single_counted; null without a field. */
         val previewNote: String?,
         val keep: String,
     )
 
     private fun accountsTitle(single: String?): String = if (single != null) c.say("accounts.title_single", "platform" to single) else c.say("accounts.title")
 
-    private fun previewNote(single: String?): String = c.say("app_accounts.preview_note", "platform" to (single ?: Platforms.THREADS.name))
+    /**
+     * The sentence under the fields about the preview, naming the platform (the app knows Threads alone). With the switches a typo
+     * costs, unless the screen already says how many are left (`counted`; card-proof.md, step 4).
+     */
+    private fun previewNote(single: String?, counted: Boolean): String =
+        c.say(if (counted) "accounts.preview_note_single_counted" else "accounts.preview_note_single", "platform" to (single ?: Platforms.THREADS.name))
 
     private fun row(slot: CardProof.Slot, daily: Boolean, lines: Boolean, current: String = slot.current ?: ""): AccountRow {
         val p = if (slot.known) Platforms.of(slot.platform) else null
@@ -177,7 +182,8 @@ internal class Messages(private val c: Copy) {
         )
     }
 
-    private fun previewNotes(rows: List<AccountRow>, single: String?): List<String> = if (rows.any { it.editable }) listOf(previewNote(single)) else emptyList()
+    private fun previewNotes(rows: List<AccountRow>, single: String?, counted: Boolean): List<String> =
+        if (rows.any { it.editable }) listOf(previewNote(single, counted)) else emptyList()
 
     /** Step 4 as it opens ("4. 你的帳號"): rows to fill when the card declares nothing; what it declares and the actions when it does. */
     fun accountsView(status: CardProof.Status): AccountsView {
@@ -217,7 +223,8 @@ internal class Messages(private val c: Copy) {
             title = accountsTitle(single),
             lead = listOf(if (never) c.say("accounts.none_yet") else c.say("accounts.nothing_now"), if (single != null) c.say("accounts.fill_one_single", "platform" to single) else c.say("accounts.fill_one")),
             rows = rows,
-            notes = if (daily) emptyList() else rules + previewNotes(rows, single),
+            // A row never declared on one platform says no count: the full sentence.
+            notes = if (daily) emptyList() else rules + previewNotes(rows, single, counted = single == null || !never),
             dailyLimit = dailyLimit,
             editList = false,
         )
@@ -231,7 +238,7 @@ internal class Messages(private val c: Copy) {
             title = accountsTitle(single),
             lead = listOf(c.say("accounts.current")),
             rows = rows,
-            notes = listOf(c.say("accounts.how_change") + c.say("accounts.switches_limited")) + previewNotes(rows, single),
+            notes = listOf(c.say("accounts.how_change") + c.say("accounts.switches_limited")) + previewNotes(rows, single, counted = true),
             dailyLimit = null,
             editList = true,
         )
@@ -256,7 +263,7 @@ internal class Messages(private val c: Copy) {
             slot.switchesLeft == 1 -> c.say("confirm.uses_final_switch")
             else -> c.say("accounts.switch_limit", "switches_left" to slot.switchesLeft - 1)
         }
-        return SwitchView(title, intro, c.say("accounts.switch"), row(slot, daily = false, lines = false, current = ""), c.say("accounts.switch_effect", "account" to now) + cost, previewNote(single), keep)
+        return SwitchView(title, intro, c.say("accounts.switch"), row(slot, daily = false, lines = false, current = ""), c.say("accounts.switch_effect", "account" to now) + cost, previewNote(single, counted = true), keep)
     }
 
     /** The lines under one row of step 4 (card-proof.md, "每一列下面的那一行"). None for a platform the app does not know: that sentence is not written yet. */

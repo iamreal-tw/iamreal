@@ -714,7 +714,7 @@ async function cardProof(p: Proof): Promise<string> {
     for (const a of [...p.accounts.absent, say("accounts.title"), say("accounts.edit_list"), say("accounts.switches_limited"), say("accounts.preview")]) check(!s.includes(a), `step 4 does not say "${a.slice(0, 40)}"`);
     if (p.current === "") {
       // Nothing declared: the field, and nothing of what a card with an account can do.
-      shows(s, "step 4", [THREADS, "@", say("app_accounts.preview"), say("app_accounts.preview_note", { platform: THREADS }), say("common.next")]);
+      shows(s, "step 4", [THREADS, "@", say("app_accounts.preview"), say("accounts.preview_note_single", { platform: THREADS }), say("common.next")]);
       for (const a of [say("accounts.refresh"), say("accounts.switch"), say("accounts.declared_now")]) check(!s.includes(a), `step 4, nothing declared, does not say "${a}"`);
       check(field("account-threads").text === "", "step 4: the field is empty");
     } else {
@@ -755,7 +755,7 @@ async function cardProof(p: Proof): Promise<string> {
     {
       shot(`step-4-${p.name}-field`);
       const s = wholeScreen();
-      shows(s, "step 4, after 改成別的帳號,", [step(4), say("accounts.title_single", { platform: THREADS }), inline, say("accounts.switch"), THREADS, "@", say("app_accounts.preview"), ...act.after, say("app_accounts.preview_note", { platform: THREADS }), say("common.next"), say("accounts.keep"), say("common.cancel")]);
+      shows(s, "step 4, after 改成別的帳號,", [step(4), say("accounts.title_single", { platform: THREADS }), inline, say("accounts.switch"), THREADS, "@", say("app_accounts.preview"), ...act.after, say("accounts.preview_note_single_counted", { platform: THREADS }), say("common.next"), say("accounts.keep"), say("common.cancel")]);
       check(!s.includes(say("accounts.refresh")) && !s.includes(say("accounts.declared_now")), "step 4, after 改成別的帳號: no 更新島民證明");
       check(field("account-threads").text === "", "step 4, after 改成別的帳號: the field is empty");
     }

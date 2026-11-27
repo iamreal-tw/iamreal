@@ -389,7 +389,7 @@ export interface SwitchView {
   row: AccountRowView | null;
   /** Below the field: what changing it does and the switches left after it; or that no switch is left. */
   lines: Sentence[];
-  /** accounts.preview_note; null without a field or a preview. */
+  /** accounts.preview_note_single_counted (accounts.preview_note with several platforms); null without a field or a preview. */
   previewNote: Sentence | null;
 }
 
@@ -433,8 +433,19 @@ function rowView(slot: SlotStatus, o: { daily: boolean; lines: boolean; current?
   };
 }
 
-function previewNotes(rows: readonly AccountRowView[]): Sentence[][] {
-  return rows.some((r) => r.preview) ? [[say(COPY.accounts.preview_note)]] : [];
+/**
+ * The sentence under the fields about the preview, when a row has one. One
+ * platform: named, with the switches a typo costs unless the rows already
+ * say how many are left (`counted`).
+ */
+function previewNotes(rows: readonly AccountRowView[], single: string | null, counted: boolean): Sentence[][] {
+  return rows.some((r) => r.preview) ? [[previewNote(single, counted)]] : [];
+}
+
+function previewNote(single: string | null, counted: boolean): Sentence {
+  const a = COPY.accounts;
+  if (single === null) return say(a.preview_note);
+  return say(counted ? a.preview_note_single_counted : a.preview_note_single, { platform: single });
 }
 
 function lastCardProof(st: CardStatus): Message {
@@ -488,7 +499,7 @@ export function accountsView(st: CardStatus): AccountsView {
     title,
     lead: [[say(never ? a.none_yet : a.nothing_now)], [fillOne]],
     rows,
-    notes: daily ? [] : [...rules, ...previewNotes(rows)],
+    notes: daily ? [] : [...rules, ...previewNotes(rows, single, !never)],
     dailyLimit,
   };
 }
@@ -503,7 +514,7 @@ export function editListView(st: CardStatus): FillView {
     title: accountsTitle(onePlatform(st)),
     lead: [[say(a.current)]],
     rows,
-    notes: [[say(a.how_change), say(a.switches_limited)], ...previewNotes(rows)],
+    notes: [[say(a.how_change), say(a.switches_limited)], ...previewNotes(rows, onePlatform(st), true)],
     dailyLimit: null,
   };
 }
@@ -514,12 +525,13 @@ export function switchView(st: CardStatus): SwitchView {
   const slot = st.slots.find((sl) => sl.row !== null && sl.current !== null)!;
   const now = handle(slot.platform, slot.current!);
   const intro = say(a.declared_inline, { account: now });
-  const title = accountsTitle(onePlatform(st));
+  const single = onePlatform(st);
+  const title = accountsTitle(single);
   // Used up: no other account can be declared.
   if (slot.switchesLeft === 0) return { title, intro, row: null, lines: [say(a.row_used_up, { switches_used: slot.switchCount })], previewNote: null };
   const row = rowView(slot, { daily: false, lines: false, current: "" });
   const cost = slot.switchesLeft === 1 ? say(COPY.confirm.uses_final_switch) : say(a.switch_limit, { switches_left: slot.switchesLeft - 1 });
-  return { title, intro, row, lines: [say(a.switch_effect, { account: now }), cost], previewNote: row.preview ? say(a.preview_note) : null };
+  return { title, intro, row, lines: [say(a.switch_effect, { account: now }), cost], previewNote: row.preview ? previewNote(single, true) : null };
 }
 
 // Step 5: the list to be signed ------------------------------------------------------

@@ -283,7 +283,7 @@ describe("your accounts (step 4)", () => {
     );
     assert.deepEqual(
       v.notes.map((n) => n.map(t).join("")),
-      ["預覽會在新分頁開這個帳號的頁面，讓你小心確認沒有打錯帳號。"],
+      ["請預覽你的 Threads 個人檔案，避免打錯帳號。一張卡終身最多只能更換 5 次。"],
     );
     assert.equal(v.dailyLimit, null);
   });
@@ -295,7 +295,7 @@ describe("your accounts (step 4)", () => {
     assert.deepEqual(v.rows[0]!.lines.map(t), ["上一次宣告的是 @bob，已經收回。填回 @bob 不算更換。", "更換過 1 次，還可以更換 4 次。"]);
     assert.deepEqual(
       v.notes.map((n) => n.map(t).join("")),
-      ["預覽會在新分頁開這個帳號的頁面，讓你小心確認沒有打錯帳號。"],
+      ["請預覽你的 Threads 個人檔案，避免打錯帳號。"],
     );
   });
 
@@ -373,7 +373,7 @@ describe("your accounts (step 4)", () => {
     assert.equal(t(v.intro), "這張卡片目前宣告 @alice。");
     assert.deepEqual([v.row!.platform, v.row!.current, v.row!.editable, v.row!.preview, v.row!.lines], ["threads", "", true, true, []]);
     assert.deepEqual(v.lines.map(t), ["改了之後，@alice 不再是這張卡片宣告的帳號。", "一張卡終身最多更換 5 次，這次之後還可以更換 3 次。"]);
-    assert.equal(t(v.previewNote!), "預覽會在新分頁開這個帳號的頁面，讓你小心確認沒有打錯帳號。");
+    assert.equal(t(v.previewNote!), "請預覽你的 Threads 個人檔案，避免打錯帳號。");
     // The last one.
     assert.deepEqual(switchView(status([declared("alice", { switchCount: 4 })])).lines.map(t)[1], "用掉最後一次更換。這次之後，這個平台不能再更換。");
     // Used up: no field, the reason only.

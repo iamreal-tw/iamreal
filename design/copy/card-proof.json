@@ -126,6 +126,8 @@
     "switch_limit": "一張卡終身最多更換 5 次，這次之後還可以更換 {switches_left} 次。",
     "preview": "預覽個人檔案",
     "preview_note": "預覽會在新分頁開這個帳號的頁面，讓你小心確認沒有打錯帳號。",
+    "preview_note_single": "請預覽你的 {platform} 個人檔案，避免打錯帳號。一張卡終身最多只能更換 5 次。",
+    "preview_note_single_counted": "請預覽你的 {platform} 個人檔案，避免打錯帳號。",
     "one_per_platform": "一張卡片在每個平台只能宣告一個帳號，之後改成別的帳號是更換。",
     "how_change": "填上空白的是新宣告，清空是收回，改成別的帳號是更換。",
     "switches_limited": "一張卡終身最多只能更換宣告的帳號 5 次。",
@@ -326,8 +328,7 @@
     "pin_format": "卡片的 PIN 是 6 到 10 個半形的英數字或符號。這個 PIN 沒有送給卡片，請再輸入一次。"
   },
   "app_accounts": {
-    "preview": "預覽",
-    "preview_note": "預覽會在 {platform} 或瀏覽器打開個人檔案，讓你小心確認沒有打錯帳號。"
+    "preview": "預覽"
   },
   "app_progress": {
     "keep_open": "請不要關閉 app，也不要切到別的 app。",
