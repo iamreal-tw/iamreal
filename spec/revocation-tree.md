@@ -219,8 +219,9 @@ that issuer in the mirror (the usable ones with the highest `cRLNumber`):
 - it accepts the root of the newest one;
 - it accepts the root of the second newest one only if the challenge was
   issued before the server first learned of the newest one, or at most 2
-  minutes after. A card proof under way when MOICA's list changes goes
-  through; one begun after that uses the newest list. The 2 minutes cover the
+  minutes after. A card proof whose challenge was issued before MOICA's
+  list changed goes through; one whose challenge comes later uses the newest
+  list. The 2 minutes cover the
   60 seconds a device can be served the index from the cache of the data
   domain, and the time between the mirror writing the index and the part of
   the server that accepts card proofs learning of the CRL. The mirror tells

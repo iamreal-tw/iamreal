@@ -782,9 +782,9 @@ export class ProofLog extends DurableObject<Env> {
     const known = this.newestCrls()[record.issuer];
     const newest = known.map((crl) => ({ root: crl.root, date: crlDay(crl.crlDate) }));
     if (newest.length === 0 || taiwanDay(now().getTime()) > newest[0]!.date + CRL_MAX_AGE_DAYS) return refused("crl_stale");
-    const switched = this.#firstTold(record.issuer, known[0]!) + CRL_SWITCH_GRACE_MS;
-    const accepted = challenge.issuedMs <= switched ? newest : newest.slice(0, 1);
-    if (!accepted.some((crl) => crl.root === record.smtRoot)) return refused("root");
+    const secondNewestUntilMs = this.#firstTold(record.issuer, known[0]!) + CRL_SWITCH_GRACE_MS;
+    const acceptable = challenge.issuedMs <= secondNewestUntilMs ? newest : newest.slice(0, 1);
+    if (!acceptable.some((crl) => crl.root === record.smtRoot)) return refused("root");
     // The record rules get the date of each of the two with that root, as anyone re-verifying finds them in the
     // archive: two CRLs with one root list the same cards, so the second's date lets nothing more through.
     const crlDates = newest.filter((crl) => crl.root === record.smtRoot).map((crl) => crl.date);
