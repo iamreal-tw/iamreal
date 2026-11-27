@@ -277,7 +277,7 @@ enum Action: Equatable {
     case openStore
     /// The phone's map, searching for household registration offices (step 1).
     case findOffice
-    /// MOICA's site, in the browser (step 1).
+    /// MOICA's page on applying, in the browser (step 1).
     case howToApply
     /// Tap 3, the proof and the submission.
     case declare
@@ -299,7 +299,7 @@ enum Action: Equatable {
     /// The page of the account typed on a platform.
     case preview(String)
     case openSettings
-    /// "沒有看到連結，重新掛上": the whole of step 6 in the place of the short one.
+    /// "重新掛上連結": the whole of step 6 in the place of the short one.
     case rehang
     /// From step 6 to step 7.
     case toRemind

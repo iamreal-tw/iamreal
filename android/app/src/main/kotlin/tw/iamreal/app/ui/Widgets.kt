@@ -209,7 +209,7 @@ internal fun SideBySide(modifier: Modifier = Modifier, content: @Composable () -
 
 /**
  * A demonstration and its one control (design/copy/card-proof.md, "示範"): small words in the picture's bottom right corner,
- * "停止" while it plays and "再看一次" otherwise, and pressing the picture does the same. Small, so that the step's own button
+ * "停止播放" while it plays and "再看一次" otherwise, and pressing the picture does the same. Small, so that the step's own button
  * is the one that stands out. A screen reader presses the words: the picture reads as its one sentence and nothing else.
  */
 @Composable

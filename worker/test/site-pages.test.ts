@@ -300,7 +300,7 @@ describe("hanging a proof on a profile", () => {
     assert.deepEqual([...new Set(changes)].sort(), ["copied", "linkListed", "linkOnProfile", "pasteMenu", "pasted", "resultLabel"]);
     // The button's two words are hang.md's; as sent it says the one that plays.
     const [stop, replay] = [/\| 示範還在動 \| (.*) \|/.exec(section)?.[1], /\| 停了或動完了 \| (.*) \|/.exec(section)?.[1]];
-    assert.deepEqual([stop, replay], ["停止", "再看一次"]);
+    assert.deepEqual([stop, replay], ["停止播放", "再看一次"]);
     assert.ok(demo[1]!.includes(`<button type="button" class="button quiet" data-demo-button data-stop="${stop}" data-replay="${replay}">${replay}</button>`));
     // Each of the four steps says which it is, for the player to mark.
     assert.deepEqual([...page.matchAll(/<li data-step="(\d)">/g)].map((m) => m[1]), ["1", "2", "3", "4"]);
