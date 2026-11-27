@@ -22,7 +22,9 @@
 #   in that app's range, it talks to the test site and not
 #   the production one, it is not linked with the library of the tests (no
 #   idc_testing_session_open, which trusts issuer keys a test gives it), the
-#   files it carries are the repository's, iPhone only, no AdSupport.
+#   files it carries are the repository's, iPhone only, no AdSupport, and
+#   Config/IamrealApp.entitlements, which the upload workflows sign the
+#   archive with, has TAG and the app domain test-app.iamreal.tw (#532).
 #
 # Which proof log the card signs for is not in the executable as anything it
 # can find: both scope strings are in the core. It follows from the site: in

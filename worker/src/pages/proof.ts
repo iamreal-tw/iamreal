@@ -61,6 +61,17 @@ export function embed(account: string): Html {
   return html`<iframe class="threads-profile" src="https://www.threads.com/@${account}/embed/" title="Threads 個人檔案：@${account}" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" credentialless></iframe>`;
 }
 
+/**
+ * 個人檔案 as a link to the profile of a Threads account, in the heading
+ * above its embedded profile on the page of a card and of an account: the
+ * way to the profile that does not depend on the embed (proof-page.md,
+ * section 2; account-page.md). The account must be a Threads username
+ * already checked; it is escaped all the same.
+ */
+export function profileLink(account: string): Html {
+  return html`<a href="https://www.threads.com/@${account}">個人檔案</a>`;
+}
+
 /** How long ago a date was, as the pages write it: 今天 or N 天前, in whole days. A date after today (the clock stepped back) is written as today. */
 export function daysAgo(day: number, today: number): string {
   return today - day <= 0 ? "今天" : `${today - day} 天前`;
@@ -129,7 +140,7 @@ ${titled(html`<span class="line">一張台灣國民的自然人憑證</span>
 ${accountName(account)}`)}
 </section>
 <section class="owner">
-<h2 class="ask"><a href="https://www.threads.com/@${account}">個人檔案</a>上有這個連結，才代表 @${account} 承認本證明。</h2>
+<h2 class="ask">${profileLink(account)}上有這個連結，才代表 @${account} 承認本證明。</h2>
 <p class="backlink">${site.host}/p/${shortId}</p>
 ${embed(account)}
 </section>

@@ -40,6 +40,13 @@ val onTestSite = setOf("release", testAppBuild, "debug", fakeBuild)
 // the development build's is 2,000,000. On launch day the test site's minimum version goes to 1,000,000 and
 // stops only the production app's builds from before launch. checkManifest holds each build to its range.
 val buildNumbers = mapOf("release" to 1..999_999, testAppBuild to 1_000_000..1_999_999, "debug" to 2_000_000..2_000_000, fakeBuild to 2_000_000..2_000_000)
+// The app domain each build type opens for (ADR-0040, "app 網域跟著連的網站"; README.md, "app 網域"): the
+// production app and the test app, on the test site, the test site's; the development build none, so no
+// debug key's fingerprint is published. The two that have one take src/app-domain/AndroidManifest.xml
+// (sourceSets, below), whole host, any path, https only, with this host; checkManifest holds every build
+// type's merged manifest to this map. The PR of launch day gives "release" app.iamreal.tw here.
+val testSiteAppDomain = "test-app.iamreal.tw"
+val appDomains = mapOf("release" to testSiteAppDomain, testAppBuild to testSiteAppDomain)
 // The build types whose build number is fixed, the one of their range, and that take no Gradle property.
 val fixedBuildNumber = setOf("debug", fakeBuild)
 // The build number of a build: the two uploads give theirs (upload-android.yml, upload-android-test.yml:
@@ -167,11 +174,13 @@ android {
             ndk { abiFilters += releaseAbis }
             isMinifyEnabled = true
             proguardFiles("proguard-rules.pro")
+            manifestPlaceholders["appDomain"] = appDomains.getValue("release")
         }
         create(testAppBuild) {
             // The test app (ADR-0040): built as the production app is, under its own identifier.
             initWith(getByName("release"))
             applicationIdSuffix = ".test"
+            manifestPlaceholders["appDomain"] = appDomains.getValue(testAppBuild)
         }
         create(fakeBuild) {
             // The emulator test's: a debug build with src/fake/ in place of src/real/ (sourceSets, below).
@@ -190,6 +199,8 @@ android {
         getByName("debug").kotlin.directories.add("src/real/kotlin")
         getByName("release").kotlin.directories.add("src/real/kotlin")
         getByName(testAppBuild).kotlin.directories.add("src/real/kotlin")
+        // The app domain's declaration (appDomains): the production app's and the test app's, not the development build's.
+        for (buildType in appDomains.keys) getByName(buildType).manifest.srcFile("src/app-domain/AndroidManifest.xml")
         // TestingCore, for the library of the tests: in the fake build and the unit tests only.
         getByName(fakeBuild).kotlin.directories.add("src/testing/kotlin")
         // The emulator test's build is a development build: it has that build's name under the icon.
@@ -362,8 +373,9 @@ abstract class CopyDesign : DefaultTask() {
 
 /**
  * Fails when the merged manifest is of another app, has a build number outside its build type's range
- * (buildNumbers), asks for a permission that is not allowed, names the advertising ID anywhere, or has a
- * component other apps can call besides the app's one activity.
+ * (buildNumbers), asks for a permission that is not allowed, names the advertising ID anywhere, has a
+ * component other apps can call besides the app's one activity, or is opened by an address other than the
+ * App Links of its build type's app domains (appDomains).
  */
 abstract class CheckManifest : DefaultTask() {
     @get:InputFile abstract val manifest: RegularFileProperty
@@ -371,6 +383,8 @@ abstract class CheckManifest : DefaultTask() {
     @get:Input abstract val lowestBuild: Property<Int>
     @get:Input abstract val highestBuild: Property<Int>
     @get:Input abstract val allowed: ListProperty<String>
+    /** The hosts whose App Links this build type declares (appDomains). */
+    @get:Input abstract val domains: ListProperty<String>
 
     @TaskAction
     fun check() {
@@ -398,6 +412,51 @@ abstract class CheckManifest : DefaultTask() {
         val extra = asked - allowed.get().toSet()
         if (extra.isNotEmpty()) throw GradleException("the merged manifest asks for permissions that are not in app/build.gradle.kts: $extra")
         if (open != listOf("tw.iamreal.app.MainActivity")) throw GradleException("the components of the merged manifest that other apps can call are $open, not the one activity")
+        checkAppDomains(root)
+    }
+
+    /**
+     * The addresses that open the app (README.md, "app 網域"): only App Links of this build type's app domains
+     * (appDomains), each on the one activity, verified by the system (autoVerify), https, the whole host and
+     * any path. No address of anything else opens the app: no scheme of its own, no http, no other host, no
+     * wildcard host, no path or port that would make the declaration other than the host's.
+     */
+    private fun checkAppDomains(root: org.w3c.dom.Element) {
+        val android = "http://schemas.android.com/apk/res/android"
+        fun children(node: org.w3c.dom.Element, tag: String) =
+            (0 until node.childNodes.length).map { node.childNodes.item(it) }.filterIsInstance<org.w3c.dom.Element>().filter { it.tagName == tag }
+        val declared = mutableListOf<String>()
+        val filters = root.getElementsByTagName("intent-filter")
+        for (i in 0 until filters.length) {
+            val filter = filters.item(i) as org.w3c.dom.Element
+            val data = children(filter, "data")
+            if (data.isEmpty()) continue
+            val component = (filter.parentNode as org.w3c.dom.Element).getAttributeNS(android, "name")
+            val actions = children(filter, "action").map { it.getAttributeNS(android, "name") }.toSet()
+            val categories = children(filter, "category").map { it.getAttributeNS(android, "name") }.toSet()
+            val schemes = data.mapNotNull { d -> d.getAttributeNS(android, "scheme").takeIf { it.isNotEmpty() } }.toSet()
+            val hosts = data.mapNotNull { d -> d.getAttributeNS(android, "host").takeIf { it.isNotEmpty() } }
+            // Any attribute of <data> but the scheme and the host: a path, a port, a type, a fragment, a query.
+            val more = data.flatMap { d ->
+                (0 until d.attributes.length).map { d.attributes.item(it) }
+                    .filter { it.namespaceURI == android && it.localName != "scheme" && it.localName != "host" }
+                    .map { it.localName }
+            }
+            val problems = listOfNotNull(
+                "on $component, not the one activity".takeIf { component != "tw.iamreal.app.MainActivity" },
+                "not verified by the system (autoVerify)".takeIf { filter.getAttributeNS(android, "autoVerify") != "true" },
+                "actions $actions, not VIEW".takeIf { actions != setOf("android.intent.action.VIEW") },
+                "categories $categories, not DEFAULT and BROWSABLE".takeIf { categories != setOf("android.intent.category.DEFAULT", "android.intent.category.BROWSABLE") },
+                "schemes $schemes, not https alone".takeIf { schemes != setOf("https") },
+                "no host".takeIf { hosts.isEmpty() },
+                "more than the scheme and the host: $more".takeIf { more.isNotEmpty() },
+            )
+            if (problems.isNotEmpty()) throw GradleException("the merged manifest of ${id.get()} has addresses that open the app other than its app domains (app/build.gradle.kts, appDomains): ${problems.joinToString("; ")}")
+            declared += hosts
+        }
+        if (declared.sorted() != domains.get().sorted()) {
+            throw GradleException("the app domains of ${id.get()} in the merged manifest are $declared, not ${domains.get()} (app/build.gradle.kts, appDomains)")
+        }
     }
 }
 
@@ -614,6 +673,7 @@ androidComponents {
             id = variantId
             lowestBuild = variantBuilds.first
             highestBuild = variantBuilds.last
+            domains = listOfNotNull(appDomains[variant.buildType!!])
         }
         val checkApk = tasks.register<CheckApk>("checkApk$name") {
             design.from(designResources.values)

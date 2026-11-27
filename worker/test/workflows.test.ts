@@ -345,13 +345,27 @@ Object.assign(CHANGES, {
   "ios-upload 12 the distribution certificate given to the step that archives": [
     replace(U, `${IOS_ARCHIVE_STEP}        working-directory: ios\n`, `${IOS_ARCHIVE_STEP}        working-directory: ios\n        env:\n          IOS_DIST_P12_BASE64: \${{ secrets.IOS_DIST_P12_BASE64 }}\n`),
   ],
-  "ios-upload 13 the profile not checked for NFC tag reading": [replace(U, " | grep -qw TAG && uuid=", " && uuid=")],
+  "ios-upload 13 the profile not checked for NFC tag reading": [replace(U, " | grep -qw TAG && ", " && ")],
   "ios-upload 14 the test app's profile signing the production app": [replace(U, "secrets.IOS_APPSTORE_PROFILE_BASE64", "secrets.IOS_TEST_APPSTORE_PROFILE_BASE64")],
   "ios-upload 15 the signed app's NFC entitlement let through with more than TAG": [
     replace(U, ` && ! /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.nfc.readersession.formats:1' "$RUNNER_TEMP/entitlements.plist" > /dev/null 2>&1`, ""),
   ],
   "ios-upload 16 the archive handed on without the app's entitlements": [
     replace(U, '      - name: Sign the app ad hoc with its entitlements, for the export to read\n        run: codesign --force --sign - --timestamp=none --entitlements ios/Config/IamrealApp.entitlements "$RUNNER_TEMP/IamrealApp.xcarchive/Products/Applications/IamrealApp.app" && codesign --verify "$RUNNER_TEMP/IamrealApp.xcarchive/Products/Applications/IamrealApp.app"\n', ""),
+  ],
+  // The app domain (#532): the signed app declares the test site's, and only it.
+  "ios-upload 17 the signed app's associated domains not checked": [
+    replace(U, ` && test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.associated-domains:0' "$RUNNER_TEMP/entitlements.plist")" = applinks:test-app.iamreal.tw && ! /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.associated-domains:1' "$RUNNER_TEMP/entitlements.plist" > /dev/null 2>&1`, ""),
+  ],
+  "ios-upload 18 the signed app's associated domains let through with more than the app domain": [
+    replace(U, ` && ! /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.associated-domains:1' "$RUNNER_TEMP/entitlements.plist" > /dev/null 2>&1`, ""),
+  ],
+  "ios-upload 19 another app domain": [replace(U, " = applinks:test-app.iamreal.tw && ", " = applinks:app.iamreal.tw && ")],
+  "ios-upload 20 the profile not checked for associated domains": [
+    replace(U, ` && /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.associated-domains' "$RUNNER_TEMP/profile.plist" > /dev/null`, ""),
+  ],
+  "ios-upload 21 the app signed ad hoc with the development build's entitlements": [
+    replace(U, "--entitlements ios/Config/IamrealApp.entitlements", "--entitlements ios/Config/IamrealAppDev.entitlements"),
   ],
 });
 
@@ -369,6 +383,9 @@ Object.assign(CHANGES, {
   "ios-test-upload 9 the production app's profile signing the test app": [replace(UT, "secrets.IOS_TEST_APPSTORE_PROFILE_BASE64", "secrets.IOS_APPSTORE_PROFILE_BASE64")],
   "ios-test-upload 8 the upload job checking out the repository": [
     replace(UT, IOS_UNPACK_STEP, `      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n${IOS_UNPACK_STEP}`),
+  ],
+  "ios-test-upload 10 the signed app's associated domains not checked": [
+    replace(UT, ` && test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.associated-domains:0' "$RUNNER_TEMP/entitlements.plist")" = applinks:test-app.iamreal.tw && ! /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.associated-domains:1' "$RUNNER_TEMP/entitlements.plist" > /dev/null 2>&1`, ""),
   ],
 });
 
