@@ -87,9 +87,10 @@
 
 | ADR | 程式現在還是 | 票 |
 |---|---|---|
+| 0015 | 後台收最新兩份清冊的樹根，直到再下一份進來，不看題目是什麼時候發的 | [#543](https://github.com/iamreal-tw/iamreal/issues/543) |
 | 0025 | 每天的重驗有了（`.github/workflows/reverify.yml`），只跑測試的證明紀錄：正式的那一份寫好了、等正式網站才打開；每次從第 1 筆整份重驗，沒有進度檔，`iamreal-verify` 也還不能接著上次做、指定一段序號；沒通過時沒有東西通知營運者 | [#413](https://github.com/iamreal-tw/iamreal/issues/413)，通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
 | 0026 | 後台、網頁版和兩個 app 做完了（照 IP 的上限 [#418](https://github.com/iamreal-tw/iamreal/issues/418)；全站的總量上限、Durable Object 撐不住時的 `busy`、網頁版的處理 [#32](https://github.com/iamreal-tw/iamreal/issues/32)；Android [#419](https://github.com/iamreal-tw/iamreal/issues/419)、iOS [#420](https://github.com/iamreal-tw/iamreal/issues/420)）。WAF 的限流規則和挑戰頁在測試網站設好、演練過（2026-11-27，[#423](https://github.com/iamreal-tw/iamreal/issues/423)）；照 IP 的上限擋不住每次開新連線的來源，那種只有 WAF 的規則擋得住（2026-11-27，[#466](https://github.com/iamreal-tw/iamreal/issues/466)）。訪客的頁面在 Cloudflare 上沒有快取，要不要打開見 [#472](https://github.com/iamreal-tw/iamreal/issues/472) | [#413](https://github.com/iamreal-tw/iamreal/issues/413) |
-| 0027 | 指紋檔沒有另一份 | [#35](https://github.com/iamreal-tw/iamreal/issues/35) |
+| 0027 | 指紋檔沒有另一份；沒有清冊差異檔（`crl/patches/`），規格沒有它的格式，`iamreal-verify` 不用它 | [#35](https://github.com/iamreal-tw/iamreal/issues/35)；差異檔 [#545](https://github.com/iamreal-tw/iamreal/issues/545)、[#546](https://github.com/iamreal-tw/iamreal/issues/546) |
 | 0028 | 測試的證明紀錄每天重驗了；沒通過時還沒有東西通知營運者，要自己看執行紀錄 | [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
 | 0029 | 只有測試網站的部署（合併到 main）；沒有推版本標籤部署正式網站的工作流程、production environment、正式的權杖 | [#39](https://github.com/iamreal-tw/iamreal/issues/39) |
 | 0033 | 沒有副本、沒有抄副本的工作流程、清冊檔沒有鎖、後台沒有「從證明紀錄重建」、沒有 `docs/playbooks/` | [#102](https://github.com/iamreal-tw/iamreal/issues/102)、[#103](https://github.com/iamreal-tw/iamreal/issues/103)、[#105](https://github.com/iamreal-tw/iamreal/issues/105)、[#106](https://github.com/iamreal-tw/iamreal/issues/106)、[#107](https://github.com/iamreal-tw/iamreal/issues/107)、[#108](https://github.com/iamreal-tw/iamreal/issues/108)、[#109](https://github.com/iamreal-tw/iamreal/issues/109)、[#110](https://github.com/iamreal-tw/iamreal/issues/110)、[#111](https://github.com/iamreal-tw/iamreal/issues/111)；常見問題的那一句在 [#104](https://github.com/iamreal-tw/iamreal/issues/104) |
