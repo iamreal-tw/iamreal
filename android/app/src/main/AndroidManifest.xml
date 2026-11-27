@@ -35,12 +35,21 @@
         android:theme="@style/App"
         android:usesCleartextTraffic="false">
         <!-- A change of the screen (turned, folded, dark) does not start
-             the activity again: the screens draw themselves anew. -->
+             the activity again: the screens draw themselves anew.
+             singleTask: there is only ever one of this activity, in the
+             app's own task. Whatever opens the app again (the home screen,
+             the reminder's notification, an address of the app domain from
+             a browser or from inside another app; src/app-domain/) brings
+             that one to the front as it was, and never puts a second one on
+             top of the other app's screens. Opened again, it closes what the
+             app opened in its own task above it: the system's settings pages
+             and permission question. The share sheet opens in a task of its
+             own (MainActivity.kt), so a post being written is not lost. -->
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|uiMode|keyboard|keyboardHidden|navigation|fontScale|locale|layoutDirection"
             android:exported="true"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

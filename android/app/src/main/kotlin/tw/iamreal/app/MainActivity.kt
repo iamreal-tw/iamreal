@@ -114,7 +114,9 @@ class MainActivity : ComponentActivity() {
                 // The system's share sheet with the text the screen gives; which app it goes to is the cardholder's to pick.
                 val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
                 try {
-                    startActivity(Intent.createChooser(send, null))
+                    // In a task of its own: the app's activity is singleTask (AndroidManifest.xml), and opening the app
+                    // again would close what is above it in its task, a post being written in the app shared to.
+                    startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 } catch (e: ActivityNotFoundException) {
                     // Nothing on the phone to share with: nothing to do here.
                 }
@@ -227,6 +229,9 @@ class MainActivity : ComponentActivity() {
     /**
      * Opened from the reminder's notification: step 1 says so. A card proof under way is left as it is; from
      * the steps after the submission, back to step 1. Another app could open the app the same way: all it gets is that sentence.
+     *
+     * Opened by an address of the app domain (README.md, "app 網域"): nothing. The address is not read, so
+     * it is the same as opened from the home screen; a card proof under way stays where it was (issue #92).
      */
     private fun handle(intent: Intent?) {
         if (intent?.getBooleanExtra(Phone.FROM_REMINDER, false) != true) return
