@@ -43,7 +43,7 @@
 | `picture` | 示範的畫面比例，寬比高 |
 | `screen` | 一個示意畫面的寬是幾個單位。取景的 `span` 用同一種單位 |
 | `start` | 開頭的取景 |
-| `mark.fade` | 紅框和標籤淡入、淡出各幾秒 |
+| `mark.fade` | 紅框淡入、淡出各幾秒（示範裡要按的地方沒有標籤） |
 | `tap` | 按下去的數值，見「按」 |
 | `states` | 六個畫面變化各花幾秒；0 是那一刻直接變 |
 | `variants` | 每個平台自己的名字：事件裡的 `back`，iOS 是 `done3`，Android 是 `x3` |
@@ -87,7 +87,7 @@
 | `do` | 其他欄位 | 意思 |
 |---|---|---|
 | `camera` | `frame`、`dur` | 鏡頭用 `dur` 秒從現在的取景移到 `frame`，緩進緩出 |
-| `mark` | `target` | 框 `target` 的紅框和標籤淡入 |
+| `mark` | `target` | 框 `target` 的紅框淡入 |
 | `unmark` | `target` | 淡出 |
 | `tap` | `target`，長按另有 `hold` | 按框 `target`；`hold` 是按住幾秒 |
 | `state` | `state` | 畫面的內容改變，六種之一 |

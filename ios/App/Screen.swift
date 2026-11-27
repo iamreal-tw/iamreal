@@ -171,40 +171,29 @@ struct ProofCard: Equatable {
 struct HangDemo: Equatable {
     /// The words on the five screens, each from the copy.
     struct Words: Equatable {
-        /// The app's own screen: the small words above it, its title, and the two buttons.
-        var kickOwn: String
+        /// The app's own screen: its title, and the two buttons.
         var title: String
         var copy: String
         var copied: String
         var open: String
         /// The profile on Threads.
-        var kickProfile: String
         var edit: String
         var found: String
         /// Editing the profile: the rows before the links, the links, the row after.
-        var kickEdit: String
         var rows: [String]
         var links: String
         var featured: String
         /// The links.
-        var kickLinks: String
         var add: String
         /// Adding a link.
-        var kickAdd: String
         var done: String
         var url: String
         var paste: String
         var linkTitle: String
-        /// The tags under what is to be pressed.
-        var press: String
-        var pressAgain: String
-        var pressThen: String
-        var pasteHere: String
 
         /// Every one of them, for tests.
         var all: [String] {
-            [kickOwn, title, copy, copied, open, kickProfile, edit, found, kickEdit] + rows
-                + [links, featured, kickLinks, add, kickAdd, done, url, paste, linkTitle, press, pressAgain, pressThen, pasteHere]
+            [title, copy, copied, open, edit, found] + rows + [links, featured, add, done, url, paste, linkTitle]
         }
     }
 
