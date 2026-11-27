@@ -22,7 +22,7 @@ export function preparePage(): Document {
 <section class="needs">
 <h2>需要什麼</h2>
 <dl class="items">
-<div><dt>實體的自然人憑證</dt><dd>台灣中華民國國民的正卡。行動自然人憑證不能用。</dd></div>
+<div><dt>實體的自然人憑證</dt><dd>本國國民的自然人憑證。行動自然人憑證不能用。</dd></div>
 <div><dt>晶片讀卡機</dt><dd>插得進自然人憑證的 USB 讀卡機。</dd></div>
 <div><dt>Windows 或 macOS 的電腦</dt><dd>和一般的瀏覽器。</dd></div>
 <div><dt>內政部的「跨平台網頁元件」</dt><dd>讓網頁能透過讀卡機和卡片溝通，裝在你的電腦上。</dd></div>

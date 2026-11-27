@@ -242,13 +242,13 @@
 
 這一題在頁面上的 `id`：`mobile-certificate`，連到這一題寫 `/faq#mobile-certificate`。
 
-### 我不是中華民國國民，可以用嗎？
+### 我不是本國國民，可以用嗎？
 
 ```
-不行。島民證明只接受台灣中華民國國民的自然人憑證正卡。非中華民國國籍人所持有的自然人憑證無法使用於島民證明。
+不行。島民證明只接受本國國民的自然人憑證。非本國國民持有的自然人憑證無法用於島民證明。
 ```
 
-「非中華民國國籍人……」那一句和過卡第 1 步的 `before.citizens_only`（`card-proof.md`）相同。
+「非本國國民……」那一句和過卡第 1 步的 `before.citizens_only`（`card-proof.md`）相同。
 
 這一題在頁面上的 `id`：`not-a-citizen`，連到這一題寫 `/faq#not-a-citizen`。
 

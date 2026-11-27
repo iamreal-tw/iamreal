@@ -3069,7 +3069,7 @@ await tryStep("the production build's step 1: one platform, named", async () => 
     const s1 = await prod.text();
     check(!(await prod.eval<boolean>(`!!document.querySelector('[data-one-proof]')`)) && !s1.includes(C.before.one_proof), "the production build's step 1: no sentence of what the proof lists");
     check(
-      [C.before.title, C.before.duration, C.before.prepare_card, C.before.citizens_only, C.before.why_physical, C.before.how_to_get].every((x) => s1.includes(x)) && !s1.includes("我們只收台灣中華民國國民的自然人憑證正卡"),
+      [C.before.title, C.before.duration, C.before.prepare_card, C.before.citizens_only, C.before.why_physical, C.before.how_to_get].every((x) => s1.includes(x)) && !s1.includes("我們只收本國國民的自然人憑證"),
       "the production build's step 1: the words of card-proof.md",
     );
     await step1Links("the production build's step 1", prod);

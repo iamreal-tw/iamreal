@@ -147,8 +147,8 @@ export const CATEGORIES: readonly Category[] = [
       },
       {
         id: "not-a-citizen",
-        question: "我不是中華民國國民，可以用嗎？",
-        answer: new Html(`<p>不行。島民證明只接受台灣中華民國國民的自然人憑證正卡。非中華民國國籍人所持有的自然人憑證無法使用於島民證明。</p>`),
+        question: "我不是本國國民，可以用嗎？",
+        answer: new Html(`<p>不行。島民證明只接受本國國民的自然人憑證。非本國國民持有的自然人憑證無法用於島民證明。</p>`),
       },
       {
         id: "under-18",
