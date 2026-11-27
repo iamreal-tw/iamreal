@@ -24,8 +24,8 @@ before(async () => {
 after(() => worker.close());
 
 /**
- * The proof log of the copy files' examples: card A has the history of
- * proof-page.md section 4 (now @alice, last card proof 2026-11-06, 12 days
+ * The proof log of the copy files' examples: card A has the record of
+ * proof-page.md section 3 (now @alice, last card proof 2026-11-06, 12 days
  * before 2026-11-18); with `withB`, card B gives its place to @alice too.
  */
 async function exampleCards(withB: boolean): Promise<void> {
@@ -38,55 +38,73 @@ async function exampleCards(withB: boolean): Promise<void> {
 /** The replacements of the example ordinal of proof-page.md (128) by `n`. */
 const ordinal = (n: number): string[] => ["第 128 張", `第 ${n} 張`];
 
-/** The titles of proof-page.md section 8's three other cases: withdrawn, two cards, no card. */
+/** The titles of proof-page.md section 7's three other cases: withdrawn, two cards, no card. */
 function specialTitles(): string[] {
-  const titles = [...copySection("proof-page.md", "8. ").matchAll(/標題是「([^」]+)」/g)].map((m) => m[1]!);
+  const titles = [...copySection("proof-page.md", "7. ").matchAll(/標題是「([^」]+)」/g)].map((m) => m[1]!);
   assert.equal(titles.length, 3);
   return titles;
 }
 
+/** proof-page.md section 3's first code block: the last card proof, the record's heading and rows, the two small lines. */
+const recordBlock = (): string[] => block("proof-page.md", "3. ");
+
 /**
- * Section 5 of the page of a card (proof-page.md): in the page's own content,
- * one link only of how to judge it, to /check, with section 5's words; none to
- * /verify; nowhere 驗證通過.
+ * A row of the record as proof-page.md section 3's table writes the kind
+ * `kind`, with its date and its accounts (in order) replaced.
  */
-function howToCheckOnce(what: string, page: string): void {
+function recordRow(kind: string, date: string, ...accounts: string[]): string {
+  const table = new Map<string, string>();
+  for (const line of copySection("proof-page.md", "3. ").split("\n")) {
+    const cells = line.split("|");
+    if (cells.length === 4 && !cells[1]!.startsWith("---") && cells[1]!.trim() !== "這一筆紀錄") table.set(cells[1]!.trim(), cells[2]!.trim());
+  }
+  assert.equal(table.size, 6, "the table of section 3 has its 6 kinds of rows");
+  const words = table.get(kind);
+  assert.ok(words !== undefined, `proof-page.md section 3 has a row ${kind}`);
+  let i = 0;
+  return words.replace(/\d{4}-\d{2}-\d{2}/, date).replace(/@[a-z0-9._]+/g, () => `@${accounts[i++]}`);
+}
+
+/**
+ * The page of a card (proof-page.md): how to check a proof is on the
+ * navigation bar and in the foot, not a section of the page's own content;
+ * no link to /verify there either, and nowhere 驗證通過.
+ */
+function noCheckSection(what: string, page: string): void {
   const main = page.slice(page.indexOf("<main>"), page.indexOf("</main>"));
-  const lines = copyLines(block("proof-page.md", "5. "));
-  const words = lines[lines.length - 1]!;
-  assert.ok(copySection("proof-page.md", "5. ").includes(`「${words}」是連結，連到「${words}」那一頁（\`check.md\`，\`/check\`）`), "proof-page.md: section 5's link goes to /check");
-  assert.deepEqual([...main.matchAll(/<a\s[^>]*href="\/(check|verify)[^"]*"[^>]*>(.*?)<\/a>/g)].map((m) => [m[1], m[2]]), [["check", words]], `${what}: one link, to /check, in the page's content`);
-  notOnPage(page, "驗證通過");
+  assert.deepEqual([...main.matchAll(/<a\s[^>]*href="\/(check|verify)[^"]*"/g)].map((m) => m[1]), [], `${what}: no link to /check or /verify in the page's content`);
+  assert.ok(page.includes('href="/check"'), `${what}: /check from the navigation bar or the foot`);
+  notOnPage(page, "如何檢查 Threads 帳號的島民證明", "驗證通過");
 }
 
 describe("the page of a card", () => {
-  test("one card: sections 1 to 5a of proof-page.md, in order; its links, the profile, the preview", async () => {
+  test("one card: sections 1 to 4 of proof-page.md, in order; its links, the profile, the preview", async () => {
     await exampleCards(true);
     const { status, page } = await getPage(worker, `/p/${CARD_A}`);
     assert.equal(status, 200);
-    wantLines(page, ["1. ", "2. ", "3. ", "4. ", "5. ", "5a. "].flatMap((s) => copyLines(block("proof-page.md", s), ...ordinal(1))));
+    wantLines(page, ["1. ", "2. ", "3. ", "4. "].flatMap((s) => copyLines(block("proof-page.md", s), ...ordinal(1))));
     // The ordinal above the title, in the secondary colour's small line; not beside the account (proof-page.md section 1).
     assert.ok(page.includes('<p class="ordinal">第 1 張島民證明</p>\n<h1 class="title">'), "the ordinal, right above the title");
-    assert.ok(page.includes("<div><dt>順序</dt><dd>第 1 張島民證明</dd></div>"), "順序, the first row of section 4");
-    assert.equal(page.split("第 1 張島民證明").length - 1, 2, "the ordinal twice, nowhere else");
+    assert.equal(page.split("第 1 張島民證明").length - 1, 1, "the ordinal once, nowhere else");
 
-    for (const link of ['<a href="/proof" data-count="start_card_proof">我要更新這張證明</a>', '<a href="https://www.threads.com/@alice">Threads 的 @alice</a>', `<a href="/hang/${CARD_A}">把它掛到個人檔案上</a>`, '<a class="button" href="/proof" data-count="start_card_proof">我也要換島民證明</a>']) {
+    for (const link of ['<a href="https://www.threads.com/@alice">個人檔案</a>', '<a href="/proof" data-count="start_card_proof">過卡更新這張證明</a>', `<a href="/hang/${CARD_A}">把它掛到個人檔案上</a>`, '<a class="button" href="/proof" data-count="start_card_proof">我也要換島民證明</a>']) {
       assert.ok(page.includes(link), `the page has ${link}`);
     }
-    howToCheckOnce("one card", page);
+    noCheckSection("one card", page);
     // The address to look for on the profile is written, not a link. A test log's site writes its own domain
     // (design/copy/test-site.md): that is where this card's page is.
     assert.equal(testSiteCardAddress(CARD_A), "test.iamreal.tw/p/7K2Q9FM4XD");
     // The profile, embedded with no script of Threads and nothing sent with the request, right under the address to compare
-    // with it (proof-page.md section 3): nothing comes between the two.
+    // with it (proof-page.md section 2): nothing comes between the two, and no sentence follows the profile.
     assert.ok(
       page.includes(
-        `<p class="backlink">${testSiteCardAddress(CARD_A)}</p>\n<iframe class="threads-profile" src="https://www.threads.com/@alice/embed/" title="Threads 個人檔案：@alice" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" credentialless></iframe>`,
+        `<p class="backlink">${testSiteCardAddress(CARD_A)}</p>\n<iframe class="threads-profile" src="https://www.threads.com/@alice/embed/" title="Threads 個人檔案：@alice" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" credentialless></iframe>\n</section>`,
       ),
-      "the address, and right under it the embedded profile",
+      "the address, right under it the embedded profile, and nothing after it",
     );
-    assert.match(page, /<details class="history">\s*<summary>全部紀錄<\/summary>/, "全部紀錄 is folded");
-    const { title, site } = previewOf("proof-page.md", "8. ");
+    // Every record listed, none folded (proof-page.md section 3).
+    assert.ok(!page.slice(page.indexOf("<main>"), page.indexOf("</main>")).includes("<details"), "no record is folded");
+    const { title, site } = previewOf("proof-page.md", "7. ");
     wantPreview(page, title, site);
     assert.ok(page.includes('<span class="account">@alice</span>'), "@alice is at the full size");
   });
@@ -102,7 +120,7 @@ describe("the page of a card", () => {
     assert.ok((await getPage(worker, `/threads/@${"a".repeat(13)}`)).page.includes(`<span class="account long">@${"a".repeat(13)}</span>`));
   });
 
-  test("全部紀錄: every row of the table of section 4, the newest first", async () => {
+  test("the record: every row of the table of section 3, the newest first", async () => {
     const e = cardStarting("E000000000");
     await pagesWorld(worker, "2026-11-18", [
       r("2026-10-01", e, "threads:bob"),
@@ -117,103 +135,94 @@ describe("the page of a card", () => {
       r("2026-10-08", e),
       r("2026-10-08", e, "threads:frank"), // another, after a withdrawal, the day of a switch: a switch too
     ]);
-    const table = new Map<string, string>();
-    for (const line of copySection("proof-page.md", "4. ").split("\n")) {
-      const cells = line.split("|");
-      if (cells.length === 4 && !cells[1]!.startsWith("---") && cells[1]!.trim() !== "這一筆紀錄") table.set(cells[1]!.trim(), cells[2]!.trim());
-    }
-    assert.equal(table.size, 6, "the table of section 4 has the 6 rows this test writes");
-    const row = (kind: string, date: string, ...accounts: string[]): string => {
-      const words = table.get(kind);
-      assert.ok(words !== undefined, `proof-page.md section 4 has a row ${kind}`);
-      let i = 0;
-      return words.replace(/\d{4}-\d{2}-\d{2}/, date).replace(/@[a-z0-9._]+/g, () => `@${accounts[i++]}`);
-    };
     const { page } = await getPage(worker, "/p/E000000000");
     wantLines(page, [
-      "全部紀錄",
-      row("收回之後宣告別的帳號", "2026-10-08", "erin", "frank"),
-      row("收回", "2026-10-08", "erin"),
-      row("更換", "2026-10-08", "carol.tw", "erin"),
-      row("收回之後宣告別的帳號", "2026-10-07", "dave", "carol.tw"),
-      row("收回", "2026-10-06", "dave"),
-      row("收回之後宣告回同一個帳號", "2026-10-05", "dave"),
-      row("收回", "2026-10-04", "dave"),
-      row("更換", "2026-10-03", "alice", "dave"),
-      row("更換", "2026-10-03", "bob", "alice"),
-      row("再次過卡", "2026-10-02"),
-      row("新宣告", "2026-10-01", "bob"),
+      ...copyLines(recordBlock().slice(0, 1), "12 天前", "41 天前", "2026-11-06", "2026-10-08"),
+      recordBlock()[2]!,
+      recordRow("收回之後宣告別的帳號", "2026-10-08", "erin", "frank"),
+      recordRow("收回", "2026-10-08", "erin"),
+      recordRow("更換", "2026-10-08", "carol.tw", "erin"),
+      recordRow("收回之後宣告別的帳號", "2026-10-07", "dave", "carol.tw"),
+      recordRow("收回", "2026-10-06", "dave"),
+      recordRow("收回之後宣告回同一個帳號", "2026-10-05", "dave"),
+      recordRow("收回", "2026-10-04", "dave"),
+      recordRow("更換", "2026-10-03", "alice", "dave"),
+      recordRow("更換", "2026-10-03", "bob", "alice"),
+      recordRow("再次過卡", "2026-10-02"),
+      recordRow("新宣告", "2026-10-01", "bob"),
+      ...copyLines(recordBlock().slice(-2)),
     ]);
-    wantLines(page, copyLines(block("proof-page.md", "4. ").slice(0, 5), ...ordinal(1), "2026-03-02", "2026-10-01", "4 次", "11 次", "1 次", "5 次"));
   });
 
-  test("no switch is written as 0 switches; a last card proof today is written 今天", async () => {
+  test("a last card proof today is written 今天", async () => {
     const c = cardStarting(CARD_A);
     await pagesWorld(worker, "2026-11-18", [r("2026-11-01", c, "threads:alice"), r("2026-11-06", c, "threads:alice")]);
     let { page } = await getPage(worker, `/p/${CARD_A}`);
-    wantLines(page, copyLines(block("proof-page.md", "4. ", 1)));
-    wantLines(page, copyLines(block("proof-page.md", "2. ", 0)));
+    wantLines(page, copyLines(recordBlock().slice(0, 1)));
 
     await pagesWorld(worker, "2026-11-18", [r("2026-11-18", c, "threads:alice")]);
     ({ page } = await getPage(worker, `/p/${CARD_A}`));
-    wantLines(page, copyLines(block("proof-page.md", "2. ", 1)));
+    wantLines(page, copyLines(block("proof-page.md", "3. ", 1)));
     notOnPage(page, "0 天前");
   });
 
-  test("withdrawn from every account: section 6, then 4 and 5; the account is that of the latest withdrawal", async () => {
+  test("withdrawn from every account: section 5, then the record and section 4; the account is that of the latest withdrawal", async () => {
     const c = cardStarting(CARD_A);
     await pagesWorld(worker, "2026-11-18", [r("2026-11-01", c, "threads:alice"), r("2026-11-05", c), r("2026-11-10", c, "threads:bob"), r("2026-11-15", c)]);
     const { status, page } = await getPage(worker, `/p/${CARD_A}`);
     assert.equal(status, 200);
     wantLines(page, [
-      ...copyLines(block("proof-page.md", "6. "), ...ordinal(1), "@alice", "@bob"),
-      ...copyLines(block("proof-page.md", "4. ").slice(0, 5), ...ordinal(1), "2026-03-02", "2026-11-01", "4 次", "4 次"),
-      ...copyLines(block("proof-page.md", "5. ")),
-      ...copyLines(block("proof-page.md", "5a. ")),
+      ...copyLines(block("proof-page.md", "5. "), ...ordinal(1), "@alice", "@bob"),
+      recordBlock()[2]!,
+      recordRow("收回", "2026-11-15", "bob"),
+      recordRow("收回之後宣告別的帳號", "2026-11-10", "alice", "bob"),
+      recordRow("收回", "2026-11-05", "alice"),
+      recordRow("新宣告", "2026-11-01", "alice"),
+      ...copyLines(block("proof-page.md", "4. ")),
     ]);
-    // No account and scope of section 1, no section 3, no small lines of section 2 and no link to update.
+    // No account of section 1, no section 2, no small lines at the end of section 3.
     const one = block("proof-page.md", "1. ");
     const two = block("proof-page.md", "2. ");
-    const three = block("proof-page.md", "3. ");
-    notOnPage(page, one[2]!, one[3]!, [...one[7]!].slice(0, 10).join(""), two[1]!, "我要更新這張證明", three[0]!, three.at(-1)!);
+    notOnPage(page, one[2]!, one[3]!, two[0]!, ...copyLines(recordBlock().slice(-2)), "過卡更新這張證明");
     assert.ok(!page.includes("<iframe"), "no profile on the page of a withdrawn card");
-    howToCheckOnce("withdrawn", page);
+    noCheckSection("withdrawn", page);
     wantPreview(page, specialTitles()[0]!, "島民證明 iamreal.tw");
   });
 
-  test("a short ID of two cards: section 7, both in the order of their scoped IDs, each under as many characters as tell them apart; sections 5 and 5a once", async () => {
+  test("a short ID of two cards: section 6, both in the order of their scoped IDs, each under as many characters as tell them apart; section 4 once", async () => {
     const m1 = cardStarting("7K2Q9FM4XD3A");
     const m2 = cardStarting("7K2Q9FM4XD3B");
     await pagesWorld(worker, "2026-11-18", [r("2026-11-01", m2, "threads:bob"), r("2026-11-06", m1, "threads:alice"), r("2026-11-15", m2)]);
     const { status, page } = await getPage(worker, `/p/${CARD_A}`);
     assert.equal(status, 200);
-    const each = block("proof-page.md", "7. ", 1);
+    const each = block("proof-page.md", "6. ", 1);
     wantLines(page, [
-      ...copyLines(block("proof-page.md", "7. ", 0)),
+      ...copyLines(block("proof-page.md", "6. ", 0)),
       ...copyLines(each, "7K2Q9FM4XD3A", "7K2Q9FM4XD3A"),
       ...copyLines(block("proof-page.md", "1. "), ...ordinal(2)),
       ...copyLines(block("proof-page.md", "2. ")),
-      ...copyLines(block("proof-page.md", "3. ")),
+      ...copyLines(recordBlock().slice(0, 3)),
+      recordRow("新宣告", "2026-11-06", "alice"),
+      ...copyLines(recordBlock().slice(-2)),
       ...copyLines(each, "7K2Q9FM4XD3A", "7K2Q9FM4XD3B"),
-      ...copyLines(block("proof-page.md", "6. "), ...ordinal(1), "@alice", "@bob"),
-      ...copyLines(block("proof-page.md", "5. ")),
-      ...copyLines(block("proof-page.md", "5a. ")),
+      ...copyLines(block("proof-page.md", "5. "), ...ordinal(1), "@alice", "@bob"),
+      ...copyLines(block("proof-page.md", "4. ")),
     ]);
     const text = squash(visibleText(page));
-    // Each section by its longest line: a short line may be in the navigation bar or the foot too.
+    // Section 4 by its longest line: a short line may be in the navigation bar or the foot too.
     const longest = (lines: string[]): string => lines.reduce((a, b) => (b.length > a.length ? b : a));
-    for (const section of ["5. ", "5a. "]) assert.equal(text.split(squash(longest(copyLines(block("proof-page.md", section))))).length - 1, 1, `section ${section}once`);
+    assert.equal(text.split(squash(longest(copyLines(block("proof-page.md", "4. "))))).length - 1, 1, "section 4 once");
     wantPreview(page, specialTitles()[1]!, "島民證明 iamreal.tw");
-    howToCheckOnce("two cards", page);
+    noCheckSection("two cards", page);
   });
 
-  test("a short ID that resolves to no card, or does not read: 404 with section 9, what was typed written back; one that does not read is answered without the proof log's object", async () => {
+  test("a short ID that resolves to no card, or does not read: 404 with section 8, what was typed written back; one that does not read is answered without the proof log's object", async () => {
     await exampleCards(false);
     const unreadable = ["7K2Q9FM4X", "7K2Q9FM4XDD", "7K2Q9FM4XU", "7K2Q-FM4XD", "", "a/b"];
     for (const typed of ["7K2Q9FM4XE", ...unreadable]) {
       const { status, page } = await getPage(worker, `/p/${typed}`);
       assert.equal(status, 404, `/p/${typed}`);
-      wantLines(page, copyLines(block("proof-page.md", "9. "), "7K2Q9FM4XD", typed));
+      wantLines(page, copyLines(block("proof-page.md", "8. "), "7K2Q9FM4XD", typed));
       assert.ok(page.includes(`<span class="typed">${testSiteCardAddress(typed)}</span> 沒有對到任何一張自然人憑證。`), `/p/${typed}: the test site's own domain`);
       assert.ok(page.includes('<a href="/proof-log#q">查一個 Threads 帳號</a>'));
       wantPreview(page, specialTitles()[2]!, "島民證明 iamreal.tw");
@@ -266,14 +275,14 @@ describe("the page of a card", () => {
     await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
     let { status, page } = await getPage(worker, `/p/${CARD_A}`);
     assert.equal(status, 200);
-    wantLines(page, ["@alice", "上次過卡：今天（2026-11-20）", "過卡次數 1 次", "2026-11-20　新宣告：@alice"]);
+    wantLines(page, ["@alice", "上次過卡：今天（2026-11-20）", "2026-11-20　新宣告：@alice"]);
     await mustSubmit(worker, await sub(worker, card, root, "threads:bob"), "threads switch");
     ({ status, page } = await getPage(worker, `/p/${CARD_A}`));
-    wantLines(page, ["@bob", "過卡次數 2 次", "2026-11-20　更換：@alice 改成 @bob", "2026-11-20　新宣告：@alice"]);
+    wantLines(page, ["@bob", "2026-11-20　更換：@alice 改成 @bob", "2026-11-20　新宣告：@alice"]);
     // An account on another platform of the test log is not shown: the pages list Threads only.
     await mustSubmit(worker, await sub(worker, card, root, "test-example:a-b", "threads:bob"), "test-example first, threads refresh");
     ({ page } = await getPage(worker, `/p/${CARD_A}`));
-    wantLines(page, ["過卡次數 3 次", "2026-11-20　再次過卡", "2026-11-20　更換：@alice 改成 @bob"]);
+    wantLines(page, ["2026-11-20　再次過卡", "2026-11-20　更換：@alice 改成 @bob", "2026-11-20　新宣告：@alice"]);
     notOnPage(page, "a-b");
   });
 });

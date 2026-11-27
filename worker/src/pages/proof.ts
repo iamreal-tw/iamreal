@@ -7,7 +7,7 @@ import { platformsOf } from "iamreal-protocol/platforms.ts";
 import { SHORT_ID_LENGTH } from "iamreal-protocol/scoped-id.ts";
 import type { CardsOfShortId, PageCard } from "../page-data.ts";
 import { Html, html, thousands } from "./html.ts";
-import { type Document, NEEDS, type Site } from "./layout.ts";
+import { type Document, type Site } from "./layout.ts";
 import { ON_A_CARD, recordWords } from "./record-words.ts";
 
 /** The one platform the pages show: the first version lists Threads only (proof-page.md). The other platforms of a test log are not shown. */
@@ -68,102 +68,79 @@ export function daysAgo(day: number, today: number): string {
 
 const currentOf = (card: PageCard): string | null => card.slots.find((s) => s.platform === PLATFORM)?.current ?? null;
 
-/** The card's ordinal as the page writes it, above the title and in section 4 (proof-page.md, sections 1 and 4). */
+/** The card's ordinal as the page writes it, above the title (proof-page.md, section 1). */
 const ordinalOf = (card: PageCard): string => `第 ${thousands(card.ordinal)} 張島民證明`;
 
-/** The title of the link preview (proof-page.md, section 8). */
+/** The title of the link preview (proof-page.md, section 7). */
 function titleOf(cards: readonly PageCard[]): string {
   if (cards.length > 1) return `這個網址對到 ${cards.length} 張自然人憑證`;
   const account = currentOf(cards[0]!);
-  return account === null ? "這張自然人憑證現在沒有把名額給任何帳號" : `一張自然人憑證把 Threads 的名額給了 @${account}`;
+  return account === null ? "這張自然人憑證現在沒有把名額給任何帳號" : `一張自然人憑證宣告了 Threads 的 @${account}`;
 }
 
 /**
- * The first screen of one card: sections 1 and 2 (or 6) in one column, and
- * section 3 in the other. `nested` is one of several cards: its title is
- * not the page's.
+ * Section 3 of one card: the last card proof, every valid record of the
+ * card on Threads, newest first, and the two small lines for its holder.
+ * On a card that gives its place to no account (section 5), the line of the
+ * latest withdrawal comes under the last card proof instead, and the two
+ * small lines are left out.
  */
-function firstScreen(site: Site, card: PageCard, shortId: string, today: number, nested: boolean): Html {
+function lastCardProofAndRecord(card: PageCard, shortId: string, today: number): Html {
+  const rows = card.history.filter((row) => row.platform === PLATFORM);
+  const giving = currentOf(card) !== null;
+  // The account of the latest withdrawal on Threads, if there is one.
+  const withdrawn = giving ? null : (rows.find((row) => row.kind === "withdraw")?.before ?? null);
+  return html`<section class="last">
+<p class="when">上次過卡：${daysAgo(card.lastCardProof, today)}<span class="date">（${formatDay(card.lastCardProof)}）</span></p>${withdrawn === null ? new Html("") : html`
+<p class="small">那一天收回了 Threads 的 @${withdrawn}。</p>`}
+<h2 class="records">這張自然人憑證的證明紀錄</h2>
+<ol class="log">
+${rows.map((row) => html`<li><time>${formatDay(row.date)}</time> <span>${recordWords(row, ON_A_CARD)}</span></li>`)}
+</ol>${giving ? html`
+<p class="small advice">建議持卡人每三個月過卡一次</p>
+<p class="small yours">這是你的證明？<a href="/proof" data-count="start_card_proof">過卡更新這張證明</a>・<a href="/hang/${shortId}">把它掛到個人檔案上</a></p>` : new Html("")}
+</section>`;
+}
+
+/**
+ * Sections 1 to 3 of one card, or section 5 for one that gives its place
+ * to no account: in this order on a phone; on a desktop sections 1 and 2 in
+ * the left column and section 3 in the right (pages.css). `nested` is one
+ * of several cards: its title is not the page's.
+ */
+function cardSections(site: Site, card: PageCard, shortId: string, today: number, nested: boolean): Html {
   const account = currentOf(card);
   if (account !== null && !isThreadsUsername(account)) throw new Error("pages: a card has an account that is not a Threads username");
   // The title, with the ordinal right above it: a small line in the secondary colour, never beside the account.
   const titled = (inside: Html): Html => html`<p class="ordinal">${ordinalOf(card)}</p>
 ${nested ? html`<h2 class="title">${inside}</h2>` : html`<h1 class="title">${inside}</h1>`}`;
-  const when = html`<p class="when">上次過卡：${daysAgo(card.lastCardProof, today)}<span class="date">（${formatDay(card.lastCardProof)}）</span></p>`;
   if (account === null) {
-    // The account of the latest withdrawal on Threads, if there is one.
-    const withdrawn = card.history.find((row) => row.platform === PLATFORM && row.kind === "withdraw")?.before ?? null;
     return html`<div class="first">
-<div class="column">
 <section class="claim withdrawn">
 ${titled(html`這張自然人憑證現在沒有把名額給任何帳號`)}
 </section>
-<section class="last">
-${when}${withdrawn === null ? new Html("") : html`
-<p class="small">那一天收回了 Threads 的 @${withdrawn}。</p>`}
-</section>
-</div>
+${lastCardProofAndRecord(card, shortId, today)}
 </div>`;
   }
   return html`<div class="first">
-<div class="column">
 <section class="claim">
-${titled(html`<span class="line">一張台灣國民的自然人憑證，</span>
-<span class="line">把它在 Threads 唯一的名額給了</span>
+${titled(html`<span class="line">一張台灣國民的自然人憑證</span>
+<span class="line">宣告了 Threads 的</span>
 ${accountName(account)}`)}
-<p class="small scope">這張證明只涵蓋 Threads 上的 @${account}。名稱不同的帳號、Instagram 或其他平台上同名的帳號，都和這張證明無關。</p>
 </section>
-<section class="last">
-${when}
-<p class="small">過卡日當天，這張自然人憑證在效期內，不在廢止清冊上。無法判斷卡片是否依然有效，要等下一次過卡才知道。因此越久沒過卡，這張證明的說服力越低，建議持卡人每三個月過卡一次。</p>
-<p class="small"><a href="/proof" data-count="start_card_proof">我要更新這張證明</a></p>
-</section>
-</div>
 <section class="owner">
-<h2 class="ask">帳號主人承認這張證明嗎？</h2>
-<p>@${account} 的個人檔案上有這個連結，才代表帳號主人承認這張證明：</p>
+<h2 class="ask"><a href="https://www.threads.com/@${account}">個人檔案</a>上有這個連結，才代表 @${account} 承認本證明。</h2>
 <p class="backlink">${site.host}/p/${shortId}</p>
 ${embed(account)}
-<p class="small">@${account} 的個人檔案上沒有 ${shortId}，代表帳號主人可能沒有承認這張證明。</p>
-<p class="small">個人檔案顯示不出來時，請到 Threads 上看：<a href="https://www.threads.com/@${account}">Threads 的 @${account}</a></p>
-<p class="small yours">這是你的帳號？<a href="/hang/${shortId}">把它掛到個人檔案上</a></p>
 </section>
+${lastCardProofAndRecord(card, shortId, today)}
 </div>`;
 }
 
-/** Section 4 of one card. */
-function record(card: PageCard): Html {
-  const rows = card.history.filter((row) => row.platform === PLATFORM);
-  const switches = card.slots.find((s) => s.platform === PLATFORM)?.switchCount ?? 0;
-  return html`<section class="record">
-<h2>這張自然人憑證的證明紀錄</h2>
-<dl class="facts">
-<div><dt>順序</dt><dd>${ordinalOf(card)}</dd></div>
-<div><dt>第一次過卡</dt><dd>${formatDay(card.firstCardProof)}</dd></div>
-<div><dt>過卡次數</dt><dd>${card.cardProofs} 次</dd></div>
-<div><dt>更換帳號</dt><dd>在 Threads 更換過 ${switches} 次帳號（一張自然人憑證最多 5 次）</dd></div>
-</dl>
-<details class="history">
-<summary>全部紀錄</summary>
-<ol class="log">
-${rows.map((row) => html`<li><time>${formatDay(row.date)}</time> <span>${recordWords(row, ON_A_CARD)}</span></li>`)}
-</ol>
-</details>
-</section>`;
-}
-
-/** proof-page.md, section 5: the page's one way on, to how to check an account's proof (/check). */
-const HOW_TO_CHECK = html`<section class="how-to-check">
-<h2>如何檢查</h2>
-<p>這張證明是在持卡人的裝置上算出來的，永久公布在證明紀錄裡。看一個帳號有沒有台灣人背書，要看哪幾個地方、小心哪些手法：</p>
-<p><a href="/check">如何檢查 Threads 帳號的島民證明</a></p>
-</section>`;
-
-/** proof-page.md, section 5a; the last line is home.md's 〈需要什麼〉. */
+/** proof-page.md, section 4: once on the page, after the last card. */
 const MINE = html`<section class="mine">
-<p>一張自然人憑證可以換一張 Threads 的島民證明，上面寫著你的 Threads 帳號。</p>
+<p>一張自然人憑證只能換一張島民證明，上面只能宣告一個 Threads 帳號。</p>
 <p><a class="button" href="/proof" data-count="start_card_proof">我也要換島民證明</a></p>
-<p class="small">${NEEDS}</p>
 </section>`;
 
 /**
@@ -175,13 +152,8 @@ const MINE = html`<section class="mine">
 export function proofPage(site: Site, shortId: string, { today, cards }: CardsOfShortId): Document {
   if (cards.length === 0) throw new Error("pages: no card for the short ID");
   let content: Html;
-  // Section 4 beside section 5 (one card), or each card's section 4 under its first screen and section 5 once, after the last (several).
   if (cards.length === 1) {
-    content = html`${firstScreen(site, cards[0]!, shortId, today, false)}
-<div class="second">
-${record(cards[0]!)}
-${HOW_TO_CHECK}
-</div>`;
+    content = cardSections(site, cards[0]!, shortId, today, false);
   } else {
     const starts = prefixes(cards.map((c) => c.scopedId));
     content = html`<section class="many">
@@ -191,22 +163,16 @@ ${HOW_TO_CHECK}
 ${cards.map(
   (card, i) => html`<article class="one-of-many">
 <p class="prefix">島民編號 <span class="id">${starts[i]!}</span> 開頭</p>
-${firstScreen(site, card, shortId, today, true)}
-<div class="second">
-${record(card)}
-</div>
+${cardSections(site, card, shortId, today, true)}
 </article>`,
-)}
-<div class="second">
-${HOW_TO_CHECK}
-</div>`;
+)}`;
   }
   return { title: titleOf(cards), kind: "proof", content: html`${content}\n${MINE}` };
 }
 
 /**
  * The page of a short ID that resolves to no card (proof-page.md, section
- * 9). `typed` is what the visitor typed after /p/, written back on the page
+ * 8). `typed` is what the visitor typed after /p/, written back on the page
  * as it is, escaped.
  */
 export function proofMissing(site: Site, typed: string): Document {

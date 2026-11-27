@@ -16,7 +16,7 @@ import { type TestWorker, startWorker } from "./harness.ts";
 import { CARD_A, CARD_B, CLEARED_ON, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r } from "./pages.ts";
 import { freshProofLog, mustSubmit, newCard, publishCrl, publishG3, sub, tw, wantError } from "./records.ts";
 
-/** What a page's copy file says of its preview's image: the one image of every page (proof-page.md, section 8, 預覽圖). */
+/** What a page's copy file says of its preview's image: the one image of every page (proof-page.md, section 7, 預覽圖). */
 const SAME_IMAGE_NOTE = "圖是每一頁同一張（`proof-page.md`「預覽圖」）";
 
 let worker: TestWorker;

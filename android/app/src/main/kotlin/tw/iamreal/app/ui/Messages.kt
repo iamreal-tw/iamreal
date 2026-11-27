@@ -383,6 +383,45 @@ internal class Messages(private val c: Copy) {
      */
     data class OpensProfile(val label: String, val told: String, val address: String)
 
+    /** The button that opens the profile of an account on a platform the app knows; null for one it does not. */
+    private fun opensProfile(platform: String, username: String, known: Boolean): OpensProfile? {
+        val p = if (known) Platforms.of(platform) else null
+        return p?.let { OpensProfile(c.say("hang.open_threads", "platform" to it.name), c.say("done.open_profile", "account" to Platforms.handle(platform, username), "platform" to it.name), it.profileUrl(username)) }
+    }
+
+    private fun hangTitle(single: String?): String = if (single != null) c.say("hang.title_single", "platform" to single) else c.say("hang.title")
+
+    private fun hangWhy(single: String?): String = if (single != null) c.say("hang.why_single") else c.say("done.anyone")
+
+    /** The four steps of hanging the link, in words. */
+    private fun hangSteps(): List<String> = listOf(c.say("done.step_edit"), c.say("done.step_link"), c.say("done.step_add"), c.say("done.step_paste"))
+
+    /**
+     * The whole of step 6 for the accounts the card declares now, from step 4 where the card has had its 3 card proofs today
+     * (design/copy/card-proof.md, "今天已經過卡 3 次"): no record this time, so no date and no notes of one.
+     */
+    class HangFromLimitView(val title: String, val why: String, val profiles: List<OpensProfile>, val steps: List<String>, val hung: String, val account: String?)
+
+    /**
+     * Whether step 4's 今天已經過卡 3 次 offers 重新掛上連結: the card declares an account on a platform the app knows. Not when
+     * it declares nothing now (everything withdrawn today), nor only accounts on platforms the app does not know: no profile
+     * to open, no demonstration.
+     */
+    fun canHangFromLimit(status: CardProof.Status): Boolean = status.slots.any { it.current != null && it.known && Platforms.of(it.platform) != null }
+
+    fun hangFromLimit(status: CardProof.Status, single: String?): HangFromLimitView {
+        val declared = status.slots.mapNotNull { s -> s.current?.let { Triple(s.platform, it, s.known) } }
+        val openProof = c.say("done.open_proof")
+        return HangFromLimitView(
+            title = hangTitle(single),
+            why = hangWhy(single),
+            profiles = declared.mapNotNull { (platform, username, known) -> opensProfile(platform, username, known) },
+            steps = hangSteps(),
+            hung = c.say("done.hung", "open_proof" to openProof),
+            account = declared.firstOrNull { (platform, _, known) -> known && Platforms.of(platform) != null }?.let { (platform, username) -> Platforms.handle(platform, username) },
+        )
+    }
+
     /**
      * What the steps after the submission say (design/copy/card-proof.md, "6. 掛上去" and "8. 完成和分享", each with its part
      * marked app). The same choices as doneView of web/src/ui/messages.ts.
@@ -478,16 +517,13 @@ internal class Messages(private val c: Copy) {
             unlink = if (single != null) c.say("finish.unlink_single", "platform" to single) else c.say("done.withdrawn_link"),
             card = d.accounts.map { (platform, username) -> (if (single != null) null else if (knownOf(platform)) Platforms.of(platform)?.name ?: platform else platform) to account(platform, username) },
             recordedOn = c.say("done.recorded_on", "date" to d.date),
-            hangTitle = if (single != null) c.say("hang.title_single", "platform" to single) else c.say("hang.title"),
-            why = if (single != null) c.say("hang.why_single") else c.say("done.anyone"),
+            hangTitle = hangTitle(single),
+            why = hangWhy(single),
             short = short,
             stillThere = if (short) c.say("hang.still_there_single", "platform" to single!!) else null,
             look = c.say("hang.look", "open_proof" to openProof),
-            profiles = d.accounts.mapNotNull { (platform, username) ->
-                val p = if (knownOf(platform)) Platforms.of(platform) else null
-                p?.let { OpensProfile(c.say("hang.open_threads", "platform" to it.name), c.say("done.open_profile", "account" to account(platform, username), "platform" to it.name), it.profileUrl(username)) }
-            },
-            steps = listOf(c.say("done.step_edit"), c.say("done.step_link"), c.say("done.step_add"), c.say("done.step_paste")),
+            profiles = d.accounts.mapNotNull { (platform, username) -> opensProfile(platform, username, knownOf(platform)) },
+            steps = hangSteps(),
             notes = listOfNotNull(
                 if (d.firstRecord && !withdrawAll) c.say("hang.new_card") else null,
                 if (withdrew && !withdrawAll) c.say("done.withdrawn_link") else null,

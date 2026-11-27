@@ -955,7 +955,7 @@ async function hangStep(o: { name: string; shortId: string; account: string; dat
   const s = wholeScreen();
   shows(s, "step 6", [step(6), recorded, ...wholeHang(o.account), WHY, link, say("app_demo.replay"), say("common.next"), ...(o.newCard ? [say("hang.new_card")] : [])]);
   // The words drawn in the demonstration are not read: a screen reader gets its one sentence, and the four steps in words.
-  check(!s.includes(say("app_demo_hang.kick_profile")) && !s.includes(say("app_demo_hang.press")), "step 6: what is drawn in the demonstration is not read");
+  check(!s.includes(say("app_demo_hang.found")) && !s.includes(say("app_demo_hang.row_bio")), "step 6: what is drawn in the demonstration is not read");
   {
     // The two buttons side by side, above the demonstration.
     // All three as one look at the screen has them, from the step's top: the picture starts under the buttons, and may go on below the screen.

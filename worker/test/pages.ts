@@ -218,7 +218,7 @@ export const FAVICON_LINK = `<link rel="icon" href="${FAVICON_PATH}">`;
 
 /**
  * The link preview's image as every page that has a link preview writes it
- * (proof-page.md, section 8, 預覽圖): the same image on each, at the address
+ * (proof-page.md, section 7, 預覽圖): the same image on each, at the address
  * of the site's own domain, with its size and the alt text of the copy.
  */
 export const previewImageMeta = (host: string): string =>

@@ -134,13 +134,13 @@ export function engineFiles(): Record<string, string> {
  *     the service links to (design/copy/faq.md);
  *   - the maintainer's blog, which that answer links to too;
  *   - Threads: the profile a page of a card or of an account embeds and
- *     links to (design/copy/proof-page.md, section 3; account-page.md), the
+ *     links to (design/copy/proof-page.md, section 2; account-page.md), the
  *     site /hang opens (hang.md), and the one origin the pages' policy
  *     allows a frame from (src/headers.ts);
  *   - the page of a card on this site, as 複製連結 of /hang/<short ID>
  *     copies it (hang.md, part 2), in the site's own domain;
  *   - the image of every page's link preview, site/og-image.png, in the
- *     site's own domain (proof-page.md, section 8, 預覽圖);
+ *     site's own domain (proof-page.md, section 7, 預覽圖);
  *   - MOICA's site, which /prepare links to: its download page of the
  *     component and its home page (design/copy/prepare.md, sections 3 and
  *     4). Links only: the CRLs, the one thing fetched from MOICA, are on
