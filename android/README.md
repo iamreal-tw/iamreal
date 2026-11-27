@@ -23,9 +23,9 @@
 
 app 的圖示是記號（紅色的自然人憑證和墨色的台灣，`web/src/ui/logo.ts`）放在頁面的白底上，營運者從三個方向裡選的（[#490](https://github.com/iamreal-tw/iamreal/issues/490)），和 iOS 的相同。兩種 build 同一個圖示，靠下面的名稱分。
 
-- `app/src/main/res/mipmap-anydpi/ic_launcher.xml`：adaptive icon，底是 `token_bg`，前景是 `drawable/launcher_mark.xml`。前景 108dp，系統只顯示中間的 72dp、裁成它自己的形狀；記號每單位 0.76dp、放在正中間，卡片的每個角都在直徑 66dp 的圓裡，裁成圓形也不會切到。`ThemeTest` 核對底是 `token_bg`、前景畫的是記號的台灣，台灣的每一點和卡片的四個角都在那個圓裡
+- `app/src/main/res/mipmap-anydpi/ic_launcher.xml`：adaptive icon，底是 `token_bg`，前景是 `drawable/launcher_mark.xml`。前景 108dp，系統只顯示中間的 72dp、裁成它自己的形狀；記號每單位 0.76dp、放在正中間，卡片的每個角都在直徑 66dp 的圓裡，裁成圓形也不會切到。`ThemeTest` 核對底是 `token_bg`、前景畫的記號和啟動畫面的 `splash_mark.xml` 相同，台灣的每一點和卡片的四個角都在那個圓裡
 - 沒有單色的那一層（`<monochrome>`）：手機設成用主題色的圖示時，這個 app 照樣顯示原本的顏色
-- `test/AppIcon.java` 照 `launcher_mark.xml` 畫出 iOS 的圖示（1024×1024、沒有透明度，寫進 `ios/App/Assets.xcassets/`），和 Google Play 商店頁的兩張圖：圖示（512×512、32 位元 PNG）、主題圖片（1024×500、24 位元 PNG，記號加「島民證明」，名稱從 `design/copy/app.json` 的 `splash.name` 讀、用 `design/fonts/` 的源流明體）。只用 JDK，改了記號或 `launcher_mark.xml` 之後在程式庫的根目錄手動跑；建置和部署都不跑它。商店的兩張由營運者自己換上 Play Console：
+- `test/AppIcon.java` 照 `launcher_mark.xml` 放記號的位置（和台灣的輪廓，卡片照 `web/src/ui/logo.ts` 寫在程式裡）畫出 iOS 的圖示（1024×1024、沒有透明度，寫進 `ios/App/Assets.xcassets/`），和 Google Play 商店頁的兩張圖：圖示（512×512、32 位元 PNG）、主題圖片（1024×500、24 位元 PNG，記號加「島民證明」，名稱從 `design/copy/app.json` 的 `splash.name` 讀、用 `design/fonts/` 的源流明體）。只用 JDK，改了記號或 `launcher_mark.xml` 之後在程式庫的根目錄手動跑；建置和部署都不跑它。商店的兩張由營運者自己換上 Play Console：
 
   ```sh
   java android/test/AppIcon.java <放商店圖片的目錄>

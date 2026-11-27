@@ -18,8 +18,8 @@ import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
 
 /**
- * The app's icon as images (#490), drawn as the Android app's launcher draws it
- * (android/app/src/main/res/drawable/launcher_mark.xml: the mark on the page's white):
+ * The app's icon as images (#490): the mark on the page's white, where the Android app's launcher puts it
+ * (android/app/src/main/res/drawable/launcher_mark.xml):
  *
  * - the iOS app's icon, 1024 by 1024 with no alpha (App Store Connect refuses an icon with one), written in place:
  *   ios/App/Assets.xcassets/AppIcon.appiconset/AppIcon.png
@@ -47,19 +47,18 @@ public class AppIcon {
         Files.createDirectories(out);
         String tokens = Files.readString(Path.of("design/tokens.json"));
         Mark mark = Mark.of(Files.readString(LAUNCHER), color(tokens, "--you"), color(tokens, "--bg"), color(tokens, "--ink"));
-        Color bg = color(tokens, "--bg");
 
-        write(icon(mark, bg, 1024, BufferedImage.TYPE_INT_RGB), IOS_ICON.toFile());
+        write(icon(mark, 1024, BufferedImage.TYPE_INT_RGB), IOS_ICON.toFile());
         File play = out.resolve("play-icon.png").toFile();
-        write(icon(mark, bg, 512, BufferedImage.TYPE_INT_ARGB), play);
+        write(icon(mark, 512, BufferedImage.TYPE_INT_ARGB), play);
         if (play.length() > 1024 * 1024) throw new IllegalStateException("play-icon.png is over 1 MB");
-        write(featureGraphic(mark, bg, color(tokens, "--ink")), out.resolve("feature-graphic.png").toFile());
+        write(featureGraphic(mark), out.resolve("feature-graphic.png").toFile());
     }
 
     /** The icon, `size` pixels square: the launcher's layer, the part it shows. */
-    static BufferedImage icon(Mark mark, Color bg, int size, int type) {
+    static BufferedImage icon(Mark mark, int size, int type) {
         BufferedImage image = new BufferedImage(size, size, type);
-        Graphics2D g = drawing(image, bg);
+        Graphics2D g = drawing(image, mark.bg);
         double px = size / SHOWN;
         g.scale(px, px);
         g.translate(-SHOWN_FROM, -SHOWN_FROM);
@@ -70,7 +69,7 @@ public class AppIcon {
     }
 
     /** The feature graphic: the mark and the app's name side by side, together in the middle. */
-    static BufferedImage featureGraphic(Mark mark, Color bg, Color ink) throws Exception {
+    static BufferedImage featureGraphic(Mark mark) throws Exception {
         final int width = 1024, height = 500;
         final double markHeight = 190, gap = 52;
         final float nameSize = 136f;
@@ -82,22 +81,22 @@ public class AppIcon {
         if (font.canDisplayUpTo(name) != -1) throw new IllegalStateException("design/fonts/GenRyuMin2TW-B.otf has no glyph for the name");
 
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = drawing(image, bg);
+        Graphics2D g = drawing(image, mark.bg);
         TextLayout layout = new TextLayout(name, font, g.getFontRenderContext());
         Rectangle2D text = layout.getBounds();
-        Rectangle2D drawn = mark.bounds;
-        double unit = markHeight / drawn.getHeight();
-        double markWidth = drawn.getWidth() * unit;
+        Rectangle2D markBounds = mark.bounds;
+        double unit = markHeight / markBounds.getHeight();
+        double markWidth = markBounds.getWidth() * unit;
         double left = (width - (markWidth + gap + text.getWidth())) / 2;
 
-        AffineTransform plain = g.getTransform();
+        AffineTransform unmoved = g.getTransform();
         // Each in the middle of the height by what it draws, not by the font's ascent and descent.
         g.translate(left, (height - markHeight) / 2);
         g.scale(unit, unit);
-        g.translate(-drawn.getX(), -drawn.getY());
+        g.translate(-markBounds.getX(), -markBounds.getY());
         mark.draw(g);
-        g.setTransform(plain);
-        g.setColor(ink);
+        g.setTransform(unmoved);
+        g.setColor(mark.ink);
         layout.draw(g, (float) (left + markWidth + gap - text.getX()), (float) ((height - text.getHeight()) / 2 - text.getY()));
         g.dispose();
         return image;
@@ -128,10 +127,12 @@ public class AppIcon {
     }
 
     /**
-     * The mark in its 64 by 64 units (web/src/ui/logo.ts; ios/App/Mark.swift draws the same): a card in the
-     * cardholder's red, turned -9° about (27, 39), with a chip in the page's white; the island in ink, scaled 0.97 and
-     * moved (31.5, 3), over its outline in the page's white, 2.6 wide with round joins. The island's outline and where
-     * the launcher puts the mark are read from launcher_mark.xml, so the images are the launcher's icon.
+     * The mark in its 64 by 64 units, as web/src/ui/logo.ts draws it (ios/App/Mark.swift and the Android app's
+     * drawables draw the same): a card in the cardholder's red, turned -9° about (27, 39), with a chip in the page's
+     * white; the island in ink, scaled 0.97 and moved (31.5, 3), over its outline in the page's white, 2.6 wide with
+     * round joins. Only two things are read from launcher_mark.xml: the island's outline, and the scale and the move
+     * of its group "mark" (where the launcher puts the mark). The card, the chip and the numbers above are written
+     * here as logo.ts writes them; ThemeTest checks launcher_mark.xml draws the same mark as splash_mark.xml.
      */
     record Mark(Shape card, Shape chip, Shape outline, Shape island, Color you, Color bg, Color ink, AffineTransform placed, Rectangle2D bounds) {
         static Mark of(String launcher, Color you, Color bg, Color ink) {

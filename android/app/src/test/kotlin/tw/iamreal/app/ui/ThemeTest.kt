@@ -10,7 +10,8 @@ import java.io.File
  * The theme's values are design/tokens.json's (design/DESIGN.md, "數值怎麼用"):
  * each token the screens use, written in Theme.kt as tokens.json writes it,
  * is the value of the same name there. The file is read where it is: next to
- * design/copy/, which the build hands the tests (app/build.gradle.kts).
+ * design/copy/, which the build hands the tests (app/build.gradle.kts). And
+ * the mark the system's splash and the launcher's icon draw (res/drawable/).
  */
 class ThemeTest {
     private val tokens = JSONObject(File(File(System.getProperty("iamreal.copy")).parentFile, "tokens.json").readText())
@@ -56,8 +57,11 @@ class ThemeTest {
         assertTrue("the icon's ground is token_bg", icon.contains("""<background android:drawable="@color/token_bg" />"""))
         assertTrue("the icon's foreground is launcher_mark", icon.contains("""<foreground android:drawable="@drawable/launcher_mark" />"""))
         val mark = File(res, "drawable/launcher_mark.xml").readText()
-        // Twice, as the splash: its outline in the colour of the ground, then the island in ink.
-        assertEquals(2, mark.split("android:pathData=\"$TAIWAN_OUTLINE\"").size - 1)
+        // The same card and island as the splash's, drawn the same way: only where the whole mark is put differs.
+        fun drawing(xml: String): String = xml.replace(Regex("<!--.*?-->", RegexOption.DOT_MATCHES_ALL), "").replace(Regex("\\s+"), " ")
+            .substringAfter("<group android:pivotX=\"27\"", "")
+        assertTrue("launcher_mark.xml draws a card turned about (27, 39)", drawing(mark).isNotEmpty())
+        assertEquals("launcher_mark.xml's mark", drawing(File(res, "drawable/splash_mark.xml").readText()), drawing(mark))
         // Where the mark is put on the layer of 108dp, and the points it reaches: the island's, and the corners of the
         // card turned -9° about (27, 39) (its rounded corners reach less far). A launcher keeps the circle of 66dp in
         // the middle, whatever shape it masks the icon to.
