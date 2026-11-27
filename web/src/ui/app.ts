@@ -926,14 +926,16 @@ export function startApp(o: AppOptions): void {
   /**
    * Step 6: hang the link on the profile (hang.md, part 1). `short`: only
    * whether the link is still there; hang.rehang shows the whole step.
+   * `fromShort`: the whole step, reached by hang.rehang: common.back goes
+   * back to the short one (card-proof.md, step 6, its short version).
    */
-  function hangScreen(view: DoneView, short: boolean): void {
+  function hangScreen(view: DoneView, short: boolean, fromShort = false): void {
     const t = COPY.done;
     const h = COPY.hang;
     const { note, record } = recordParts(view);
     const linkbox = el("div", { class: "linkbox" }, el("span", { class: "id", attrs: { "data-link": "" } }, view.link));
     // One main button a screen (design/DESIGN.md): hang.copy on the whole step 6, common.next on the short one.
-    const toFinish = (): void => finishScreen(view, () => hangScreen(view, short));
+    const toFinish = (): void => finishScreen(view, () => hangScreen(view, short, fromShort));
     let body: (HTMLElement | null)[];
     if (short) {
       body = [
@@ -941,7 +943,7 @@ export function startApp(o: AppOptions): void {
         linkbox,
         el("p", { class: "look" }, ...openProofIn(h.look, view)),
         el("p", { class: "why", attrs: { "data-why-hang": "" } }, say(view.why)),
-        actions(secondary(h.rehang, () => hangScreen(view, false)), primary(COPY.common.next, toFinish)),
+        actions(secondary(h.rehang, () => hangScreen(view, false, true)), primary(COPY.common.next, toFinish)),
       ];
     } else {
       const copy = primary(h.copy, () => {
@@ -981,7 +983,7 @@ export function startApp(o: AppOptions): void {
         ...notes,
         el("div", { class: "hung" }, el("p", { class: "hung-ask" }, ...openProofIn(t.hung, view)), el("p", {}, t.hung_done)),
         ...record,
-        actionsEnd(secondary(COPY.common.next, toFinish)),
+        fromShort ? actions(secondary(COPY.common.back, () => hangScreen(view, true)), secondary(COPY.common.next, toFinish)) : actionsEnd(secondary(COPY.common.next, toFinish)),
       ];
     }
     show(6, el("section", { class: "step", attrs: { "data-step": "hang", "data-short": String(short) } }, note, ...recordedLines(view), ...body));

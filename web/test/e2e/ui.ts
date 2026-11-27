@@ -965,6 +965,8 @@ interface DoneSeen {
   finish: FinishSeen;
   /** 上一步 on the last step went back to step 6 as it was left. */
   backToHang: boolean;
+  /** Step 6 opened short: 上一步 of the whole one went back to the short one. */
+  backToShort: boolean;
   /** The card's short ID, from the link (or, everything withdrawn, the record's line). */
   sid: string;
   /** The card's ordinal as its page on the server writes it (the number of 第 N 張島民證明); "" when no card is named. */
@@ -1020,6 +1022,7 @@ const finishNow = () =>
 async function doneSeen(shots?: string): Promise<DoneSeen> {
   let hang: HangSeen | null = null;
   let backToHang = false;
+  let backToShort = false;
   if (await page.eval<boolean>(`!!${step("hang")}`)) {
     const short = await page.eval<boolean>(`document.querySelector('[data-step="hang"]').dataset.short === "true"`);
     let s = { shortTitle: "", shortLook: "", shortWhy: "", shortLink: "" };
@@ -1033,6 +1036,12 @@ async function doneSeen(shots?: string): Promise<DoneSeen> {
       if (shots) await screenshot(`${shots}-6-hang-short`);
       await page.clickButton(C.hang.rehang);
       await page.waitFor(`document.querySelector('[data-step="hang"]')?.dataset.short === "false" || null`, "重新掛上連結: the whole step 6");
+      // 上一步 of the whole step: the short one again; then the whole one again, to go on as before.
+      await page.clickButton(C.common.back);
+      await page.waitFor(`document.querySelector('[data-step="hang"]')?.dataset.short === "true" || null`, "上一步: the short step 6 again");
+      backToShort = true;
+      await page.clickButton(C.hang.rehang);
+      await page.waitFor(`document.querySelector('[data-step="hang"]')?.dataset.short === "false" || null`, "重新掛上連結: the whole step 6 again");
     }
     hang = { short, ...s, ...(await hangNow()) };
     if (shots) await screenshot(`${shots}-6-hang`);
@@ -1049,7 +1058,7 @@ async function doneSeen(shots?: string): Promise<DoneSeen> {
   }
   const link = hang?.link ?? "";
   const sid = /^(?:test\.)?iamreal\.tw\/p\/([0-9A-Z]{10})$/.exec(link)?.[1] ?? (/島民編號開頭是 ([0-9A-Z]{10})。/.exec(hang?.main ?? finish.main)?.[1] ?? "");
-  return { hang, finish, backToHang, sid, pageOrdinal: await pageOrdinal(sid) };
+  return { hang, finish, backToHang, backToShort, sid, pageOrdinal: await pageOrdinal(sid) };
 }
 
 /** The ordinal the card's page on the server writes: the proof log's, not the answer's. */
@@ -1162,6 +1171,7 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   check(fin.comeBack && fin.main.includes(C.done.return_title) && fin.main.includes(C.done.return_note), `${o.label}: the last step, when to come back`);
   check(JSON.stringify(fin.buttons) === JSON.stringify([C.common.back, C.finish.done]), `${o.label}: the last step's buttons ${JSON.stringify(fin.buttons)}`);
   check(d!.backToHang, `${o.label}: 上一步 goes back to step 6 as it was left`);
+  if (d!.hang?.short) check(d!.backToShort, `${o.label}: 上一步 of the whole step 6 goes back to the short one`);
   doneScreens++;
   shown.push(sid);
 }

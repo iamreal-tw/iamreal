@@ -906,6 +906,11 @@ internal class Model(
         hangWhole = true
     }
 
+    /** "上一步" of the whole step 6, reached from the short one: the short one again. */
+    fun hangShort() {
+        hangWhole = false
+    }
+
     /** "下一步" of step 6. */
     fun toRemind() {
         if (done != null) step = Step.REMIND

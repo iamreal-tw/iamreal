@@ -224,16 +224,17 @@ private fun Read(m: Model, outside: Outside) {
         // Where the card goes differs from one Android phone to another: the words and the demonstration say to look for it.
         Body(c.say("app_read.how_android"))
         m.senseDemo?.let { demo ->
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SenseDemo(demo, c.say("app_demo.sense_android"))
-                // Not while the card is being read: the demonstration rests then.
-                Button(if (demo.playing) c.say("app_demo.stop") else c.say("app_demo.replay"), Modifier.testTag("sense-demo-button"), enabled = !m.readBusy, height = 46.dp) {
-                    if (demo.playing) demo.stop() else demo.play()
-                }
+            // Not while the card is being read: the demonstration rests then.
+            DemoFrame(demo, c, "sense-demo-button", enabled = !m.readBusy) {
+                SenseDemo(demo, c.say("app_demo.sense_android"), it)
             }
         }
     }
-    TaskList(c, listOf(c.say("read.server"), c.say("app_read.certificate"), c.say("read.check"), c.say("read.crl")), m.readItems, m.readMessage, "read-list")
+    val list = @Composable { TaskList(c, listOf(c.say("read.server"), c.say("app_read.certificate"), c.say("read.check"), c.say("read.crl")), m.readItems, m.readMessage, "read-list") }
+    // Before the card is read, "感應卡片" right under the demonstration, where it is seen without scrolling, and the list, all
+    // still to do, under it. Once the list has something to say (where it stopped, why; all done), the list and then the buttons.
+    val tapFirst = m.readButton == ReadButton.TAP
+    if (!tapFirst) list()
     Actions {
         val wide = Modifier.fillMaxWidth()
         when (m.readButton) {
@@ -253,6 +254,7 @@ private fun Read(m: Model, outside: Outside) {
             }
         }
     }
+    if (tapFirst) list()
 }
 
 @Composable
@@ -574,7 +576,8 @@ private fun Recorded(c: Copy, d: CardProof.Done, view: Messages.DoneView) {
 
 /**
  * Step 6: hang the link on the profile, and nothing else (design/copy/card-proof.md, "6. 掛上去", app). Someone back for a card proof
- * again is asked only whether the link is still there, until "重新掛上連結". No way back: step 5 has submitted.
+ * again is asked only whether the link is still there, until "重新掛上連結", and the whole step then has 上一步 back to the short
+ * one. No way back to step 5: it has submitted.
  */
 @Composable
 private fun Hang(m: Model, outside: Outside) {
@@ -597,10 +600,10 @@ private fun Hang(m: Model, outside: Outside) {
         ProofLink(link)
         OpensProof(view.look, openProof) { outside.open(url) }
         Body(view.why)
-        // In the copy's order: the way to the whole step first, the way on under it.
+        // The way on on the right, the way to the whole step on the left (Actions).
         Actions {
-            Button(c.say("hang.rehang"), wide) { m.hangAgain() }
             Button(c.say("common.next"), wide, primary = true) { m.toRemind() }
+            Button(c.say("hang.rehang"), wide) { m.hangAgain() }
         }
         return
     }
@@ -626,7 +629,7 @@ private fun Hang(m: Model, outside: Outside) {
         Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val account = d.accounts.firstOrNull { (platform, _) -> Platforms.of(platform) != null }
             val words = HangDemoWords(view.hangTitle, account?.let { Platforms.handle(it.first, it.second) } ?: "", link, url, profile.label)
-            HangDemo(demo, c, words, c.say("app_demo.hang")) { label, onClick -> Button(label, Modifier.testTag("hang-demo-button"), height = 46.dp, onClick = onClick) }
+            DemoFrame(demo, c, "hang-demo-button") { HangDemo(demo, c, words, c.say("app_demo.hang"), it) }
         }
     }
     val shown = demo?.step ?: 0
@@ -655,7 +658,11 @@ private fun Hang(m: Model, outside: Outside) {
         Small(c.say("done.hung_done"), colour = Colours.text)
     }
     Recorded(c, d, view)
-    Actions { Button(c.say("common.next"), wide) { m.toRemind() } }
+    Actions {
+        Button(c.say("common.next"), wide) { m.toRemind() }
+        // Reached from the short one by "重新掛上連結": back to it (design/copy/card-proof.md, step 6, "回來更新的人：短版").
+        if (stillThere != null) Button(c.say("common.back"), wide) { m.hangShort() }
+    }
 }
 
 /**

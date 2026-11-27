@@ -184,18 +184,18 @@ internal class HangDemoPlayer(val timeline: HangTimeline) : DemoPlayer(timeline.
 internal class Pose(val scale: Float, val x: Float, val y: Float)
 
 /**
- * The picture of the demonstration, and under it the one button: "停止" while it plays, "再看一次" otherwise. To a
- * screen reader the picture is one element that reads [told]; what is drawn in it is not read.
+ * The picture of the demonstration; its control is the screen's (`ui.DemoFrame`). To a screen reader the picture is one element
+ * that reads [told]; what is drawn in it is not read.
  */
 @Composable
-internal fun HangDemo(player: HangDemoPlayer, copy: Copy, words: HangDemoWords, told: String, button: @Composable (label: String, onClick: () -> Unit) -> Unit) {
+internal fun HangDemo(player: HangDemoPlayer, copy: Copy, words: HangDemoWords, told: String, modifier: Modifier = Modifier) {
     val timeline = player.timeline
     // The row's lengths are pixels of this screen: on a screen of another density the boxes are asked again where they are.
     val density = LocalDensity.current.density
     LaunchedEffect(density) { player.measuredAt(density) }
     Frames(player)
     Box(
-        Modifier
+        modifier
             .fillMaxWidth()
             .aspectRatio(timeline.aspect)
             .background(Colours.soft, RoundedCornerShape(Type.radiusPanel))
@@ -243,7 +243,6 @@ internal fun HangDemo(player: HangDemoPlayer, copy: Copy, words: HangDemoWords, 
             demo.AddLink(words)
         }
     }
-    button(if (player.playing) copy.say("app_demo.stop") else copy.say("app_demo.replay")) { if (player.playing) player.stop() else player.play() }
 }
 
 /** Between two screens of the row. */
