@@ -102,7 +102,8 @@ const overloadedNamespace = (real: DurableObjectNamespace): DurableObjectNamespa
 
 const testEnv = (env: Env): Env => ({
   ...env,
-  ...testSettings,
+  // APP_DOMAIN is any value a test gives, a setting the Worker must turn away included (src/app-domain.ts).
+  ...(testSettings as Partial<Env>),
   ...(connectionLogFails && { CONNECTION_LOG: failingBucket(env.CONNECTION_LOG) }),
   ...(proofLogOverloaded && { PROOF_LOG: overloadedNamespace(env.PROOF_LOG) as Env["PROOF_LOG"] }),
 });

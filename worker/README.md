@@ -18,6 +18,7 @@
 | 每天台灣時間換日公布證明紀錄：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布證明紀錄](#每天換日公布證明紀錄)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的證明紀錄），重驗通過（[部署後要營運者做的](#每天換日公布證明紀錄)）；清空之後，2026-11-22 公布了營運者用真卡片過卡的那一筆，重驗通過（[#71](https://github.com/iamreal-tw/iamreal/issues/71)） | |
 | 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過；送出一筆時用它驗證 | |
 | 每一種訪客頁面：首頁 `/`、島民證明 `/p/<短編號>`、查詢頁、證明紀錄頁、常見問題、如何驗證證明紀錄、過卡需要什麼、掛上去、複製按鈕的程式、計數的程式，過卡的頁面 `/proof`，和頁面用的衍生表（[頁面和檔案](#頁面和檔案)） | |
+| app 網域 `test-app.iamreal.tw`（[app 網域](#app-網域)，ADR-0040）：照主機分流，送 `assetlinks.json`、`apple-app-site-association` 和沒裝 app 時的那一頁，兩個檔從環境設定產生；部署前的檢查核對它認的 app（[#530](https://github.com/iamreal-tw/iamreal/issues/530)） | 測試 app 的 Android 簽章金鑰（測試 app 還沒建在 Play Console，[#479](https://github.com/iamreal-tw/iamreal/issues/479)）；iPhone 的 TestFlight 連結（[#535](https://github.com/iamreal-tw/iamreal/issues/535)）；正式網站的 app 網域 `app.iamreal.tw`，上線時做 |
 | 測試專用的建置和測試的工具；本機用真卡片過卡的指令（[在本機用真卡片過卡](#在本機用真卡片過卡)） | |
 | 部署測試環境的指令。2026-11-19 用它第一次部署到 `test.iamreal.tw`（[第一次部署量到的](#第一次部署量到的)） | 推版本標籤時部署正式環境的工作流程 |
 | 合併到 `main` 時部署測試環境的工作流程（[從 GitHub Actions 部署](#從-github-actions-部署)） | |
@@ -771,6 +772,62 @@ Worker 產生的頁面回 `200` 時（每一頁都載入計數的程式 `/count.
 - 它們用固定的埠 61171（假的元件），一次只能跑一套。
 - 三套都在 CI 的 `browser` 工作裡（`.github/workflows/checks-browser.yml`），`worker/` 有改的 PR 會跑；前兩套在 `CONTRIBUTING.md`「完成的定義」的清單上。
 
+## app 網域
+
+ADR-0040，`GLOSSARY.md`「app 網域」。測試網站的 app 網域 `test-app.iamreal.tw` 是 Worker `iamreal-test` 的第二個自訂網域（2026-11-28 在儀表板加的，[#528](https://github.com/iamreal-tw/iamreal/issues/528)），不另開 Worker：部署的權杖只能部署這一個。在手機上打開這個網域的任何網址，裝了 app 就打開 app（Android App Links、iOS Universal Links），沒裝就落在沒裝 app 時的那一頁（`design/copy/app-domain.md`）。app 不讀網址裡的任何東西（#92）。程式在 [`src/app-domain.ts`](src/app-domain.ts)、[`src/app-domain-setting.ts`](src/app-domain-setting.ts)、[`src/pages/no-app.ts`](src/pages/no-app.ts)；測試在 [`test/app-domain.test.ts`](test/app-domain.test.ts)。
+
+### 照主機分流
+
+請求的主機是設定 `APP_DOMAIN` 的 `host` 時，Worker 在看路徑之前就交給 app 網域的那一段，`/api/` 也一樣：
+
+| 路徑 | 回什麼 |
+|---|---|
+| `/.well-known/assetlinks.json` | `200`，`application/json`：每個有 Android 簽章金鑰的 app 一筆，`delegate_permission/common.handle_all_urls` |
+| `/.well-known/apple-app-site-association` | `200`，`application/json`：`applinks.details` 一項，`appIDs` 是團隊代號加每個 app 的識別碼，`components` 是 `{"/": "*"}`（每一條路徑、任何查詢字串） |
+| `/.well-known/` 底下其他的 | `404`，純文字 |
+| 其他每一條路徑，帶查詢字串的也一樣 | `200`，沒裝 app 時的那一頁 |
+
+- 只收 `GET`、`HEAD`，其他的方法回 `405`。不轉址，不看 User-Agent，不設 cookie。快取一小時（`Cache-Control: public, max-age=3600`）；Apple 的 CDN 和手機自己還會再留更久（[Supporting associated domains](https://developer.apple.com/documentation/xcode/supporting-associated-domains)）。測試網站上每個回應帶 `X-Robots-Tag: noindex`。
+- **其他主機（`test.iamreal.tw`、本機的 `localhost`）照舊**：兩個檔是找不到的頁面，`404`。所以 `test.iamreal.tw` 上的連結（第 6 步的 `/hang/<短編號>`）照舊在瀏覽器裡打開。
+- **兩個檔不放 Static Assets**：Static Assets 不分主機，放了 `test.iamreal.tw` 也會送。反過來，Static Assets 的檔案在 app 網域上照樣由 Cloudflare 直接送、不跑 Worker：沒裝 app 時的那一頁用的 `/pages.css`、`/fonts/…`、`/favicon.ico` 靠這一點；`/proof` 在 app 網域上打開的也是過卡的頁面，但它問 `/api/` 拿到的是沒裝 app 時的那一頁，走不下去。QR code 和按鈕都只連 `/`。
+- **不問任何 Durable Object，不算照 IP 的上限**：這裡的回答不讀證明紀錄，Apple 的 CDN 和 Google 的驗證從少數幾個 IP 來抓。整個 zone 的 WAF 限流規則照樣算（[營運者的說明](#營運者的說明)）。不送計數（#527）。
+- 設定格式不對時，app 網域的每個請求回 `500`，即時的輸出寫一行 `{"event":"internal_error","page":"app_domain","where":"settings",…}`；網站照常。沒有設定 `APP_DOMAIN` 時，這個主機只是網站的另一個名字。
+
+### 設定和部署前的檢查
+
+`wrangler.jsonc` 的 `vars.APP_DOMAIN`：`host`、`apple_team_id`（Apple 開發者帳號的團隊代號，不是金鑰，每個簽過的 app 都看得到）、`apps`（每個 app 的識別碼和 `android_sha256`）。`android_sha256` 是 Google 產生的簽章金鑰的 SHA-256（ADR-0040），照 Play Console「應用程式簽署」頁的寫法：大寫十六進位、冒號隔開。
+
+部署前的檢查（`scripts/deploy-build-checks.ts` 的 `checkAppDomains`）核對：
+
+- 測試的證明紀錄的環境有 app 網域，是 `test-app.iamreal.tw`；正式的證明紀錄的環境上線前沒有（`APP_DOMAINS`）
+- 它認的 app 正好是正式 app `tw.iamreal.app` 和測試 app `tw.iamreal.app.test`，各一次；開發用 build `tw.iamreal.app.dev` 不在裡面
+- 團隊代號是 10 個大寫英數字；每個指紋是 32 個位元組的寫法，同一個 app 不重複
+- 每個 app 至少有一把簽章金鑰，`APPS_NOT_ON_GOOGLE_PLAY_YET` 裡的除外，而且那裡的一把都不能有
+
+現在的值：
+
+- **正式 app 列兩把**：Play Console 上「使用中」的那一把（傳統金鑰，不是後量子的那一把）和「先前的」那一把（#528）。Play 同一頁產生的 Digital Asset Links 片段只列先前的那一把，頁面上看不出手機上的 app 是哪一把簽的；兩把都列，任一把簽的 app 都驗證得過。實機用 `adb shell pm get-app-links tw.iamreal.app` 確認之後，再決定要不要拿掉一把（[#534](https://github.com/iamreal-tw/iamreal/issues/534)）。
+- **測試 app 還沒有**：還沒建在 Play Console（[#479](https://github.com/iamreal-tw/iamreal/issues/479)），沒有 Google 產生的金鑰。它在 `APPS_NOT_ON_GOOGLE_PLAY_YET`，`assetlinks.json` 先不列它，`apple-app-site-association` 照樣列。建好之後從「應用程式簽署」頁抄指紋寫進 `android_sha256`，同一個 PR 把它從 `APPS_NOT_ON_GOOGLE_PLAY_YET` 拿掉。
+
+### 部署後的確認
+
+```sh
+curl -sD - https://test-app.iamreal.tw/.well-known/assetlinks.json
+curl -sD - https://test-app.iamreal.tw/.well-known/apple-app-site-association
+curl -s https://app-site-association.cdn-apple.com/a/v1/test-app.iamreal.tw          # Apple 的 CDN，最多要等 24 小時
+curl -s 'https://digitalassetlinks.googleapis.com/v1/assetlinks:check?source.web.site=https://test-app.iamreal.tw&relation=delegate_permission/common.handle_all_urls&target.android_app.package_name=tw.iamreal.app&target.android_app.certificate.sha256_fingerprint=<指紋>'
+```
+
+最後一行每把指紋各問一次，回 `"linked": true`。兩個檔要在宣告了 app 網域的 app 發出去之前上線：Android 14 以下只在安裝或更新 app 時驗證網域（[Verify Android App Links](https://developer.android.com/training/app-links/verify-android-applinks)）。
+
+### 上線那天
+
+ADR-0040「Consequences」：正式 app 改認 `app.iamreal.tw`，所以
+
+1. `test-app.iamreal.tw` 的 `apps` 拿掉正式 app，`APP_DOMAINS.test.apps` 跟著拿掉；沒裝 app 時那一頁的商店連結換成測試 app 的（`design/copy/app-domain.md`）
+2. 正式環境的 `APP_DOMAIN` 寫 `app.iamreal.tw` 和正式 app，`APP_DOMAINS.production` 寫同樣的網域和 app；正式的那一頁照 #135 的第一版句子做
+3. 儀表板上把 `app.iamreal.tw` 加成正式 Worker 的自訂網域
+
 ## 三樣不是設定值的東西
 
 後台認哪些發證金鑰、去哪裡抓內政部的清冊、現在幾點，都寫在程式裡，不是設定值（ADR-0028）：設定寫錯，不會讓後台收下假卡片簽的東西。
@@ -901,7 +958,7 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 | 欄位 | 值 | 說明 |
 |---|---|---|
 | `name` | `iamreal-test` | Worker 的名稱。部署的權杖只能部署這一個 |
-| `workers_dev`、`preview_urls` | `false` | 不開 `workers.dev` 的網址，只走自訂網域 `test.iamreal.tw`。自訂網域在儀表板上設，不在這裡（ADR-0029） |
+| `workers_dev`、`preview_urls` | `false` | 不開 `workers.dev` 的網址，只走自訂網域 `test.iamreal.tw` 和 app 網域 `test-app.iamreal.tw`。自訂網域在儀表板上設，不在這裡（ADR-0029） |
 | `triggers.crons` | `0 * * * *` | 每小時整點跑一次排程 |
 | `durable_objects` | `PROOF_LOG` → 類別 `ProofLog`；`COUNTS` → 類別 `Counts`；`STARTS` → 類別 `Starts` | 一份證明紀錄一個 Durable Object；收計數的是另一個（[計數](#計數)），最上層的 migration `v3` 建它的類別；數開始過卡的又是另一個（[全站的總量上限](#全站的總量上限)），migration `v4` 建它的類別 |
 | `ratelimits` | `RATE_CHALLENGES` 等六個 | 照 IP 的上限，一類一個（[限流](#限流)） |
@@ -913,6 +970,7 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 | `vars.TEST_PROOF_LOG_CLEARED_ON` | `2026-11-27` | 測試的證明紀錄上次清空的日期，每一頁的標示旁寫它（[測試的證明紀錄的標示](#測試的證明紀錄的標示)）。第一次清空是 2026-11-21（紀錄規則的版本從 1 加到 2，[#120](https://github.com/iamreal-tw/iamreal/issues/120)）；第二次是 2026-11-23（Durable Object 的類別改名，migration `v2` 刪掉舊的類別，[#277](https://github.com/iamreal-tw/iamreal/issues/277)）；第三次是 2026-11-27（紀錄規則的版本從 2 加到 3，拿掉當天的更正，[#509](https://github.com/iamreal-tw/iamreal/issues/509)）；在那之前寫的是測試網站第一次部署的日期 2026-11-19。清空時和 `PROOF_LOG_OBJECT_NAME` 一起改（[清空測試的證明紀錄](#清空測試的證明紀錄)） |
 | `vars.CARD_PROOFS_PAUSED` | `false` | `"true"` 停止收過卡，`"false"` 收（[停止和恢復收過卡](#停止和恢復收過卡)）。營運者在儀表板改；下一次部署寫回這裡的值。不是這兩個值時，API 回 `500` |
 | `vars.REBUILD_PROOF_LOG` | 空字串 | 營運者要的一次重建的名稱，空字串是沒有（[從證明紀錄重建](#從證明紀錄重建)）。1 到 40 個 `A-Za-z0-9._-`；不是的話 API 回 `500`。營運者在儀表板改；下一次部署寫回這裡的值 |
+| `vars.APP_DOMAIN` | `test-app.iamreal.tw`、團隊代號、兩個 app | app 網域和它認的 app，兩個給系統讀的檔從它產生（[app 網域](#app-網域)）。格式不對時 app 網域回 `500`，網站照常；部署前的檢查擋下格式不對、網域不對、多一個或少一個 app |
 | `assets`（最上層，每個環境共用） | `./site`，沒有 binding | 樣式表、複製按鈕的程式和過卡頁面的檔案，Cloudflare 直接送，不跑 Worker（[Static Assets](#static-assets)） |
 
 **`limits.cpu_ms` 是 `300000`，寫在最上層。** 一次呼叫最多用多少 CPU 時間：300,000 毫秒是能設的最大值，沒有設是 30 秒（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)「CPU time」，2026-11-20 讀的），一棵樹都建不完（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)）。
@@ -2036,7 +2094,7 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 |---|---|---|
 | Cloudflare 的 DNS | `iamreal.tw` 的名稱伺服器在 Cloudflare | 兩個自訂網域要這個 zone 在 Cloudflare 上 |
 | Cloudflare 的帳號 | Workers 的付費方案 | 驗一筆證明、建一棵樹的 CPU 時間（ADR-0023；[設定檔](#設定檔)的 `limits.cpu_ms`） |
-| Workers | Worker `iamreal-test`，從 Hello World 範本建的（儀表板不能建空的）；自訂網域 `test.iamreal.tw` | 部署的權杖建不了 Worker、改不了自訂網域。`workers.dev` 的網址由 `wrangler.jsonc` 的 `workers_dev: false` 關掉 |
+| Workers | Worker `iamreal-test`，從 Hello World 範本建的（儀表板不能建空的）；自訂網域 `test.iamreal.tw`，和 app 網域 `test-app.iamreal.tw`（2026-11-28，[#528](https://github.com/iamreal-tw/iamreal/issues/528)） | 部署的權杖建不了 Worker、改不了自訂網域。`workers.dev` 的網址由 `wrangler.jsonc` 的 `workers_dev: false` 關掉 |
 | R2 | 儲存桶 `iamreal-test-data`，位置 Automatic、存放等級 Standard；自訂網域 `test-data.iamreal.tw` | `wrangler.jsonc` 的 `r2_buckets`；部署不建任何資源（`--experimental-provision=false`，[第一次部署量到的](#第一次部署量到的)） |
 | R2 儲存桶的 CORS | 只允許 `https://test.iamreal.tw` 用 `GET` | 過卡的頁面從資料網域下載清冊存檔（ADR-0027） |
 | R2 儲存桶的生命週期規則 | `card-state-7-days`：前綴 `proof-log/card-state/`（[#277](https://github.com/iamreal-tw/iamreal/issues/277) 之前是改名之前的目錄），物件建立 7 天後刪除（[#185](https://github.com/iamreal-tw/iamreal/issues/185)） | 程式不刪卡片狀態檔（[每天換日公布證明紀錄](#每天換日公布證明紀錄)「部署後要營運者做的」） |
@@ -2076,7 +2134,8 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | 檔案 | 內容 |
 |---|---|
 | `wrangler.jsonc` | Worker 專案的設定 |
-| `src/index.ts` | 進入點：HTTP（`/api/` 交給 `src/api.ts`，其他交給 `src/visitor.ts`）和排程 |
+| `src/index.ts` | 進入點：HTTP（app 網域交給 `src/app-domain.ts`，`/api/` 交給 `src/api.ts`，其他交給 `src/visitor.ts`）和排程 |
+| `src/app-domain.ts`、`src/app-domain-setting.ts`、`src/pages/no-app.ts` | app 網域（[app 網域](#app-網域)）：照主機分流和每一種回答；設定 `APP_DOMAIN` 的格式和從它產生的兩個檔；沒裝 app 時的那一頁 |
 | `src/visitor.ts` | `/api/` 以外的網址：每一種訪客頁面和複製按鈕的程式；方法、轉址、`404`、快取、出錯時的那一行 |
 | `src/headers.ts` | 頁面和檔案送的標頭，只定義在這裡 |
 | `src/page-data.ts` | 頁面讀證明紀錄的介面 `PageData`，和問 Durable Object 的那一個實作 |
@@ -2122,6 +2181,7 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `test/crl-testdata.test.ts` | 清冊鏡像和 Go 的 `crl/` 逐案比對（第三項要有 `go`） |
 | `test/mirror-invariant.test.ts` | 寫索引出錯時，鏡像交給 Durable Object 的樹根仍然都列在索引裡（在 Node 裡，用假的儲存桶和假的雜湊） |
 | `test/mirror-faults.test.ts` | 清冊鏡像出錯和遇到大東西的時候：拿不到行的檔、拖時間的檔、太大的回應、超過一頁的儲存桶、之前留下的檔和補它們的界線、建樹到一半被停掉的一輪、兩輪同時寫索引 |
+| `test/app-domain.test.ts` | app 網域：兩個檔的內容和標頭、`/.well-known/` 的其他路徑、沒裝 app 時的那一頁逐字照 `design/copy/app-domain.md`、`test.iamreal.tw` 上沒有兩個檔、設定不對時、部署前的檢查擋得下的每一種設定 |
 | `test/api.test.ts` | `challenges`、`card-state`、`config` 和 `/api/` 的外框，整個 Worker 在本機的 workerd 裡 |
 | `test/records.test.ts`、`test/records.ts` | `records` 的每個錯誤代碼和先後順序、題目、清冊、午夜、`201` 的內容（Go 的舊後台的 `api_test.go` 的案例），用只看第一個位元組的驗證器 |
 | `test/records-real.test.ts` | `cmd/iamreal-verify/testdata/card-proofs/` 的十三份真的證明，從鏡像抓清冊、發題目走到寫入，用部署的那一個驗證器；寫出來的證明紀錄公布之後，Go 建出來的 `iamreal-verify` 配原生的 `bb` 重驗通過（這一項要設 `IAMREAL_BB`、要有 `go`） |

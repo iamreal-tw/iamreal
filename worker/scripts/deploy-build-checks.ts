@@ -10,7 +10,9 @@
 // time a round of the CRL mirror counts on (`checkCpuLimit`), and has
 // Cloudflare send the files of site/ itself, with the headers of the
 // environment's kind of proof log (`checkSiteFiles`), and a test log's
-// site has a date to say it was last cleared on (`checkClearedOn`).
+// site has a date to say it was last cleared on (`checkClearedOn`), and the
+// test site's app domain opens the apps that connect to it and no other
+// (`checkAppDomains`).
 //
 // And the card proof page among those files is the test site's build of
 // web/, with that date (`checkProofPages`; the checks themselves are in
@@ -35,8 +37,10 @@ import { basename, dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { experimental_readRawConfig, unstable_readConfig } from "wrangler";
 import { parseDay } from "iamreal-protocol/date.ts";
+import { type AppDomain, appDomainProblem } from "../src/app-domain-setting.ts";
 import { CIRCUITS, CIRCUIT_NAMES } from "../src/circuits.ts";
 import { ROUND_CPU_MS } from "../src/round-budget.ts";
+import { GOOGLE_PLAY_TEST } from "../src/pages/no-app.ts";
 import { WASM_FILE, WASM_SHA256, vkFile } from "./engine-files.ts";
 import { moduliInSpec } from "./issuers-in-spec.ts";
 import { PROOF_DIR, type ProofPage, checkProofPage, readProofPage } from "./proof-page.ts";
@@ -148,6 +152,9 @@ export function engineFiles(): Record<string, string> {
  *   - The privacy statement's links (design/copy/privacy.md, sections 6, 12
  *     and 14): its own history on GitHub, and the privacy policies of
  *     Cloudflare, Apple and Google. Links only.
+ *   - The page of the app domain for a phone without the app
+ *     (design/copy/app-domain.md): the store's test (src/pages/no-app.ts)
+ *     and the site's home page, in the site's own domain. Links only.
  *
  * The data domain, which the card proof page's policy lets it fetch from,
  * is not among them: that policy is sent by Static Assets (site/_headers),
@@ -171,6 +178,8 @@ export const PAGE_ADDRESSES: readonly string[] = [
   "https://www.cloudflare.com/privacypolicy/",
   "https://www.apple.com/legal/privacy/",
   "https://policies.google.com/privacy",
+  GOOGLE_PLAY_TEST,
+  "https://${site.host}/",
 ];
 
 export function checkAddresses(b: BuildContents): void {
@@ -212,7 +221,7 @@ export function checkNothingOfTheTestBuild(b: BuildContents): void {
  * (`REBUILD_PROOF_LOG`, changed the same way: README.md, "從證明紀錄重建"), the
  * object that takes the counts and how many a minute holds (README.md, "計數"),
  * the per-IP limits and the object that keeps the site-wide limit with its
- * number (README.md, "限流"): so the issuer keys, MOICA's addresses and the clock cannot be
+ * number (README.md, "限流"), and the app domain with the apps it opens (README.md, "app 網域"): so the issuer keys, MOICA's addresses and the clock cannot be
  * read from a setting, and the Worker has no binding to read the files of
  * Static Assets by (`checkSiteFiles`). (A secret set on the Worker with
  * `wrangler secret` is not in the configuration and is not seen here.)
@@ -220,7 +229,7 @@ export function checkNothingOfTheTestBuild(b: BuildContents): void {
 export function checkBindings(wranglerOutput: string): void {
   assert.deepEqual(
     bindingsIn(wranglerOutput),
-    { PROOF_LOG: "Durable Object", DATA: "R2 Bucket", CONNECTION_LOG: "R2 Bucket", RATE_CHALLENGES: "Rate Limit", RATE_CARD_STATE: "Rate Limit", RATE_RECORDS: "Rate Limit", RATE_PUBLIC_READS: "Rate Limit", RATE_PAGES: "Rate Limit", RATE_COUNTS: "Rate Limit", COUNTS: "Durable Object", COUNT_EVENTS_PER_MINUTE: "Environment Variable", STARTS: "Durable Object", CARD_PROOF_STARTS_PER_MINUTE: "Environment Variable", PROOF_LOG_OBJECT_NAME: "Environment Variable", PROOF_LOG_KIND: "Environment Variable", CARD_PROOFS_PAUSED: "Environment Variable", REBUILD_PROOF_LOG: "Environment Variable", TEST_PROOF_LOG_CLEARED_ON: "Environment Variable" },
+    { PROOF_LOG: "Durable Object", DATA: "R2 Bucket", CONNECTION_LOG: "R2 Bucket", RATE_CHALLENGES: "Rate Limit", RATE_CARD_STATE: "Rate Limit", RATE_RECORDS: "Rate Limit", RATE_PUBLIC_READS: "Rate Limit", RATE_PAGES: "Rate Limit", RATE_COUNTS: "Rate Limit", COUNTS: "Durable Object", COUNT_EVENTS_PER_MINUTE: "Environment Variable", STARTS: "Durable Object", CARD_PROOF_STARTS_PER_MINUTE: "Environment Variable", PROOF_LOG_OBJECT_NAME: "Environment Variable", PROOF_LOG_KIND: "Environment Variable", CARD_PROOFS_PAUSED: "Environment Variable", REBUILD_PROOF_LOG: "Environment Variable", TEST_PROOF_LOG_CLEARED_ON: "Environment Variable", APP_DOMAIN: "Environment Variable" },
     "the deploy build's bindings",
   );
 }
@@ -295,6 +304,74 @@ export function checkClearedOn(configured: Readonly<Record<string, { kind: unkno
   for (const [env, { kind, clearedOn }] of Object.entries(configured)) {
     if (kind !== "test") continue;
     assert.ok(typeof clearedOn === "string" && parseDay(clearedOn) !== null, `TEST_PROOF_LOG_CLEARED_ON of the ${env} environment is a date, YYYY-MM-DD`);
+  }
+}
+
+/** The app domain of one environment of wrangler.jsonc: `PROOF_LOG_KIND` and `APP_DOMAIN`, undefined where it has none. */
+export interface ConfiguredAppDomain {
+  readonly kind: unknown;
+  readonly appDomain: unknown;
+}
+
+/** `PROOF_LOG_KIND` and `APP_DOMAIN` of every environment of wrangler.jsonc, each read the way wrangler reads it for `--env <name>` (as `configuredCpuMs` reads). */
+export function configuredAppDomains(): Record<string, ConfiguredAppDomain> {
+  const { rawConfig } = experimental_readRawConfig({ config: WRANGLER_CONFIG });
+  const out: Record<string, ConfiguredAppDomain> = {};
+  for (const env of Object.keys(rawConfig.env ?? {})) {
+    const { vars } = unstable_readConfig({ config: WRANGLER_CONFIG, env }, { hideWarnings: true });
+    out[env] = { kind: vars.PROOF_LOG_KIND, appDomain: vars.APP_DOMAIN };
+  }
+  return out;
+}
+
+/**
+ * The app domain of each kind of proof log's site, and the apps it opens
+ * (ADR-0040, "app 網域跟著連的網站"): the apps that connect to that site, and
+ * never the development build. Before launch the production app connects
+ * to the test site, so the test site's opens both; the production log's
+ * site has none until launch day, when the production app moves to it
+ * (README.md, "app 網域", 上線那天).
+ */
+export const APP_DOMAINS: Readonly<Record<"production" | "test", { readonly host: string; readonly apps: readonly string[] } | null>> = {
+  production: null,
+  test: { host: "test-app.iamreal.tw", apps: ["tw.iamreal.app", "tw.iamreal.app.test"] },
+};
+
+/**
+ * The apps not on Google Play yet, which have no signing key to list: the
+ * test app until it is made in Play Console (#479). An app here must have no
+ * fingerprint, and every other app at least one; taking it off this list is
+ * the same change as writing its fingerprint into wrangler.jsonc.
+ */
+export const APPS_NOT_ON_GOOGLE_PLAY_YET: readonly string[] = ["tw.iamreal.app.test"];
+
+/**
+ * In every environment the app domain is the one of its kind of proof log
+ * (`APP_DOMAINS`), or none where that kind has none; its setting has the form
+ * the Worker reads (src/app-domain-setting.ts, `appDomainProblem`): a team ID,
+ * fingerprints written as Play Console writes them, each once; and it opens
+ * exactly the apps of that site, each once, each with a signing key unless it
+ * is not on Google Play yet (`APPS_NOT_ON_GOOGLE_PLAY_YET`). With another
+ * setting the deployed app domain answers 500, or opens an app it should
+ * not, or none, and that would only be seen after the deploy, on a phone.
+ */
+export function checkAppDomains(configured: Readonly<Record<string, ConfiguredAppDomain>>): void {
+  assert.ok(Object.keys(configured).length > 0, "wrangler.jsonc has an environment");
+  for (const [env, { kind, appDomain }] of Object.entries(configured)) {
+    assert.ok(kind === "test" || kind === "production", `PROOF_LOG_KIND of the ${env} environment is test or production`);
+    const want = APP_DOMAINS[kind];
+    if (want === null) {
+      assert.equal(appDomain, undefined, `the ${env} environment, of a ${kind} log, has no app domain yet`);
+      continue;
+    }
+    assert.equal(appDomainProblem(appDomain), null, `APP_DOMAIN of the ${env} environment has the form src/app-domain.ts reads`);
+    const d = appDomain as AppDomain;
+    assert.equal(d.host, want.host, `the app domain of the ${env} environment is ${want.host}`);
+    assert.deepEqual(d.apps.map((app) => app.id).sort(), [...want.apps].sort(), `the app domain of the ${env} environment opens ${want.apps.join(" and ")}, no other`);
+    for (const app of d.apps) {
+      if (APPS_NOT_ON_GOOGLE_PLAY_YET.includes(app.id)) assert.equal(app.android_sha256.length, 0, `${app.id} is not on Google Play yet: no signing key of it in the ${env} environment's app domain (take it off APPS_NOT_ON_GOOGLE_PLAY_YET with its key)`);
+      else assert.ok(app.android_sha256.length > 0, `${app.id} has a signing key in the ${env} environment's app domain`);
+    }
   }
 }
 
@@ -525,4 +602,5 @@ export function checkDeployBuild(dir: string, wranglerOutput: string): void {
   checkCpuLimit(configuredCpuMs());
   checkSiteFiles(configuredSites());
   checkClearedOn(configuredClearedOn());
+  checkAppDomains(configuredAppDomains());
 }
