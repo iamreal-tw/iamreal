@@ -186,7 +186,7 @@ final class DoneScreenTests: XCTestCase {
         XCTAssertFalse(still.playing)
         XCTAssertFalse(still.played, "its first frame, before it ever played")
         let playing = try XCTUnwrap(demo(of: screens.hang(again, single: "Threads", copied: false, whole: true, demoPlaying: true)))
-        XCTAssertEqual(playing.control, Button(label: "停止", action: .stopDemo))
+        XCTAssertEqual(playing.control, Button(label: "停止播放", action: .stopDemo))
         XCTAssertTrue(playing.playing)
         XCTAssertTrue(playing.played)
         // Stopped or at its end: its last frame.

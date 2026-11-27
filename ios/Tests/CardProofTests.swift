@@ -157,7 +157,7 @@ final class CardProofTests: XCTestCase {
             // The demonstration of where the card goes: what VoiceOver reads in its place, and its button. It plays
             // as the step comes up.
             "示範：手機正面朝你，不用翻面。把自然人憑證貼到手機背面的上方，停住不動。",
-            "停止",
+            "停止播放",
             "連上島民證明的伺服器",
             "感應卡片，讀取卡片上的憑證",
             "檢查憑證",
@@ -170,7 +170,7 @@ final class CardProofTests: XCTestCase {
         // the picture tells it, it is at rest again.
         XCTAssertEqual(senseDemonstration(on: model.screen)?.description, Copy.bundled()("app_demo.sense_iphone"))
         XCTAssertEqual(senseDemonstration(on: model.screen)?.playing, true)
-        try await press("停止", in: model)
+        try await press("停止播放", in: model)
         XCTAssertEqual(senseDemonstration(on: model.screen)?.control.label, Copy.bundled()("app_demo.replay"))
         XCTAssertEqual(senseDemonstration(on: model.screen)?.played, true)
         try await press("再看一次", in: model)
@@ -294,7 +294,7 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(demonstration(on: model.screen)?.played, false)
         model.perform(.showDemo)
         XCTAssertEqual(demonstration(on: model.screen)?.control.label, Copy.bundled()("app_demo.stop"))
-        try await press("停止", in: model)
+        try await press("停止播放", in: model)
         XCTAssertEqual(demonstration(on: model.screen)?.control.label, Copy.bundled()("app_demo.replay"))
         XCTAssertEqual(demonstration(on: model.screen)?.playing, false)
         XCTAssertEqual(demonstration(on: model.screen)?.played, true, "at its last frame")

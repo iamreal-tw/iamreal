@@ -542,7 +542,7 @@ final class ScreensTests: XCTestCase {
             throw XCTSkip("no demonstration")
         }
         let playing = try demo(screens.read(reached: 0, running: false, stop: nil, demoPlaying: true))
-        XCTAssertEqual(playing.control, Button(label: "停止", action: .stopDemo))
+        XCTAssertEqual(playing.control, Button(label: "停止播放", action: .stopDemo))
         XCTAssertTrue(playing.playing && playing.played)
         let before = try demo(screens.read(reached: 0, running: false, stop: nil))
         XCTAssertEqual(before.control, Button(label: "再看一次", action: .playDemo))
