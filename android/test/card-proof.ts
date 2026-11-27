@@ -932,7 +932,7 @@ async function hangStep(o: { name: string; shortId: string; account: string; dat
       const now = visible();
       const rehang = now.find((n) => n.text === say("hang.rehang"));
       const next = now.find((n) => n.text === say("common.next"));
-      if (rehang && next) check(Math.abs(rehang.y - next.y) < 40 && rehang.x < next.x, "step 6, the short one: 下一步 on the right, the way to the whole step on its left");
+      check(rehang !== undefined && next !== undefined && Math.abs(rehang.y - next.y) < 40 && rehang.x < next.x, `step 6, the short one: 下一步 on the right, the way to the whole step on its left (${rehang?.x},${rehang?.y} and ${next?.x},${next?.y})`);
     }
     for (const a of [...wholeHang(o.account), say("hang.new_card"), say("common.back"), ...neverAfter(o.account)]) check(!s.includes(a), `step 6, the short one, does not say "${a.slice(0, 40)}"`);
     press(LOOK);
