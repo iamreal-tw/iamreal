@@ -1,0 +1,138 @@
+{
+  "spec": "revocation-tree",
+  "status": "draft",
+  "note": "CRL patches (revocation-tree.md, \"CRL patches\"). Bytes are in hex. Each case of `usable`: reading `patch` against `previous` gives `file`, and `name` is the patch's name. Each case of `unusable` cannot be used: read against `previous`, the patch breaks a rule of the format, or, for the one with a `name`, gives a file without the SHA-256 that name gives. The previous files here are not CRLs: the format does not look at what it copies.",
+  "usable": [
+    {
+      "label": "an empty patch gives an empty file",
+      "previous": "616263",
+      "patch": "",
+      "file": "",
+      "name": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.patch"
+    },
+    {
+      "label": "one write, with no previous bytes used",
+      "previous": "",
+      "patch": "0100000003646566",
+      "file": "646566",
+      "name": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855-cb8379ac2098aa165029e3938a51da0bcecfc008fd6795f401178647f96c5b34.patch"
+    },
+    {
+      "label": "one copy of the whole previous file",
+      "previous": "0102030405",
+      "patch": "000000000000000005",
+      "file": "0102030405",
+      "name": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0-74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0.patch"
+    },
+    {
+      "label": "a copy that ends at the previous file's last byte",
+      "previous": "0102030405",
+      "patch": "000000000300000002",
+      "file": "0405",
+      "name": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0-2fa1b377bf67309f65e5e7bc9d924345ca648dec4e601a398a9cb497dcba3765.patch"
+    },
+    {
+      "label": "copies and writes in turn; the copies skip bytes of the previous file",
+      "previous": "000102030405060708090a0b0c0d0e0f",
+      "patch": "0000000000000000040100000002ffee000000000600000004000000000c00000004",
+      "file": "00010203ffee060708090c0d0e0f",
+      "name": "be45cb2605bf36bebde684841a28f0fd43c69850a3dce5fedba69928ee3a8991-bd87497fb738531aaf02e9d33f1e9952c0ef788c2a04ac04d80c03c1dbe340ff.patch"
+    },
+    {
+      "label": "a copy that starts where the last one ended",
+      "previous": "000102030405060708090a0b0c0d0e0f",
+      "patch": "000000000200000003000000000500000003",
+      "file": "020304050607",
+      "name": "be45cb2605bf36bebde684841a28f0fd43c69850a3dce5fedba69928ee3a8991-9263dda44761ead43a50b4f62bdc2237e561b1e4c3f4bba002ce53cc1c4ffc64.patch"
+    },
+    {
+      "label": "instructions of length 0 give nothing; a copy of length 0 still sets where the next may start",
+      "previous": "000102030405060708090a0b0c0d0e0f",
+      "patch": "0100000000000000000300000000000000000300000002000000001000000000",
+      "file": "0304",
+      "name": "be45cb2605bf36bebde684841a28f0fd43c69850a3dce5fedba69928ee3a8991-0ce3940bebf2b22a5d2108ecf0c368a0541c7e3c45703f8540921b4eafc82947.patch"
+    },
+    {
+      "label": "a write of bytes that are also an instruction",
+      "previous": "0102030405",
+      "patch": "0100000009000000000000000005",
+      "file": "000000000000000005",
+      "name": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0-daeef3f9f29f50305ceb2a6cac41452a76db046389ff9f1e278103258de90bb8.patch"
+    },
+    {
+      "label": "an entry put in between, a changed byte at the start and other bytes at the end",
+      "previous": "308228292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374757677a0a1a2a3",
+      "patch": "010000000230830000000002000000280100000005300e020101000000002a000000280100000004b0b1b2b3",
+      "file": "308328292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f300e020101505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374757677b0b1b2b3",
+      "name": "189b6604a5ca2a08512f7e78b4a27d432341ba073b8b4bc9708bba68975c8b7b-61667c342a0818af3589a52c67974c21487200984daead454b8650a7a90d5625.patch"
+    }
+  ],
+  "unusable": [
+    {
+      "label": "a copy that ends past the end of the previous file",
+      "previous": "0102030405",
+      "patch": "000000000300000003"
+    },
+    {
+      "label": "a copy of length 0 that starts past the end of the previous file",
+      "previous": "0102030405",
+      "patch": "000000000600000000"
+    },
+    {
+      "label": "a copy that starts before the previous copy ended",
+      "previous": "0102030405",
+      "patch": "000000000000000003000000000200000001"
+    },
+    {
+      "label": "a copy whose start and length add up past 2^32: read as 32-bit numbers, they would wrap to 1",
+      "previous": "0102030405",
+      "patch": "00ffffffff00000002"
+    },
+    {
+      "label": "a copy whose length is 2^32 - 1",
+      "previous": "0102030405",
+      "patch": "0000000001ffffffff"
+    },
+    {
+      "label": "a write whose bytes run past the end of the patch",
+      "previous": "0102030405",
+      "patch": "0100000004aabbcc"
+    },
+    {
+      "label": "a write of length 2^32 - 1, past the end of the patch",
+      "previous": "0102030405",
+      "patch": "01ffffffffaa"
+    },
+    {
+      "label": "a write whose length runs past the end of the patch",
+      "previous": "0102030405",
+      "patch": "010000"
+    },
+    {
+      "label": "a copy cut short in its length",
+      "previous": "0102030405",
+      "patch": "00000000000000"
+    },
+    {
+      "label": "only an instruction's first byte",
+      "previous": "0102030405",
+      "patch": "00"
+    },
+    {
+      "label": "an instruction that starts with 02",
+      "previous": "0102030405",
+      "patch": "020000000000000005"
+    },
+    {
+      "label": "a byte other than 00 and 01 after a good instruction",
+      "previous": "0102030405",
+      "patch": "000000000000000005ff"
+    },
+    {
+      "label": "a well-formed patch whose file does not have the SHA-256 of its name",
+      "previous": "0102030405",
+      "patch": "000000000000000005",
+      "name": "74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0-9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a.patch"
+    }
+  ]
+}

@@ -13,6 +13,15 @@
 // 3. After each time the index is written, and once at the start, tells the
 //    proof log's object which are the two newest usable CRLs of each issuer
 //    key that the index lists.
+// 4. Once the second step is done, writes CRL patches
+//    (spec/revocation-tree.md, "CRL patches") under `crl/patches/`: for each
+//    usable CRL that got its line in this round, the patch from the CRL
+//    before it; then the patch of every other pair of adjacent usable CRLs
+//    that has none. A patch is
+//    written only after it was read back in memory and gave the file's
+//    SHA-256. A patch that cannot be written is that patch's trouble alone:
+//    the index and the proof log's object do not wait for patches, and the
+//    next round tries it again.
 //
 // What holds throughout: the proof log's object knows of a root only once the
 // index in the bucket lists it.
@@ -31,7 +40,8 @@
 // tree was being built is stored and gets its line in a later round. So
 // that a round is not stopped, it does not start another of the files an
 // earlier round left unless it still has the time the largest takes
-// (src/round-budget.ts). The files it fetched itself it always does: if
+// (src/round-budget.ts), and the same holds for the patches of the fourth
+// step. The files it fetched itself it always does, and their patches: if
 // those two do not fit into one invocation, no round can do them
 // (ADR-0023 says what then).
 //
@@ -67,7 +77,8 @@
 //   signed, and its line in the index says that it is not usable.
 import { hexOf } from "iamreal-protocol/bytes.ts";
 import { readCrl } from "./crl.ts";
-import { type IndexLine, type NewestCrls, formatIndex, lineOf, newestCrls, readIndex } from "./crl-index.ts";
+import { type IndexLine, type NewestCrls, type PatchPair, formatIndex, lineOf, newestCrls, patchPairs, readIndex } from "./crl-index.ts";
+import { makePatch, patchName, restore } from "./crl-patch.ts";
 import { treeRoot } from "./crl-tree.ts";
 import type { IssuerKey, IssuerName } from "./issuers.ts";
 import type { Poseidon2Hash } from "./poseidon2.ts";
@@ -107,15 +118,30 @@ export type FileResult =
     }
   | { readonly result: "failed"; readonly sha256: string; readonly error: string };
 
+/** What one round did with one CRL patch: `from` and `to` are the SHA-256 of the two files. */
+export type PatchResult =
+  | {
+      readonly result: "written";
+      readonly from: string;
+      readonly to: string;
+      /** The patch's length. */
+      readonly bytes: number;
+      /** Milliseconds from reading the two files to writing the patch; too little on Cloudflare, as `readMs` of a file. */
+      readonly ms: number;
+    }
+  | { readonly result: "failed"; readonly from: string; readonly to: string; readonly error: string };
+
 /** What one round of the mirror did. */
 export interface MirrorRound {
   readonly sources: readonly SourceResult[];
   readonly files: readonly FileResult[];
+  readonly patches: readonly PatchResult[];
   /**
    * Everything that went wrong, in words: a source that failed, a file
    * that got no line, an archive that could not be read, an index that
-   * could not be written, a proof log's object that could not be told. Empty
-   * if the round did all it had to do.
+   * could not be written, a proof log's object that could not be told, a
+   * patch that could not be written. Empty if the round did all it had to
+   * do, or left only what it had no time for.
    */
   readonly errors: readonly string[];
 }
@@ -138,8 +164,9 @@ export interface MirrorParts {
   readonly timeoutMs: number;
   /**
    * For how long a round goes on starting files an earlier round left
-   * without a line, in milliseconds: what the round may use, less what the
-   * largest file takes (src/round-budget.ts).
+   * without a line, and patches of pairs that have none, in milliseconds:
+   * what the round may use, less what the largest file takes
+   * (src/round-budget.ts).
    */
   readonly catchUpMs: number;
   /** The issuer keys a CRL's signature is checked against, in order. */
@@ -186,6 +213,7 @@ const keptHeader = (value: string | null | undefined): string | undefined => (ty
 
 const INDEX_KEY = "crl/index.jsonl";
 const FILE_KEY = /^crl\/([0-9a-f]{64})\.crl$/;
+const PATCHES = "crl/patches/";
 
 /**
  * The largest answer the mirror stores: 32 MiB. MOICA's larger CRL, G2's,
@@ -211,13 +239,14 @@ export function crlMirrorInWorker(parts: MirrorParts): CrlMirror {
     async round() {
       const sources = await fetchAll(parts.sources, parts.bucket, parts.timeoutMs, await lastAnswers(parts.bucket));
       const files: FileResult[] = [];
+      const patches: PatchResult[] = [];
       const errors = sources.flatMap((s) => (s.result === "failed" ? [`${s.issuer} failed: ${s.error}`] : []));
       try {
-        await indexArchive(parts, sources, files, errors);
+        await indexArchive(parts, sources, files, patches, errors);
       } catch (e) {
         errors.push(messageOf(e));
       }
-      return { sources, files, errors };
+      return { sources, files, patches, errors };
     },
   };
 }
@@ -297,10 +326,11 @@ class ArchiveIndex {
 }
 
 /**
- * The second and third steps of a round. Adds to `files` and `errors` as it
- * goes. Throws only if the archive cannot be read at all.
+ * The second, third and fourth steps of a round. Adds to `files`,
+ * `patches` and `errors` as it goes. Throws only if the archive cannot be
+ * read at all.
  */
-async function indexArchive(parts: MirrorParts, sources: readonly SourceResult[], files: FileResult[], errors: string[]): Promise<void> {
+async function indexArchive(parts: MirrorParts, sources: readonly SourceResult[], files: FileResult[], patches: PatchResult[], errors: string[]): Promise<void> {
   // Read after the first step's requests, so it is the time now (see `elapsedMs` below).
   const started = Date.now();
   /**
@@ -345,15 +375,30 @@ async function indexArchive(parts: MirrorParts, sources: readonly SourceResult[]
   const index = await ArchiveIndex.read(parts.bucket);
   /** Each file's SHA-256 and when it was stored. */
   const stored = new Map<string, number>();
+  /** The names of the patches in the bucket (the listing of `crl/` holds `crl/patches/`), and of those this round wrote or tried. */
+  const patched = new Set<string>();
   for (let cursor: string | undefined; ; ) {
     const page = await parts.bucket.list({ prefix: "crl/", ...(cursor !== undefined && { cursor }) });
     for (const object of page.objects) {
       const name = FILE_KEY.exec(object.key);
       if (name) stored.set(name[1]!, object.uploaded.getTime());
+      else if (object.key.startsWith(PATCHES)) patched.add(object.key.slice(PATCHES.length));
     }
     if (!page.truncated) break;
     cursor = page.cursor;
   }
+  /** Writes the patch of `pair` unless the bucket has it or this round tried it; its trouble is its own. */
+  const writePatchOnce = async (pair: PatchPair): Promise<void> => {
+    const name = patchName(pair.from.sha256, pair.to.sha256);
+    if (patched.has(name)) return;
+    patched.add(name);
+    try {
+      patches.push(await writePatch(parts, pair));
+    } catch (e) {
+      patches.push({ result: "failed", from: pair.from.sha256, to: pair.to.sha256, error: messageOf(e) });
+      errors.push(`the patch ${name} was not written: ${messageOf(e)}`);
+    }
+  };
 
   try {
     // A line whose file is not there goes; and the index is written anew if it was not as the spec writes it.
@@ -369,6 +414,8 @@ async function indexArchive(parts: MirrorParts, sources: readonly SourceResult[]
   const listed = new Set(index.lines.map((l) => l.sha256));
   const fresh = new Set(sources.flatMap((s) => (s.result === "failed" ? [] : [s.sha256])).filter((sha256) => stored.has(sha256) && !listed.has(sha256)));
   const older = [...stored.keys()].filter((sha256) => !listed.has(sha256) && !fresh.has(sha256)).sort((a, b) => stored.get(b)! - stored.get(a)! || (a < b ? -1 : 1));
+  /** The files that got their lines in this round. */
+  const indexedNow = new Set<string>();
   for (const sha256 of [...fresh, ...older]) {
     // This round's files are always done. Another of the older ones is
     // started only while the round has time left for the largest
@@ -381,6 +428,7 @@ async function indexArchive(parts: MirrorParts, sources: readonly SourceResult[]
       const result = await indexFile(parts, sha256);
       await index.change((lines) => (lines.some((l) => l.sha256 === sha256) ? lines : [...lines, result.line]));
       files.push(result);
+      indexedNow.add(sha256);
       await tell(index);
     } catch (e) {
       // This file's trouble alone: the next round tries it again.
@@ -388,6 +436,46 @@ async function indexArchive(parts: MirrorParts, sources: readonly SourceResult[]
       errors.push(`${sha256} got no line: ${messageOf(e)}`);
     }
   }
+
+  // The patches come after every line, so that none keeps a CRL from the
+  // proof log's object. Only what the bucket is known to hold is paired.
+  if (!index.known) return;
+  const pairs = patchPairs(index.lines);
+  // The patch of each file that got its line in this round, from the usable
+  // CRL before it, always, as the file was. Then the other pairs that have
+  // no patch yet, the newest first, while the round has the time, as for
+  // the older files above.
+  for (const pair of pairs) if (indexedNow.has(pair.to.sha256)) await writePatchOnce(pair);
+  for (const pair of pairs.reverse()) {
+    if (patched.has(patchName(pair.from.sha256, pair.to.sha256))) continue;
+    if ((await elapsedMs()) >= parts.catchUpMs) break;
+    await writePatchOnce(pair);
+  }
+}
+
+/**
+ * Makes the patch from one file of the archive to the next, reads it back
+ * in memory, and writes it only if it gave the file's SHA-256 (src/crl-patch.ts).
+ * Throws if either file is not in the bucket or not the bytes its name
+ * promises, or if the patch did not give the file.
+ */
+async function writePatch(parts: MirrorParts, pair: PatchPair): Promise<PatchResult & { result: "written" }> {
+  const started = Date.now();
+  const previous = await fileBytes(parts.bucket, pair.from.sha256);
+  // The next file's bytes are only an argument, so nothing holds them while the patch is read back.
+  const bytes = makePatch(previous, await fileBytes(parts.bucket, pair.to.sha256));
+  await restore(previous, bytes, pair.to.sha256);
+  await parts.bucket.put(`${PATCHES}${patchName(pair.from.sha256, pair.to.sha256)}`, bytes, { httpMetadata: { cacheControl: CACHE_IMMUTABLE } });
+  return { result: "written", from: pair.from.sha256, to: pair.to.sha256, bytes: bytes.length, ms: Date.now() - started };
+}
+
+/** The bytes of the archive's file with this SHA-256, which must be that file's. */
+async function fileBytes(bucket: R2Bucket, sha256: string): Promise<Uint8Array> {
+  const object = await bucket.get(`crl/${sha256}.crl`);
+  if (object === null) throw new Error(`the file ${sha256} is not in the bucket`);
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  if (hexOf(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))) !== sha256) throw new Error(`the bytes of the file ${sha256} do not have the SHA-256 of its name`);
+  return bytes;
 }
 
 /**
@@ -401,15 +489,9 @@ async function indexArchive(parts: MirrorParts, sources: readonly SourceResult[]
  */
 async function indexFile(parts: MirrorParts, sha256: string): Promise<FileResult & { result: "indexed" }> {
   const started = Date.now();
-  const object = await parts.bucket.get(`crl/${sha256}.crl`);
-  if (object === null) throw new Error("the file is not in the bucket");
-  // In a function of its own, so that the file's bytes are out of reach while the tree is built: only the keys stay.
-  const reading = await (async () => {
-    const bytes = new Uint8Array(await object.arrayBuffer());
-    // The line's SHA-256 is of the bytes, as it is for anyone who rebuilds the index from the files.
-    if (hexOf(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))) !== sha256) throw new Error("the file's bytes do not have the SHA-256 of its name");
-    return readCrl(bytes, parts.issuers);
-  })();
+  // The bytes are only an argument, so that they are out of reach while the tree is built: only the keys stay.
+  // The line's SHA-256 is of the bytes, as it is for anyone who rebuilds the index from the files.
+  const reading = await readCrl(await fileBytes(parts.bucket, sha256), parts.issuers);
   const read = Date.now();
   const tree = reading.keys === undefined ? undefined : await treeRoot(reading.keys, parts.hash, pause);
   return {

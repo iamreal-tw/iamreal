@@ -126,7 +126,7 @@ async function mirrorRound(env: Env): Promise<void> {
   });
   const round = await mirror.round();
   const at = now().toISOString();
-  // One line per source and one per file that was read, in the live log only: nothing here is kept.
+  // One line per source, one per file that was read and one per patch, in the live log only: nothing here is kept.
   for (const r of round.sources) console.log(JSON.stringify({ event: "crl_mirror", at, ...r }));
   for (const f of round.files) {
     if (f.result === "failed") console.log(JSON.stringify({ event: "crl_index", at, ...f }));
@@ -135,6 +135,7 @@ async function mirrorRound(env: Env): Promise<void> {
       console.log(JSON.stringify({ event: "crl_index", at, result: f.result, sha256, issuer, crl_number: crlNumber, crl_date: crlDate, root, entries: f.entries, keys: f.keys, hashes: f.hashes, read_ms: f.readMs, tree_ms: f.treeMs }));
     }
   }
+  for (const p of round.patches) console.log(JSON.stringify({ event: "crl_patch", at, ...p }));
   // Thrown after everything that could be done was done, so that the run shows as failed.
   if (round.errors.length > 0) throw new Error(`CRL mirror: ${round.errors.join("; ")}`);
 }

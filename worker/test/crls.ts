@@ -5,7 +5,7 @@
 // The keys are made on the spot, once per process. The private halves stay
 // in this process's memory, to sign the test's CRLs; they are written to no
 // file and are in no build (ADR-0028).
-import { type KeyObject, createPublicKey, generateKeyPairSync, sign } from "node:crypto";
+import { type KeyObject, createHash, createPublicKey, generateKeyPairSync, sign } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
@@ -77,6 +77,10 @@ const integer = (x: bigint): Uint8Array => {
 const oid = (...bytes: number[]): Uint8Array => der(0x06, Uint8Array.from(bytes));
 const utcTime = (t: Date): Uint8Array => der(0x17, Buffer.from(`${t.toISOString().replace(/[-:T]/g, "").slice(2, 14)}Z`));
 const SHA256_WITH_RSA = der(0x30, oid(0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b), der(0x05));
+
+/** `n` serial numbers of 16 bytes that look random, as MOICA's do; the same `from` gives the same ones. */
+export const randomSerials = (from: number, n: number): bigint[] =>
+  Array.from({ length: n }, (_, i) => BigInt(`0x${createHash("sha256").update(String(from + i)).digest("hex").slice(0, 32)}`) >> 1n);
 
 export interface TestCrl {
   /** Whose test key signs it. */

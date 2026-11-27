@@ -38,7 +38,8 @@ declaration code, not in the scope string.
 `poseidon2-constants.json` belong to `scoped-id.md` and
 `revocation-tree.md`; `card-state-file.json` belongs to `record-rules.md`
 ("The card state file"); `card-status.json` belongs to
-`list-consequence.md` ("The card's state, as shown"). Every implementation (Go,
+`list-consequence.md` ("The card's state, as shown"); `crl-patch.json`
+belongs to `revocation-tree.md` ("CRL patches"). Every implementation (Go,
 TypeScript, and Rust in `device-core/`) runs its tests against these same
 files, so an implementation that drifts from the specification fails its
 tests. Of `record-rules.json`, Rust reads every case's `state` and not its
