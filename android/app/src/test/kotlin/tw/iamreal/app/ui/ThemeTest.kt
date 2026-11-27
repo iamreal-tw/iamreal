@@ -50,6 +50,31 @@ class ThemeTest {
     }
 
     @Test
+    fun `the launcher's icon is the mark on the page's white, inside the circle every launcher keeps`() {
+        val res = File(System.getProperty("iamreal.strings.store")).parentFile.parentFile
+        val icon = File(res, "mipmap-anydpi/ic_launcher.xml").readText()
+        assertTrue("the icon's ground is token_bg", icon.contains("""<background android:drawable="@color/token_bg" />"""))
+        assertTrue("the icon's foreground is launcher_mark", icon.contains("""<foreground android:drawable="@drawable/launcher_mark" />"""))
+        val mark = File(res, "drawable/launcher_mark.xml").readText()
+        // Twice, as the splash: its outline in the colour of the ground, then the island in ink.
+        assertEquals(2, mark.split("android:pathData=\"$TAIWAN_OUTLINE\"").size - 1)
+        // Where the mark is put on the layer of 108dp, and the points it reaches: the island's, and the corners of the
+        // card turned -9° about (27, 39) (its rounded corners reach less far). A launcher keeps the circle of 66dp in
+        // the middle, whatever shape it masks the icon to.
+        val (scale, x0, y0) = Regex("""android:name="mark"\s+android:scaleX="([0-9.]+)"\s+android:scaleY="\1"\s+android:translateX="([0-9.]+)"\s+android:translateY="([0-9.]+)"""")
+            .find(mark)!!.destructured.toList().map { it.toDouble() }
+        val island = Regex("""([0-9.]+) ([0-9.]+)""").findAll(TAIWAN_OUTLINE).map { 31.5 + 0.97 * it.groupValues[1].toDouble() to 3 + 0.97 * it.groupValues[2].toDouble() }
+        val turn = Math.toRadians(-9.0)
+        val card = listOf(3.0 to 24.0, 49.0 to 24.0, 49.0 to 54.0, 3.0 to 54.0).map { (x, y) ->
+            27 + (x - 27) * Math.cos(turn) - (y - 39) * Math.sin(turn) to 39 + (x - 27) * Math.sin(turn) + (y - 39) * Math.cos(turn)
+        }
+        for ((x, y) in island + card) {
+            val r = Math.hypot(x0 + scale * x - 54, y0 + scale * y - 54)
+            assertTrue("($x, $y) of the mark is ${"%.1f".format(r)}dp from the middle, outside the circle of 66dp", r <= 33)
+        }
+    }
+
+    @Test
     fun `the values the screens draw with are read from those tokens`() {
         assertEquals(0xFFBF2150.toInt(), Tokens.colour("--you"))
         assertEquals(28f, Tokens.px("--size-h2-phone"))
