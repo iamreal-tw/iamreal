@@ -381,11 +381,11 @@ Object.assign(CHANGES, {
   "ios-test-upload 6 the run number as the build, which takes turns with the production app's": [replace(UT, IOS_TEST_ARCHIVE, './archive.sh --test-app "$RUNNER_TEMP/IamrealApp.xcarchive" "$GITHUB_RUN_NUMBER"')],
   "ios-test-upload 7 the production app's group, so that one waits for the other": [replace(UT, "  group: upload-ios-test\n", "  group: upload-ios\n")],
   "ios-test-upload 9 the production app's profile signing the test app": [replace(UT, "secrets.IOS_TEST_APPSTORE_PROFILE_BASE64", "secrets.IOS_APPSTORE_PROFILE_BASE64")],
-  "ios-test-upload 10 the signed app's associated domains not checked": [
-    replace(UT, ` && test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.associated-domains:0' "$RUNNER_TEMP/entitlements.plist")" = applinks:test-app.iamreal.tw && ! /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.associated-domains:1' "$RUNNER_TEMP/entitlements.plist" > /dev/null 2>&1`, ""),
-  ],
   "ios-test-upload 8 the upload job checking out the repository": [
     replace(UT, IOS_UNPACK_STEP, `      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n${IOS_UNPACK_STEP}`),
+  ],
+  "ios-test-upload 10 the signed app's associated domains not checked": [
+    replace(UT, ` && test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.associated-domains:0' "$RUNNER_TEMP/entitlements.plist")" = applinks:test-app.iamreal.tw && ! /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.associated-domains:1' "$RUNNER_TEMP/entitlements.plist" > /dev/null 2>&1`, ""),
   ],
 });
 

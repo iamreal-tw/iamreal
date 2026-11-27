@@ -159,10 +159,11 @@ done
 # to any address of it opens the production app or the test app; the
 # development build declares no domain. On launch day the production app
 # is given app.iamreal.tw here and an entitlements file of its own.
-# The file is the configuration's, the one Xcode signs with (the project
-# file's CODE_SIGN_ENTITLEMENTS) and, for the production app and the test app, the one the
-# upload workflows sign the unsigned archive with ad hoc before the export
-# (.github/workflows/upload-ios.yml): it holds these two and nothing else.
+# The file is the configuration's: the one the project file names for it
+# (CODE_SIGN_ENTITLEMENTS) and Xcode signs with, and, for the production
+# app and the test app, the one the upload workflows sign the unsigned
+# archive with ad hoc before the export (.github/workflows/upload-ios.yml).
+# It holds these two and nothing else.
 # What the app carries is checked too where it carries something: a build
 # for the simulator has its entitlements in its executable, and a signed
 # app in its signature; the archive archive.sh makes has neither.
@@ -193,13 +194,19 @@ if [ -n "$entitlements" ]; then
     [ -z "$domains" ] || want_keys="com.apple.developer.associated-domains $want_keys"
     [ "$keys" = "$want_keys " ] || problem "Config/$entitlements has the entitlements [ $keys], not [ $want_keys ]"
   fi
-  carried=$tmp_entitlements
-  if xcrun segedit "$app/$(plist CFBundleExecutable)" -extract __TEXT __entitlements "$carried" 2>/dev/null && [ -s "$carried" ]; then
-    check_entitlements "$carried" "the entitlements in the executable"
-  elif codesign -d --entitlements - --xml "$app" > "$carried" 2>/dev/null && [ -s "$carried" ]; then
-    check_entitlements "$carried" "the entitlements of the app's signature"
+  if xcrun segedit "$app/$(plist CFBundleExecutable)" -extract __TEXT __entitlements "$tmp_entitlements" 2>/dev/null && [ -s "$tmp_entitlements" ]; then
+    check_entitlements "$tmp_entitlements" "the entitlements in the executable"
+  elif codesign -d --entitlements - --xml "$app" > "$tmp_entitlements" 2>/dev/null && [ -s "$tmp_entitlements" ]; then
+    check_entitlements "$tmp_entitlements" "the entitlements of the app's signature"
   fi
 fi
+# The project file names the development build's file once (Debug) and the
+# other once for each of the other two (Release, TestApp), in the app's
+# target; the tests' target and Config/ name none.
+signed_with=$(grep -h -E 'CODE_SIGN_ENTITLEMENTS' "$project" "$config"/*.xcconfig | tr -d '\t' | sort | uniq -c | tr -s ' ' | sed 's/^ //')
+want_signed='2 CODE_SIGN_ENTITLEMENTS = Config/IamrealApp.entitlements;
+1 CODE_SIGN_ENTITLEMENTS = Config/IamrealAppDev.entitlements;'
+[ "$signed_with" = "$want_signed" ] || problem "the project does not sign Debug with Config/IamrealAppDev.entitlements and Release and TestApp with Config/IamrealApp.entitlements: $signed_with"
 
 # The library of the tests, in a Debug build for the simulator only: its
 # function, and the bytes device-core/ marks that library with. Xcode hands

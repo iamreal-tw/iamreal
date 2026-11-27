@@ -30,10 +30,11 @@
 # keychain of the job's own, the profile is checked (this app, the team, NFC
 # tag reading, associated domains) and named in the export options, the app
 # is signed once without uploading to check its entitlements (NFC tag
-# reading and the app domain, #532), then signed again and uploaded. Each secret is in the env of the one step that uses it; the App
-# Store Connect key only in the last. What it trusts: the pinned action, the
-# runner's Xcode and tools, and the archive and export options "build" made
-# from the same commit.
+# reading and the app domain, #532), then signed again and uploaded. Each
+# secret is in the env of the one step that uses it; the App Store Connect
+# key only in the last. What it trusts: the pinned action, the runner's
+# Xcode and tools, and the archive and export options "build" made from the
+# same commit.
 name: upload-ios
 
 on:

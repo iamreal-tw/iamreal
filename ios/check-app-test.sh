@@ -310,34 +310,38 @@ expect "a URL scheme of its own" "registers a URL scheme"
 
 # The entitlements (#532): the app domain in the production app's and the
 # test app's, none in the development build's, and TAG in every one.
-entitlements() {
+copy_config() {
   rm -rf "$tmp/config"
   cp -R "$here/Config" "$tmp/config"
 }
-entitlements
+copy_config
 plutil -insert com\\.apple\\.developer\\.associated-domains -json '["applinks:test-app.iamreal.tw"]' "$tmp/config/IamrealAppDev.entitlements"
 expect "the app domain in the development build's entitlements" "the associated domains are [\"applinks:test-app.iamreal.tw\"], not none, the ones of the 開發用 build" IAMREAL_CONFIG_DIR="$tmp/config"
-entitlements
+copy_config
 plutil -remove com\\.apple\\.developer\\.associated-domains "$tmp/config/IamrealApp.entitlements"
 expect "no app domain in the production app's entitlements" "Config/IamrealApp.entitlements: the associated domains are none, not applinks:test-app.iamreal.tw" IAMREAL_CONFIG_DIR="$tmp/config" CONFIGURATION=Release
-entitlements
+copy_config
 plutil -replace com\\.apple\\.developer\\.associated-domains -json '["applinks:test-app.iamreal.tw","applinks:test.iamreal.tw"]' "$tmp/config/IamrealApp.entitlements"
 expect "a second domain in the test app's entitlements" "Config/IamrealApp.entitlements: the associated domains are [\"applinks:test-app.iamreal.tw\",\"applinks:test.iamreal.tw\"]" IAMREAL_CONFIG_DIR="$tmp/config" CONFIGURATION=TestApp
-entitlements
+copy_config
 plutil -replace com\\.apple\\.developer\\.associated-domains -json '["applinks:app.iamreal.tw"]' "$tmp/config/IamrealApp.entitlements"
 expect "the production site's app domain before launch" "Config/IamrealApp.entitlements: the associated domains are [\"applinks:app.iamreal.tw\"]" IAMREAL_CONFIG_DIR="$tmp/config" CONFIGURATION=Release
-entitlements
+copy_config
 plutil -replace com\\.apple\\.developer\\.nfc\\.readersession\\.formats -json '["TAG","NDEF"]' "$tmp/config/IamrealAppDev.entitlements"
 expect "NDEF in the development build's entitlements" "com.apple.developer.nfc.readersession.formats is [\"TAG\",\"NDEF\"]" IAMREAL_CONFIG_DIR="$tmp/config"
-entitlements
+copy_config
 plutil -insert aps-environment -string production "$tmp/config/IamrealApp.entitlements"
 expect "another entitlement in the production app's" "Config/IamrealApp.entitlements has the entitlements [ aps-environment " IAMREAL_CONFIG_DIR="$tmp/config" CONFIGURATION=Release
-entitlements
+copy_config
 rm "$tmp/config/IamrealAppDev.entitlements"
 expect "no entitlements file for the development build" "no Config/IamrealAppDev.entitlements" IAMREAL_CONFIG_DIR="$tmp/config"
 copy
 expect "a Debug build signed with the production app's entitlements" "the build is signed with Config/IamrealApp.entitlements, not Config/IamrealAppDev.entitlements" CODE_SIGN_ENTITLEMENTS=Config/IamrealApp.entitlements
 expect "a Release build signed with the development build's entitlements" "the build is signed with Config/IamrealAppDev.entitlements, not Config/IamrealApp.entitlements" CODE_SIGN_ENTITLEMENTS=Config/IamrealAppDev.entitlements CONFIGURATION=Release
+rm -rf "$tmp/project"
+mkdir "$tmp/project"
+sed 's|CODE_SIGN_ENTITLEMENTS = Config/IamrealAppDev.entitlements;|CODE_SIGN_ENTITLEMENTS = Config/IamrealApp.entitlements;|' "$here/IamrealApp.xcodeproj/project.pbxproj" > "$tmp/project/project.pbxproj"
+expect "the project signing Debug with the production app's entitlements" "the project does not sign Debug with Config/IamrealAppDev.entitlements" IAMREAL_PROJECT_FILE="$tmp/project/project.pbxproj"
 # What the app carries: the development build's executable, checked as the production app's.
 expect "the development build's entitlements in a Release build" "the entitlements in the executable: the associated domains are none, not applinks:test-app.iamreal.tw" CONFIGURATION=Release
 
