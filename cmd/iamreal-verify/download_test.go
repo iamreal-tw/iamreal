@@ -130,11 +130,15 @@ func TestDataNoRedirect(t *testing.T) {
 // SHA-256 is reported, and counts as missing from the archive.
 func TestDataCRLNotItsName(t *testing.T) {
 	files := testDataDomain(t)
+	// A and B, each the first CRL of its issuer key, so both downloaded
+	// whole (C is given by its patch from B, and its file not asked for).
 	var names []string
-	for n := range files {
-		if strings.HasSuffix(n, ".crl") {
-			names = append(names, n)
+	for _, name := range []string{crlA, crlB} {
+		b, err := os.ReadFile(filepath.Join("testdata", "archive", name))
+		if err != nil {
+			t.Fatal(err)
 		}
+		names = append(names, "crl/"+sha256Hex(b)+".crl")
 	}
 	files[names[0]], files[names[1]] = files[names[1]], files[names[0]]
 	code, _, errOut := runDataArchive(t, serveData(t, files).URL)

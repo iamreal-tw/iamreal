@@ -56,7 +56,7 @@ const (
 	// (worker/README.md); 64 MiB leaves room for it to grow.
 	maxCRL = 64 << 20
 	// maxPatch: a CRL patch larger than the largest CRL is never worth
-	// reading; downloading the CRL whole is less.
+	// reading; downloading the CRL whole takes fewer bytes.
 	maxPatch = maxCRL
 )
 
@@ -297,19 +297,13 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 					b = u.patched(previous, sha, stderr)
 				}
 				if b == nil {
-					fmt.Fprintf(stderr, "iamreal-verify: downloading %s\n", u.url(name))
+					var problem string
 					var err error
-					b, err = u.get(name, maxCRL)
-					if errors.Is(err, errNotFound) {
-						return nil, crl.ErrLeftOut
+					if b, problem, err = u.whole(sha, stderr); problem != "" {
+						problems = append(problems, problem)
 					}
 					if err != nil {
 						return nil, err
-					}
-					sum := sha256.Sum256(b)
-					if got := hex.EncodeToString(sum[:]); got != sha {
-						problems = append(problems, fmt.Sprintf("%s: %s is not the SHA-256 of its content, %s; left out of the archive", u.url(name), sha, got))
-						return nil, crl.ErrLeftOut
 					}
 				}
 				if usable {
@@ -320,6 +314,26 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 		}
 	}
 	return out, cleanup, nil
+}
+
+// whole downloads the CRL file with SHA-256 sha whole. A file that is not
+// there (404), or whose content's SHA-256 is not its name, is
+// crl.ErrLeftOut, the second with a problem to report.
+func (u urlSource) whole(sha string, stderr io.Writer) ([]byte, string, error) {
+	name := sha + ".crl"
+	fmt.Fprintf(stderr, "iamreal-verify: downloading %s\n", u.url(name))
+	b, err := u.get(name, maxCRL)
+	if errors.Is(err, errNotFound) {
+		return nil, "", crl.ErrLeftOut
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	sum := sha256.Sum256(b)
+	if got := hex.EncodeToString(sum[:]); got != sha {
+		return nil, fmt.Sprintf("%s: %s is not the SHA-256 of its content, %s; left out of the archive", u.url(name), sha, got), crl.ErrLeftOut
+	}
+	return b, "", nil
 }
 
 // heldCRL is a CRL file kept in memory as the previous CRL of the next.
@@ -356,10 +370,12 @@ func (u urlSource) String() string { return u.base.String() }
 // indexSHA256 finds the sha256 of each line of an archive index.
 var indexSHA256 = regexp.MustCompile(`"sha256":"([0-9a-f]{64})"`)
 
-// indexIssuer and indexRoot find the issuer and the root of a line; a
-// usable CRL's root is 64 hex digits, an unusable file's "-" and a code.
+// indexIssuer and indexRoot find the issuer key and the root of a line; a
+// usable CRL's root is 64 hex digits, an unusable file's "-" and a code
+// (crl.IndexLine.Usable). They do not check the rest of the line: a line
+// the spec does not allow costs a whole download, and rebuilding reports it.
 var (
-	indexIssuer = regexp.MustCompile(`"issuer":"(G2|G3)"`)
+	indexIssuer = regexp.MustCompile(`"issuer":"(` + strings.Join(crl.Issuers, "|") + `)"`)
 	indexRoot   = regexp.MustCompile(`"root":"[0-9a-f]{64}"`)
 )
 

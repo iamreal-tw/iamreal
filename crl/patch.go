@@ -53,15 +53,15 @@ func ApplyPatch(previous, patch []byte) ([]byte, error) {
 }
 
 // RestorePatch is ApplyPatch, with the file's SHA-256 checked against
-// sha256 (the second half of the patch's name): a file without it is an
+// want (the second half of the patch's name): a file without it is an
 // *UnusablePatch too.
-func RestorePatch(previous, patch []byte, sha256 string) ([]byte, error) {
+func RestorePatch(previous, patch []byte, want string) ([]byte, error) {
 	file, err := ApplyPatch(previous, patch)
 	if err != nil {
 		return nil, err
 	}
-	if got := sha256Hex(file); got != sha256 {
-		return nil, unusablePatch("it gives a file with SHA-256 %s, not %s", got, sha256)
+	if got := sha256Hex(file); got != want {
+		return nil, unusablePatch("it gives a file with SHA-256 %s, not %s", got, want)
 	}
 	return file, nil
 }

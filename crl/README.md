@@ -173,7 +173,7 @@ go test ./crl/...
 - `testdata/times/` 的九份 `oid-*`：清冊或一筆多一個延伸欄位，它的 OID 裡一個數字是 2^31−1 和 2^31（第一個數字、後面的數字、一筆的延伸欄位各一對），或數字不是最短寫法、沒寫完、OID 是空的（[#227](https://github.com/iamreal-tw/iamreal/issues/227)）。2^31−1 的三份讀得懂（`-not_usable_signature`），其餘是 `-not_usable_der`。這條界線原本是 Go 的 `cryptobyte` 的，現在寫在規格「Object identifiers」，四份實作都照它
 - `testdata/times/` 的 `extension-*`、`entry-then-null`、`entry-extensions-then-null`、`tbs-then-null` 七份：一個延伸欄位、一筆廢止、`tbsCertList` 裡比該有的多一個元素（或延伸欄位少了值），都是 `-not_usable_der`。逐個元素走、不先全部列出來的讀法（[#410](https://github.com/iamreal-tw/iamreal/issues/410)）也要認得多出來的東西
 - `testdata/` 的 `entry-negative-then-entry-critical`、`entry-critical-then-entry-negative`、`entry-duplicate-then-entry-seventeen`：多筆廢止各有不同的問題時，由排在前面的那一筆決定
-- `spec/vectors/crl-patch.json`：每個可用的差異檔還原出標準答案的檔、檔名相同；每個不可用的（複製超出上一份、往回複製、長度超出結尾、不是 `00`、`01` 開頭的指令、還原出來的 SHA-256 不是檔名）都被拒絕。TypeScript 的鏡像讀同一份（`worker/test/crl-patch.test.ts`）。
+- `spec/vectors/crl-patch.json`：每個可用的差異檔還原出標準答案的檔、檔名相同；每個不可用的（複製超出上一份、往回複製、長度超出結尾、不是 `00`、`01` 開頭的指令、還原出來的 SHA-256 不是檔名）都被拒絕。TypeScript 的鏡像讀同一份（`worker/test/crl-patch.test.ts`）
 - 存檔索引：排序、每一種寫錯的行被拒絕（包括樹根不小於 `p`）、完整重算回報改過的樹根、多出來的檔案、少了的檔案、沒有索引、沒辦法切成行的索引、寫法不對和順序錯的行（附行號），每一個不同都回報，並照重建的索引回答；只信索引時照索引回答，索引不在或寫錯是錯誤。
 
 ### 重新產生自製清冊

@@ -15,6 +15,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/binary"
+	"maps"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -184,15 +185,6 @@ func newPatchArchiveT(t *testing.T) *patchArchive {
 	return a
 }
 
-// copyFiles is a copy of the files of a data domain, to change.
-func (a *patchArchive) copyFiles() map[string][]byte {
-	out := map[string][]byte{}
-	for k, v := range a.files {
-		out[k] = v
-	}
-	return out
-}
-
 // run runs the command with -data source, the fake verifier and the
 // archive's keys.
 func (a *patchArchive) run(t *testing.T, source string) (int, string, string) {
@@ -203,8 +195,8 @@ func (a *patchArchive) run(t *testing.T, source string) (int, string, string) {
 	return code, out.String(), errOut.String()
 }
 
-// crlAsked is what a server was asked for under crl/ other than the index:
-// CRL files and patches, sorted.
+// crlAsked is what a server was asked for under crl/ whose name ends in
+// suffix (".crl" for CRL files, ".patch" for patches), sorted.
 func crlAsked(srv *dataServer, suffix string) []string {
 	var out []string
 	for _, p := range srv.paths() {
@@ -288,7 +280,7 @@ func TestDataCRLPatchFallback(t *testing.T) {
 		{"larger than a CRL can be", func(f map[string][]byte, p string) { f[p] = make([]byte, maxCRL+1) }, "larger than"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			files := a.copyFiles()
+			files := maps.Clone(a.files)
 			patch := a.patchOf[target]
 			c.edit(files, patch)
 			srv := serveData(t, files)
