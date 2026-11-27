@@ -2815,13 +2815,13 @@ await tryStep("before the PIN: a CRL older than the one this browser used", () =
   check(workers > 0, `the requests of the workers were seen too (${workers})`);
   const csp = browser.logs.filter((l) => /Content Security Policy/i.test(l.text));
   check(csp.length === 0, `no Content-Security-Policy violation ${JSON.stringify(csp.slice(0, 3))}`);
-  // Six windows had no request: the silent component's, and the five opened for the second
-  // signature that the challenge of another day, the date that changed on step 5, card proofs
-  // stopped on step 5, and the challenge turned away as too many people (rate limited, then the
-  // proof log overloaded; #32) stopped (each closed unused). The blocked clicks opened none. A PIN the bridge does not send: its
+  // Five windows had no request: the silent component's, and the four opened for the second
+  // signature that the challenge of another day, card proofs stopped on step 5, and the
+  // challenge turned away as too many people (rate limited, then the proof log overloaded; #32)
+  // stopped (each closed unused). The blocked clicks opened none. A PIN the bridge does not send: its
   // window is closed unused (and may not have loaded).
   check(
-    popups.size === component.requests.length + 6 + unusedWindows && unusedWindows <= 3,
+    popups.size === component.requests.length + 5 + unusedWindows && unusedWindows <= 3,
     `one component window per request (${popups.size} windows, ${component.requests.length} requests, ${unusedWindows} closed unused for a PIN not sent)`,
   );
   check(component.requests.every((r) => r.func !== "MakeSignature" || (r.pin ?? "") !== ""), "no signing request without a PIN");
