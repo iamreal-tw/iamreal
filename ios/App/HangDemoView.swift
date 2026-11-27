@@ -286,8 +286,6 @@ struct HangDemoView: View {
                     .frame(height: 38)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line.color, lineWidth: 1))
             }
-            // Room for the tag under the button.
-            .padding(.bottom, 30)
         }
     }
 
@@ -317,8 +315,6 @@ struct HangDemoView: View {
                 }
                 .frame(height: 46)
                 .modifier(box(.links, state))
-                // Room for the tag under the row.
-                .padding(.bottom, 30)
                 Divider().overlay(Theme.line.color)
                 row(demo.words.featured)
             }
@@ -334,8 +330,6 @@ struct HangDemoView: View {
                 Spacer()
                 bold(demo.words.done, 15).modifier(box(.done3, state))
             }
-            // Room for the tag under what is at the top right.
-            .padding(.bottom, 26)
             VStack(spacing: 0) {
                 Text(demo.link).font(.system(size: 15)).foregroundColor(Theme.ink.color).lineLimit(1).truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -347,7 +341,6 @@ struct HangDemoView: View {
                     .frame(height: 46)
                     .modifier(box(.add, state))
             }
-            .padding(.bottom, 30)
         }
     }
 
@@ -361,8 +354,8 @@ struct HangDemoView: View {
                 Spacer()
                 bold(demo.words.done, 15).modifier(box(.done4, state))
             }
-            // Room for the tag under what is at the top right, and for the paste bubble over the field.
-            .padding(.bottom, 34)
+            // Room for the paste bubble over the field.
+            .padding(.bottom, 12)
             VStack(alignment: .leading, spacing: 6) {
                 Text(demo.words.url).font(.system(size: 12)).foregroundColor(Theme.mute.color).lineLimit(1)
                 Text(demo.address).font(.system(size: 14)).foregroundColor(Theme.ink.color).lineLimit(1).truncationMode(.tail)
@@ -385,8 +378,6 @@ struct HangDemoView: View {
                     }
                     .modifier(box(.urlfield, state))
             }
-            // Room for the tag under the field.
-            .padding(.bottom, 26)
             VStack(alignment: .leading, spacing: 6) {
                 Text(demo.words.linkTitle).font(.system(size: 12)).foregroundColor(Theme.mute.color).lineLimit(1)
                 RoundedRectangle(cornerRadius: 6).stroke(Theme.line.color, lineWidth: 1).frame(height: 44)

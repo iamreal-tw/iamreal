@@ -118,8 +118,10 @@ const TIMELINE_ID = "hang-timeline";
 /** What a screen reader is told of the whole demonstration (hang.md, 示範). */
 const DEMO_TOLD = "示範：按「複製連結」，到 Threads 的個人檔案按「編輯個人檔案」、「連結」、「新增連結」，貼上網址後按「完成」，個人檔案上多了一行連結。";
 
-/** The frame around what to press and its label, there while the timeline marks the box. */
-// The red frame on what is pressed. No words beside it: the demonstration goes by too fast to read them (card-proof.md, "示範").
+/**
+ * The red frame around what to press, there while the timeline marks the box. No words beside it: the demonstration goes
+ * by too fast to read them (hang.md, 五個示意畫面).
+ */
 const mark = (): Html => html`<span class="mark"></span>`;
 
 /** What a box that is pressed has: the ink that darkens it, and the ring. */

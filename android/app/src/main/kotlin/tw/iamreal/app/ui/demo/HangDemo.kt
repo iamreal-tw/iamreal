@@ -314,10 +314,10 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
 
     /** The label of the line a visitor looks for, under it in the middle: it takes no room there. */
     @Composable
-    private fun BoxScope.Tag(text: String, colour: Color, shows: () -> Float) {
+    private fun BoxScope.Tag(text: String, shows: () -> Float) {
         Layout(
             content = {
-                BasicText(text, Modifier.background(colour, RoundedCornerShape(6.dp)).padding(horizontal = 9.dp, vertical = 6.dp), style = style(12.dp, Colours.bg), maxLines = 1, softWrap = false)
+                BasicText(text, Modifier.background(ink, RoundedCornerShape(6.dp)).padding(horizontal = 9.dp, vertical = 6.dp), style = style(12.dp, Colours.bg), maxLines = 1, softWrap = false)
             },
             modifier = Modifier.matchParentSize().graphicsLayer { alpha = shows().coerceIn(0f, 1f) },
         ) { measurables, constraints ->
@@ -380,7 +380,7 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
                     Line(words.link, style(15.dp, weight = Type.weightHeading))
                 }
                 Box(Modifier.matchParentSize().drawWithContent { frame(ink, changed("resultLabel")) })
-                Tag(c.say("app_demo_hang.found"), ink) { changed("resultLabel") }
+                Tag(c.say("app_demo_hang.found")) { changed("resultLabel") }
             }
             // What is under it makes room for the line, and then for the label under the line.
             Column(Modifier.fillMaxWidth().graphicsLayer { translationY = changed("linkOnProfile") * LINK_ROW.toPx() + changed("resultLabel") * FOUND_TAG.toPx() }) {
