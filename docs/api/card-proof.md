@@ -311,7 +311,7 @@ Submits one card proof: the card's whole list of accounts.
   | `400` | `challenge_used` | A card proof was already accepted for it |
   | `400` | `challenge_attempts` | Submitted more than 5 times |
   | `400` | `proof` | The record does not verify |
-  | `400` | `root` | `smt_root` is not the root of the issuer's newest CRL, nor of the second newest for a challenge issued before the newest reached the server or at most 2 minutes after |
+  | `400` | `root` | `smt_root` is not the root of the issuer's newest CRL, nor of the second newest for a challenge issued before the server learned of the newest or at most 2 minutes after |
   | `400` | `date_order` | The record rule of that name (check 4): the challenge's date is more than 4 days before the latest date among the valid records of the proof log, or before the card's `last_card_proof`. The second happens to a card that took two challenges around midnight and submitted the later-dated one first; the earlier one cannot be submitted, and the card proof is made again with a new challenge. The whole list is refused; nothing is recorded for any platform |
   | `400` | `empty`, `switch_limit` | The record rule of that name. The whole list is refused; nothing is recorded for any platform |
   | `400` | `daily_limit` | The record rules accept the record, but the server has written `daily_limit` records of the card with the challenge's date (`card-state`). It is the server's rule, not the record rules'. The whole list is refused; the card proof can be made the next day |
