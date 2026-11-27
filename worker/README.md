@@ -1463,6 +1463,8 @@ Durable Object 回 `overloaded`（錯誤帶著 `overloaded: true`，文件說不
 
 **還有兩種時候，算了一次的送出沒有紀錄**：Durable Object 已經把次數加上去、回應卻沒有回到 Worker（那個請求回 `500`）；Worker 這一次執行在算了之後被平台結束（例如用完 CPU 時間）。後一種為了不讓「送出後馬上斷線」躲掉紀錄，寫入是在算了一次的那一刻就向執行環境登記的（`waitUntil`），不是等回應準備好才登記；客戶端斷線後請求是不是照樣跑完，沒有在 Cloudflare 上看過。
 
+**Cloudflare 上看過的**：寫得進去，每小時的排程列得出最舊的一筆（2026-11-27，[上線前的量測](#不用營運者就量得到的)）。
+
 **還沒在 Cloudflare 上看過的**：`CF-Connecting-IP`、`request.cf` 的 `country` 和 `asn` 實際的值（本機的 workerd 裡 IP 是測試自己帶的標頭）；滿 32 天後 `oldest.json` 的日期有沒有跟著往後移（2026-12-30 看，[滿 32 天後看的](#滿-32-天後看的)）。
 
 ### 查連線紀錄
@@ -1922,9 +1924,9 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 - R2：「Maximum concurrent writes to the same object name (key) | 1 per second」（[R2 limits](https://developers.cloudflare.com/r2/platform/limits/)）；不同的鍵沒有寫每秒的上限
 - 照這些推的（還沒量，量了換掉）：一筆紀錄只在物件裡留到搬檔（最多約 2,000 筆、40 MB），長期留在物件裡的是卡片狀態表和衍生表，一張卡片幾百個位元組到 1 KB 上下，千萬張以下碰不到 10 GB。每秒 1,000 個請求是頁面的讀取和寫入**合起來**的軟上限，做的事越多越低（ADR-0026），實際的數字要負載才量得到
 
-**往返的時間從開發用的電腦量不準**：那台電腦送的請求進的是 Cloudflare 的 `SJC` 機房（回應的 `cf-ray` 結尾），三種請求（`/faq`、`/`、`/api/v1/fingerprint`）各 20 次，TLS 之後到第一個位元組的中位數都在 154 到 165 ms 之間，分不出問不問 Durable Object。負載要從進台灣附近機房的網路送，先看 `cf-ray`。
+**往返的時間從開發用的電腦量不準**：那台電腦送的請求進的是一個不在台灣附近的 Cloudflare 機房（回應的 `cf-ray` 結尾），三種請求（`/faq`、`/`、`/api/v1/fingerprint`）各 20 次，TLS 之後到第一個位元組的中位數都在 154 到 165 ms 之間，分不出問不問 Durable Object。負載要從進台灣附近機房的網路送，先看 `cf-ray`。
 
-**連線紀錄在 Cloudflare 上寫得進去**：01:23 送了一筆題目是後台發的、證明是隨機位元組的送出（帳號是 `test-example` 的 `alice`，匿名編號是 `spec/vectors/` 裡的那一個），回 `400` `proof`，往返 703 ms。這一筆被算了一次，照規則有一筆連線紀錄；裡面的 IP 是送出的那台電腦的，31 天後由規則刪掉。
+**連線紀錄在 Cloudflare 上寫得進去**：01:23 送了一筆題目是後台發的、證明是隨機位元組的送出（帳號是 `test-example` 的 `alice`，匿名編號是 `spec/vectors/` 裡的那一個），回 `400` `proof`，往返 703 ms。這一筆被算了一次，照規則有一筆連線紀錄；裡面的 IP 是送出的那台電腦的，31 天後由規則刪掉。02:00 的排程之後 `connection-log/oldest.json` 從 `{"checked":"2026-11-27T01:00:13.139Z","oldest":null}` 變成 `{"checked":"2026-11-27T02:00:13.158Z","oldest":"2026-11-27"}`：Cloudflare 上連線紀錄寫得進去、排程列得出來，這是第一次看到。
 
 ### 營運者用真卡片過卡時看的
 
@@ -1957,7 +1959,7 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 
 連線紀錄和計數明細的生命週期規則真的有刪：
 
-| | 最舊的一筆 | 到期（31 天） | 文件說 24 小時內刪掉，最晚 |
+| | 最舊的一筆 | 到期（31 天） | 文件說 24 小時內刪掉（[Object lifecycles](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)），最晚 |
 |---|---|---|---|
 | 連線紀錄 `connection/` | 2026-11-27 01:23（上面送的那一筆） | 2026-12-28 01:23 | 2026-12-29 01:23 |
 | 計數明細 `count-events/` | 2026-11-26（2026-11-27 的 `count-events/oldest.json`） | 2026-12-27 | 2026-12-28 |
@@ -1966,11 +1968,11 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 
 ### Threads 的 app 開連結時送的標頭
 
-訪客頁面的計數收的是 `document.referrer` 的網域和瀏覽器的大類（`spec/counts.md`「Sources」「Browsers」），看不到完整的 `User-Agent`，也看不到 Android 的 WebView 可能帶的 `X-Requested-With`。完整的標頭只在即時紀錄看得到，不保存。[#275](https://github.com/iamreal-tw/iamreal/issues/275) 要照看到的定來源的分類。營運者用手機，iOS、Android 各做一次：
+訪客頁面的計數收的是 `document.referrer` 的網域和瀏覽器的大類（`spec/counts.md`「Sources」「Browsers」），看不到完整的 `User-Agent` 和其他標頭（例如 `X-Requested-With`，有的 app 裡的瀏覽器會帶）。完整的標頭只在即時紀錄看得到，不保存。[#275](https://github.com/iamreal-tw/iamreal/issues/275) 要照看到的定來源的分類。營運者用手機，iOS、Android 各做一次：
 
 1. 電腦上打開即時紀錄（上面第 2 步）。點開一行看不到請求的標頭的話，改在自己的電腦跑 `wrangler tail --env test --format json`，用部署測試網站的那把權杖：它印的每個請求有 `event.request.headers`，裡面有 IP，不要貼出去
 2. 在 Threads 發一則只有自己看得到的貼文，或私訊給自己，內容是 `https://test.iamreal.tw/faq`（每一種訪客頁面都跑 Worker；這一頁不問證明紀錄）
-3. 貼出去之後，即時紀錄會先出現 Threads 抓連結預覽的請求：記下它的 `User-Agent`（它不是訪客，分來源時要認得它）
+3. 貼出去之後，即時紀錄裡如果先出現一個不是自己點的 `GET /faq`（抓連結預覽的程式），記下它的 `User-Agent`：它不是訪客，分來源時要認得它
 4. 在手機的 Threads app 裡點那個連結。記下那一行 `GET /faq` 的 `Referer`、`User-Agent`，和有沒有 `X-Requested-With`
 5. 在 app 裡選「用瀏覽器開啟」再開一次，記下同樣三樣：分得出 app 裡的瀏覽器和外面的瀏覽器
 
