@@ -1000,7 +1000,7 @@ async function remindOn(name: string, date: string, design?: string): Promise<vo
   const s = wholeScreen();
   shows(s, "step 7, the reminder on,", [step(7), ...reminderSays(date), say("common.next"), say("common.back"), say("app_reminder.adjust")]);
   check(!s.includes(app("settings.open")), "step 7 has no 設定 in its header");
-  for (const a of [say("app_done.reminder_turn_on"), say("app_reminder.skip"), say("app_reminder.denied"), say("app_reminder.settings")]) check(!s.includes(a), `step 7, the reminder on, does not say "${a.slice(0, 30)}"`);
+  for (const a of [say("app_done.reminder_set"), say("app_reminder.skip")]) check(!s.includes(a), `step 7, the reminder on, does not say "${a.slice(0, 30)}"`);
   check(storedDay() === weeksAfter(date, 12), `the card proof set the reminder again, 12 weeks on: ${storedDay()}`);
 }
 
@@ -1532,8 +1532,9 @@ const storedDay = (): string | undefined => /<string name="day">([0-9-]+)<\/stri
 
 /**
  * Step 7 of the first card proof, which offers the reminder (design/copy/card-proof.md, "7. 提醒"): 這次不要 stores nothing and goes on;
- * back from step 8, the screen of its interval and time, left without saving; 開啟提醒 sets the defaults and goes on; back again, step 7
- * shows the reminder that is on. Leaves step 7 on the screen, the reminder on.
+ * back from step 8, 設定提醒 opens the screen of its interval and time, left without saving; 設定提醒 again and 開啟提醒 there sets
+ * the defaults and comes back to step 7, which shows the reminder that is on and waits for 下一步. Leaves step 7 on the screen, the
+ * reminder on.
  */
 async function reminderOffered(shortId: string): Promise<void> {
   console.log("\nstep 7: the reminder, offered");
@@ -1542,8 +1543,8 @@ async function reminderOffered(shortId: string): Promise<void> {
     shot("step-7-first");
     await designShot("card-proof-app-7-reminder-phone.png");
     const s = wholeScreen();
-    shows(s, "step 7", [step(7), ...reminderSays(today), say("app_done.reminder_turn_on"), say("common.back"), say("app_reminder.adjust"), say("app_reminder.skip")]);
-    for (const a of [say("common.next"), say("app_reminder.denied"), say("app_reminder.settings"), say("hang.copy"), say("finish.done")]) check(!s.includes(a), `step 7 does not say "${a.slice(0, 30)}"`);
+    shows(s, "step 7", [step(7), ...reminderSays(today), say("app_done.reminder_set"), say("common.back"), say("app_reminder.skip")]);
+    for (const a of [say("common.next"), say("app_reminder.adjust"), say("hang.copy"), say("finish.done")]) check(!s.includes(a), `step 7 does not say "${a.slice(0, 30)}"`);
   }
   // 上一步: step 6 as it was left; then on again.
   press(say("common.back"));
@@ -1557,11 +1558,11 @@ async function reminderOffered(shortId: string): Promise<void> {
   check(!/<string/.test(reminderStored()), "這次不要 stores nothing of a reminder");
   // 上一步 of step 8: step 7, which offers the reminder again.
   press(say("common.back"));
-  await waitText(say("app_done.reminder_turn_on"), "step 7 again, from step 8", 10_000);
+  await waitText(say("app_done.reminder_set"), "step 7 again, from step 8", 10_000);
   check(textsOf(visible()).includes(step(7)), "step 8: 上一步 goes back to step 7");
-  press(say("app_reminder.adjust"));
+  press(say("app_done.reminder_set"));
   await waitText(app("reminder.from_today"), "the screen of the interval and the time");
-  check(!/<string/.test(reminderStored()), "before 開啟提醒 the phone stores nothing of the reminder");
+  check(!/<string/.test(reminderStored()), "設定提醒 stores nothing of the reminder: the screen of the interval and the time does, on 開啟提醒");
   const next = (weeks: number): string => app("reminder.next", { day: dayText(weeksAfter(today, weeks)), time: NINE });
   {
     shot("reminder-schedule");
@@ -1582,12 +1583,13 @@ async function reminderOffered(shortId: string): Promise<void> {
   check(true, "the next reminder follows the interval chosen");
   // Left without saving: step 7 as it was, nothing stored.
   press(app("reminder.cancel"));
-  await waitText(say("app_done.reminder_turn_on"), "step 7 again, from the screen of the interval and the time", 10_000);
+  await waitText(say("app_done.reminder_set"), "step 7 again, from the screen of the interval and the time", 10_000);
   check(!/<string/.test(reminderStored()), "the screen of the interval and the time, left with 取消, stores nothing");
-  // 開啟提醒: the defaults, and on to step 8 (this Android asks nothing before it lets an app notify).
-  press(say("app_done.reminder_turn_on"));
-  await waitText(step(8), "step 8, after 開啟提醒", 10_000);
-  press(say("common.back"));
+  // 設定提醒, then 開啟提醒 there as it opens: the defaults (this Android asks nothing before it lets an app notify), and back to
+  // step 7, which waits for 下一步.
+  press(say("app_done.reminder_set"));
+  await waitText(app("reminder.from_today"), "the screen of the interval and the time, again");
+  press(app("reminder.turn_on"));
   await remindOn("first-on", today, "card-proof-app-7-reminder-on-phone.png");
   check(storedDay() === weeksAfter(today, 12), `the phone stores the day of the next reminder: ${storedDay()}`);
   const kept = [...reminderStored().matchAll(/name="([a-z]+)"/g)].map((m) => m[1]).sort();

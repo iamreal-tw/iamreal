@@ -99,7 +99,6 @@ extension CardProofModel {
             appCopy: appCopy,
             reminders: reminders,
             openSchedule: { [weak pages] in pages?.openSchedule() },
-            openNotificationSettings: openNotificationSettings,
             openSettings: { [weak pages] in pages?.openSettings() },
             site: AppEnvironment.site,
             open: { UIApplication.shared.open($0) },
@@ -108,18 +107,6 @@ extension CardProofModel {
             canReadCards: { NFCCard.available },
             minApp: { config, now in MinApp.read(config: config, build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String, now: now) },
             storePage: AppEnvironment.storePage))
-    }
-
-    /// The system's settings at this app's notifications; before iOS 16,
-    /// at this app, where the notifications are one row.
-    private static func openNotificationSettings() {
-        let address: String
-        if #available(iOS 16.0, *) {
-            address = UIApplication.openNotificationSettingsURLString
-        } else {
-            address = UIApplication.openSettingsURLString
-        }
-        if let url = URL(string: address) { UIApplication.shared.open(url) }
     }
 
     /// The system's share sheet with `text`, over what the app shows.

@@ -64,8 +64,6 @@ internal class Outside(
     val copy: (String) -> Unit,
     val share: (String) -> Unit,
     val nfcSettings: () -> Unit,
-    /** The system's page of the app's notifications. */
-    val notificationSettings: () -> Unit,
 )
 
 /**
@@ -119,7 +117,7 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
                         Step.CONFIRM -> Confirm(m)
                         Step.PROGRESS -> Progress(m)
                         Step.HANG -> Hang(m, outside)
-                        Step.REMIND -> RemindStep(r, m.copy, m.done?.validUntil, back = { m.backToHang() }, next = { m.toDone() }, notificationSettings = outside.notificationSettings)
+                        Step.REMIND -> RemindStep(r, m.copy, m.done?.validUntil, back = { m.backToHang() }, next = { m.toDone() })
                         Step.DONE -> Finish(m, outside)
                     }
                 }

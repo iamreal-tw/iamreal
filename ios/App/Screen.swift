@@ -328,8 +328,6 @@ enum Action: Equatable {
     case toRemind
     /// From step 7 to step 8.
     case toFinish
-    /// The system's settings, at this app's notifications.
-    case openNotificationSettings
     /// The picture of step 6's demonstration has come onto the screen: it
     /// plays, the first time in a card proof.
     case showDemo
@@ -337,8 +335,6 @@ enum Action: Equatable {
     case playDemo
     /// The demonstration at its last frame: its button, or its end.
     case stopDemo
-    /// The reminder, as step 7 offers it.
-    case turnOnReminder
     /// The screen to choose the reminder's interval and time.
     case adjustReminder
     /// "一週後再提醒我", on step 1 opened from the notification.

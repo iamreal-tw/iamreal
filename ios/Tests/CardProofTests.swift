@@ -28,8 +28,8 @@ final class CardProofTests: XCTestCase {
     private var notifier: FakeNotifier!
     private var reminderStore: MemoryReminderStore!
     private var reminders: Reminders!
-    /// How many times the app opened the system's settings at its notifications.
-    private var notificationSettingsOpened = 0
+    /// How many times the app opened the screen to choose the reminder's interval and time.
+    private var scheduleOpened = 0
     /// What the lowest version says of the build, when a test changes it under a model.
     private var minApp: MinApp?
     /// The counts the models of a test sent, read, in the order they were sent (#434); and the card proof device ID as the
@@ -339,7 +339,7 @@ final class CardProofTests: XCTestCase {
             "建議定期更新島民證明，增加說服力。",
             "這支手機會在 \(When(appCopy: Copy.bundled("app")).day(Day(now).adding(days: 84)))晚上 9:00 提醒你，大約三個月後。",
         ]
-        XCTAssertEqual(model.screen.texts, offered + ["上一步", "開啟提醒", "改提醒間隔或時刻", "這次不要"])
+        XCTAssertEqual(model.screen.texts, offered + ["上一步", "設定提醒", "這次不要"])
         await Snapshot.save(model, as: "7-reminder")
         // Back to step 6, as it was left, and on again. The demonstration does not play by itself a second time.
         try await press("上一步", in: model)
@@ -350,36 +350,16 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(demonstration(on: model.screen)?.played, true)
         try await press("下一步", in: model)
 
-        // The system does not let the app notify: nothing is set, and the step says why.
-        notifier.allows = false
-        try await press("開啟提醒", in: model)
+        // "設定提醒": the screen to choose the interval and time, where the system is asked (ReminderTests). Nothing is
+        // asked or kept from here.
+        try await press("設定提醒", in: model)
+        XCTAssertEqual(scheduleOpened, 1)
         XCTAssertEqual(model.screen.step, 7)
-        XCTAssertEqual(model.screen.texts, [
-            "提醒我回來過卡",
-            "沒有排提醒：手機不允許這個 app 發通知。請允許通知設定，我們不會在沒有經過你同意的情況下打擾你。",
-            "上一步", "打開通知設定",
-            "這次不要",
-        ])
         XCTAssertNil(reminderStore.kept)
-        XCTAssertEqual(notifier.scheduled, [])
-        await Snapshot.save(model, as: "7-refused")
-        // Back in the app with nothing changed in the settings: the same screen.
-        try await press("打開通知設定", in: model)
-        XCTAssertEqual(notificationSettingsOpened, 1)
-        model.cameBack()
-        while let work = model.work { await work.value }
-        XCTAssertTrue(model.screen.texts.contains("打開通知設定"))
-        XCTAssertNil(reminderStore.kept)
-        // "這次不要", then back from the last step: asked again as step 7 comes up, and still refused.
-        try await press("這次不要", in: model)
-        XCTAssertEqual(model.screen.step, 8)
-        try await press("上一步", in: model)
-        XCTAssertTrue(model.screen.texts.contains("打開通知設定"))
-        XCTAssertNil(reminderStore.kept)
-        // Allowed in the settings: back in the app the reminder is set as offered, and the step says when.
-        notifier.allows = true
-        model.cameBack()
-        while let work = model.work { await work.value }
+        XCTAssertEqual(notifier.asked, 0, "the system was not asked from step 7")
+        // Set there as offered: back here the step says when, and stays until 下一步 is pressed.
+        let turnedOn = await reminders.turnOn(interval: .weeks12, time: .evening)
+        XCTAssertTrue(turnedOn)
         XCTAssertEqual(model.screen.step, 7)
         XCTAssertEqual(model.screen.texts, offered + ["上一步", "下一步", "改提醒間隔或時刻"])
         XCTAssertEqual(reminderStore.kept, ReminderSettings(interval: .weeks12, time: .evening, next: Day(now).adding(days: 84)))
@@ -590,7 +570,7 @@ final class CardProofTests: XCTestCase {
         XCTAssertFalse(model.screen.texts.contains { $0.hasPrefix("如果你換了新的自然人憑證") })
         // Step 7, asked again (nothing is kept on this phone), and "這次不要": nothing is kept, on to the last step.
         try await press("下一步", in: model)
-        XCTAssertEqual(model.screen.links.map(\.label), ["改提醒間隔或時刻", "這次不要"])
+        XCTAssertEqual(model.screen.links.map(\.label), ["這次不要"])
         try await press("這次不要", in: model)
         XCTAssertNil(reminderStore.kept)
         XCTAssertEqual(notifier.asked, 0, "the system was not asked for notifications")
@@ -1243,8 +1223,7 @@ final class CardProofTests: XCTestCase {
             copy: Copy.bundled(),
             appCopy: Copy.bundled("app"),
             reminders: reminders,
-            openSchedule: {},
-            openNotificationSettings: { [unowned self] in self.notificationSettingsOpened += 1 },
+            openSchedule: { [unowned self] in self.scheduleOpened += 1 },
             openSettings: {},
             site: backend.origin,
             open: { [unowned self] in self.opened.append($0) },

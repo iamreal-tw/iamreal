@@ -20,8 +20,6 @@ final class CardProofModel: ObservableObject {
         var reminders: Reminders
         /// The screen to choose the reminder's interval and time.
         var openSchedule: () -> Void
-        /// The system's settings, at this app's notifications.
-        var openNotificationSettings: () -> Void
         var openSettings: () -> Void
         /// The site of this build: its pages are opened in the browser.
         var site: URL
@@ -116,8 +114,6 @@ final class CardProofModel: ObservableObject {
     /// What step 2 shows: how far the list is, whether a tap is under way, why it stopped.
     private var reading: (reached: Int, running: Bool, stop: CardProofFlow.Stop?) = (0, false, nil)
     private var copied = false
-    /// "開啟提醒" was pressed on step 7 and the system said no.
-    private var reminderRefused = false
     /// The app was opened from the reminder: step 1 says so until the card proof starts.
     private var fromReminder: FromReminder?
     private var reached = 0
@@ -266,16 +262,7 @@ final class CardProofModel: ObservableObject {
         case .toRemind:
             demoPlaying = false
             show(.remind)
-            // Refused before, and maybe allowed since in the system's settings.
-            askAgain()
-        // Not while the system is being asked: what it answers would be set after "這次不要".
-        case .toFinish: if work == nil { show(.finish) }
-        case .openNotificationSettings: deps.openNotificationSettings()
-        case .turnOnReminder:
-            run {
-                // Set as the screen offered: on to the last step. Refused: step 7 says so.
-                if await self.turnOnAsOffered() { self.show(.finish) } else { self.redraw() }
-            }
+        case .toFinish: show(.finish)
         case .snoozeReminder:
             run { await self.snoozeReminder() }
         }
@@ -467,36 +454,12 @@ final class CardProofModel: ObservableObject {
         return true
     }
 
-    /// The app is in front again. Step 7 said the system does not let
-    /// the app notify, and the cardholder may have been to the system's
-    /// settings: asked again, and set as offered if it is allowed now.
+    /// The app is in front again.
     func cameBack() {
         // The system does not run the app's clock while it is held in the background.
         if dropPINIfItsTimeIsUp() { return }
-        askAgain()
         // The operator may have stopped card proofs, or resumed them, meanwhile.
         if flow == nil, screen.step <= 1 { askConfigAgain() }
-    }
-
-    /// Step 7 is up and says the system does not let the app notify: the
-    /// system is asked again (it shows nothing once it was refused), and
-    /// the reminder is set as offered if it is allowed now. Not when a
-    /// reminder was set meanwhile, from the settings: that one stays.
-    private func askAgain() {
-        guard finished != nil, after == .remind, reminderRefused, deps.reminders.settings == nil else { return }
-        run {
-            _ = await self.turnOnAsOffered()
-            self.redraw()
-        }
-    }
-
-    /// Turns the reminder on as step 7 offers it, from today. False when
-    /// the system does not let the app notify: nothing is kept.
-    private func turnOnAsOffered() async -> Bool {
-        let offered = deps.reminders.offered
-        let allowed = await deps.reminders.turnOn(interval: offered.interval, time: offered.time)
-        reminderRefused = !allowed
-        return allowed
     }
 
     /// Step 2 as it is now, with its demonstration.
@@ -541,8 +504,6 @@ final class CardProofModel: ObservableObject {
             let reminder: DoneReminder
             if let settings = reminders.settings {
                 reminder = .on(settings, counted: reminders.countedFromToday)
-            } else if reminderRefused {
-                reminder = .refused
             } else {
                 reminder = .ask(reminders.offered)
             }
@@ -604,7 +565,6 @@ final class CardProofModel: ObservableObject {
         sensePlaying = false
         sensePlayed = false
         copied = false
-        reminderRefused = false
         reached = 0
     }
 
@@ -640,9 +600,7 @@ final class CardProofModel: ObservableObject {
             redraw()
         // After the record was sent nothing touches the card: back one step.
         case 7: show(.hang)
-        case 8:
-            show(.remind)
-            askAgain()
+        case 8: show(.remind)
         default: break
         }
     }

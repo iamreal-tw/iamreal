@@ -291,7 +291,7 @@ final class DoneScreenTests: XCTestCase {
 
     private let threeMonths = ReminderSettings(interval: .weeks12, time: .evening, next: Day(2027, 2, 8))
 
-    /// Nothing kept: the question, the day the default would set, and three ways on.
+    /// Nothing kept: the question, the day the default would set; "設定提醒" opens the screen to choose, and "這次不要".
     func testStepSevenAsksWithTheDayTheDefaultWouldSet() throws {
         let screen = screens.remind(.ask(threeMonths), notAfter: nil)
         XCTAssertEqual(screen.step, 7)
@@ -299,12 +299,11 @@ final class DoneScreenTests: XCTestCase {
             "提醒我回來過卡",
             "建議定期更新島民證明，增加說服力。",
             "這支手機會在 2027-02-08（星期一）晚上 9:00 提醒你，大約三個月後。",
-            "上一步", "開啟提醒",
-            "改提醒間隔或時刻",
+            "上一步", "設定提醒",
             "這次不要",
         ])
-        XCTAssertEqual(screen.buttons.map(\.action), [.back, .turnOnReminder])
-        XCTAssertEqual(screen.links.map(\.action), [.adjustReminder, .toFinish])
+        XCTAssertEqual(screen.buttons.map(\.action), [.back, .adjustReminder])
+        XCTAssertEqual(screen.links.map(\.action), [.toFinish])
         XCTAssertTrue(screen.mainButton)
         try CopyDocument.load().check(screen)
     }
@@ -328,20 +327,6 @@ final class DoneScreenTests: XCTestCase {
         let oneMonth = ReminderSettings(interval: .weeks4, time: TimeOfDay(hour: 7, minute: 5), next: Day(2027, 1, 1))
         XCTAssertEqual(screens.remind(.on(oneMonth, counted: false), notAfter: nil).texts[2], "這支手機會在 2027-01-01（星期五）上午 7:05 提醒你。")
         XCTAssertEqual(screens.remind(.on(oneMonth, counted: true), notAfter: nil).texts[2], "這支手機會在 2027-01-01（星期五）上午 7:05 提醒你，大約一個月後。")
-    }
-
-    /// The system does not let the app notify: why nothing was set, and the way to its settings.
-    func testStepSevenWhenTheSystemSaidNo() throws {
-        let screen = screens.remind(.refused, notAfter: "270115155959")
-        XCTAssertEqual(screen.texts, [
-            "提醒我回來過卡",
-            "沒有排提醒：手機不允許這個 app 發通知。請允許通知設定，我們不會在沒有經過你同意的情況下打擾你。",
-            "上一步", "打開通知設定",
-            "這次不要",
-        ])
-        XCTAssertEqual(screen.buttons.map(\.action), [.back, .openNotificationSettings])
-        XCTAssertEqual(screen.links.map(\.action), [.toFinish])
-        try CopyDocument.load().check(screen)
     }
 
     /// The certificate ends before the reminder's day: said under the day;

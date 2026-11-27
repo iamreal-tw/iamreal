@@ -47,8 +47,6 @@ enum DoneReminder: Equatable {
     /// The reminder is on, set again by this card proof. `counted`: its
     /// day is its interval from today, not a day picked.
     case on(ReminderSettings, counted: Bool)
-    /// "開啟提醒" was pressed here and the system said no.
-    case refused
 }
 
 /// What the screen to choose the interval and time shows

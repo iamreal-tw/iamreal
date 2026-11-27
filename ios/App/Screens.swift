@@ -791,12 +791,6 @@ struct Screens {
         let settings: ReminderSettings
         let counted: Bool
         switch reminder {
-        case .refused:
-            blocks.append(.text(copy("app_reminder.denied")))
-            return Screen(
-                step: 7, blocks: blocks,
-                buttons: [back, Button(label: copy("app_reminder.settings"), action: .openNotificationSettings)],
-                links: [skip])
         case .ask(let asked):
             settings = asked
             counted = true
@@ -814,11 +808,13 @@ struct Screens {
         if let validUntil = notAfter.flatMap(Self.dateOfCertificateTime), validUntil < settings.next.iso {
             blocks.append(.text(copy("app_done.reminder_expires", ["valid_until": validUntil])))
         }
+        // Nothing kept: "設定提醒" opens the screen to choose the interval and time, where "開啟提醒" asks the system
+        // and sets it; back here it is on, and 下一步 is the cardholder's to press (card-proof.md, step 7).
         if case .ask = reminder {
             return Screen(
                 step: 7, blocks: blocks,
-                buttons: [back, Button(label: copy("app_done.reminder_turn_on"), action: .turnOnReminder)],
-                links: [adjust, skip])
+                buttons: [back, Button(label: copy("app_done.reminder_set"), action: .adjustReminder)],
+                links: [skip])
         }
         // On already: turned off from the settings, not here.
         return Screen(step: 7, blocks: blocks, buttons: [back, Button(label: copy("common.next"), action: .toFinish)], links: [adjust])

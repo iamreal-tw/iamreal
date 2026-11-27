@@ -339,15 +339,13 @@
     "reminder_title": "提醒我回來過卡",
     "reminder_next_about": "這支手機會在 {day}{time} 提醒你，大約{interval}後。",
     "reminder_next": "這支手機會在 {day}{time} 提醒你。",
-    "reminder_turn_on": "開啟提醒",
+    "reminder_set": "設定提醒",
     "share_other": "用其他 app 分享",
     "reminder_expires": "這張自然人憑證在 {valid_until} 到期，比下次提醒早。到期之後要展期或換新卡，才能再過卡。"
   },
   "app_reminder": {
     "why": "建議定期更新島民證明，增加說服力。",
     "adjust": "改提醒間隔或時刻",
-    "skip": "這次不要",
-    "denied": "沒有排提醒：手機不允許這個 app 發通知。請允許通知設定，我們不會在沒有經過你同意的情況下打擾你。",
-    "settings": "打開通知設定"
+    "skip": "這次不要"
   }
 }

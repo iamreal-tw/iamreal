@@ -148,7 +148,7 @@ final class BusyTests: XCTestCase {
                 openSession: { try DeviceCore.Session(.test) }, proofFiles: BundledFile.proofFiles(for:)),
             copy: Copy.bundled(), appCopy: Copy.bundled("app"),
             reminders: Reminders(store: MemoryReminderStore(), notifier: FakeNotifier(), clock: Date.init, calendar: .current),
-            openSchedule: {}, openNotificationSettings: {}, openSettings: {}, site: site,
+            openSchedule: {}, openSettings: {}, site: site,
             open: { _ in }, copyText: { _ in }, share: { _ in }))
     }
 

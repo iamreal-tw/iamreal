@@ -111,7 +111,6 @@ final class ScreensTests: XCTestCase {
             ("card-proof-app-5-confirm-withdraw-phone", screens.confirm(card(), consequence("withdraw", "alice"))),
             ("card-proof-app-6-hang-short-phone", screens.hang(recorded("refresh", "alice"), single: "Threads", copied: false)),
             ("card-proof-app-7-reminder-on-phone", screens.remind(.on(threeMonths, counted: true), notAfter: nil)),
-            ("card-proof-app-7-reminder-refused-phone", screens.remind(.refused, notAfter: nil)),
             ("card-proof-app-8-done-switch-phone", screens.finish(recorded("switch", "carol.tw"), single: "Threads")),
             ("card-proof-app-8-withdraw-phone", screens.finish(recorded("withdraw", "alice"), single: "Threads")),
         ]
