@@ -102,8 +102,8 @@ const HELP_HREF: Record<HelpTopic, string> = { prepare: "/prepare" };
  * map finds what is near; this page asks for no location.
  */
 const FIND_OFFICE_HREF = "https://www.google.com/maps/search/?api=1&query=%E6%88%B6%E6%94%BF%E4%BA%8B%E5%8B%99%E6%89%80";
-/** before.how_to_get_moica: MOICA's site (its page on applying blocks automated reading, so it is not checked yet: card-proof.md, step 1). */
-const MOICA_HREF = "https://moica.nat.gov.tw/";
+/** before.how_to_get_moica: MOICA's page on applying (who can apply, where, what to bring: card-proof.md, step 1). */
+const MOICA_HREF = "https://moica.nat.gov.tw/rac.html";
 
 /** A link out of the page: in a new tab, as leaving this page would end the card proof. */
 function newTab(href: string, attrs: Record<string, string>, ...children: (Node | string)[]): HTMLAnchorElement {

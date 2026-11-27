@@ -137,8 +137,8 @@ private const val FIND_OFFICE_QUERY = "%E6%88%B6%E6%94%BF%E4%BA%8B%E5%8B%99%E6%8
 internal const val FIND_OFFICE_MAP = "geo:0,0?q=$FIND_OFFICE_QUERY"
 internal const val FIND_OFFICE_SITE = "https://www.google.com/maps/search/?api=1&query=$FIND_OFFICE_QUERY"
 
-/** before.how_to_get_moica: the certificate authority's site (design/copy/card-proof.md, "1. 開始之前"). */
-private const val MOICA = "https://moica.nat.gov.tw/"
+/** before.how_to_get_moica: the certificate authority's page on applying (design/copy/card-proof.md, "1. 開始之前"). */
+private const val MOICA = "https://moica.nat.gov.tw/rac.html"
 
 /** The store the app is updated from, as the copy's `{store}` (design/copy/card-proof.md: on Android, Google Play), and the app's page there. */
 private const val STORE = "Google Play"
@@ -604,7 +604,7 @@ private fun Recorded(c: Copy, d: CardProof.Done, view: Messages.DoneView) {
 
 /**
  * Step 6: hang the link on the profile, and nothing else (design/copy/card-proof.md, "6. 掛上去", app). Someone back for a card proof
- * again is asked only whether the link is still there, until "沒有看到連結，重新掛上". No way back: step 5 has submitted.
+ * again is asked only whether the link is still there, until "重新掛上連結". No way back: step 5 has submitted.
  */
 @Composable
 private fun Hang(m: Model, outside: Outside) {
