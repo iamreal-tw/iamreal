@@ -66,6 +66,9 @@ struct ScreenView: View {
             ForEach(Array(screen.blocks.enumerated()), id: \.offset) { index, block in
                 self.block(block, first: index == 0)
             }
+            if let top = screen.top {
+                self.button(top, main: true).padding(.top, 36)
+            }
             if !screen.buttons.isEmpty {
                 // The way on, the last of them, first: on the right side by side, on top one under the other.
                 ButtonRow(firstOnRight: true) {
@@ -73,7 +76,7 @@ struct ScreenView: View {
                         self.button(button, main: screen.mainButton && index == screen.buttons.count - 1)
                     }
                 }
-                .padding(.top, 36)
+                .padding(.top, screen.top == nil ? 36 : SideBySide.spacing)
             }
             ForEach(Array(screen.under.enumerated()), id: \.offset) { _, block in self.block(block, first: false) }
             // The ways back, as links: to the screen before, then out of the card proof.
@@ -215,9 +218,11 @@ struct ScreenView: View {
             .padding(.top, 20)
         case .linked(let before, let link, let after):
             SwiftUI.Button { perform(link.action) } label: {
-                (Text(before) + Text(link.label).underline() + Text(after))
-                    .font(Theme.body(Theme.sizeBody, Theme.weightHeading))
-                    .foregroundColor(Theme.you.color)
+                // Only the link looks like one, as on Android: the words around it are the text's (design/DESIGN.md, the components: links).
+                (Text(before).foregroundColor(Theme.ink.color)
+                    + Text(link.label).font(Theme.body(Theme.sizeBody, Theme.weightHeading)).underline().foregroundColor(Theme.you.color)
+                    + Text(after).foregroundColor(Theme.ink.color))
+                    .font(Theme.body(Theme.sizeBody))
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, minHeight: Theme.minTarget.value, alignment: .leading)

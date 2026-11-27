@@ -20,6 +20,10 @@ struct Screen: Equatable {
     /// there are more than two, the way on on top (design/DESIGN.md, the
     /// components: buttons).
     var buttons: [Button] = []
+    /// The screen's main button alone above `buttons`, as wide as the
+    /// screen: step 8's sharing, with 上一步 and 完成 side by side under
+    /// it (design/DESIGN.md, the components: buttons).
+    var top: Button?
     /// Under the buttons: what is not to read before the way on (step 2's
     /// list, all still to do, before the card is read).
     var under: [Block] = []
@@ -44,7 +48,7 @@ struct Screen: Equatable {
     /// Every sentence on the screen, in its order: for tests. The
     /// header's are not among them: they are not card-proof.md's.
     var texts: [String] {
-        warnings.flatMap(\.texts) + (notice?.texts ?? []) + blocks.flatMap(\.texts) + buttons.map(\.label) + under.flatMap(\.texts) + links.map(\.label) + (cancel.map { [$0.label] } ?? [])
+        warnings.flatMap(\.texts) + (notice?.texts ?? []) + blocks.flatMap(\.texts) + (top.map { [$0.label] } ?? []) + buttons.map(\.label) + under.flatMap(\.texts) + links.map(\.label) + (cancel.map { [$0.label] } ?? [])
     }
 }
 

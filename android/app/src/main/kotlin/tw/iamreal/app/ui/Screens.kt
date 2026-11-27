@@ -737,9 +737,14 @@ private fun Finish(m: Model, outside: Outside) {
     // The card's ordinal, where the answer had one, and the invitation: one paragraph. Sharing is asked for, not required.
     Body((view.ordinal ?: "") + c.say("finish.invite"), Modifier.padding(top = 8.dp))
     Body(c.say("finish.thanks"))
-    Actions {
-        // One main button a screen (design/DESIGN.md): the first platform's, were there more than one.
-        for ((n, share) in view.shares.withIndex()) Button(share, wide, primary = n == 0) { outside.share("${view.shareText}\n$url") }
+    if (view.shares.isNotEmpty()) {
+        Actions {
+            // One main button a screen (design/DESIGN.md): the first platform's, were there more than one.
+            for ((n, share) in view.shares.withIndex()) Button(share, wide, primary = n == 0) { outside.share("${view.shareText}\n$url") }
+        }
+    }
+    // Under it, 上一步 and 完成 side by side as the two buttons of a step, 完成 on the right (design/DESIGN.md, the components: buttons).
+    SideBySide(Modifier.fillMaxWidth().padding(top = if (view.shares.isEmpty()) 20.dp else 12.dp), firstOnRight = true) {
         Button(c.say("finish.done"), wide) { m.cancel() }
         Button(c.say("common.back"), wide) { m.backFromDone() }
     }

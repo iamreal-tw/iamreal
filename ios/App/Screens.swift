@@ -866,13 +866,13 @@ struct Screens {
             .sentences(ordinal + [copy("finish.invite")]),
             .text(copy("finish.thanks")),
         ]
-        // One share sheet, whichever platform: the button names the one the app knows. The main button, on top of
-        // the three, one under the other (design/DESIGN.md, the components: buttons).
+        // One share sheet, whichever platform: the button names the one the app knows. The main button, alone on
+        // top; 上一步 and 完成 side by side under it (design/DESIGN.md, the components: buttons).
         let share = Platform.known.first.map { Button(label: copy("done.share", ["platform": $0.name]), action: .share) }
         return Screen(
             step: 8, blocks: blocks,
-            buttons: [Button(label: copy("common.back"), action: .back), end] + (share.map { [$0] } ?? []),
-            mainButton: share != nil, settings: settingsButton)
+            buttons: [Button(label: copy("common.back"), action: .back), end], top: share,
+            mainButton: false, settings: settingsButton)
     }
 
     /// The tap ended in a way that leaves it to be made again as it is:

@@ -369,13 +369,14 @@ final class DoneScreenTests: XCTestCase {
             "島民證明", "@alice", "島民編號 7K2Q9FM4XD 開頭",
             "這是第 128 張島民證明。", "愈多人成為島民，知道彼此都是台灣人，我們能讓台灣的網路討論變得更貼近真實、更有意義。",
             "謝謝你加入島民，誠摯的邀請你分享島民證明。",
-            "上一步", "完成", "分享到 Threads",
+            "分享到 Threads", "上一步", "完成",
         ])
-        // Three buttons, one under the other, the main one on top: sharing; then done (to step 1), and back to step 7
+        // The main button alone on top: sharing; under it back to step 7 and done (to step 1), side by side
         // (card-proof.md, step 8, app).
         XCTAssertTrue(inline(screen).isEmpty)
-        XCTAssertTrue(screen.mainButton)
-        XCTAssertEqual(screen.buttons.map(\.action), [.back, .restart, .share])
+        XCTAssertEqual(screen.top?.action, .share)
+        XCTAssertFalse(screen.mainButton)
+        XCTAssertEqual(screen.buttons.map(\.action), [.back, .restart])
         XCTAssertEqual(screen.settings, Button(label: "設定", action: .openSettings))
         try CopyDocument.load().check(screen)
     }

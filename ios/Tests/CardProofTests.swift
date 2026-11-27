@@ -393,7 +393,7 @@ final class CardProofTests: XCTestCase {
             "島民證明", "@alice", "島民編號 \(shortID) 開頭",
             "這是第 \(ordinal) 張島民證明。", "愈多人成為島民，知道彼此都是台灣人，我們能讓台灣的網路討論變得更貼近真實、更有意義。",
             "謝謝你加入島民，誠摯的邀請你分享島民證明。",
-            "上一步", "完成", "分享到 Threads",
+            "分享到 Threads", "上一步", "完成",
         ])
         await Snapshot.save(model, as: "8-done")
         // The share sheet, with the sentence and the card's page.
@@ -1287,7 +1287,7 @@ final class CardProofTests: XCTestCase {
             }
         }
         let inline = (model.screen.blocks + model.screen.under).flatMap(within)
-        let buttons = model.screen.buttons + model.screen.links + (model.screen.cancel.map { [$0] } ?? []) + inline
+        let buttons = (model.screen.top.map { [$0] } ?? []) + model.screen.buttons + model.screen.links + (model.screen.cancel.map { [$0] } ?? []) + inline
         let button = try XCTUnwrap(buttons.first { $0.label == label }, "no button \(label) among \(buttons.map(\.label))", file: file, line: line)
         XCTAssertTrue(button.enabled, "\(label) cannot be pressed", file: file, line: line)
         model.perform(button.action)
