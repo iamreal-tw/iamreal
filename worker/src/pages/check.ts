@@ -98,7 +98,7 @@ ${exampleProfile(host, 3)}
 <p class="side-label">島民證明的頁面</p>
 <div class="proof-sample">
 <p class="ordinal">第 1,284 張島民證明</p>
-<p class="sample-title">一張台灣國民的自然人憑證，<br>把它在 Threads 唯一的名額給了</p>
+<p class="sample-title">一張台灣國民的自然人憑證<br>宣告了 Threads 的</p>
 <p class="sample-account">@alice</p>
 </div>
 </div>`,
@@ -127,7 +127,7 @@ ${step(
 <section><h3>告訴你的</h3>
 <p>有一張台灣國民的自然人憑證，把它在 Threads 唯一的名額給了這個帳號，以及上次過卡是哪一天。</p></section>
 <section><h3>不會告訴你的</h3>
-<p>卡片是誰的，以及過卡的人是不是自然人憑證上的那個人：卡片可能遺失，也可能被借走或賣給別人。</p></section>
+<p>卡片是誰的，以及過卡的人是不是自然人憑證上的那個人：卡片可能遺失，也可能被借走或賣給別人。Instagram 或其他平台上同名的帳號，也不在這張證明裡。</p></section>
 <section><h3>一張卡片，一個帳號</h3>
 <p>一張自然人憑證在 Threads 同一時間只能把名額給一個帳號。要有一萬個有島民證明的帳號，得先有一萬張真的卡片。</p></section>
 </div>

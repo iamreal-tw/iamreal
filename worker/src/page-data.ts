@@ -40,14 +40,10 @@ export interface PageCard {
    * "The ordinal").
    */
   readonly ordinal: number;
-  /** The earliest date among the card's valid records. */
-  readonly firstCardProof: Day;
-  /** The latest date among them. */
+  /** The latest date among the card's valid records. */
   readonly lastCardProof: Day;
-  /** The number of the card's valid records. */
-  readonly cardProofs: number;
   /** One entry for every platform on which a valid record of the card has had a kind, in ascending order of platform. */
-  readonly slots: readonly { readonly platform: string; readonly current: string | null; readonly switchCount: number }[];
+  readonly slots: readonly { readonly platform: string; readonly current: string | null }[];
   /** What the card's valid records did, the newest first; a record with a kind on several platforms has a row for each. */
   readonly history: readonly HistoryRow[];
 }

@@ -494,13 +494,13 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `/demo.js` | 掛上去的示範的播放程式（`design/copy/hang.md`「示範」），只有 `/hang` 和 `/hang/<短編號>` 載入 | Static Assets 直接送 `site/demo.js`，不跑 Worker |
 | `/count.js` | 訪客頁面的計數（ADR-0032、ADR-0039，`spec/counts.md`），上面每一頁回 `200` 時都載入 | Static Assets 直接送 `site/count.js`，不跑 Worker |
 | `/pages.css` | 訪客頁面的樣式表 | Static Assets 直接送 `site/pages.css`，不跑 Worker |
-| `/og-image.png` | 連結預覽圖（`design/copy/proof-page.md` 第 8 段「預覽圖」） | Static Assets 直接送 `site/og-image.png`，不跑 Worker |
+| `/og-image.png` | 連結預覽圖（`design/copy/proof-page.md` 第 7 段「預覽圖」） | Static Assets 直接送 `site/og-image.png`，不跑 Worker |
 | `/favicon.ico` | 網站的圖示：每一頁的 `<link rel="icon">` 指到這裡，瀏覽器和連結預覽也會自己來要（[#356](https://github.com/iamreal-tw/iamreal/issues/356)） | Static Assets 直接送 `site/favicon.ico`，不跑 Worker |
 | `/proof` | 過卡的頁面：`web/` 建置的 `index.html`；`/proof/` 和 `/proof/index.html` 轉（`301`）到 `/proof` | Static Assets 直接送 `site/proof/` 的檔，不跑 Worker |
 | `/proof/…` | 那份建置的其他檔案 | 同上 |
 | 其他網址 | 「找不到這一頁」（`design/copy/not-found.md`），`404` | Worker 產生，不問證明紀錄 |
 
-**連結預覽圖每一頁都是同一張。** 有連結預覽（`og:title`）的每一頁，`<head>` 都多五行：`og:image` 是 `https://<網站的網域>/og-image.png`（測試的證明紀錄是 `test.iamreal.tw`，正式的是 `iamreal.tw`，`src/settings.ts` 的 `SITE_HOSTS`），加上 `og:image:type`、`og:image:width`、`og:image:height`（`image/png`、1200、630）和替代文字 `og:image:alt`（逐字照 `design/copy/proof-page.md` 第 8 段）。圖是 `design/screens/og-image.png` 的拷貝，上面沒有帳號名稱、日期、島民編號，不隨頁面改變。沒有連結預覽的頁面（查詢頁打了不合 Threads 格式的名稱）也沒有圖。過卡的頁面 `/proof` 是 `web/` 的建置，沒有連結預覽，也沒有圖。`test/pages.ts` 的 `getPage` 對每一頁檢查這五行。
+**連結預覽圖每一頁都是同一張。** 有連結預覽（`og:title`）的每一頁，`<head>` 都多五行：`og:image` 是 `https://<網站的網域>/og-image.png`（測試的證明紀錄是 `test.iamreal.tw`，正式的是 `iamreal.tw`，`src/settings.ts` 的 `SITE_HOSTS`），加上 `og:image:type`、`og:image:width`、`og:image:height`（`image/png`、1200、630）和替代文字 `og:image:alt`（逐字照 `design/copy/proof-page.md` 第 7 段）。圖是 `design/screens/og-image.png` 的拷貝，上面沒有帳號名稱、日期、島民編號，不隨頁面改變。沒有連結預覽的頁面（查詢頁打了不合 Threads 格式的名稱）也沒有圖。過卡的頁面 `/proof` 是 `web/` 的建置，沒有連結預覽，也沒有圖。`test/pages.ts` 的 `getPage` 對每一頁檢查這五行。
 
 **圖示每一頁都是同一個。** 每一頁的 `<head>` 都有 `<link rel="icon" href="/favicon.ico">`（`src/pages/layout.ts` 的 `FAVICON_PATH`；過卡的頁面 `/proof` 也是，`web/index.html`），指到 Static Assets 送的 `site/favicon.ico`：瀏覽器和 Threads 這類連結預覽不看那一行、直接要 `/favicon.ico` 的，拿到的也是同一個檔（Threads 怎麼取圖示還不知道，兩種都放）。圖案是頁首的記號（`LOGO`），顏色照 `design/tokens.json`，16、32、48 像素三張 PNG 包在一個 ICO 裡，由 `scripts/favicon.ts` 用這台電腦的 Chrome 畫（改了記號時手動跑；部署和建置都不跑）。和 `pages.css`、`copy.js` 一樣在版控裡，帶訪客頁面的標頭、`Cache-Control: no-cache` 和 `ETag`；`Content-Type` 是 Static Assets 照副檔名給的。兩個 app 的圖示是同一個記號放在白底上（[#490](https://github.com/iamreal-tw/iamreal/issues/490)）。
 
@@ -2081,7 +2081,7 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `src/headers.ts` | 頁面和檔案送的標頭，只定義在這裡 |
 | `src/page-data.ts` | 頁面讀證明紀錄的介面 `PageData`，和問 Durable Object 的那一個實作 |
 | `src/views.ts` | 頁面用的衍生表：建表、一筆紀錄寫什麼、清空和照一串紀錄重寫、頁面的查詢、數有幾張卡片宣告同一個帳號 |
-| `src/pages/` | 把資料變成 HTML：`html.ts`（跳脫）、`layout.ts`（每一頁的外框、導覽列、頁尾、測試的證明紀錄的標示、程式的 `<script>`）、`home.ts`、`proof.ts`（島民證明）、`account.ts`（查詢頁）、`proof-log-page.ts`（證明紀錄頁和 `?after=` 的讀法）、`record-words.ts`（一筆紀錄做了什麼的寫法，島民證明頁的「全部紀錄」和證明紀錄頁共用）、`faq.ts`（常見問題，首頁的八題也讀它）、`verify.ts`、`hang.ts`、`not-found.ts`（找不到這一頁） |
+| `src/pages/` | 把資料變成 HTML：`html.ts`（跳脫）、`layout.ts`（每一頁的外框、導覽列、頁尾、測試的證明紀錄的標示、程式的 `<script>`）、`home.ts`、`proof.ts`（島民證明）、`account.ts`（查詢頁）、`proof-log-page.ts`（證明紀錄頁和 `?after=` 的讀法）、`record-words.ts`（一筆紀錄做了什麼的寫法，島民證明頁的證明紀錄和證明紀錄頁共用）、`faq.ts`（常見問題，首頁的八題也讀它）、`verify.ts`、`hang.ts`、`not-found.ts`（找不到這一頁） |
 | `count/` | 訪客頁面的計數的原始檔 `visitor.js`；送出去的是 `site/count.js` |
 | `demo/` | 掛上去的示範的播放程式的原始檔 `player.js`；送出去的是 `site/demo.js` |
 | `site/` | Static Assets 的檔案，Cloudflare 直接送：`pages.css`、`copy.js`、`count.js`、`demo.js`、`favicon.ico`、`fonts/`、`og-image.png`、`_headers`、`_redirects` 在版控裡，`proof/` 放 `web/` 的建置 |
@@ -2134,7 +2134,7 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `test/site-pages.test.ts` | 常見問題、如何驗證證明紀錄、如何檢查 Threads 帳號的島民證明、過卡需要什麼、掛上去的每一種情況、`/copy.js`（Static Assets 送、不跑 Worker）（Go 的舊後台的 `site_test.go` 的案例）；每一頁上連到這個網站的連結都回 `200` |
 | `test/proof-files.test.ts` | `/proof` 和它的檔案：標頭和 `web/README.md` 引用的一字不差、`/proof/` 的轉址、沒有建置時是 `404` |
 | `test/views.test.ts` | 衍生表和紀錄同一個交易、從紀錄重建逐列相同、數卡片不受壞掉的卡片狀態影響；一筆在 `test-example` 收回、在 `threads` 更換的紀錄，四張表逐列和預期的相同；`spec/vectors/record-rules.json` 的每一案，有效的每一筆寫進衍生表的列和從紀錄規則前後的狀態算出來的相同；頁面的每個讀取跑的每一句只讀一個索引（或主鍵）的一段、不排序，用的是 `src/views.ts` 給每個讀取寫的那幾個索引（Go 的舊後台的 `sqlite_view_test.go` 的 `TestViewsTwoPlatforms`、`TestViewsMatchVectors`、`TestViewQueriesUseIndexes`） |
-| `test/page-refusals.test.ts` | 頁面的程式拒絕畫出的：不合 Threads 格式的帳號（查詢頁、掛上去、島民證明的每一張卡片）、全部紀錄裡沒有寫法的一列（不認得的種類，或少了要寫的帳號）、沒有卡片的島民證明；在 Node 裡直接呼叫 `src/pages/`，因為 Worker 不會交給頁面這樣的資料（Go 的舊後台的 `pages_test.go` 的 `TestRenderAlone` 後半） |
+| `test/page-refusals.test.ts` | 頁面的程式拒絕畫出的：不合 Threads 格式的帳號（查詢頁、掛上去、島民證明的每一張卡片）、證明紀錄裡沒有寫法的一列（不認得的種類，或少了要寫的帳號）、沒有卡片的島民證明；在 Node 裡直接呼叫 `src/pages/`，因為 Worker 不會交給頁面這樣的資料（Go 的舊後台的 `pages_test.go` 的 `TestRenderAlone` 後半） |
 | `test/publication.test.ts` | 每天換日公布：空的證明紀錄、每一天的四個物件和標頭、沒有新紀錄的一天、沒響的那一天不補、同一刻、每一步失敗和重做、連續失敗時等 1、2、4 … 分鐘到每次一小時、成功之後又從一分鐘算起、兩次嘗試之間物件重啟也照樣等、時鐘跑快時存下的時間最多等一小時、`paused` 之前的失敗不接著算、那一行寫了就不變、儲存桶的指紋檔少了行會補回來、有物件沒有的行就不公布（開始前和寫之前各看一次；自己寫了但沒收到回應的那一行不算別人的）、寫的時候跨過午夜、`paused` 不公布、`GET /api/v1/fingerprint`、Worker 沒有送這些檔的網址 |
 | `test/publication-verify.test.ts` | 整條路的比對：假卡片寫三天 2,005 筆，Go 的 `iamreal-verify` 用預設的讀法重驗後台寫出來的整個資料網域（要有 `go`） |
 | `test/proof-log-files.test.ts` | 寫滿 1,000 筆的紀錄檔和雜湊清單搬到 R2：位元組、標頭、物件裡不再留那 1,000 筆、卡片現況和頁面不變；每一步失敗時紀錄不刪、重做的位元組相同；第一檔搬不成時第二檔寫滿；題目發得密時照樣搬；衍生表從 R2 重建（每一種紀錄跨過檔的邊界）、連續失敗時等 1、2、4 分鐘然後每次 5 分鐘、物件重啟時還沒到時間不重建、到時間由 alarm 叫醒時只有一次重建、成功之後又從一分鐘算起；搬不成時連續失敗的間隔加倍到一小時、重啟之後照樣等、由每天公布搬成也算成功（下一檔寫滿就馬上搬）；Worker 沒有送紀錄檔的網址；Go 的 `iamreal-verify` 讀得懂寫出來的目錄（最後一項要有 `go`） |
