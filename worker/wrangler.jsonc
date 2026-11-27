@@ -56,7 +56,8 @@
     // The test site (ADR-0028).
     "test": {
       "name": "iamreal-test",
-      // Only the custom domain test.iamreal.tw, which is set in the dashboard (ADR-0029).
+      // Only the custom domains test.iamreal.tw and its app domain test-app.iamreal.tw (APP_DOMAIN below),
+      // which are set in the dashboard (ADR-0029).
       "workers_dev": false,
       "preview_urls": false,
       // The CRL mirror, every hour.
@@ -130,7 +131,35 @@
         // The site-wide limit (ADR-0026; src/rate-limit.ts, withinStarts): how many card proofs may start in a
         // minute, all networks together, counted on `GET /api/v1/config?start` only, by the object STARTS.
         // Plain digits, 0 to 100000. A starting value for the operator to set (README.md, "全站的總量上限").
-        "CARD_PROOF_STARTS_PER_MINUTE": "60"
+        "CARD_PROOF_STARTS_PER_MINUTE": "60",
+        // The app domain (ADR-0040; README.md, "app 網域"): a second custom domain of this Worker, set in the
+        // dashboard, whose every address opens the apps named here. On it the Worker answers the two files a
+        // phone's system reads, made from this setting, and the page for a phone without the app; nothing else
+        // (src/app-domain.ts). The check of a deploy build holds this to the apps of this site
+        // (scripts/deploy-build-checks.ts, `checkAppDomains`).
+        // - "apple_team_id": the team of the Apple developer account, in front of each app's identifier in
+        //   apple-app-site-association. Not a key: every signed app shows it.
+        // - "apps": the apps that open the domain. Before launch both connect to the test site, so both are
+        //   here; the development build never is. On launch day the production app goes (ADR-0040).
+        // - "android_sha256": the SHA-256 of the signing keys Google made for the app, as Play Console's App
+        //   signing page shows them, which assetlinks.json lists. The production app's: the key in use (the
+        //   classic one, not the post-quantum one) and the earlier one, both until a phone shows which one the
+        //   app is signed with (#534). The test app is not in Play Console yet (#479): none until it is, and
+        //   until then it is in apple-app-site-association only.
+        "APP_DOMAIN": {
+          "host": "test-app.iamreal.tw",
+          "apple_team_id": "Z59T4S2753",
+          "apps": [
+            {
+              "id": "tw.iamreal.app",
+              "android_sha256": [
+                "22:D5:4D:E9:CB:EB:94:9C:B4:A1:E8:0D:B5:4D:4E:98:1D:B9:CF:5C:E2:43:C8:90:79:1F:AF:42:D9:B1:4A:7F",
+                "66:06:64:3B:B7:90:85:B0:CC:DD:42:1A:AF:51:E1:59:1B:A4:54:D0:30:8E:1D:DC:B9:BA:59:70:A9:44:94:9B"
+              ]
+            },
+            { "id": "tw.iamreal.app.test", "android_sha256": [] }
+          ]
+        }
       }
     }
   }

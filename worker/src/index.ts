@@ -1,9 +1,11 @@
 // The Worker (ADR-0023). So far: the API of a card proof (api.ts), the
 // hourly CRL mirror (mirror.ts), and the proof log's Durable Object
 // (proof-log.ts), which writes the records and keeps what the mirror tells it,
-// the visitors' pages and the card proof page (visitor.ts).
+// the visitors' pages and the card proof page (visitor.ts), and the app
+// domain's two files and page (app-domain.ts).
 import { CRL_CATCH_UP_MS, CRL_SOURCES, CRL_TIMEOUT_MS, ISSUERS, now } from "#target";
 import { type ApiParts, api, isApiPath } from "./api.ts";
+import { appDomain, isAppDomainHost } from "./app-domain.ts";
 import { poseidon2Hash, proofVerifier } from "./in-worker.ts";
 import { checkIssuerTable } from "./issuers.ts";
 import { CONNECTION_LOG_PREFIX, OLDEST_KEY, isOverdue, oldestDay, oldestFile } from "./connection-log.ts";
@@ -27,7 +29,10 @@ const API_PARTS: ApiParts = { verifier: proofVerifier };
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
-    if (isApiPath(new URL(request.url).pathname)) return api(request, env, API_PARTS, (work) => ctx.waitUntil(work));
+    const url = new URL(request.url);
+    // The app domain (src/app-domain.ts) before anything else: on it there is no API and no page of the site.
+    if (isAppDomainHost(env, url.hostname)) return appDomain(request, env);
+    if (isApiPath(url.pathname)) return api(request, env, API_PARTS, (work) => ctx.waitUntil(work));
     // The only place that says where the pages read the proof log from (src/page-data.ts, `PageData`): its Durable Object.
     const parts: VisitorParts = { pageData: pageDataOfProofLog(env) };
     return visitor(request, env, parts);

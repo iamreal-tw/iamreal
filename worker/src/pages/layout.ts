@@ -138,6 +138,11 @@ const FOOT = html`<footer class="foot">
 </div>
 </footer>`;
 
+/** The mark of a test log, with the date it was last cleared on (design/copy/test-site.md): above everything else on every page of a test log's site, the app domain's too. */
+export function testProofLogMark(clearedOn: string): Html {
+  return html`<p class="test-proof-log">測試的證明紀錄　不定期清空，上次清空：<time>${clearedOn}</time></p>`;
+}
+
 /** The whole document of a page. */
 export function layout(site: Site, d: Document): string {
   const test = site.testProofLogClearedOn;
@@ -162,7 +167,7 @@ ${d.count === undefined ? new Html("") : html`<script src="${COUNT_JS_PATH}" def
 ` : new Html("")}${d.demo === true ? html`<script src="${DEMO_JS_PATH}" defer></script>
 ` : new Html("")}</head>
 <body class="${d.kind}">
-${test === null ? new Html("") : html`<p class="test-proof-log">測試的證明紀錄　不定期清空，上次清空：<time>${test}</time></p>
+${test === null ? new Html("") : html`${testProofLogMark(test)}
 `}${NAV}
 <main>
 ${d.content}

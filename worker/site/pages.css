@@ -4310,3 +4310,28 @@ body.account-not-a-name .title {
     width: 100%;
   }
 }
+
+/* The app domain's page for a phone without the app (app-domain.md) ------------------------------------------- */
+
+/* One column, as the other pages' own content: the title, the two stores' buttons one under the other, as wide as the longer one. */
+body.no-app .title {
+  font-size: var(--size-h2-phone);
+  line-height: 1.3;
+  margin: 40px 0 16px;
+}
+
+body.no-app .stores {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 20px 0 10px;
+}
+
+body.no-app h2 {
+  font-size: var(--size-h3-phone);
+  margin: 36px 0 8px;
+}
+
+body.no-app .back {
+  margin-top: 36px;
+}

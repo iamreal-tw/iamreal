@@ -55,9 +55,9 @@ test("the only addresses in the deploy build are MOICA's two, the ones crl/READM
   checkAddresses(deploy);
   // The pages' are the repository, Threads, the site's own domain (the link /hang/<short ID> copies), MOICA's site
   // (the two links of /prepare), the maintainer's blog (the FAQ's 誰在做島民證明？) and the privacy policies /privacy links to
-  // (Cloudflare's, Apple's, Google's), each over HTTPS. (The data
+  // (Cloudflare's, Apple's, Google's), and the production app's closed test on Google Play, which the app domain's page links to, each over HTTPS. (The data
   // domain is in the card proof page's policy, which is in site/_headers and no longer in the Worker.)
-  for (const address of PAGE_ADDRESSES) assert.match(address, /^https:\/\/((github\.com|www\.threads\.com|moica\.nat\.gov\.tw|\$\{site\.host\})[/;]|opasschang\.com$|www\.cloudflare\.com\/privacypolicy\/$|www\.apple\.com\/legal\/privacy\/$|policies\.google\.com\/privacy$)/);
+  for (const address of PAGE_ADDRESSES) assert.match(address, /^https:\/\/((github\.com|www\.threads\.com|moica\.nat\.gov\.tw|\$\{site\.host\})[/;]|opasschang\.com$|www\.cloudflare\.com\/privacypolicy\/$|www\.apple\.com\/legal\/privacy\/$|policies\.google\.com\/privacy$|play\.google\.com\/apps\/testing\/tw\.iamreal\.app$)/);
   // The data domains as origins, the way the card proof page's policy writes them: the privacy statement names them as words
   // (privacy.md, sections 1 and 5). A policy that wrote one without its scheme would no longer be caught here.
   assert.ok(!deploy.code.includes("https://data.iamreal.tw") && !deploy.code.includes("https://test-data.iamreal.tw") && !deploy.code.includes("Document-Isolation-Policy"), "the deploy build has nothing of the card proof page's headers");
@@ -79,10 +79,10 @@ test("the deploy build holds nothing of the test build", () => {
   checkNothingOfTheTestBuild(deploy);
 });
 
-test("the test environment's only settings are the proof log's object, the data bucket, the connection log's bucket, the six per-IP limits, the counts' object and how many counts a minute holds, the site-wide limit's object and its number, the object's name, which proof log it is, the date it was last cleared on, whether card proofs are taken and the name of a rebuild asked for", () => {
+test("the test environment's only settings are the proof log's object, the data bucket, the connection log's bucket, the six per-IP limits, the counts' object and how many counts a minute holds, the site-wide limit's object and its number, the object's name, which proof log it is, the date it was last cleared on, whether card proofs are taken, the name of a rebuild asked for and the app domain", () => {
   checkBindings(deploy.output);
   // Not the files of Static Assets: with a binding to them the Worker could read and send them itself.
-  assert.deepEqual(Object.keys(bindingsIn(deploy.output)).sort(), ["CARD_PROOFS_PAUSED", "CARD_PROOF_STARTS_PER_MINUTE", "CONNECTION_LOG", "COUNTS", "COUNT_EVENTS_PER_MINUTE", "DATA", "PROOF_LOG", "PROOF_LOG_KIND", "PROOF_LOG_OBJECT_NAME", "RATE_CARD_STATE", "RATE_CHALLENGES", "RATE_COUNTS", "RATE_PAGES", "RATE_PUBLIC_READS", "RATE_RECORDS", "REBUILD_PROOF_LOG", "STARTS", "TEST_PROOF_LOG_CLEARED_ON"]);
+  assert.deepEqual(Object.keys(bindingsIn(deploy.output)).sort(), ["APP_DOMAIN", "CARD_PROOFS_PAUSED", "CARD_PROOF_STARTS_PER_MINUTE", "CONNECTION_LOG", "COUNTS", "COUNT_EVENTS_PER_MINUTE", "DATA", "PROOF_LOG", "PROOF_LOG_KIND", "PROOF_LOG_OBJECT_NAME", "RATE_CARD_STATE", "RATE_CHALLENGES", "RATE_COUNTS", "RATE_PAGES", "RATE_PUBLIC_READS", "RATE_RECORDS", "REBUILD_PROOF_LOG", "STARTS", "TEST_PROOF_LOG_CLEARED_ON"]);
   assert.throws(() => checkBindings(`${deploy.output}\nenv.ASSETS      Assets\n`));
 });
 

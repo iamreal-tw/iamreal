@@ -56,6 +56,8 @@ export interface TestSettings {
   readonly COUNT_EVENTS_PER_MINUTE?: string;
   /** How many card proofs may start in a minute, the whole site together (src/rate-limit.ts, `withinStarts`). wrangler.jsonc sets "60". */
   readonly CARD_PROOF_STARTS_PER_MINUTE?: string;
+  /** The app domain and the apps it opens (src/app-domain.ts), in place of wrangler.jsonc's; null for none. */
+  readonly APP_DOMAIN?: unknown;
 }
 
 /**
