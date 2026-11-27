@@ -306,7 +306,7 @@ private fun Accounts(m: Model, outside: Outside) {
         AccountsMode.EDIT -> FillAccounts(m, m.messages.editListView(status), outside)
         AccountsMode.OPEN -> when (val view = m.messages.accountsView(status)) {
             is Messages.FillView -> FillAccounts(m, view, outside)
-            is Messages.DeclaredView -> DeclaredAccounts(m, view)
+            is Messages.DeclaredView -> DeclaredAccounts(m, view, outside)
         }
     }
 }
@@ -348,7 +348,7 @@ private fun HangFromLimit(m: Model, outside: Outside) {
 
 /** The card declares accounts: what it declares and when it last did, "更新島民證明", and the other things to do. */
 @Composable
-private fun DeclaredAccounts(m: Model, view: Messages.DeclaredView) {
+private fun DeclaredAccounts(m: Model, view: Messages.DeclaredView, outside: Outside) {
     val c = m.copy
     Title(view.title)
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
