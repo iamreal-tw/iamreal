@@ -83,19 +83,20 @@ export async function restore(previous: Uint8Array, patch: Uint8Array, sha256: s
 /**
  * How long a run of bytes the two files must share for `makePatch` to see
  * it, and the stride at which it indexes `previous`. A CRL entry of MOICA's
- * is about 40 bytes, its serial number 16 of them, so 32 bytes hold some of
- * a serial number wherever they start.
+ * is 49 or 50 bytes, its serial number 16 of them.
  */
 const BLOCK = 32;
 /**
- * The shortest run `makePatch` copies. In MOICA's CRLs the bytes of an
- * entry without its serial number, a revocation date, its reason code and
- * the start of the next entry, are 33; a CRL ordered by serial number has
- * the same 33 bytes for every entry revoked in the same second, anywhere in
- * the file. Runs the two files share where nothing changed are thousands of
- * bytes.
+ * The shortest run `makePatch` copies. Between two serial numbers in
+ * MOICA's CRLs lie 33 bytes: an entry's revocation time and reason code,
+ * and the start of the next entry. They are the same for every entry
+ * revoked in the same second, and a CRL ordered by serial number has those
+ * entries all over the file (worker/README.md, "清冊差異檔量到的"). So a
+ * run of 32 bytes may be found far ahead of where it belongs; one of 64
+ * holds bytes of a serial number. Runs the two files share where nothing
+ * changed are thousands of bytes.
  */
-const MIN_COPY = 2 * BLOCK;
+const MIN_COPY = 64;
 /** The base of the rolling hash; BASE ** BLOCK, mod 2^32, takes a byte out of it. */
 const BASE = 0x01000193;
 const BASE_TO_BLOCK = (() => {
