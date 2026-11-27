@@ -190,8 +190,10 @@ class MainActivity : ComponentActivity() {
                         Step.READ -> model.backToBefore()
                         Step.PIN -> model.backToRead()
                         Step.CONFIRM -> model.backToAccounts()
-                        // No way back but "取消", which drops the PIN.
-                        Step.ACCOUNTS, Step.PROGRESS -> {}
+                        // The whole step 6 shown from step 4's 今天已經過卡 3 次: back to it, as its 上一步. Otherwise no way back
+                        // but "取消" (or 回到開頭 on that screen).
+                        Step.ACCOUNTS -> if (model.hangFromLimit) model.backFromHangFromLimit()
+                        Step.PROGRESS -> {}
                     }
                 }
             },
