@@ -7,7 +7,7 @@ import { shortId } from "iamreal-protocol/scoped-id.ts";
 import type { CardsOfAccount } from "../page-data.ts";
 import { Html, html } from "./html.ts";
 import type { Document } from "./layout.ts";
-import { accountName, daysAgo, embed, isThreadsUsername, prefixes } from "./proof.ts";
+import { accountName, daysAgo, embed, isThreadsUsername, prefixes, profileLink } from "./proof.ts";
 
 /**
  * The page of the account `username` on Threads (in its one spelling): the
@@ -36,7 +36,7 @@ ${heading}
 <p class="small">任何持卡人都可以宣告任何帳號，張數不代表支持或連署。</p>
 </section>
 <section class="owner">
-<h2 class="ask"><a href="https://www.threads.com/@${username}">個人檔案</a>上有哪一張的連結，才代表 @${username} 承認那一張。</h2>
+<h2 class="ask">${profileLink(username)}上有哪一張的連結，才代表 @${username} 承認那一張。</h2>
 ${embed(username)}
 </section>
 <section class="cards-of">
