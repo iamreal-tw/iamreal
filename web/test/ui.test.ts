@@ -469,7 +469,7 @@ describe("confirm (step 5)", () => {
     ]);
     assert.deepEqual(rowsOf(cq), [
       [EXAMPLE_NAME, "test-example", "a-b", ["新宣告"]],
-      ["Threads", "threads", "@carol.tw", ["更換，原本是 @alice。", "用掉一次更換，不會恢復。之後還可以更換 1 次。"]],
+      ["Threads", "threads", "@carol.tw", ["更換，原本是 @alice。", "用掉一次更換，之後還可以更換 1 次。"]],
     ]);
     const v = confirmView(cq, null, ["Example", "Threads"]);
     assert.equal(v.intro, "按下後，證明紀錄會公開記下這張卡片的帳號清單：");
@@ -496,10 +496,10 @@ describe("confirm (step 5)", () => {
     assert.deepEqual(one(crow({ kind: "refresh", username: "bob", current: null })), ["再次宣告，不算更換"]);
     assert.deepEqual(one(crow({ kind: "withdraw", username: "alice", current: "alice" })), ["收回"]);
     // Withdrawn before, another account: a switch from the account withdrawn.
-    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: null, previous: "bob", switchesLeftAfter: 4 })), ["更換，原本是 @bob。", "用掉一次更換，不會恢復。之後還可以更換 4 次。"]);
+    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: null, previous: "bob", switchesLeftAfter: 4 })), ["更換，原本是 @bob。", "用掉一次更換，之後還可以更換 4 次。"]);
     // The third and the fourth: the switches left of the 5.
-    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: "bob", previous: "bob", switchesLeftAfter: 2 })), ["更換，原本是 @bob。", "用掉一次更換，不會恢復。之後還可以更換 2 次。"]);
-    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: "bob", previous: "bob", switchesLeftAfter: 1 })), ["更換，原本是 @bob。", "用掉一次更換，不會恢復。之後還可以更換 1 次。"]);
+    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: "bob", previous: "bob", switchesLeftAfter: 2 })), ["更換，原本是 @bob。", "用掉一次更換，之後還可以更換 2 次。"]);
+    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: "bob", previous: "bob", switchesLeftAfter: 1 })), ["更換，原本是 @bob。", "用掉一次更換，之後還可以更換 1 次。"]);
     // The fifth.
     assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: "bob", previous: "bob", switchesLeftAfter: 0 })), ["更換，原本是 @bob。", "用掉最後一次更換。這次之後，這個平台不能再更換。"]);
     // A platform the device does not know: the account as the server sent it, unchanged.

@@ -201,7 +201,8 @@ struct ScreenView: View {
             }
             .padding(.top, 40)
         case .proofCard(let card):
-            proofCard(card).frame(maxWidth: 260).padding(.top, 24)
+            // In the middle of the screen, as on Android (design/DESIGN.md, the components: the proof card).
+            proofCard(card).frame(maxWidth: 260).frame(maxWidth: .infinity).padding(.top, 24)
         case .steps(let steps):
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(steps.enumerated()), id: \.offset) { index, step in

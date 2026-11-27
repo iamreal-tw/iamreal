@@ -532,7 +532,7 @@ final class CardProofTests: XCTestCase {
 
         model.type("carol.tw", on: "threads")
         try await press("下一步", in: model)
-        XCTAssertEqual(rows(on: model.screen), [["Threads", "@carol.tw", "更換，原本是 @alice。", "用掉一次更換，不會恢復。之後還可以更換 4 次。"]])
+        XCTAssertEqual(rows(on: model.screen), [["Threads", "@carol.tw", "更換，原本是 @alice。", "用掉一次更換，之後還可以更換 4 次。"]])
         // Back: the field as it was typed.
         try await press("上一步", in: model)
         XCTAssertEqual(model.screen.step, 4)
@@ -946,7 +946,7 @@ final class CardProofTests: XCTestCase {
             "從 2027-03-01 起，這一版的島民證明 app 不能過卡。請更新到最新的版本。",
             "卡片還沒有被讀取，沒有任何東西送出去。",
             "到 App Store 更新",
-            "也可以用電腦和讀卡機，在 \(try XCTUnwrap(backend.origin.host)) 過卡。",
+            "也可以用電腦和讀卡機，打開 \(try XCTUnwrap(backend.origin.host)) 過卡。",
         ])
         checkAgainstTheCopy(model.screen, file: #filePath, line: #line)
         XCTAssertEqual(model.screen.buttons, [])
@@ -997,7 +997,7 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.texts, [
             "這支手機不能感應卡片",
             "這支手機沒有 NFC，不能用 app 過卡。",
-            "可以用電腦和讀卡機，在 \(try XCTUnwrap(backend.origin.host)) 過卡。",
+            "可以用電腦和讀卡機，打開 \(try XCTUnwrap(backend.origin.host)) 過卡。",
         ])
         checkAgainstTheCopy(model.screen, file: #filePath, line: #line)
         XCTAssertEqual(model.screen.buttons, [])

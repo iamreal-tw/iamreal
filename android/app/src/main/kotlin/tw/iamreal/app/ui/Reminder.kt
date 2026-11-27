@@ -440,7 +440,6 @@ internal fun ScheduleScreen(r: ReminderModel, pickers: Pickers, serviceName: Str
                 Modifier.testTag("next-reminder"),
                 style = TextStyle(color = Colours.ink, fontSize = 18.sp, lineHeight = 1.6.em),
             )
-            Small(a.say("reminder.evening"), Modifier.padding(top = 6.dp))
         }
         if (r.scheduleDenied) Problem(a.say("reminder.denied"))
         Actions {
@@ -484,7 +483,6 @@ internal fun SettingsScreen(r: ReminderModel, outside: Outside, version: String,
                 }
                 SettingRow(a.say("settings.next")) { Value(if (r.passed) a.say("settings.next_none") else r.words.day(plan.day), Modifier.testTag("settings-next")) }
             }
-            Small(a.say("settings.stored"), Modifier.padding(top = 14.dp), colour = Colours.text)
         }
         Column(Modifier.fillMaxWidth()) {
             Label(a.say("settings.about"), Modifier.padding(bottom = 8.dp))

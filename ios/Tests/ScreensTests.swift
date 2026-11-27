@@ -375,7 +375,7 @@ final class ScreensTests: XCTestCase {
         XCTAssertEqual(screens.confirm(newCard, declaration().0).buttons.last?.label, "宣告這個帳號")
         let switching = screens.confirm(card(), consequence("switch", "carol.tw", switchesLeft: 3))
         XCTAssertEqual(switching.buttons.last?.label, "宣告這個帳號")
-        XCTAssertTrue(switching.texts.contains("用掉一次更換，不會恢復。之後還可以更換 3 次。"))
+        XCTAssertTrue(switching.texts.contains("用掉一次更換，之後還可以更換 3 次。"))
         XCTAssertTrue(switching.texts.contains("按下後，證明紀錄會記下新的證明並公開給所有人："))
         let withdrawing = screens.confirm(card(), consequence("withdraw", "alice"))
         XCTAssertEqual(withdrawing.texts, [
@@ -410,8 +410,8 @@ final class ScreensTests: XCTestCase {
         XCTAssertEqual(pages.schedule.texts, [
             "提醒我回來過卡", "從今天起算，落在同一個星期幾。",
             "多久提醒一次", "一個月（4 週）", "三個月（12 週）", "建議", "六個月（26 週）", "選日期",
-            "什麼時候提醒", "時刻", "晚上 9:00", "更改",
-            "下次提醒：2027-02-08（星期一）晚上 9:00", "自然人憑證多半放在家裡，所以預設在晚上。",
+            "什麼時候提醒，卡片比較容易在手邊", "時刻", "晚上 9:00", "更改",
+            "下次提醒：2027-02-08（星期一）晚上 9:00",
             "開啟提醒", "取消",
         ])
         XCTAssertEqual(pages.schedule.options.map(\.selected), [false, true, false, false])
@@ -446,10 +446,9 @@ final class ScreensTests: XCTestCase {
     func testTheSettingsSayWhatAppMDWrites() async throws {
         let (reminders, pages) = reminderPages()
         XCTAssertEqual(pages.settings.texts, [
-            "返回", "設定", "過卡提醒", "提醒我回來過卡", appCopy("settings.stored"),
+            "返回", "設定", "過卡提醒", "提醒我回來過卡",
             "關於", "版本", "dev", "常見問題", "隱私權說明", "原始碼（GitHub）",
         ])
-        XCTAssertTrue(try Repository.text("design/copy/app.md").contains("\n" + appCopy("settings.stored") + "\n"))
         await reminders.turnOn(interval: .weeks12, time: .evening)
         XCTAssertEqual(pages.settings.rows, [
             SettingsScreen.Row(label: "多久一次", value: "三個月", change: "更改"),
@@ -504,7 +503,7 @@ final class ScreensTests: XCTestCase {
             "從 2027-03-01 起，這一版的島民證明 app 不能過卡。請更新到最新的版本。",
             "卡片還沒有被讀取，沒有任何東西送出去。",
             "到 App Store 更新",
-            "也可以用電腦和讀卡機，在 iamreal.tw 過卡。",
+            "也可以用電腦和讀卡機，打開 iamreal.tw 過卡。",
         ])
         XCTAssertEqual(stop.buttons, [])
         XCTAssertNil(stop.cancel)
@@ -518,7 +517,9 @@ final class ScreensTests: XCTestCase {
     func testAPhoneWithoutNFC() {
         let screen = screens.noNFC()
         XCTAssertEqual(screen.step, 0)
-        XCTAssertEqual(screen.texts, ["這支手機不能感應卡片", "這支手機沒有 NFC，不能用 app 過卡。", "可以用電腦和讀卡機，在 iamreal.tw 過卡。"])
+        XCTAssertEqual(screen.texts, ["這支手機不能感應卡片", "這支手機沒有 NFC，不能用 app 過卡。", "可以用電腦和讀卡機，打開 iamreal.tw 過卡。"])
+        // The site's name is the link to it: the one way left.
+        XCTAssertEqual(screen.blocks.last, .linked("可以用電腦和讀卡機，打開 ", Button(label: "iamreal.tw", action: .openSite), " 過卡。"))
         XCTAssertEqual(screen.buttons, [])
         document.check(screen)
     }

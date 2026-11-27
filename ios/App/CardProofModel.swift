@@ -235,6 +235,7 @@ final class CardProofModel: ObservableObject {
             redraw()
         case .openProof:
             if let shortID = proofShown { deps.open(proofAddress(shortID)) }
+        case .openSite: deps.open(deps.site)
         case .openProfile(let platform):
             // The account of the record sent, or the one the card declares now (step 4 on a day with 3 records).
             let accounts = finished?.done.accounts ?? status.map(Screens.hangable) ?? []

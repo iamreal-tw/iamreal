@@ -310,6 +310,8 @@ enum Action: Equatable {
     case copyLink
     /// The card's page, in the browser.
     case openProof
+    /// The site of this build, in the browser: a phone that cannot read a card.
+    case openSite
     /// The platform's app or the browser, at the account the card declares there.
     case openProfile(String)
     /// The platform's composer, the sentence and the card's page filled in.

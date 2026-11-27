@@ -1472,6 +1472,10 @@ async function oldVersionAndNoNfc(): Promise<void> {
     check(![step(1), say("before.title"), say("common.next"), say("app_read.tap_card")].some((x) => s.includes(x)), "a phone without NFC: no step, no 下一步");
   }
   shot("step-1-no-nfc");
+  // The site's name is the link to it: the one way left.
+  emulator.tap(find((n) => n.id === "open-site", "the site's name"));
+  await sleep(2_000);
+  check(onTop().includes(`dat=http://${SITE}`), "a phone without NFC: the site's name opens the site in the browser");
   phoneHasNfc = true;
   emulator.shell(`am force-stop ${APP}`);
   emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
@@ -1570,7 +1574,7 @@ async function reminderOffered(shortId: string): Promise<void> {
     const s = wholeScreen();
     shows(s, "the screen of the interval and the time", [
       app("reminder.title"), app("reminder.from_today"), app("reminder.how_often"), app("reminder.weeks_4"), app("reminder.weeks_12"), app("reminder.suggested"),
-      app("reminder.weeks_26"), app("reminder.pick_date"), app("reminder.when"), app("reminder.time"), NINE, app("reminder.change"), next(12), app("reminder.evening"),
+      app("reminder.weeks_26"), app("reminder.pick_date"), app("reminder.when"), app("reminder.time"), NINE, app("reminder.change"), next(12),
       app("reminder.turn_on"), app("reminder.cancel"),
     ]);
     check(!s.includes(app("reminder.save")), "the screen of the interval and the time, with the reminder off, says 開啟提醒, not 儲存");
@@ -1610,7 +1614,7 @@ async function settingsFromLastStep(): Promise<void> {
     const s = wholeScreen();
     shows(s, "the settings", [
       app("settings.title"), app("settings.reminder"), app("settings.switch"), app("settings.interval"), app("interval.weeks_12"), app("settings.time"), NINE,
-      app("settings.next"), dayText(weeksAfter(today, 12)), app("settings.stored"), app("settings.about"), app("settings.version"), app("settings.faq"),
+      app("settings.next"), dayText(weeksAfter(today, 12)), app("settings.about"), app("settings.version"), app("settings.faq"),
       app("settings.privacy"), app("settings.source"),
     ]);
     check(field("version").text === "dev", `the settings show the build's version: ${field("version").text}`);

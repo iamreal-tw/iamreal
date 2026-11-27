@@ -56,12 +56,20 @@ struct Screens {
         return Screen(step: 0, blocks: blocks, settings: settingsButton)
     }
 
+    /// The way left on a phone that cannot read a card, with the site's
+    /// name as a link to it: the app cannot go on, so this screen links out
+    /// (card-proof.md, step 1, "app").
+    private var reader: Block {
+        let parts = copy("app_before.no_nfc_reader").components(separatedBy: "{domain}")
+        return .linked(parts.first ?? "", Button(label: host, action: .openSite), parts.dropFirst().first ?? "")
+    }
+
     /// In the place of step 1 on a phone that cannot read a card
     /// (card-proof.md, step 1, "app"): nothing leads to a tap.
     func noNFC() -> Screen {
         Screen(
             step: 0,
-            blocks: [.title(copy("app_before.no_nfc_title")), .text(copy("app_before.no_nfc")), .text(copy("app_before.no_nfc_reader", ["domain": host]))],
+            blocks: [.title(copy("app_before.no_nfc_title")), .text(copy("app_before.no_nfc")), reader],
             settings: settingsButton)
     }
 

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -107,7 +108,7 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
                     }
                     when (m.step) {
                         Step.BEFORE -> when (gate) {
-                            Gate.NO_NFC -> NoNfc(m)
+                            Gate.NO_NFC -> NoNfc(m, outside)
                             Gate.TOO_OLD -> TooOld(m, (m.minApp as MinApp.TooOld).from, outside)
                             null -> Before(m, outside)
                         }
@@ -172,14 +173,17 @@ private fun TooOld(m: Model, from: String, outside: Outside) {
     Small(c.say("app_before.or_reader", "domain" to m.domain))
 }
 
-/** In place of step 1 on a phone without NFC: nothing of a card proof can be reached. */
+/**
+ * In place of step 1 on a phone without NFC: nothing of a card proof can be reached. The site's name is a link to it: the app
+ * cannot go on, so this screen links out (card-proof.md, step 1, "app").
+ */
 @Composable
-private fun NoNfc(m: Model) {
+private fun NoNfc(m: Model, outside: Outside) {
     val c = m.copy
     Spacer(Modifier.height(GATE_TOP))
     Title(c.say("app_before.no_nfc_title"))
     Body(c.say("app_before.no_nfc"))
-    Body(c.say("app_before.no_nfc_reader", "domain" to m.domain))
+    LinkInSentence(c.say("app_before.no_nfc_reader", "domain" to m.domain), m.domain, "open-site") { outside.open(m.site) }
 }
 
 @Composable
@@ -561,7 +565,11 @@ private fun SmallCard(c: Copy, accounts: List<Pair<String?, String>>, shortId: S
 
 /** "打開你的島民證明看看。": the words that open the card's page in the red of what you do, the rest of the sentence as the body. */
 @Composable
-private fun OpensProof(sentence: String, link: String, onOpen: () -> Unit) {
+private fun OpensProof(sentence: String, link: String, onOpen: () -> Unit) = LinkInSentence(sentence, link, "open-proof", onOpen)
+
+/** A sentence of the body with `link` in it as a link, in red and underlined; the rest is the text's (design/DESIGN.md, links). */
+@Composable
+private fun LinkInSentence(sentence: String, link: String, tag: String, onOpen: () -> Unit) {
     val at = sentence.indexOf(link)
     val words = buildAnnotatedString {
         if (at < 0) {
@@ -574,7 +582,7 @@ private fun OpensProof(sentence: String, link: String, onOpen: () -> Unit) {
     }
     BasicText(
         words,
-        Modifier.clickable(role = Role.Button, onClick = onOpen).defaultMinSize(minHeight = Type.minTarget).padding(vertical = 8.dp).testTag("open-proof"),
+        Modifier.clickable(role = Role.Button, onClick = onOpen).defaultMinSize(minHeight = Type.minTarget).padding(vertical = 8.dp).testTag(tag),
         style = TextStyle(color = Colours.ink, fontSize = Type.sizeBody, lineHeight = Type.leadingSmall),
     )
 }
@@ -731,7 +739,8 @@ private fun Finish(m: Model, outside: Outside) {
     }
     val url = m.proofUrl(d.shortId)
     Title(view.title)
-    SmallCard(c, view.card, d.shortId, wide.padding(top = 8.dp))
+    // At most 260 wide, in the middle of the screen, as on iOS (design/DESIGN.md, the components: the proof card).
+    Box(wide.padding(top = 8.dp), contentAlignment = Alignment.Center) { SmallCard(c, view.card, d.shortId, Modifier.widthIn(max = 260.dp).fillMaxWidth()) }
     // The card's ordinal, where the answer had one, and the invitation: one paragraph. Sharing is asked for, not required.
     // The thanks is in the ordinal's sentence; without an ordinal, on its own (card-proof.md, step 8).
     Body((view.ordinal ?: c.say("finish.thanks")) + c.say("finish.invite"), Modifier.padding(top = 8.dp))

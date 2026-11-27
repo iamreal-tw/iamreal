@@ -76,7 +76,6 @@ struct ScheduleScreen: Equatable {
     var time: String
     var change: String
     var next: String
-    var evening: String
     /// Why nothing was set.
     var message: String?
     /// "開啟提醒", or "儲存" when the reminder is on.
@@ -89,7 +88,7 @@ struct ScheduleScreen: Equatable {
             texts.append(option.label)
             if let note = option.note { texts.append(note) }
         }
-        texts += [when, timeLabel, time, change, next, evening]
+        texts += [when, timeLabel, time, change, next]
         if let message { texts.append(message) }
         return texts + [confirm, cancel]
     }
@@ -111,7 +110,6 @@ struct SettingsScreen: Equatable {
     var on: Bool
     /// How often, the time, the next reminder: while it is on.
     var rows: [Row]
-    var stored: String
     var about: String
     var version: Row
     /// The pages the browser opens: the questions, the privacy notice, the source.
@@ -123,7 +121,7 @@ struct SettingsScreen: Equatable {
             texts += [row.label, row.value]
             if let change = row.change { texts.append(change) }
         }
-        return texts + [stored, about, version.label, version.value] + links
+        return texts + [about, version.label, version.value] + links
     }
 }
 
@@ -159,7 +157,6 @@ struct ReminderScreens {
             time: when.time(time),
             change: appCopy("reminder.change"),
             next: appCopy("reminder.next", ["day": when.day(next), "time": when.time(time)]),
-            evening: appCopy("reminder.evening"),
             message: refused ? appCopy("reminder.denied") : nil,
             confirm: on ? appCopy("reminder.save") : appCopy("reminder.turn_on"),
             cancel: appCopy("reminder.cancel"))
@@ -183,7 +180,6 @@ struct ReminderScreens {
             toggle: appCopy("settings.switch"),
             on: settings != nil,
             rows: rows,
-            stored: appCopy("settings.stored"),
             about: appCopy("settings.about"),
             version: .init(label: appCopy("settings.version"), value: version, change: nil),
             links: [appCopy("settings.faq"), appCopy("settings.privacy"), appCopy("settings.source")])

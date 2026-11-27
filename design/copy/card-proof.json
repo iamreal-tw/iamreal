@@ -159,7 +159,7 @@
     "date": "日期",
     "short_id_label": "島民編號",
     "short_id": "{short_id} 開頭",
-    "uses_switch": "用掉一次更換，不會恢復。之後還可以更換 {switches_left} 次。",
+    "uses_switch": "用掉一次更換，之後還可以更換 {switches_left} 次。",
     "uses_final_switch": "用掉最後一次更換。這次之後，這個平台不能再更換。",
     "withdraw_stays": "收回之後，證明紀錄裡原本的紀錄還在：看得出這張卡片宣告過這個帳號。",
     "history_stays": "歷史證明紀錄無法刪除，依然看得出這張卡片過去曾宣告過的帳號。",
@@ -251,10 +251,10 @@
     "too_old_title": "這一版不能過卡了",
     "too_old": "從 {min_app_from} 起，這一版的島民證明 app 不能過卡。請更新到最新的版本。",
     "nothing_sent": "卡片還沒有被讀取，沒有任何東西送出去。",
-    "or_reader": "也可以用電腦和讀卡機，在 {domain} 過卡。",
+    "or_reader": "也可以用電腦和讀卡機，打開 {domain} 過卡。",
     "no_nfc_title": "這支手機不能感應卡片",
     "no_nfc": "這支手機沒有 NFC，不能用 app 過卡。",
-    "no_nfc_reader": "可以用電腦和讀卡機，在 {domain} 過卡。"
+    "no_nfc_reader": "可以用電腦和讀卡機，打開 {domain} 過卡。"
   },
   "app_panel": {
     "iphone_wait": "把自然人憑證貼在 iPhone 背面的上方",

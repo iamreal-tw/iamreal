@@ -184,9 +184,6 @@ struct ScheduleView: View {
                 .lineSpacing(Theme.spacing(Theme.leadingHeading, Theme.sizeLead))
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 28)
-            Text(screen.evening).font(Theme.body(Theme.sizeSmall)).foregroundColor(Theme.mute.color)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 8)
 
             if let message = screen.message {
                 Text(message).font(Theme.body(Theme.sizeKicker)).foregroundColor(Theme.ink.color)
@@ -265,10 +262,6 @@ struct SettingsView: View {
                     }
                 }
             }
-            Text(screen.stored).font(Theme.body(Theme.sizeSmall)).foregroundColor(Theme.mute.color)
-                .lineSpacing(Theme.spacing(Theme.leadingSmall, Theme.sizeSmall))
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 16)
 
             Parts.label(screen.about).padding(.top, 36)
             Divider().overlay(Theme.line.color)
