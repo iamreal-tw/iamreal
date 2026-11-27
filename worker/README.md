@@ -1463,7 +1463,7 @@ Durable Object 回 `overloaded`（錯誤帶著 `overloaded: true`，文件說不
 
 **還有兩種時候，算了一次的送出沒有紀錄**：Durable Object 已經把次數加上去、回應卻沒有回到 Worker（那個請求回 `500`）；Worker 這一次執行在算了之後被平台結束（例如用完 CPU 時間）。後一種為了不讓「送出後馬上斷線」躲掉紀錄，寫入是在算了一次的那一刻就向執行環境登記的（`waitUntil`），不是等回應準備好才登記；客戶端斷線後請求是不是照樣跑完，沒有在 Cloudflare 上看過。
 
-**還沒在 Cloudflare 上看過的**：`CF-Connecting-IP`、`request.cf` 的 `country` 和 `asn` 實際的值（本機的 workerd 裡 IP 是測試自己帶的標頭）；滿 32 天後 `oldest.json` 的日期有沒有跟著往後移。
+**還沒在 Cloudflare 上看過的**：`CF-Connecting-IP`、`request.cf` 的 `country` 和 `asn` 實際的值（本機的 workerd 裡 IP 是測試自己帶的標頭）；滿 32 天後 `oldest.json` 的日期有沒有跟著往後移（2026-12-30 看，[滿 32 天後看的](#滿-32-天後看的)）。
 
 ### 查連線紀錄
 
@@ -1586,9 +1586,9 @@ node --experimental-strip-types scripts/connection-log.ts --from 2026-11-20 --to
 
 **還沒在 Cloudflare 上看過的**：
 
-- 這個物件一秒收得了多少（和 [#52](https://github.com/iamreal-tw/iamreal/issues/52) 的量測一起量）
+- 這個物件一秒收得了多少（和 [#52](https://github.com/iamreal-tw/iamreal/issues/52) 的量測一起量，[要臨時的 Worker 和負載的](#要臨時的-worker-和負載的)）
 - 計時器是不是真的讓物件留到那一分鐘寫出來（照文件會；本機的 workerd 不會收掉物件，測不到）
-- 生命週期規則真的刪掉 `count-events/` 的檔：滿 32 天後營運者看一次
+- 生命週期規則真的刪掉 `count-events/` 的檔：2026-12-30 看一次（[滿 32 天後看的](#滿-32-天後看的)）
 
 ## 計數的加總
 
@@ -1764,7 +1764,7 @@ node --experimental-strip-types scripts/operator-page.ts [--days 30] [--out <檔
 
 **沒有做、沒有量的：**
 
-- **多久沒有量過**，要在測試網站量，寫到 [#52](https://github.com/iamreal-tw/iamreal/issues/52)。一步要從 R2 讀一個約 20 MB 的檔、算 1,000 筆的雜湊、套 1,000 次規則。最後一步另外在一個交易裡把卡片狀態表和五張衍生表整份換掉，表越大越久；大到一次 alarm 做不完時，那一步會一直重來，換不過去。這個上限在哪裡也還沒有量。
+- **多久沒有量過**，在臨時的 Worker 上量十萬筆（[要臨時的 Worker 和負載的](#要臨時的-worker-和負載的)），寫到 [#52](https://github.com/iamreal-tw/iamreal/issues/52)。一步要從 R2 讀一個約 20 MB 的檔、算 1,000 筆的雜湊、套 1,000 次規則。最後一步另外在一個交易裡把卡片狀態表和五張衍生表整份換掉，表越大越久；大到一次 alarm 做不完時，那一步會一直重來，換不過去。這個上限在哪裡也還沒有量。
 - **指紋檔最後一行之後的紀錄**只用規則重算，沒有東西可以對：它們要到下一次每天的公布、下一次重驗才被比到。
 - **清空測試的證明紀錄時**不要留著 `REBUILD_PROOF_LOG` 的名稱和停止收過卡：新的空物件會把儲存桶裡還沒清掉的舊檔讀進來（[清空測試的證明紀錄](#清空測試的證明紀錄)的步驟本來就先清儲存桶）。
 - **沒有另外留一份每筆紀錄的精簡內容**（#107 的留言提過）：先只做從紀錄檔讀的這一條，物件的資料沒了時本來就只能這樣讀；太慢再加。
@@ -1898,6 +1898,83 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 **它不開瀏覽器，所以過卡的頁面只看在不在。** 頁面在瀏覽器裡的那一半（標頭、跨來源隔離、證明引擎啟動、沒有違反 CSP、沒有連到別的網域，開到第一個畫面為止、不按「讀取卡片」）是 `web/` 的 [`test/e2e/smoke.ts`](../web/test/e2e/smoke.ts)（`web/README.md`）；它對線上跑的結果在 [Static Assets](#static-assets)「Cloudflare 上還沒確認的」。
 
 **2026-11-21 對 `main` 的 `1400e11` 部署出去的版本**：21 項過 20 項。不過的是「沒有一頁有不是自己網站的 script」，十個頁面都列在那一行：Cloudflare 在每一個 HTML 頁面加了一個別的網域的 script（[Static Assets](#static-assets)「Cloudflare 上看過的」最後一段），營運者當天關掉（[#240](https://github.com/iamreal-tw/iamreal/issues/240)）之後重跑，21 項全過。改成照瀏覽器的送法之後，其他各項的結果沒有變。
+
+## 上線前的量測
+
+[#52](https://github.com/iamreal-tw/iamreal/issues/52) 要量的數字，連同 [#196](https://github.com/iamreal-tw/iamreal/issues/196) 的十萬張卡片。分成四種：不用營運者就量得到的（這一節第一段，量了）、營運者用真卡片過卡時看的、要臨時的 Worker 和負載的、滿 32 天後看的；加上 Threads 的 app 送什麼標頭。已經量過、不再量的：從 Cloudflare 抓得到內政部的兩個清冊網址（[從 Cloudflare 抓得到內政部的兩個清冊網址](#從-cloudflare-抓得到內政部的兩個清冊網址)）、清冊鏡像一輪的 CPU 時間和記憶體（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)）、Rate Limiting binding 的計數每台機器各一份（[#466](https://github.com/iamreal-tw/iamreal/issues/466)）。
+
+### 不用營運者就量得到的
+
+2026-11-27 量的，時間都是 UTC。
+
+**公開的資料**（01:16 從 `test-data.iamreal.tw` 下載；那時測試的證明紀錄有 2 筆、1 張卡片）：
+
+| | 大小 | 推到更多的時候 |
+|---|---|---|
+| 紀錄檔的一行（`proof-log/0000000000000000.jsonl`，2 行 39,918 個位元組） | 19,959 個位元組。`proof` 一個欄位是 19,544 個字元（base64，14,658 個位元組），其他欄位合起來約 400 | 一檔 1,000 筆約 20 MB；十萬筆的證明紀錄約 2 GB |
+| 卡片狀態檔的一行（`proof-log/card-state/2026-11-27.jsonl`） | 302 個位元組，一個 Threads 名額 | 十萬張約 30 MB。本機量的 20 萬張是 68.7 MB（三張有一張多一個名額，[每天換日公布證明紀錄](#每天換日公布證明紀錄)「大小的上限」），對得上 |
+
+**一筆連線紀錄的物件**（照 `src/connection-log.ts` 的格式算，請求編號 16 個十六進位數字）：成功的約 190 個位元組（IPv4，帶過卡裝置編號）、約 215（IPv6），沒帶過卡裝置編號少 30；沒成功的多一份內文，一次送出的內文約 20 KB，最多 64 KiB。Cloudflare 上實際的大小在下面「營運者用真卡片過卡時看的」第 8 步看。
+
+**Cloudflare 文件寫的上限**（2026-11-27 讀的）：
+
+- 一個 Durable Object：「An individual Object has a soft limit of 1,000 requests per second.」；SQLite 的物件「Storage per Durable Object | 10 GB」；一列「Maximum string, `BLOB` or table row size | 8 MB」（[Durable Objects limits](https://developers.cloudflare.com/durable-objects/platform/limits/)）
+- R2：「Maximum concurrent writes to the same object name (key) | 1 per second」（[R2 limits](https://developers.cloudflare.com/r2/platform/limits/)）；不同的鍵沒有寫每秒的上限
+- 照這些推的（還沒量，量了換掉）：一筆紀錄只在物件裡留到搬檔（最多約 2,000 筆、40 MB），長期留在物件裡的是卡片狀態表和衍生表，一張卡片幾百個位元組到 1 KB 上下，千萬張以下碰不到 10 GB。每秒 1,000 個請求是頁面的讀取和寫入**合起來**的軟上限，做的事越多越低（ADR-0026），實際的數字要負載才量得到
+
+**往返的時間從開發用的電腦量不準**：那台電腦送的請求進的是 Cloudflare 的 `SJC` 機房（回應的 `cf-ray` 結尾），三種請求（`/faq`、`/`、`/api/v1/fingerprint`）各 20 次，TLS 之後到第一個位元組的中位數都在 154 到 165 ms 之間，分不出問不問 Durable Object。負載要從進台灣附近機房的網路送，先看 `cf-ray`。
+
+**連線紀錄在 Cloudflare 上寫得進去**：01:23 送了一筆題目是後台發的、證明是隨機位元組的送出（帳號是 `test-example` 的 `alice`，匿名編號是 `spec/vectors/` 裡的那一個），回 `400` `proof`，往返 703 ms。這一筆被算了一次，照規則有一筆連線紀錄；裡面的 IP 是送出的那台電腦的，31 天後由規則刪掉。
+
+### 營運者用真卡片過卡時看的
+
+[#177](https://github.com/iamreal-tw/iamreal/issues/177) 過卡的那一天一起看。**後台不為這個加量測的紀錄**：Worker 裡讀不到自己用了多少 CPU 時間，`Date.now()` 在計算時不走（[排程做什麼](#排程做什麼)），驗證的時間從裡面量不到；寫入動到幾列在物件裡數得到（cursor 的 `rowsWritten`），但寫入那段程式分在 `src/proof-log.ts`、`src/card-table.ts`、`src/views.ts`，要每一處都包，換來的數字儀表板本來就有。
+
+過卡之前：
+
+1. 挑一個不在整點前後 5 分鐘的時間：每小時 00 分的排程會讓 CPU 的圖多一個大的
+2. 打開 Workers & Pages → `iamreal-test` → Logs → Live（即時紀錄，不保存；[Real-time logs](https://developers.cloudflare.com/workers/observability/logs/real-time-logs/)）
+3. 記下開始的時間，到分鐘
+
+過卡時：
+
+4. 每一次送出，記下從按下送出到看到完成大約幾秒，和即時紀錄裡那一行 `POST /api/v1/records` 的時間（點開那一行，有 CPU 時間、牆上時間的話一起記）
+
+過卡之後馬上：
+
+5. **驗一筆證明的 CPU 時間**：Workers & Pages → `iamreal-test` → Metrics，時間範圍縮到過卡的那幾分鐘，看「CPU Time per execution」的 P999：那幾分鐘裡最重的就是送出那一筆，頁面、`config`、計數都在 1 ms 上下。本機約 15 ms（[量到的](#量到的)）。第 4 步記到每一行的 CPU 時間的話，以那個為準
+6. **寫入一筆要多久**：同一頁的「Wall time per execution」P999；Durable Objects → 證明紀錄的那個 namespace → Metrics 有牆上時間或 CPU 時間的話也記。看有沒有比其他送出久很多的一筆（停頓）
+7. **每筆寫入動到幾列**：同一個 namespace 的 Metrics，看過卡那一小時的 rows written、rows read（SQLite 計費用的數字）。那一小時物件做的事是發題目、計次、寫入、alarm 刪過期的題目；寫入的交易寫 `records`、`cards` 各 1 列，`proof_log` 更新 2 次，衍生表的列，`challenges` 1 列，加上它們的索引。儀表板上沒有這兩個數字的話，等臨時的 Worker 那一次量（下一節）
+8. **一筆連線紀錄的物件多大**：R2 → `iamreal-test-logs` → Objects → `connection/<UTC 的日期>/`，列表上每一筆有大小，不用打開、不用建權杖。成功的那一筆應該約 190 個位元組；2026-11-27 那一筆約 20 KB
+
+第 5 到 8 步的數字貼回給維護者（截圖不要有帳號名稱和 IP），寫進這一節。**每張卡片在各張表佔多少位元組不在這裡量**：測試的證明紀錄只有一兩張卡片，SQLite 一頁 4 KB，從物件的大小看不出一張卡片的幾百個位元組。灌了十萬張卡片的臨時 Worker 上量（下一節）。
+
+### 要臨時的 Worker 和負載的
+
+同一個 Durable Object 一秒回答幾個頁面讀取、一秒寫得了幾筆（物件那一側）、收計數的物件一秒收多少、從證明紀錄重建十萬筆要多久、每張卡片佔多少位元組，和 #196 的十萬張卡片換日公布，在一個臨時的 Worker 和兩個臨時的儲存桶上一次量。假卡片不進測試的證明紀錄（ADR-0028）。設定、負載的程式和營運者的步驟另外一個 PR。
+
+### 滿 32 天後看的
+
+連線紀錄和計數明細的生命週期規則真的有刪：
+
+| | 最舊的一筆 | 到期（31 天） | 文件說 24 小時內刪掉，最晚 |
+|---|---|---|---|
+| 連線紀錄 `connection/` | 2026-11-27 01:23（上面送的那一筆） | 2026-12-28 01:23 | 2026-12-29 01:23 |
+| 計數明細 `count-events/` | 2026-11-26（2026-11-27 的 `count-events/oldest.json`） | 2026-12-27 | 2026-12-28 |
+
+**2026-12-30 看**（台灣時間 10:00 以後）：`https://test-data.iamreal.tw/connection-log/oldest.json` 的 `oldest` 不是 `2026-11-27`、`https://test-data.iamreal.tw/count-events/oldest.json` 的不是 `2026-11-26`（是更晚的日期；之後一筆都沒有時是 `null`），兩個的 `checked` 都在一小時內。結果寫在 #52。沒看也會知道：`oldest` 比今天早超過 33 天時外部的檢查失敗（[連線紀錄](#連線紀錄)「規則有沒有在刪，從外面看得到」）。
+
+### Threads 的 app 開連結時送的標頭
+
+訪客頁面的計數收的是 `document.referrer` 的網域和瀏覽器的大類（`spec/counts.md`「Sources」「Browsers」），看不到完整的 `User-Agent`，也看不到 Android 的 WebView 可能帶的 `X-Requested-With`。完整的標頭只在即時紀錄看得到，不保存。[#275](https://github.com/iamreal-tw/iamreal/issues/275) 要照看到的定來源的分類。營運者用手機，iOS、Android 各做一次：
+
+1. 電腦上打開即時紀錄（上面第 2 步）。點開一行看不到請求的標頭的話，改在自己的電腦跑 `wrangler tail --env test --format json`，用部署測試網站的那把權杖：它印的每個請求有 `event.request.headers`，裡面有 IP，不要貼出去
+2. 在 Threads 發一則只有自己看得到的貼文，或私訊給自己，內容是 `https://test.iamreal.tw/faq`（每一種訪客頁面都跑 Worker；這一頁不問證明紀錄）
+3. 貼出去之後，即時紀錄會先出現 Threads 抓連結預覽的請求：記下它的 `User-Agent`（它不是訪客，分來源時要認得它）
+4. 在手機的 Threads app 裡點那個連結。記下那一行 `GET /faq` 的 `Referer`、`User-Agent`，和有沒有 `X-Requested-With`
+5. 在 app 裡選「用瀏覽器開啟」再開一次，記下同樣三樣：分得出 app 裡的瀏覽器和外面的瀏覽器
+
+三種請求各自的這三樣原文（不含 IP、`CF-Connecting-IP`、cookie）貼在 #52。
 
 ## 營運者在 Cloudflare 和 GitHub 上設的
 
