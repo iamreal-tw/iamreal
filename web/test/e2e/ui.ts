@@ -27,16 +27,13 @@
 //    list for a card that declares nothing (請至少填一個帳號); both declared
 //    again; a switch the server records as a switch where the screen said a
 //    correction (the card's state changed on its way: the screen tells the
-//    cardholder, kind_mismatch); the third switch; a fourth refused by the
-//    server's policy, which the Worker was started with for this
-//    (RESTRICT_LATE_SWITCHES: switch_restricted); a platform the page does
+//    cardholder, kind_mismatch); the third switch; a platform the page does
 //    not know (the config without its row): the account kept in the list as
-//    it is; then the Worker restarted as it runs by default (no such
-//    policy): the fourth and fifth switches recorded, step 4 saying none is
-//    left and refusing another account typed anyway, and a sixth refused by
-//    the record rules (switch_limit). Along the way: a submission
-//    that did not get through (再試一次), one the server refused (its
-//    request ID on the screen); 回到開頭 and 取消 on steps 4 and 5, then card
+//    it is; then the Worker restarted: the fourth and fifth switches
+//    recorded, step 4 saying none is left and refusing another account typed
+//    anyway, and a sixth refused by the record rules (switch_limit). Along
+//    the way: a submission that did not get through (再試一次), one the
+//    server refused (its request ID on the screen); 回到開頭 and 取消 on steps 4 and 5, then card
 //    proofs again on the same page with the same proof engine; step 3's
 //    上一步; the PIN's wait running out; a window the browser blocked on each
 //    of the three clicks; every case that stops before the PIN is asked,
@@ -242,12 +239,8 @@ await build({
   build: { outDir: dist, emptyOutDir: true },
 });
 
-// Started with the policy on the fourth and fifth switch (the setting
-// RESTRICT_LATE_SWITCHES, which wrangler.jsonc does not have), for the case
-// that checks switch_restricted; restarted as it runs by default before the
-// fourth and fifth switches are made.
 console.log("starting the Worker (test build) with that page");
-const site = await startWorkerSite({ proofFiles: dist, issuers, settings: { RESTRICT_LATE_SWITCHES: "true" } });
+const site = await startWorkerSite({ proofFiles: dist, issuers });
 const { worker } = site;
 /** Has the Worker's schedule run once: its mirror fetches what the fake MOICA serves now. */
 async function mirror(): Promise<void> {
@@ -376,10 +369,10 @@ async function noLinkOut(label: string): Promise<void> {
 }
 const stepLine = (n: number) => fill(C.common.step, { step: n, steps: 7 });
 
-/** Step 1's two links, in the question on how to get a card: a map's search, MOICA's site; each in a new tab, nothing else (card-proof.md, step 1). */
+/** Step 1's two links, in the question on how to get a card: a map's search, MOICA's page on applying; each in a new tab, nothing else (card-proof.md, step 1). */
 const STEP1_LINKS = [
   [C.before.find_office, "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent("戶政事務所")],
-  [C.before.how_to_get_moica, "https://moica.nat.gov.tw/"],
+  [C.before.how_to_get_moica, "https://moica.nat.gov.tw/rac.html"],
 ];
 async function step1Links(label: string, p: Page = page): Promise<void> {
   const links = await p.eval<[string, string, string][]>(`[...document.querySelectorAll('#app a')].map((a) => [a.textContent, a.getAttribute("href"), a.target + " " + a.rel + " " + !!a.closest('.asks details')])`);
@@ -922,7 +915,7 @@ interface HangSeen {
   shortLook: string;
   shortWhy: string;
   shortLink: string;
-  /** The whole step 6, after 沒有看到連結，重新掛上 when it opened short. */
+  /** The whole step 6, after 重新掛上連結 when it opened short. */
   title: string;
   link: string;
   /** What the QR code holds. */
@@ -1020,7 +1013,7 @@ const finishNow = () =>
 
 /**
  * After the submission, through every screen there is: step 6 (short, then
- * the whole one after 沒有看到連結，重新掛上), 下一步 to the last step, 上一步
+ * the whole one after 重新掛上連結), 下一步 to the last step, 上一步
  * back to step 6 as it was left. Ends on step 6, or on the last step when
  * everything was withdrawn. `shots`: the screenshots' prefix.
  */
@@ -1039,7 +1032,7 @@ async function doneSeen(shots?: string): Promise<DoneSeen> {
       })`);
       if (shots) await screenshot(`${shots}-6-hang-short`);
       await page.clickButton(C.hang.rehang);
-      await page.waitFor(`document.querySelector('[data-step="hang"]')?.dataset.short === "false" || null`, "沒有看到連結，重新掛上: the whole step 6");
+      await page.waitFor(`document.querySelector('[data-step="hang"]')?.dataset.short === "false" || null`, "重新掛上連結: the whole step 6");
     }
     hang = { short, ...s, ...(await hangNow()) };
     if (shots) await screenshot(`${shots}-6-hang`);
@@ -1136,7 +1129,7 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   check(h.where.includes(stepLine(6)), `${o.label}: 第 6 步，共 7 步 "${h.where}"`);
   check(h.main.includes(recorded), `${o.label}: step 6, the day it was recorded, unplug`);
   if (mismatch.length > 0) check(h.first === C.done.mismatch, `${o.label}: the difference, first of all "${h.first}"`);
-  // Short for a card proof again with one platform; 沒有看到連結，重新掛上 shows the whole step.
+  // Short for a card proof again with one platform; 重新掛上連結 shows the whole step.
   check(h.short === !!o.short, `${o.label}: step 6 ${o.short ? "is" : "is not"} short`);
   if (o.short) {
     check(h.shortTitle === fill(C.hang.still_there_single, { platform: o.single! }), `${o.label}: the short step 6 asks "${h.shortTitle}"`);
@@ -1727,33 +1720,6 @@ await tryStep("3 switches: the row says 2 are left; 取消 on step 5", async () 
   check(componentCount("MakeSignature") === signs && challengeCount() === challenges, "取消 on step 5: no second signature, no challenge");
 });
 
-// The Worker was started with RESTRICT_LATE_SWITCHES: the page offers the
-// fourth switch (the record rules allow 5), the server's policy refuses it
-// (switch_restricted).
-await tryStep("a fourth switch the server's policy refuses (RESTRICT_LATE_SWITCHES: switch_restricted)", async () => {
-  await toAccounts({ samePage: true });
-  await typeRows({ [THREADS]: "erin" });
-  checkConfirm(
-    "a fourth",
-    await waitConfirm(),
-    [
-      [EXAMPLE, EXAMPLE_NAME, "a-b", [K.unchanged]],
-      [THREADS, THREADS_NAME, at("erin"), [fill(K.switch, { previous: at("dave") }), fill(C.confirm.uses_switch, { switches_left: 1 })]],
-    ],
-    C.confirm.button_declare,
-  );
-  const before = await recordCount();
-  await page.clickButton(C.confirm.button_declare);
-  const d = await waitDoneOrMessage();
-  const id = await page.text("[data-request-id]");
-  check(!d.done && d.item === "submit" && d.message === `${C.stops.switch_restricted}\n${fill(C.stops.request_id, { request_id: id })}`, `switch_restricted, under 送出: ${JSON.stringify(d.message)}`);
-  const res = browser.responses.filter((r) => r.url.endsWith("/api/v1/records") && r.status === 403).at(-1);
-  check(res?.headers["x-request-id"] === id && refused("switch_restricted", id), `403 switch_restricted, its request ID on the screen (${id})`);
-  check((await recordCount()) === before, "nothing was appended");
-  check(JSON.stringify(await buttonTexts()) === JSON.stringify([C.read.read_again]), "refused: 再讀一次卡片 only");
-  await screenshot("switch-restricted-5-progress");
-});
-
 // The server's config without the test-example row: a platform the page does
 // not know, on which the card has an account. The row cannot be changed, and
 // the account goes back into the list as it is (docs/api/card-proof.md).
@@ -1892,11 +1858,11 @@ await tryStep("the same page after 回到開頭, 取消 and the wait: card proof
   );
 });
 
-// The server as it runs by default: no policy on the fourth and fifth switch ----------
+// The Worker restarted ----------
 
-await tryStep("the Worker restarted without RESTRICT_LATE_SWITCHES (the default)", async () => {
+await tryStep("the Worker restarted", async () => {
   // The whole Worker and its Durable Object stop and start again: what they stored and the bucket's files stay,
-  // the settings the test gave are gone (worker/test/harness.ts), and the clock is set again with the next request.
+  // and the clock is set again with the next request.
   const before = await recordCount();
   await worker.restart();
   const config = await (await fetch(`${PAGE_ORIGIN}/api/v1/config`)).json();
@@ -3069,7 +3035,7 @@ await tryStep("the production build's step 1: one platform, named", async () => 
     const s1 = await prod.text();
     check(!(await prod.eval<boolean>(`!!document.querySelector('[data-one-proof]')`)) && !s1.includes(C.before.one_proof), "the production build's step 1: no sentence of what the proof lists");
     check(
-      [C.before.title, C.before.duration, C.before.prepare_card, C.before.citizens_only, C.before.why_physical, C.before.how_to_get].every((x) => s1.includes(x)) && !s1.includes("我們只收台灣中華民國國民的自然人憑證正卡"),
+      [C.before.title, C.before.duration, C.before.prepare_card, C.before.citizens_only, C.before.why_physical, C.before.how_to_get].every((x) => s1.includes(x)) && !s1.includes("我們只收本國國民的自然人憑證"),
       "the production build's step 1: the words of card-proof.md",
     );
     await step1Links("the production build's step 1", prod);

@@ -85,7 +85,7 @@ Google Play 新的個人帳號要先跑封閉測試，至少 12 位測試者連�
 
 - **能上傳的金鑰不放在跑 coding agent 的電腦上**，和 ADR-0029 相同。測試網站允許從營運者的電腦部署，是為了開發時直接看結果；app 用線裝到手機就看得到，不需要上傳的金鑰。
 - **Android 的簽章金鑰是唯一丟了補不回來的。** 它外流時，拿到的人簽的安裝檔，手機會當成這個 app 的更新。CI 用不到它，所以不放在 CI。自己產生，任何人才能核對安裝檔是哪一把金鑰簽的，離開 Google Play 時也還能發更新。
-- **iOS 沒有對應的金鑰。** 發布憑證可以撤銷重發，已經裝的 app 不受影響。
+- **iOS 沒有對應的金鑰。** 發布憑證可以撤銷重發，App Store 上已經發布的 app 不受影響；已經上傳、還沒送審的 build 可能變成無效（[Certificates overview](https://developer.apple.com/help/account/certificates/certificates-overview/)：「Builds already uploaded to App Store Connect but not yet submitted for App Review may be marked as Invalid Binary if they were signed with a revoked certificate.」）。
 - **送審和發布留給營運者手動做**，CI 的金鑰就能縮到只能上傳。正式版不常發。
 - **正式 app 的標籤要先有測試 app 的 build**：正式 app 的每一行程式都先在手機上用測試 app 跑過，兩個 build 只差識別碼、連的網站和場合字串。
 - **iOS 不講做不到的事。** 說「可驗證」而實際上沒有人能比對，比不說更糟。

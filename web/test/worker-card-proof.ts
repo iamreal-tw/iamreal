@@ -351,7 +351,7 @@ try {
   await visitor.waitFor(`document.querySelector('[data-step="2"]').classList.contains("now")`, "step 2 to be marked", 5_000);
   demo = await demoNow(visitor);
   check(demo.marked.join() === "2" && demo.playing === "true", `at 6 s step 2 is the one marked, and it still plays: ${JSON.stringify(demo)}`);
-  // 停止, halfway: straight to the last frame, and the button plays it again.
+  // 停止播放, halfway: straight to the last frame, and the button plays it again.
   await visitor.clickButton(stopWord);
   demo = await demoNow(visitor);
   check(demo.playing === "false" && demo.button === replayWord && demo.at === DEMO_LENGTH && demo.marked.length === 0, `${stopWord} goes to the last frame, the button then says ${replayWord}: ${JSON.stringify(demo)}`);

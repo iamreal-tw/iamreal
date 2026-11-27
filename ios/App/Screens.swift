@@ -631,8 +631,8 @@ struct Screens {
     /// Step 6: the link to the card's page, to put on the profile
     /// (card-proof.md, step 6 and its "app"). `single`: the one platform's
     /// name, as step 5 decided it. `copied`: the link was copied. `whole`:
-    /// the whole step also where the short one would do ("沒有看到連結，
-    /// 重新掛上" was pressed). The same parts as the web page's, but for
+    /// the whole step also where the short one would do ("重新掛上連結"
+    /// was pressed). The same parts as the web page's, but for
     /// what only the page has: the QR code, and "現在可以拔出卡片。" (the
     /// panel said the card can be taken away when it signed). In the
     /// order of the page a phone opens to hang it: the link, the two
@@ -911,7 +911,6 @@ struct Screens {
             case "paused": sentence = copy("stops.paused")
             case "switch_limit": sentence = copy("stops.switch_limit")
             case "empty": sentence = copy("stops.empty")
-            case "switch_restricted": sentence = copy("stops.switch_restricted")
             case "scope", "platform", "malformed", "challenge_used", "challenge_attempts", "proof", "root", "date_order":
                 sentence = copy("stops.rejected", ["code": failure.code])
             default: sentence = copy("stops.server_unreadable", ["code": failure.code])

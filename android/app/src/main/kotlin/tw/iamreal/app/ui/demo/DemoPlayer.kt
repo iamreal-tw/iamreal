@@ -34,7 +34,7 @@ internal open class DemoPlayer(val length: Double) {
         playing = true
     }
 
-    /** "停止": straight to the last frame. */
+    /** "停止播放": straight to the last frame. */
     fun stop() {
         started = true
         seconds = length

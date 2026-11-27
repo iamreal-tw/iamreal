@@ -109,8 +109,6 @@ describe("stops", () => {
     [{ code: "server", server: "root", status: 400 }, "這次過卡沒有被接受（代碼 root），證明紀錄沒有變動。", 4],
     [{ code: "server", server: "challenge_used", status: 400 }, "這次過卡沒有被接受（代碼 challenge_used），證明紀錄沒有變動。", 4],
     [{ code: "server", server: "platform", status: 400 }, "這次過卡沒有被接受（代碼 platform），證明紀錄沒有變動。", 4],
-    // The server's operating policy refused a switch the rules allow (none by default): its own sentence.
-    [{ code: "server", server: "switch_restricted", status: 403 }, "這個平台目前不接受更多次更換。", 4],
     [{ code: "server", server: "crl_stale", status: 503 }, "內政部的廢止清冊超過 3 天沒有更新，現在不能過卡。", 4],
     // The operator stopped taking card proofs, or the server stopped by itself (docs/api/card-proof.md, paused).
     [{ code: "server", server: "paused", status: 503 }, COPY.stops.paused, 4],
@@ -161,7 +159,7 @@ describe("stops", () => {
   });
 
   test("every server error carries its request ID", () => {
-    for (const server of ["paused", "root", "challenge_unknown", "challenge_used", "crl_stale", "daily_limit", "switch_limit", "empty", "switch_restricted", "malformed_response", "not_found"]) {
+    for (const server of ["paused", "root", "challenge_unknown", "challenge_used", "crl_stale", "daily_limit", "switch_limit", "empty", "malformed_response", "not_found"]) {
       assert.equal(stopMessage({ code: "server", server, status: 400, requestId: "ab" }).requestId, "ab", server);
     }
   });
@@ -492,7 +490,7 @@ describe("confirm (step 5)", () => {
     // Each platform of the screens named, where one platform would be.
     assert.deepEqual(pointsOf(v), [
       "證明紀錄不包含姓名、生日、身分證字號和卡號。Example、Threads、政府、我們都查不出這是誰的卡片。",
-      "之後拿著這張卡片和 PIN 的人，都能查詢、更新、收回或更換這張證明宣告的 Example、Threads 帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。",
+      "任何持有這張卡片和 PIN 的人，都能查詢、更新、收回或更換這張證明宣告的 Example、Threads 帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。",
     ]);
     assert.equal(v.button, "宣告這份清單");
     assert.equal(v.date, TODAY);
@@ -542,7 +540,7 @@ describe("confirm (step 5)", () => {
     assert.equal(one.intro, "按下後，證明紀錄會記下新的證明並公開給所有人：");
     assert.deepEqual(pointsOf(one), [
       "證明紀錄不包含姓名、生日、身分證字號和卡號。Threads、政府、我們都查不出這是誰的卡片。",
-      "之後拿著這張卡片和 PIN 的人，都能查詢、更新、收回或更換這張證明宣告的 Threads 帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。",
+      "任何持有這張卡片和 PIN 的人，都能查詢、更新、收回或更換這張證明宣告的 Threads 帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。",
     ]);
     assert.equal(one.button, "宣告這個帳號");
     // A switch or declared again: 宣告這個帳號.
@@ -558,7 +556,7 @@ describe("confirm (step 5)", () => {
     assert.deepEqual(pointsOf(one), [
       "歷史證明紀錄無法刪除，依然看得出這張卡片過去曾宣告過的帳號。",
       "證明紀錄不包含姓名、生日、身分證字號和卡號。Threads、政府、我們都查不出這是誰的卡片。",
-      "之後拿著這張卡片和 PIN 的人，都能查詢或再宣告。",
+      "任何持有這張卡片和 PIN 的人，都能查詢或再宣告。",
     ]);
     assert.equal(one.button, "收回對 @alice 的宣告");
     // More than one platform: the same points, 收回所有帳號.

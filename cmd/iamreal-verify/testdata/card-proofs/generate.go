@@ -84,7 +84,6 @@ var proofs = []proofSpec{
 	{"2026-11-23T09:00:00+08:00", "G3", []string{"test-example:c-d", "threads:dave"}, 1, 201, "test-example refresh, threads switch"},
 	{"2026-11-23T10:00:00+08:00", "G2", []string{}, 0, 201, "threads withdraw"},
 	{"2026-11-23T10:30:00+08:00", "G2", []string{}, 0, 400, "empty"},
-	{"2026-11-24T09:00:00+08:00", "G3", []string{"test-example:c-d", "threads:erin"}, 1, 403, "switch_restricted"},
 	{"2026-11-24T09:30:00+08:00", "G3", []string{"test-example:c-d"}, 1, 201, "test-example refresh, threads withdraw"},
 	{"2026-11-24T11:00:00+08:00", "G3", []string{"test-example:c-d", "threads:dave"}, 1, 201, "test-example refresh, threads refresh"},
 	{"2026-11-24T11:30:00+08:00", "G3", []string{}, 1, 201, "test-example withdraw, threads withdraw"},
