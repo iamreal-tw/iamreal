@@ -30,3 +30,6 @@ export const IDLE_LIMIT_MS: number = __IAMREAL_TEST_IDLE_MS__;
 
 /** The links the screens write, as the production build writes them: the tests compare the screens with design/copy/, whose examples are the public site's. */
 export const SITE_DOMAIN = "iamreal.tw";
+
+/** No app domain, as the production build: the card proof starts at step 1. The choice of a way is tried on the test site's build (test/e2e/ui.ts). */
+export const APP_LINK: string | null = null;

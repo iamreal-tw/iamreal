@@ -35,17 +35,22 @@
     "paused": "現在暫停收過卡。已經換到的島民證明照常有效，證明紀錄也照常可以查。請晚點再來。",
     "busy": "現在人太多，請稍後再來。"
   },
-  "app": {
-    "use_reader": "我的電腦有讀卡機",
-    "use_phone": "我要用手機",
-    "reader_on_phone": "用讀卡機過卡要在電腦上做。請在電腦的瀏覽器自己輸入 {domain}。",
-    "title": "用手機過卡",
-    "no_reader_needed": "用手機感應自然人憑證，不需要讀卡機。",
-    "scan": "用手機的相機掃這個 QR code，下載「島民證明」app。",
-    "rest_in_app": "接下來的步驟都在 app 裡完成。",
-    "on_phone_now": "現在就是用手機在看這一頁？",
-    "download_here": "直接下載「島民證明」app",
-    "download": "下載「島民證明」app"
+  "choose": {
+    "title": "你要用什麼過卡？",
+    "intro_single": "一張自然人憑證換一張島民證明，上面寫著這張卡片宣告的 {platform} 帳號。",
+    "same_proof": "兩種方式換到的島民證明相同。",
+    "by_phone": "用手機（不用讀卡機）",
+    "by_phone_what": "用手機感應自然人憑證。需要有 NFC 的 iPhone 或 Android 手機。",
+    "scan": "用手機的相機掃這個 QR code。",
+    "opens_app": "已經裝了「島民證明」app 會直接打開；還沒裝，會帶你去下載。",
+    "rest_on_phone": "接下來的步驟都在手機上完成。這一頁不會跟著更新：過完卡，島民證明的連結會顯示在手機上。",
+    "or": "或者",
+    "by_reader": "用讀卡機，在這台電腦上",
+    "by_reader_what": "需要讀卡機，和電腦上安裝好的內政部元件（HiPKI 元件）。",
+    "use_reader": "用讀卡機過卡",
+    "use_app": "用「島民證明」app 過卡",
+    "opens_app_short": "已經裝了會直接打開；還沒裝，會帶你去下載。",
+    "reader_on_computer": "有讀卡機的話，請用電腦打開 {domain}/proof。"
   },
   "read": {
     "title": "讀取卡片",

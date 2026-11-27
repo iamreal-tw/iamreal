@@ -1136,7 +1136,48 @@ time {
   margin-top: 40px;
 }
 
-/* Narrower than --breakpoint: the phone's layout. The card proof on the web is for a computer (#135); a narrow window still reads. */
+/* The choice of a way, before step 1 (card-proof.md): the phone's way, "or" on the rule between, the reader's. On a phone, the app's button alone. */
+.on-phone {
+  display: none;
+}
+
+.ways {
+  margin-top: 8px;
+}
+
+.way > p {
+  margin: 0;
+}
+
+.way .qr {
+  margin-top: 20px;
+}
+
+.way .actions {
+  margin-top: 20px;
+}
+
+.or {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 36px 0 0;
+  color: var(--mute);
+  font-size: var(--size-small);
+}
+
+.or::before,
+.or::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--line);
+}
+
+.on-phone .btn {
+  margin-top: 32px;
+}
+
+/* Narrower than --breakpoint: the phone's layout. The card proof on the web is for a computer; on a phone the choice of a way shows the app's way alone (card-proof.md). A narrow window still reads. */
 @media (width < 760px) {
   body {
     font-size: var(--size-body-phone);
@@ -1222,6 +1263,14 @@ time {
     border-left: 0;
     border-top: 1px solid var(--line);
     padding-left: 0;
+  }
+
+  .on-computer {
+    display: none;
+  }
+
+  .on-phone {
+    display: block;
   }
 
 }

@@ -35,3 +35,6 @@ export const IDLE_LIMIT_MS: number = IDLE_MS;
 
 /** The links on the screen are the public site's, as before: the local server's pages are at this computer's address, which no link is written with. */
 export const SITE_DOMAIN = "iamreal.tw";
+
+/** No app domain: the apps connect to the test site, not to this computer's server (ADR-0040). The card proof starts at step 1. */
+export const APP_LINK: string | null = null;
