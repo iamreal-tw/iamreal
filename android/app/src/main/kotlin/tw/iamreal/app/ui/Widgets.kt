@@ -13,6 +13,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,11 +59,13 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -202,6 +206,36 @@ internal fun SideBySide(modifier: Modifier = Modifier, content: @Composable () -
         }
     }
 }
+
+/**
+ * A demonstration and its one control (design/copy/card-proof.md, "示範"): small words in the picture's bottom right corner,
+ * "停止" while it plays and "再看一次" otherwise, and pressing the picture does the same. Small, so that the step's own button
+ * is the one that stands out. A screen reader presses the words: the picture reads as its one sentence and nothing else.
+ */
+@Composable
+internal fun Demo(playing: Boolean, copy: Copy, tag: String, enabled: Boolean = true, toggle: () -> Unit, picture: @Composable (Modifier) -> Unit) =
+    Box(Modifier.fillMaxWidth()) {
+        val onTap by rememberUpdatedState(toggle)
+        picture(Modifier.pointerInput(enabled) { if (enabled) detectTapGestures { onTap() } })
+        Box(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .padding(8.dp)
+                .alpha(if (enabled) 1f else 0.4f)
+                .clip(RoundedCornerShape(Type.radius))
+                .background(Colours.soft)
+                .clickable(enabled = enabled, role = Role.Button, onClick = toggle)
+                .defaultMinSize(minHeight = Type.minTarget)
+                .padding(horizontal = 12.dp)
+                .testTag(tag),
+            contentAlignment = Alignment.Center,
+        ) {
+            BasicText(
+                if (playing) copy.say("app_demo.stop") else copy.say("app_demo.replay"),
+                style = TextStyle(color = Colours.ink, fontSize = 15.sp, textDecoration = TextDecoration.Underline),
+            )
+        }
+    }
 
 /** The buttons of a step, one under another, as wide as the screen: the primary one first. */
 @Composable
