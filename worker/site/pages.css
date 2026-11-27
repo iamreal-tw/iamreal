@@ -3633,7 +3633,7 @@ body.check .three p {
 
 /* The page of a card (proof-page.md) and the page of an account (account-page.md) ---------------------- */
 
-/* Two columns. The page of an account: the list on the left, the account owner's question and the profile on the right. */
+/* Two columns, the same on both pages. */
 body.proof .first,
 body.account .first {
   display: grid;
@@ -3643,24 +3643,29 @@ body.account .first {
   margin-top: 56px;
 }
 
-/* The page of a card: sections 1 and 2 on the left, section 3 on the right from the height of the title, so that its
-   record, which only grows, grows down the right column and pushes nothing (proof-page.md). A withdrawn card has no section 2. */
-body.proof .first {
+/* The account and the profile on the left; on the right, from the height of the left column, what only grows: the
+   record of a card (proof-page.md, section 3), the list of the cards of an account (account-page.md). It grows down the
+   right column and pushes nothing. A withdrawn card has no profile. */
+body.proof .first,
+body.account .first {
   grid-template-rows: auto 1fr;
   row-gap: 40px;
 }
 
-body.proof .first .claim {
+body.proof .first .claim,
+body.account .first .claim {
   grid-column: 1;
   grid-row: 1;
 }
 
-body.proof .first .owner {
+body.proof .first .owner,
+body.account .first .owner {
   grid-column: 1;
   grid-row: 2;
 }
 
-body.proof .first .last {
+body.proof .first .last,
+body.account .first .cards-of {
   grid-column: 2;
   grid-row: 1 / span 2;
 }
@@ -3747,18 +3752,13 @@ body.account .ask {
   margin: 0 0 6px;
 }
 
-/* The page of a card: one line when it fits; otherwise broken at its comma or a space, never inside a word (proof-page.md, section 2). */
-body.proof .ask {
+/* One line when it fits; otherwise broken at its comma or a space, never inside a word (proof-page.md, section 2; account-page.md). */
+body.proof .ask,
+body.account .ask {
   margin-bottom: 12px;
   word-break: keep-all;
   overflow-wrap: anywhere;
   text-wrap: balance;
-}
-
-body.account .owner > p {
-  font-size: var(--size-kicker);
-  line-height: var(--leading-kicker);
-  margin-bottom: 16px;
 }
 
 body.proof .backlink {
@@ -3839,13 +3839,22 @@ body.account .title .line {
 }
 
 body.account .count {
-  margin: 28px 0 0;
+  margin: 16px 0 0;
   color: var(--ink);
+}
+
+/* Right under the count, the sentence that goes with it (principles.md, 查詢頁); broken at its comma, not inside a word. */
+body.account .claim .small {
+  max-width: var(--measure);
+  margin-top: 8px;
+  line-height: var(--leading-small);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 body.account .cards {
   list-style: none;
-  margin: 20px 0 0;
+  margin: 0;
   padding: 0;
   border-top: 1px solid var(--ink);
 }
@@ -3879,11 +3888,6 @@ body.account .meta {
   color: var(--mute);
   font-size: var(--size-kicker);
   font-variant-numeric: tabular-nums;
-}
-
-body.account .cards + .small {
-  margin-top: 16px;
-  line-height: var(--leading-small);
 }
 
 /* No card: the left column only. */
@@ -4214,20 +4218,20 @@ body.account-not-a-name .title {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  /* On a phone one under another, in this order: the account, the profile, then what only grows, so that it pushes
+     nothing down (proof-page.md, account-page.md). */
+  body.proof .first,
   body.account .first {
-    gap: 56px;
-  }
-
-  /* On a phone sections 1, 2 and 3 one under another, in that order: the account, the profile, then the last card proof
-     and the record, which only grows, so that it pushes nothing down (proof-page.md). */
-  body.proof .first {
     grid-template-rows: none;
     gap: 28px;
   }
 
   body.proof .first .claim,
   body.proof .first .owner,
-  body.proof .first .last {
+  body.proof .first .last,
+  body.account .first .claim,
+  body.account .first .owner,
+  body.account .first .cards-of {
     grid-column: 1;
     grid-row: auto;
   }
@@ -4279,7 +4283,6 @@ body.account-not-a-name .title {
     font-size: var(--size-lead-phone);
   }
 
-  body.account .owner > p,
   body.account .meta,
   body.proof .log,
   body.proof .ordinal,
