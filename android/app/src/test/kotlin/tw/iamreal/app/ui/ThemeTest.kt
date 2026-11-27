@@ -52,7 +52,7 @@ class ThemeTest {
 
     @Test
     fun `the launcher's icon is the mark on the page's white, inside the circle every launcher keeps`() {
-        val res = File(System.getProperty("iamreal.strings.store")).parentFile.parentFile
+        val res = File(System.getProperty("iamreal.strings.production")).parentFile.parentFile
         val icon = File(res, "mipmap-anydpi/ic_launcher.xml").readText()
         assertTrue("the icon's ground is token_bg", icon.contains("""<background android:drawable="@color/token_bg" />"""))
         assertTrue("the icon's foreground is launcher_mark", icon.contains("""<foreground android:drawable="@drawable/launcher_mark" />"""))
