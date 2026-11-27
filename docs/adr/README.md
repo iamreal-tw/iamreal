@@ -4,7 +4,8 @@
 
 現在有效的結論，照主題排。施工前先看這一頁找到相關的 ADR，再讀 ADR 本身：理由、沒採用的做法和後果都在裡面。
 
-- 每份 ADR 開頭的 `status` 寫它是有效、被哪一份取代，還是部分取代；部分取代的，標題下面的引言寫明是哪一段
+- 決定改了，就直接改原本那一份：正文寫現在的決定，舊的做法和改的理由放進它的 Considered Options，其餘的歷史在 git 裡。只有新的主題才開新的一份
+- 以前已經用「取代」「部分取代」的幾份維持原樣：開頭的 `status` 寫被哪一份取代；部分取代的，標題下面的引言寫明是哪一段
 - 新增或修改 ADR 時，同一個 PR 改這一頁
 - 「程式還沒跟上」一節列的 ADR，現在的程式和各目錄的 README 講的還是舊做法；兩邊對不上時以 ADR 為準
 
@@ -31,7 +32,7 @@
 
 - 證明紀錄只記持卡人的宣告，不確認帳號主人是否承認；承認靠連回，由訪客自己看。[ADR-0003](0003-proof-log-records-declarations-only.md)
 - 證明紀錄只存事件，現況由公開規則算出；不設到期日、不提供刪除。[ADR-0005](0005-proof-log-is-an-append-only-event-log.md)
-- 更換每個平台終身 5 次；當天的更正不計次；一張卡片同一個日期最多 3 筆有效紀錄。[ADR-0018](0018-five-switches-per-platform-for-life.md)
+- 更換每個平台終身 5 次，換帳號一律算一次；一張卡片一天最多過卡 3 次是後台的政策，不是紀錄規則。[ADR-0018](0018-five-switches-per-platform-for-life.md)
 - 紀錄的日期：不晚於所用清冊發布日後 3 天，不早於證明紀錄裡最晚的有效日期前 4 天。[ADR-0015](0015-device-builds-revocation-tree.md)
 - 一張卡片的紀錄，日期不早於它自己的上次過卡日。[ADR-0024](0024-card-dates-do-not-go-back.md)
 - 上線後改規則，已經寫入的紀錄結果不變：逐筆相同才往回套用，否則用生效日；平台表只新增、只放寬。[ADR-0031](0031-rule-changes-keep-written-records.md)
@@ -86,6 +87,7 @@
 
 | ADR | 程式現在還是 | 票 |
 |---|---|---|
+| 0018、0024 | 規格、標準答案、三份實作、後台和裝置的畫面還有當天的更正（`correction`、`correction_date`）、紀錄規則裡的一天 3 筆（檢查 6、`proofs_on_last_date`）和 `switch_restricted`；`spec/record-rules.md`「How far dates are trusted」的理由還沒改寫 | [#506](https://github.com/iamreal-tw/iamreal/issues/506) |
 | 0025 | 每天的重驗有了（`.github/workflows/reverify.yml`），只跑測試的證明紀錄：正式的那一份寫好了、等正式網站才打開；每次從第 1 筆整份重驗，沒有進度檔，`iamreal-verify` 也還不能接著上次做、指定一段序號；沒通過時沒有東西通知營運者 | [#413](https://github.com/iamreal-tw/iamreal/issues/413)，通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
 | 0026 | 後台、網頁版和兩個 app 做完了（照 IP 的上限 [#418](https://github.com/iamreal-tw/iamreal/issues/418)；全站的總量上限、Durable Object 撐不住時的 `busy`、網頁版的處理 [#32](https://github.com/iamreal-tw/iamreal/issues/32)；Android [#419](https://github.com/iamreal-tw/iamreal/issues/419)、iOS [#420](https://github.com/iamreal-tw/iamreal/issues/420)）。WAF 的限流規則和挑戰頁在測試網站設好、演練過（2026-11-27，[#423](https://github.com/iamreal-tw/iamreal/issues/423)）；照 IP 的上限擋不住每次開新連線的來源，那種只有 WAF 的規則擋得住（2026-11-27，[#466](https://github.com/iamreal-tw/iamreal/issues/466)）。訪客的頁面在 Cloudflare 上沒有快取，要不要打開見 [#472](https://github.com/iamreal-tw/iamreal/issues/472) | [#413](https://github.com/iamreal-tw/iamreal/issues/413) |
 | 0027 | 指紋檔沒有另一份 | [#35](https://github.com/iamreal-tw/iamreal/issues/35) |
