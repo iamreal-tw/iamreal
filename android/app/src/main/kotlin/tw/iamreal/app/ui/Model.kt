@@ -358,7 +358,7 @@ internal class Model(
     var hangDemo by mutableStateOf<HangDemoPlayer?>(null)
         private set
 
-    /** Step 6 is the whole one: "沒有看到連結，重新掛上" was pressed on the short one. */
+    /** Step 6 is the whole one: "重新掛上連結" was pressed on the short one. */
     var hangWhole by mutableStateOf(false)
         private set
     var single by mutableStateOf<String?>(null)
@@ -901,7 +901,7 @@ internal class Model(
 
     // Steps 6 to 8 -----------------------------------------------------------------------
 
-    /** "沒有看到連結，重新掛上": step 6 still, the whole of it. */
+    /** "重新掛上連結": step 6 still, the whole of it. */
     fun hangAgain() {
         hangWhole = true
     }

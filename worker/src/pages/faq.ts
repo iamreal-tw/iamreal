@@ -135,7 +135,7 @@ export const CATEGORIES: readonly Category[] = [
       {
         id: "no-card-yet",
         question: "我還沒有自然人憑證，怎麼辦？",
-        answer: new Html(`<p>本人帶身分證正本，到任何一間戶政事務所申辦，不限戶籍地。申請時要填一個電子郵件信箱。工本費 250 元，當天拿到卡片。</p>`),
+        answer: new Html(`<p>滿 18 歲，未受監護宣告，本人帶身分證正本，到任何一間戶政事務所申辦，不限戶籍地。申請時要填一個電子郵件信箱。工本費 250 元，當天拿到卡片。</p>`),
       },
       {
         id: "mobile-certificate",
@@ -147,8 +147,8 @@ export const CATEGORIES: readonly Category[] = [
       },
       {
         id: "not-a-citizen",
-        question: "我不是中華民國國民，可以用嗎？",
-        answer: new Html(`<p>不行。島民證明只接受台灣中華民國國民的自然人憑證正卡。非中華民國國籍人所持有的自然人憑證無法使用於島民證明。</p>`),
+        question: "我不是本國國民，可以用嗎？",
+        answer: new Html(`<p>不行。島民證明只接受本國國民的自然人憑證。非本國國民持有的自然人憑證無法用於島民證明。</p>`),
       },
       {
         id: "under-18",
