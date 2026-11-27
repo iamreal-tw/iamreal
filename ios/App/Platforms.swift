@@ -34,13 +34,13 @@ struct Platform {
     /// intent, which opens the Threads app's composer where it is installed
     /// (design/copy/card-proof.md, step 8, app).
     func newPost(_ text: String) -> URL? {
-        guard var parts = URLComponents(string: "https://www.threads.com/intent/post") else { return nil }
-        parts.queryItems = [URLQueryItem(name: "text", value: text)]
-        // URLComponents leaves "+" as it is, which the other end reads as a space.
-        let query = parts.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
-        parts.percentEncodedQuery = query
-        return parts.url
+        // Encoded as the web's encodeURIComponent is, so both write the same address (web/src/ui/messages.ts).
+        guard let encoded = text.addingPercentEncoding(withAllowedCharacters: Self.unreserved) else { return nil }
+        return URL(string: "https://www.threads.com/intent/post?text=" + encoded)
     }
+
+    /// What encodeURIComponent leaves as it is: letters, digits and `-_.!~*'()`.
+    private static let unreserved = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()")
 
     static let threads = Platform(id: "threads", name: "Threads", prefix: "@", formatHint: "formats.threads")
 

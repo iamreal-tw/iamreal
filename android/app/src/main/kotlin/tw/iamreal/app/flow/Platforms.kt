@@ -35,9 +35,15 @@ object Platforms {
         prefix = "@",
         formatHint = "threads",
         profileUrl = { "https://www.threads.com/@$it" },
-        // URLEncoder writes a space as "+"; the intent reads "+" as itself.
-        newPostUrl = { "https://www.threads.com/intent/post?text=" + java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") },
+        newPostUrl = { "https://www.threads.com/intent/post?text=" + encodeUriComponent(it) },
     )
+
+    /**
+     * [text] encoded as the web's encodeURIComponent encodes it, so both write the same address (web/src/ui/messages.ts):
+     * URLEncoder writes a space as "+" and encodes `!'()~`, which encodeURIComponent leaves as they are.
+     */
+    internal fun encodeUriComponent(text: String): String = java.net.URLEncoder.encode(text, "UTF-8")
+        .replace("+", "%20").replace("%21", "!").replace("%27", "'").replace("%28", "(").replace("%29", ")").replace("%7E", "~")
 
     /** The platforms the app knows. */
     val known: List<Presentation> = listOf(THREADS)

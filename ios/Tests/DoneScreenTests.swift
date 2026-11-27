@@ -374,6 +374,13 @@ final class DoneScreenTests: XCTestCase {
         XCTAssertTrue(thousands.texts.contains("這是第 1,284 張島民證明，感謝你的參與。"))
     }
 
+    /// "分享到 Threads" opens Threads's web intent, written as the web's encodeURIComponent writes it (the value from Node).
+    func testThreadsComposerAddressIsEncodedAsTheWebEncodesIt() {
+        XCTAssertEqual(
+            Platform.threads.newPost("我剛剛換了第 1,284 張島民證明。\nhttps://iamreal.tw/p/7K2Q9FM4XD (!)")?.absoluteString,
+            "https://www.threads.com/intent/post?text=%E6%88%91%E5%89%9B%E5%89%9B%E6%8F%9B%E4%BA%86%E7%AC%AC%201%2C284%20%E5%BC%B5%E5%B3%B6%E6%B0%91%E8%AD%89%E6%98%8E%E3%80%82%0Ahttps%3A%2F%2Fiamreal.tw%2Fp%2F7K2Q9FM4XD%20(!)")
+    }
+
     func testTheTextSuggestedForSharingTheOrdinalWithACommaEveryThreeDigitsOrTheSentenceWithoutANumber() {
         let expected = [row("threads", "refresh", "alice", current: "alice")]
         let text = { (ordinal: Int?) in self.screens.shareText(self.done(expected, [self.recorded("threads", "refresh", "alice")], ordinal: ordinal)) }

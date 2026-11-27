@@ -279,7 +279,7 @@ private fun Pin(m: Model) {
     }
     m.pinNote?.let { Problem(it) }
     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Point(m.pinSays("pin.purpose"))
+        Point(m.pinSays("pin.purpose", "pin.purpose_single"))
         Point(c.say("app_pin.stays"))
     }
     if (busy && m.pinBusy != "") Small(m.pinBusy!!)
@@ -328,7 +328,7 @@ private fun DailyLimit(m: Model, sentence: String, outside: Outside) {
     Body(sentence, strong = true)
     // Nothing more to do in this card proof today: to the card's page, and how to hang its link, out of the flow
     // (design/copy/card-proof.md, "今天已經過卡 3 次").
-    OpensProof(c.say("hang.look", "open_proof" to openProof), openProof) { outside.open(m.proofUrl(shortId)) }
+    LinkInSentence(c.say("hang.look", "open_proof" to openProof), openProof, "open-proof") { outside.open(m.proofUrl(shortId)) }
     Actions {
         Button(c.say("accounts.restart"), wide) { m.cancel() }
         if (m.status?.let { m.messages.canHangFromLimit(it) } == true) Button(c.say("hang.rehang"), wide) { m.showHangFromLimit() }
@@ -420,7 +420,7 @@ private fun FillAccounts(m: Model, view: Messages.FillView, outside: Outside) {
     Actions {
         Button(c.say("common.next"), Modifier.fillMaxWidth(), primary = true) { m.toConfirm() }
         // Opened with 修改帳號清單: 上一步 back to what the card declares, beside 下一步 (card-proof.md, step 4).
-        if (view.editList) Button(c.say("common.back"), Modifier.fillMaxWidth()) { m.keep() }
+        if (view.editList) Button(c.say("common.back"), Modifier.fillMaxWidth()) { m.backToDeclared() }
     }
     Rule(Modifier.padding(top = 22.dp))
     TextButton(c.say("common.cancel")) { m.cancel() }
@@ -446,7 +446,7 @@ private fun SwitchAccount(m: Model, view: Messages.SwitchView, outside: Outside)
     // 上一步 back to what the card declares, beside 下一步 (none when no switch is left); 取消 ends the card proof (card-proof.md, step 4).
     Actions {
         if (view.row != null) Button(c.say("common.next"), Modifier.fillMaxWidth(), primary = true) { m.toConfirm() }
-        Button(view.keep, Modifier.fillMaxWidth()) { m.keep() }
+        Button(view.back, Modifier.fillMaxWidth()) { m.backToDeclared() }
     }
     Rule(Modifier.padding(top = 22.dp))
     TextButton(c.say("common.cancel")) { m.cancel() }
@@ -569,11 +569,10 @@ private fun SmallCard(c: Copy, accounts: List<Pair<String?, String>>, shortId: S
     ShortId(c.say("confirm.short_id_label") + " " + c.say("confirm.short_id", "short_id" to shortId), shortId, size = Type.sizeSmall, colour = Colours.text)
 }
 
-/** "打開你的島民證明看看。": the words that open the card's page in the red of what you do, the rest of the sentence as the body. */
-@Composable
-private fun OpensProof(sentence: String, link: String, onOpen: () -> Unit) = LinkInSentence(sentence, link, "open-proof", onOpen)
-
-/** A sentence of the body with `link` in it as a link, in red and underlined; the rest is the text's (design/DESIGN.md, links). */
+/**
+ * A sentence of the body with `link` in it as a link, in red and underlined; the rest is the text's (design/DESIGN.md, links):
+ * "打開你的島民證明看看。", the site's name on a phone without NFC.
+ */
 @Composable
 private fun LinkInSentence(sentence: String, link: String, tag: String, onOpen: () -> Unit) {
     val at = sentence.indexOf(link)
@@ -642,7 +641,7 @@ private fun Hang(m: Model, outside: Outside) {
     if (stillThere != null && !m.hangWhole) {
         Title(stillThere)
         ProofLink(link)
-        OpensProof(view.look, openProof) { outside.open(url) }
+        LinkInSentence(view.look, openProof, "open-proof") { outside.open(url) }
         Body(view.why)
         // The way on on the right, the way to the whole step on the left (Actions).
         Actions {
@@ -718,7 +717,7 @@ private fun HangWhole(m: Model, outside: Outside, title: String, why: String, pr
     for (note in notes) Small(note)
     Rule(Modifier.padding(top = 12.dp))
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        OpensProof(hung, openProof) { outside.open(url) }
+        LinkInSentence(hung, openProof, "open-proof") { outside.open(url) }
         Small(c.say("done.hung_done"), colour = Colours.text)
     }
 }
@@ -748,15 +747,14 @@ private fun Finish(m: Model, outside: Outside) {
     // At most 260 wide, in the middle of the screen, as on iOS (design/DESIGN.md, the components: the proof card).
     Box(wide.padding(top = 8.dp), contentAlignment = Alignment.Center) { SmallCard(c, view.card, d.shortId, Modifier.widthIn(max = 260.dp).fillMaxWidth()) }
     // The card's ordinal, where the answer had one, and the invitation: one paragraph. Sharing is asked for, not required.
-    // The thanks is in the ordinal's sentence; without an ordinal, on its own (card-proof.md, step 8).
-    Body((view.ordinal ?: c.say("finish.thanks")) + c.say("finish.invite"), Modifier.padding(top = 8.dp))
+    Body(view.invite, Modifier.padding(top = 8.dp))
     if (view.shares.isNotEmpty()) {
         // The platform's composer, the text filled in; beside it the system's share sheet with the same text (card-proof.md, step 8, app).
         val text = "${view.shareText}\n$url"
         Row(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             // One main button a screen (design/DESIGN.md): the first platform's, were there more than one.
             for ((n, share) in view.shares.withIndex()) {
-                Button(share, Modifier.weight(1f), primary = n == 0) { outside.open(Platforms.known[n].newPostUrl(text)) }
+                Button(share.label, Modifier.weight(1f), primary = n == 0) { outside.open(share.platform.newPostUrl(text)) }
             }
             ShareSymbol(c.say("app_done.share_other")) { outside.share(text) }
         }

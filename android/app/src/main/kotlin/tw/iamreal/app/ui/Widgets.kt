@@ -163,11 +163,11 @@ internal fun Button(label: String, modifier: Modifier = Modifier, primary: Boole
 }
 
 /**
- * A square button as tall as a button, drawn as Android's share symbol (three dots joined by two lines): step 8's share sheet. `told`:
- * what a screen reader reads, as the button has no words.
+ * A square button as tall as a button, drawn as Android's share symbol (three dots joined by two lines): step 8's share sheet.
+ * `description`: what a screen reader reads, as the button has no words.
  */
 @Composable
-internal fun ShareSymbol(told: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+internal fun ShareSymbol(description: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val shape = RoundedCornerShape(Type.radius)
     Box(
         modifier
@@ -176,7 +176,7 @@ internal fun ShareSymbol(told: String, modifier: Modifier = Modifier, onClick: (
             .background(Colours.bg)
             .border(1.5.dp, Colours.ink, shape)
             .clickable(role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = told },
+            .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(22.dp)) {

@@ -289,7 +289,7 @@ enum Action: Equatable {
     /// "修改帳號清單" of step 4: a row for each platform.
     case editList
     /// 上一步 of the screens opened from step 4: back to what the card declares.
-    case keep
+    case backToDeclared
     /// The app's page in the store, to update it.
     case openStore
     /// The phone's map, searching for household registration offices (step 1).

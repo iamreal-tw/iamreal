@@ -46,7 +46,7 @@
 //    (the whole of it, or for a card proof again only whether the link is
 //    still there), step 7 is the reminder, step 8 is done and the
 //    invitation to share. The withdrawal goes from step 5 to step 8.
-// 5. The reminder (issue #297): step 7 offers it (這次不要, then 開啟提醒),
+// 5. The reminder (issue #297): step 7 offers it (這次不要, then 設定提醒 and 開啟提醒 on the screen it opens),
 //    the screen of its interval and time, the card proofs after it set it
 //    again, the settings show it. The emulator's clock is moved to the day
 //    and the time of the reminder: the notification's words, "一週後再提醒我"

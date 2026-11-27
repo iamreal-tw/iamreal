@@ -217,7 +217,7 @@ final class CardProofModel: ObservableObject {
             if let status { confirm(Screens.listNow(status).mapValues { _ in "" }) }
         case .toSwitch: edit(.switching)
         case .editList: edit(.editing)
-        case .keep: edit(.open)
+        case .backToDeclared: edit(.open)
         case .openStore: if let page = deps.storePage { deps.open(page) }
         case .findOffice: deps.open(Self.findOffice)
         case .howToApply: deps.open(Self.moica)

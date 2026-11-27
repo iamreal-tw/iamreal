@@ -31,6 +31,7 @@ import {
   firstNotDone,
   itemStates,
   onePlatform,
+  pinView,
   progressButtons,
   readItemOf,
   rowLines,
@@ -439,6 +440,13 @@ describe("your accounts (step 4)", () => {
     const more = beforeView(new Set(["test-example", "threads"]));
     assert.equal(t(more.oneProof!), "一張自然人憑證換一張島民證明，上面列出這張卡片宣告的帳號，每個平台最多一個。");
     assert.equal(more.listedTogether, true);
+  });
+
+  test("step 3: by the platforms the device knows, as step 1; one names it in what the card's signature looks up", () => {
+    const one = pinView();
+    assert.deepEqual([t(one.purpose), t(one.signing)], ["按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的 Threads 帳號。", "卡片簽章中，接著查這張卡片目前宣告的 Threads 帳號……"]);
+    const more = pinView(new Set(["test-example", "threads"]));
+    assert.deepEqual([t(more.purpose), t(more.signing)], ["按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的帳號。", "卡片簽章中，接著查這張卡片目前宣告的帳號……"]);
   });
 
   test("days between two dates", () => {

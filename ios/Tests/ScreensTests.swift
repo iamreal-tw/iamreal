@@ -228,7 +228,7 @@ final class ScreensTests: XCTestCase {
             "上一步", "下一步",
             "取消",
         ])
-        XCTAssertEqual(screen.buttons, [Button(label: "上一步", action: .keep), Button(label: "下一步", action: .toConfirm)])
+        XCTAssertEqual(screen.buttons, [Button(label: "上一步", action: .backToDeclared), Button(label: "下一步", action: .toConfirm)])
         XCTAssertEqual(screen.links, [])
         // What it costs, by the switches left.
         func cost(_ status: Flow.CardStatus) -> String? {

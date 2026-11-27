@@ -204,7 +204,7 @@ struct Screens {
         case .tapping:
             buttons = buttons.map { Button(label: $0.label, action: $0.action, enabled: false) }
         case .signed:
-            blocks.append(.busy(pinSays("app_pin.signed")))
+            blocks.append(.busy(pinSays("app_pin.signed", single: "app_pin.signed_single")))
             buttons = buttons.map { Button(label: $0.label, action: $0.action, enabled: false) }
         case .tapAgain(let message):
             blocks.append(.message(message))
@@ -217,15 +217,15 @@ struct Screens {
             blocks += why.map(Block.message)
             buttons = [Button(label: copy("app_read.restart"), action: .readAgain)]
         }
-        blocks.append(.points([pinSays("pin.purpose"), copy("app_pin.stays")]))
+        blocks.append(.points([pinSays("pin.purpose", single: "pin.purpose_single"), copy("app_pin.stays")]))
         return Screen(step: 3, blocks: blocks, buttons: buttons)
     }
 
     /// Step 3's sentences that speak of the card's accounts: as on step 1,
     /// by the platforms the app knows; with one, they name it (card-proof.md, step 3).
-    private func pinSays(_ key: String) -> String {
+    private func pinSays(_ key: String, single: String) -> String {
         guard Platform.known.count == 1, let only = Platform.known.first else { return copy(key) }
-        return copy(key + "_single", ["platform": only.name])
+        return copy(single, ["platform": only.name])
     }
 
     // Step 4: the card's accounts ------------------------------------------------------------------
@@ -309,7 +309,7 @@ struct Screens {
     /// 上一步 of step 4's screens opened from it: back to what the card
     /// declares, beside 下一步 as on the other steps; 取消 ends the card
     /// proof (card-proof.md, step 4).
-    private var keep: Button { Button(label: copy("common.back"), action: .keep) }
+    private var backToDeclared: Button { Button(label: copy("common.back"), action: .backToDeclared) }
 
     /// Step 4 (design/copy/card-proof.md, step 4, and its "app"), by what
     /// the card declares and by `mode`; the same choices as accountsView,
@@ -439,7 +439,7 @@ struct Screens {
         if row.switchesLeft == 0 {
             blocks.append(.text(copy("accounts.row_used_up", ["switches_used": String(row.switchCount)])))
             if let whole = message ?? errors[row.platform] { blocks.append(.message(whole)) }
-            return Screen(step: 4, blocks: blocks, buttons: [keep], mainButton: false, cancel: cancel)
+            return Screen(step: 4, blocks: blocks, buttons: [backToDeclared], mainButton: false, cancel: cancel)
         }
         let cost = row.switchesLeft == 1
             ? copy("confirm.uses_final_switch")
@@ -451,7 +451,7 @@ struct Screens {
         if let message { blocks.append(.message(message)) }
         blocks.append(.sentences([copy("accounts.switch_effect", ["account": now]), cost]))
         blocks += previewNote(single, counted: true)
-        return Screen(step: 4, blocks: blocks, buttons: [keep, Button(label: copy("common.next"), action: .toConfirm)], cancel: cancel)
+        return Screen(step: 4, blocks: blocks, buttons: [backToDeclared, Button(label: copy("common.next"), action: .toConfirm)], cancel: cancel)
     }
 
     /// After "修改帳號清單": a row for each platform, each changed on its own.
@@ -462,7 +462,7 @@ struct Screens {
         if let message { blocks.append(.message(message)) }
         blocks.append(.text(copy("accounts.how_change") + copy("accounts.switches_limited")))
         blocks += previewNote(single, counted: true)
-        return Screen(step: 4, blocks: blocks, buttons: [keep, Button(label: copy("common.next"), action: .toConfirm)], cancel: cancel)
+        return Screen(step: 4, blocks: blocks, buttons: [backToDeclared, Button(label: copy("common.next"), action: .toConfirm)], cancel: cancel)
     }
 
     // Step 5: confirming ----------------------------------------------------------------------
@@ -887,7 +887,7 @@ struct Screens {
         return Screen(
             step: 8, blocks: blocks,
             buttons: [Button(label: copy("common.back"), action: .back), end], top: share,
-            beside: Button(label: copy("app_done.share_other"), action: .share),
+            beside: share.map { _ in Button(label: copy("app_done.share_other"), action: .share) },
             mainButton: false, settings: settingsButton)
     }
 
