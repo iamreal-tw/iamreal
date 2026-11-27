@@ -735,12 +735,17 @@ private fun Finish(m: Model, outside: Outside) {
     Title(view.title)
     SmallCard(c, view.card, d.shortId, wide.padding(top = 8.dp))
     // The card's ordinal, where the answer had one, and the invitation: one paragraph. Sharing is asked for, not required.
-    Body((view.ordinal ?: "") + c.say("finish.invite"), Modifier.padding(top = 8.dp))
-    Body(c.say("finish.thanks"))
+    // The thanks is in the ordinal's sentence; without an ordinal, on its own (card-proof.md, step 8).
+    Body((view.ordinal ?: c.say("finish.thanks")) + c.say("finish.invite"), Modifier.padding(top = 8.dp))
     if (view.shares.isNotEmpty()) {
-        Actions {
+        // The platform's composer, the text filled in; beside it the system's share sheet with the same text (card-proof.md, step 8, app).
+        val text = "${view.shareText}\n$url"
+        Row(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             // One main button a screen (design/DESIGN.md): the first platform's, were there more than one.
-            for ((n, share) in view.shares.withIndex()) Button(share, wide, primary = n == 0) { outside.share("${view.shareText}\n$url") }
+            for ((n, share) in view.shares.withIndex()) {
+                Button(share, Modifier.weight(1f), primary = n == 0) { outside.open(Platforms.known[n].newPostUrl(text)) }
+            }
+            ShareSymbol(c.say("app_done.share_other")) { outside.share(text) }
         }
     }
     // Under it, 上一步 and 完成 side by side as the two buttons of a step, 完成 on the right (design/DESIGN.md, the components: buttons).

@@ -1019,8 +1019,9 @@ async function finishStep(o: { name: string; shortId: string; account: string; t
   check(ordinal !== "", `step 8 writes the card's ordinal before the invitation: 第 ${ordinal} 張`);
   shows(s, "step 8", [
     step(8), o.title, say("done.proof"), o.account, `${say("confirm.short_id_label")} ${say("confirm.short_id", { short_id: o.shortId })}`,
-    say("finish.thanks"), say("done.share", { platform: THREADS }), say("common.back"), say("finish.done"),
+    say("done.share", { platform: THREADS }), say("common.back"), say("finish.done"),
   ]);
+  check(visible().some((n) => n.description === say("app_done.share_other")), "step 8: beside 分享到 Threads, the share symbol, read as 用其他 app 分享");
   for (const a of [say("hang.copy"), say("app_done.reminder_title"), say("common.next"), say("finish.unlink_single", { platform: THREADS }), ...neverAfter(o.account)]) check(!s.includes(a), `step 8 does not say "${a.slice(0, 40)}"`);
   return ordinal;
 }
@@ -1776,12 +1777,17 @@ try {
   check(page.status === 200 && html.includes("@alice"), `the Worker's page of the card, /p/${shortId}, lists @alice`);
   // The card's ordinal as its page writes it: the proof log's, which the answer to the submission gave the app.
   check(/<p class="ordinal">第 ([0-9,]+) 張島民證明<\/p>/.exec(html)?.[1] === ordinal, `the card's page writes the same ordinal, 第 ${ordinal} 張`);
-  // The system's share sheet, with the sentence and, on the line under it, the address of the card's page (Android 10
-  // shows the text it is given at its top).
-  press(say("done.share", { platform: THREADS }));
+  // Threads's composer, the sentence and, on the line under it, the address of the card's page filled in: its web intent, opened
+  // outside the app (the emulator has no Threads, so the browser).
   const text = `${say("done.share_text", { ordinal })}\nhttp://${SITE}/p/${shortId}`;
+  press(say("done.share", { platform: THREADS }));
+  await sleep(2_000);
+  check(onTop().includes(`dat=https://www.threads.com/intent/post?text=${encodeURIComponent(text)}`), "step 8: 分享到 Threads opens Threads's composer with the text filled in");
+  await backToApp(8);
+  // The share symbol: the system's share sheet, with the same text (Android 10 shows the text it is given at its top).
+  emulator.tap(find((n) => n.description === say("app_done.share_other"), "the share symbol"));
   const shared = await waitText(text, "the share sheet with the sentence and the card's address", 20_000);
-  check(/act=android\.intent\.action\.CHOOSER/.test(emulator.shell("dumpsys activity activities")), "step 8: 分享到 Threads opens the system's share sheet");
+  check(/act=android\.intent\.action\.CHOOSER/.test(emulator.shell("dumpsys activity activities")), "step 8: the share symbol opens the system's share sheet");
   check(textsOf(visible()).filter((t) => t.includes(SITE)).length === 1 && shared.text === text, "step 8: what is shared is the sentence with the card's ordinal and the card's address");
   emulator.shell("input keyevent KEYCODE_BACK");
   await backToApp(8);

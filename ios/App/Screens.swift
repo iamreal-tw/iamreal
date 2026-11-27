@@ -863,15 +863,17 @@ struct Screens {
         var blocks: [Block] = [
             .title(finishTitle(done, single: single)),
             .proofCard(card),
-            .sentences(ordinal + [copy("finish.invite")]),
-            .text(copy("finish.thanks")),
+            // The thanks is in the ordinal's sentence; without an ordinal, on its own (card-proof.md, step 8).
+            .sentences((ordinal.isEmpty ? [copy("finish.thanks")] : ordinal) + [copy("finish.invite")]),
         ]
-        // One share sheet, whichever platform: the button names the one the app knows. The main button, alone on
-        // top; 上一步 and 完成 side by side under it (design/DESIGN.md, the components: buttons).
-        let share = Platform.known.first.map { Button(label: copy("done.share", ["platform": $0.name]), action: .share) }
+        // The main button on top: the composer of the platform the app knows, with the share sheet beside it as a
+        // small button of the system's symbol; 上一步 and 完成 side by side under them (design/DESIGN.md, the
+        // components: buttons).
+        let share = Platform.known.first.map { Button(label: copy("done.share", ["platform": $0.name]), action: .shareOn($0.id)) }
         return Screen(
             step: 8, blocks: blocks,
             buttons: [Button(label: copy("common.back"), action: .back), end], top: share,
+            beside: Button(label: copy("app_done.share_other"), action: .share),
             mainButton: false, settings: settingsButton)
     }
 

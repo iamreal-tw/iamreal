@@ -244,9 +244,11 @@ final class CardProofModel: ObservableObject {
             let accounts = finished?.done.accounts ?? status.map(Screens.hangable) ?? []
             let username = accounts.first(where: { $0.platform == platform })?.username
             if let username, let address = Platform.of(platform)?.profile(username) { deps.open(address) }
+        case .shareOn(let platform):
+            // The same text in the platform's composer (design/copy/card-proof.md, step 8, app).
+            if let finished, let address = Platform.of(platform)?.newPost(shared(finished.done)) { deps.open(address) }
         case .share:
-            // The sentence, and on the line under it the card's page (design/copy/card-proof.md, step 8, app).
-            if let finished { deps.share("\(screens.shareText(finished.done))\n\(proofAddress(finished.done.shortID).absoluteString)") }
+            if let finished { deps.share(shared(finished.done)) }
         case .preview(let platform): preview(platform)
         case .openSettings: deps.openSettings()
         case .adjustReminder: deps.openSchedule()
@@ -647,6 +649,11 @@ final class CardProofModel: ObservableObject {
 
     private func proofAddress(_ shortID: String) -> URL {
         deps.site.appendingPathComponent("p").appendingPathComponent(shortID)
+    }
+
+    /// What step 8 shares: the sentence, and on the line under it the card's page (design/copy/card-proof.md, step 8).
+    private func shared(_ done: CardProofFlow.Done) -> String {
+        "\(screens.shareText(done))\n\(proofAddress(done.shortID).absoluteString)"
     }
 
     /// The card whose page the screen links to: the record's, or on step 4 the card's whose state was read.

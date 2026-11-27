@@ -30,6 +30,18 @@ struct Platform {
         URL(string: "https://www.threads.com/@\(username)")
     }
 
+    /// A new post on the platform with `text` filled in: Threads's web
+    /// intent, which opens the Threads app's composer where it is installed
+    /// (design/copy/card-proof.md, step 8, app).
+    func newPost(_ text: String) -> URL? {
+        guard var parts = URLComponents(string: "https://www.threads.com/intent/post") else { return nil }
+        parts.queryItems = [URLQueryItem(name: "text", value: text)]
+        // URLComponents leaves "+" as it is, which the other end reads as a space.
+        let query = parts.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        parts.percentEncodedQuery = query
+        return parts.url
+    }
+
     static let threads = Platform(id: "threads", name: "Threads", prefix: "@", formatHint: "formats.threads")
 
     /// The platforms the app has its own definition of.

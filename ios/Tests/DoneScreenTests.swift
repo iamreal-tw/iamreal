@@ -367,26 +367,26 @@ final class DoneScreenTests: XCTestCase {
         XCTAssertEqual(screen.texts, [
             "恭喜你完成島民證明",
             "島民證明", "@alice", "島民編號 7K2Q9FM4XD 開頭",
-            "這是第 128 張島民證明。", "愈多人成為島民，知道彼此都是台灣人，我們能讓台灣的網路討論變得更貼近真實、更有意義。",
-            "謝謝你加入島民，誠摯的邀請你分享島民證明。",
-            "分享到 Threads", "上一步", "完成",
+            "這是第 128 張島民證明，感謝你的參與。", "愈多人成為島民，知道彼此都是台灣人，我們能讓 Threads 上的網路聲量更貼近真實、更有意義。",
+            "分享到 Threads", "用其他 app 分享", "上一步", "完成",
         ])
-        // The main button alone on top: sharing; under it back to step 7 and done (to step 1), side by side
-        // (card-proof.md, step 8, app).
+        // The main button on top: Threads's composer, the share sheet beside it; under them back to step 7 and
+        // done (to step 1), side by side (card-proof.md, step 8, app).
         XCTAssertTrue(inline(screen).isEmpty)
-        XCTAssertEqual(screen.top?.action, .share)
+        XCTAssertEqual(screen.top?.action, .shareOn("threads"))
+        XCTAssertEqual(screen.beside?.action, .share)
         XCTAssertFalse(screen.mainButton)
         XCTAssertEqual(screen.buttons.map(\.action), [.back, .restart])
         XCTAssertEqual(screen.settings, Button(label: "設定", action: .openSettings))
         try CopyDocument.load().check(screen)
     }
 
-    /// No ordinal in the answer: the paragraph starts at the invitation.
+    /// No ordinal in the answer: the thanks on its own, then the invitation.
     func testStepEightWithoutAnOrdinal() {
         let screen = screens.finish(done([row("threads", "refresh", "alice", current: "alice")], [recorded("threads", "refresh", "alice")], ordinal: nil), single: "Threads")
-        XCTAssertTrue(screen.blocks.contains(.sentences([copy("finish.invite")])))
+        XCTAssertTrue(screen.blocks.contains(.sentences(["感謝你的參與。", copy("finish.invite")])))
         let thousands = screens.finish(done([row("threads", "refresh", "alice", current: "alice")], [recorded("threads", "refresh", "alice")], ordinal: 1284), single: "Threads")
-        XCTAssertTrue(thousands.texts.contains("這是第 1,284 張島民證明。"))
+        XCTAssertTrue(thousands.texts.contains("這是第 1,284 張島民證明，感謝你的參與。"))
     }
 
     func testTheTextSuggestedForSharingTheOrdinalWithACommaEveryThreeDigitsOrTheSentenceWithoutANumber() {

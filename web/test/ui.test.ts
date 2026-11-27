@@ -614,7 +614,7 @@ describe("after the submission: hang it (step 6), done and share (the last step)
 
   test("the last step: the card's ordinal, then the invitation to share; without an ordinal, the invitation alone", () => {
     const expected = [crow({ kind: "first", username: "alice" })];
-    assert.equal(t(doneView(done(expected, [k("threads", "first", "alice")], { ordinal: 1284 })).ordinal!), "這是第 1,284 張島民證明。");
+    assert.equal(t(doneView(done(expected, [k("threads", "first", "alice")], { ordinal: 1284 })).ordinal!), "這是第 1,284 張島民證明，感謝你的參與。");
     assert.equal(doneView(done(expected, [k("threads", "first", "alice")], { ordinal: null })).ordinal, null);
   });
 

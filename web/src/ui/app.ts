@@ -1055,8 +1055,8 @@ export function startApp(o: AppOptions): void {
         el("h1", {}, say(view.title)),
         card,
         // The call to share (principles: the one place of a fact page that may move the reader): the card's ordinal when the answer had it.
-        el("p", { class: "invite", attrs: { "data-invite": "" } }, view.ordinal ? say(view.ordinal) : null, f.invite),
-        el("p", { class: "invite" }, f.thanks),
+        // The thanks is in the ordinal's sentence; without an ordinal, on its own (card-proof.md, step 8).
+        el("p", { class: "invite", attrs: { "data-invite": "" } }, view.ordinal ? say(view.ordinal) : f.thanks, f.invite),
         el("div", { class: "share" }, ...view.shares.map((sh) => newTab(sh.url, { class: "btn", "data-share": "" }, say(sh.button)))),
         // The web has no reminder: when to come back, in words (the app's step 7).
         el("div", { class: "return", attrs: { "data-return": "" } }, el("h3", {}, t.return_title), el("p", {}, t.return_note)),

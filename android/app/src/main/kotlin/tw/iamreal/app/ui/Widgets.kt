@@ -162,6 +162,35 @@ internal fun Button(label: String, modifier: Modifier = Modifier, primary: Boole
     }
 }
 
+/**
+ * A square button as tall as a button, drawn as Android's share symbol (three dots joined by two lines): step 8's share sheet. `told`:
+ * what a screen reader reads, as the button has no words.
+ */
+@Composable
+internal fun ShareSymbol(told: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(Type.radius)
+    Box(
+        modifier
+            .size(Type.buttonHeight)
+            .clip(shape)
+            .background(Colours.bg)
+            .border(1.5.dp, Colours.ink, shape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = told },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(22.dp)) {
+            val r = size.width * 0.14f
+            val top = Offset(size.width - r, r)
+            val middle = Offset(r, size.height / 2)
+            val bottom = Offset(size.width - r, size.height - r)
+            drawLine(Colours.ink, middle, top, strokeWidth = 2.dp.toPx())
+            drawLine(Colours.ink, middle, bottom, strokeWidth = 2.dp.toPx())
+            for (dot in listOf(top, middle, bottom)) drawCircle(Colours.ink, r, dot)
+        }
+    }
+}
+
 /** A line of text that is pressed: "取消". `action`: one of a step's other things to do ("改成別的帳號"), in ink and the body's size. */
 @Composable
 internal fun TextButton(label: String, modifier: Modifier = Modifier, action: Boolean = false, onClick: () -> Unit) = BasicText(

@@ -464,7 +464,7 @@ internal class Messages(private val c: Copy) {
         val hung: String,
         /** finish.ordinal, before the invitation to share; null when the answer had no ordinal. */
         val ordinal: String?,
-        /** "分享到 Threads": one per platform the app knows. Each opens the system's share sheet. */
+        /** "分享到 Threads": one per platform the app knows, in [Platforms.known]'s order. Each opens the platform's composer. */
         val shares: List<String>,
         /**
          * What the share sheet gets before the card's address, on the line above it: the sentence with the card's

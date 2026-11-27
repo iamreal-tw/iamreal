@@ -1155,7 +1155,7 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   const card = o.single ? o.card.map(([, account]) => ["", account]) : o.card;
   check(JSON.stringify(fin.card) === JSON.stringify(card), `${o.label}: the card lists ${JSON.stringify(fin.card)}`);
   if (!o.unnumbered) check(/^[1-9][0-9,]*$/.test(d!.pageOrdinal), `${o.label}: the card's page writes its ordinal "${d!.pageOrdinal}"`);
-  const invite = [(o.unnumbered ? "" : fill(C.finish.ordinal, { ordinal: d!.pageOrdinal })) + C.finish.invite, C.finish.thanks];
+  const invite = [(o.unnumbered ? C.finish.thanks : fill(C.finish.ordinal, { ordinal: d!.pageOrdinal })) + C.finish.invite];
   check(JSON.stringify(fin.invite) === JSON.stringify(invite), `${o.label}: the call to share ${JSON.stringify(fin.invite)}`);
   const sentence = o.unnumbered ? C.done.share_text_unnumbered : fill(C.done.share_text, { ordinal: d!.pageOrdinal });
   const text = `${sentence}\nhttps://${SITE_DOMAIN}/${cardPath(sid)}`;
@@ -2411,7 +2411,7 @@ await tryStep("Threads only: a first declaration (the field alone)", async () =>
   await waitStep("done", "the last step");
   check((await page.text("[data-step=\"done\"] h1")) === "恭喜你完成島民證明", "the last step: 恭喜你完成島民證明");
   const invite = await page.text("[data-invite]");
-  check(/^這是第 [1-9][0-9,]* 張島民證明。愈多人成為島民，知道彼此都是台灣人，我們能讓台灣的網路討論變得更貼近真實、更有意義。$/.test(invite), `the last step: "${invite}"`);
+  check(/^這是第 [1-9][0-9,]* 張島民證明，感謝你的參與。愈多人成為島民，知道彼此都是台灣人，我們能讓 Threads 上的網路聲量更貼近真實、更有意義。$/.test(invite), `the last step: "${invite}"`);
   check((await page.text()).includes("越久沒過卡，說服力越低。每次過卡，島民證明上的日期就會更新成今天。"), "the last step: why come back");
 });
 

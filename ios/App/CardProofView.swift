@@ -67,7 +67,11 @@ struct ScreenView: View {
                 self.block(block, first: index == 0)
             }
             if let top = screen.top {
-                self.button(top, main: true).padding(.top, 36)
+                HStack(spacing: SideBySide.spacing) {
+                    self.button(top, main: true)
+                    if let beside = screen.beside { self.shareSymbol(beside) }
+                }
+                .padding(.top, 36)
             }
             if !screen.buttons.isEmpty {
                 // The way on, the last of them, first: on the right side by side, on top one under the other.
@@ -417,6 +421,18 @@ struct ScreenView: View {
         .accessibilityLabel(button.spoken ?? button.label)
         .disabled(!button.enabled)
         .opacity(button.enabled ? 1 : 0.45)
+    }
+
+    /// A square button of the system's share symbol, as tall as a
+    /// button; its label is only spoken.
+    private func shareSymbol(_ button: Button) -> some View {
+        SwiftUI.Button { perform(button.action) } label: {
+            Image(systemName: "square.and.arrow.up")
+                .font(Theme.body(Theme.sizeBody, Theme.weightHeading))
+                .frame(width: Theme.buttonHeight.value, height: Theme.buttonHeight.value)
+        }
+        .buttonStyle(Framed(main: false))
+        .accessibilityLabel(button.label)
     }
 
     /// Buttons side by side, the first the main one, on the left: the

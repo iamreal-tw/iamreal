@@ -238,9 +238,9 @@
   "finish": {
     "first": "恭喜你完成島民證明",
     "switched": "島民證明換成 {account} 了",
-    "ordinal": "這是第 {ordinal} 張島民證明。",
-    "invite": "愈多人成為島民，知道彼此都是台灣人，我們能讓台灣的網路討論變得更貼近真實、更有意義。",
-    "thanks": "謝謝你加入島民，誠摯的邀請你分享島民證明。",
+    "ordinal": "這是第 {ordinal} 張島民證明，感謝你的參與。",
+    "invite": "愈多人成為島民，知道彼此都是台灣人，我們能讓 Threads 上的網路聲量更貼近真實、更有意義。",
+    "thanks": "感謝你的參與。",
     "unlink_single": "你可以拿掉 {platform} 個人檔案上的證明連結。",
     "done": "完成"
   },
@@ -340,6 +340,7 @@
     "reminder_next_about": "這支手機會在 {day}{time} 提醒你，大約{interval}後。",
     "reminder_next": "這支手機會在 {day}{time} 提醒你。",
     "reminder_turn_on": "開啟提醒",
+    "share_other": "用其他 app 分享",
     "reminder_expires": "這張自然人憑證在 {valid_until} 到期，比下次提醒早。到期之後要展期或換新卡，才能再過卡。"
   },
   "app_reminder": {

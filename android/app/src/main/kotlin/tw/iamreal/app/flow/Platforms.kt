@@ -18,6 +18,11 @@ class Presentation(
     val formatHint: String,
     /** The address of an account's public page, which "預覽" and step 6's "打開 @alice 的 Threads 個人檔案" open. */
     val profileUrl: (String) -> String,
+    /**
+     * A new post with the text filled in, which step 8's "分享到 Threads" opens: Threads's web intent, which opens the Threads app's
+     * composer where it is installed (design/copy/card-proof.md, step 8, app).
+     */
+    val newPostUrl: (String) -> String,
 ) {
     /** What was typed, tidied before its format is checked: one leading prefix dropped, `A` to `Z` in lower case (Threads does not distinguish case). */
     fun normalize(typed: String): String = typed.trim().removePrefix(prefix).map { if (it in 'A'..'Z') it.lowercaseChar() else it }.joinToString("")
@@ -30,6 +35,8 @@ object Platforms {
         prefix = "@",
         formatHint = "threads",
         profileUrl = { "https://www.threads.com/@$it" },
+        // URLEncoder writes a space as "+"; the intent reads "+" as itself.
+        newPostUrl = { "https://www.threads.com/intent/post?text=" + java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") },
     )
 
     /** The platforms the app knows. */

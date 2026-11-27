@@ -391,15 +391,20 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.texts, [
             "恭喜你完成島民證明",
             "島民證明", "@alice", "島民編號 \(shortID) 開頭",
-            "這是第 \(ordinal) 張島民證明。", "愈多人成為島民，知道彼此都是台灣人，我們能讓台灣的網路討論變得更貼近真實、更有意義。",
-            "謝謝你加入島民，誠摯的邀請你分享島民證明。",
-            "分享到 Threads", "上一步", "完成",
+            "這是第 \(ordinal) 張島民證明，感謝你的參與。", "愈多人成為島民，知道彼此都是台灣人，我們能讓 Threads 上的網路聲量更貼近真實、更有意義。",
+            "分享到 Threads", "用其他 app 分享", "上一步", "完成",
         ])
         await Snapshot.save(model, as: "8-done")
-        // The share sheet, with the sentence and the card's page.
-        try await press("分享到 Threads", in: model)
+        // Threads's composer, then the share sheet: the sentence and the card's page.
         let words = Copy(json: try Repository.data("design/copy/card-proof.json"))
-        XCTAssertEqual(shared, ["\(words("done.share_text", ["ordinal": ordinal]))\n\(address.absoluteString)"])
+        let text = "\(words("done.share_text", ["ordinal": ordinal]))\n\(address.absoluteString)"
+        try await press("分享到 Threads", in: model)
+        let intent = try XCTUnwrap(opened.last.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) })
+        XCTAssertEqual("\(intent.scheme ?? "")://\(intent.host ?? "")\(intent.path)", "https://www.threads.com/intent/post")
+        XCTAssertEqual(intent.queryItems, [URLQueryItem(name: "text", value: text)])
+        XCTAssertEqual(shared, [], "Threads's composer is not the share sheet")
+        try await press("用其他 app 分享", in: model)
+        XCTAssertEqual(shared, [text])
         // Back to step 7 and on again: nothing touches the card.
         try await press("上一步", in: model)
         XCTAssertEqual(model.screen.step, 7)

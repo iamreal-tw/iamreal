@@ -24,6 +24,9 @@ struct Screen: Equatable {
     /// screen: step 8's sharing, with 上一步 and 完成 side by side under
     /// it (design/DESIGN.md, the components: buttons).
     var top: Button?
+    /// Beside `top`, a small square button drawn as the system's share
+    /// symbol; its label is only spoken (step 8's share sheet).
+    var beside: Button?
     /// Under the buttons: what is not to read before the way on (step 2's
     /// list, all still to do, before the card is read).
     var under: [Block] = []
@@ -48,7 +51,7 @@ struct Screen: Equatable {
     /// Every sentence on the screen, in its order: for tests. The
     /// header's are not among them: they are not card-proof.md's.
     var texts: [String] {
-        warnings.flatMap(\.texts) + (notice?.texts ?? []) + blocks.flatMap(\.texts) + (top.map { [$0.label] } ?? []) + buttons.map(\.label) + under.flatMap(\.texts) + links.map(\.label) + (cancel.map { [$0.label] } ?? [])
+        warnings.flatMap(\.texts) + (notice?.texts ?? []) + blocks.flatMap(\.texts) + (top.map { [$0.label] } ?? []) + (beside.map { [$0.label] } ?? []) + buttons.map(\.label) + under.flatMap(\.texts) + links.map(\.label) + (cancel.map { [$0.label] } ?? [])
     }
 }
 
@@ -309,6 +312,8 @@ enum Action: Equatable {
     case openProof
     /// The platform's app or the browser, at the account the card declares there.
     case openProfile(String)
+    /// The platform's composer, the sentence and the card's page filled in.
+    case shareOn(String)
     /// The system's share sheet, with the sentence and the card's page.
     case share
     /// The page of the account typed on a platform.
