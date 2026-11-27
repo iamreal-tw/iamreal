@@ -28,7 +28,7 @@ app 的圖示是記號（紅色的自然人憑證和墨色的台灣，`web/src/u
 - `test/AppIcon.java` 照 `launcher_mark.xml` 放記號的位置（和台灣的輪廓，卡片照 `web/src/ui/logo.ts` 寫在程式裡）畫出 iOS 的圖示（1024×1024、沒有透明度，寫進 `ios/App/Assets.xcassets/`），和 Google Play 商店頁的兩張圖：圖示（512×512、32 位元 PNG）、主題圖片（1024×500、24 位元 PNG，記號加「島民證明」，名稱從 `design/copy/app.json` 的 `splash.name` 讀、用 `design/fonts/` 的源流明體）。只用 JDK，改了記號或 `launcher_mark.xml` 之後在程式庫的根目錄手動跑；建置和部署都不跑它。商店的兩張由營運者自己換上 Play Console：
 
   ```sh
-  java android/test/AppIcon.java <放商店圖片的目錄>
+  java android/test/AppIcon.java android/test-output/store
   ```
 
 ## 讀卡
@@ -116,6 +116,33 @@ app 的圖示是記號（紅色的自然人憑證和墨色的台灣，`web/src/u
 
 版本由兩個 Gradle 屬性給：`-Piamreal.versionName=2026.11.21 -Piamreal.versionCode=42`（`app/build.gradle.kts`）。沒給的時候是 `1`、`dev`，所以這台電腦上的建置和拉取請求的檢查都是這兩個值。
 
+## 商店頁的圖片
+
+Google Play 商店頁的圖片（截圖是 [#489](https://github.com/iamreal-tw/iamreal/issues/489) 的第一版，圖示和主題圖片是 [#490](https://github.com/iamreal-tw/iamreal/issues/490) 的）。都由程式產生，在這台電腦上跑，產生的圖不進程式庫：營運者在 Play Console 的商店資訊上傳。改了 app 的排版、字、顏色之後重跑，換掉商店頁上的。
+
+**手機截圖 4 張**：「模擬器上過一次卡」的測試加上 `IAMREAL_STORE_SCREENS=<目錄>`，在新宣告的那一次拍：
+
+| 檔名 | 畫面 |
+|---|---|
+| `phone-1-read.png` | 第 2 步，感應的面板等著卡片 |
+| `phone-2-pin.png` | 第 3 步，PIN 打好了（畫面上是圓點） |
+| `phone-3-accounts.png` | 第 4 步，填了 `@alice` |
+| `phone-4-done.png` | 第 8 步，完成和「分享到 Threads」 |
+
+```
+cd ../web
+IAMREAL_STORE_SCREENS=$PWD/../android/test-output/store IAMREAL_BB=<bb 6.0.0 的路徑> node --experimental-strip-types test/app-backend.ts \
+  first,refresh,switch,withdraw -- node --experimental-strip-types ../android/test/card-proof.ts
+```
+
+- 準備和「模擬器上過一次卡」相同（模擬器、`-skin 1080x2280`）；整個測試照樣跑完，截圖在途中拍。測試沒有全過時，圖照樣留著，但先看哪裡沒過再用
+- 每一張是模擬器整個螢幕，和測試相同的大小：1080×2280、密度 420。Google Play 收的手機截圖是 JPEG 或 24 位元、沒有透明度的 PNG，每邊 320 到 3,840 像素、長邊不超過短邊 2.3 倍（[Add preview assets](https://support.google.com/googleplay/android-developer/answer/9866151)）。`screencap -p` 給的 PNG 有透明度，所以測試讀 `screencap` 的原始像素，自己寫成 RGB 的 PNG（`test/emulator.ts` 的 `screenshotRgb`），拍完逐張核對，不合就算沒過
+- 拍的那一刻，系統的狀態列換成示範模式（Android 的 SystemUI demo mode）：時間固定 09:00、電池和訊號滿格、網路連上（測試關掉了模擬器的網路）、沒有通知的圖示。拍完換回來
+- 畫面上的都是假資料：假卡片（姓名「測試用戶」）、帳號 `@alice`、本機後台給的島民編號。沒有真的姓名
+- 測試的 build（`fake`）和發出去的 app 畫面是同一份程式；它連的是本機的後台，畫面上不出現網址
+
+**圖示和主題圖片**（512×512、1024×500）：`test/AppIcon.java` 照 app 的圖示畫（「圖示」）。
+
 ## PIN、憑證、簽章在哪裡
 
 要檢查它們有沒有離開手機，看這幾個檔：
@@ -147,7 +174,7 @@ app 的圖示是記號（紅色的自然人憑證和墨色的台灣，`web/src/u
 | `app/src/real/` | 發出去的安裝檔和用線裝的建置接到什麼（`Target.kt`）：測試網站、NFC 讀的卡片、核心自己的 session |
 | `app/src/fake/` | 只給模擬器測試的建置（build type `fake`）：假卡片、本機的後台、認測試金鑰的 session |
 | `app/src/testing/` | `TestingCore`：測試用的函式庫才有的那一個函式。只編進 `fake` 和單元測試 |
-| `test/` | 模擬器上過卡的測試（Node），見「模擬器上過一次卡」；畫 app 的圖示和商店圖片的 `AppIcon.java`（「圖示」） |
+| `test/` | 模擬器上過卡的測試（Node），見「模擬器上過一次卡」；它也拍商店頁的截圖（「商店頁的圖片」）。畫 app 的圖示、商店頁的圖示和主題圖片的 `AppIcon.java`（「圖示」） |
 | `jni/` | JNI 那一層（C）：把 `idc_` 的 C 函式包成 Kotlin 呼叫得到的函式。照 `device-core/README.md`「C 函式的慣例」釋放和清除；只呼叫 `idc_` 開頭的函式 |
 | `build-native.sh` | 編 `device-core/` 的靜態函式庫，和 JNI 那一層連結成 `libiamreal_device_core_jni.so` |
 | `fetch-zig.sh`、`zig.sha256` | 下載 Zig 0.15.1，核對 SHA-256 |

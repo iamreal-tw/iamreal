@@ -86,6 +86,10 @@
 //    interruptions above were sent as their reasons, and a card that left
 //    as an action with its tap; every submission carried the card proof
 //    device ID the counts carry.
+//
+// With IAMREAL_STORE_SCREENS set to a directory, the first declaration also
+// leaves there the four screenshots of the app's page on Google Play (#489;
+// android/README.md, "商店頁的圖片").
 import { execFileSync } from "node:child_process";
 import { createPrivateKey } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -352,6 +356,63 @@ function designCapture(file: string, height: number, top = STATUS_BAR): void {
   execFileSync("sips", ["--cropOffset", String(top), "0", "-c", String(height), "390", png], { stdio: "ignore" });
 }
 
+/**
+ * Where to save the four screenshots of the app's page on Google Play (#489), when IAMREAL_STORE_SCREENS names a directory: the
+ * first declaration's step 2 with the panel waiting for the card, step 3 with the PIN typed, step 4 with @alice typed, step 8. Each is
+ * the emulator's whole screen as the test has it, a phone's (1080 by 2280, density 420), with the system's bar in its demo mode for
+ * the moment: a set time, a full battery and signal, no notification.
+ */
+const STORE_SCREENS = process.env.IAMREAL_STORE_SCREENS;
+/** The start of a broadcast to the demo mode of Android's system bar (SystemUI's "demo mode"). */
+const DEMO_BROADCAST = "am broadcast -a com.android.systemui.demo -e command";
+/** The emulator's setting that allows the demo mode, before the test changed it. */
+let demoAllowedBefore = "";
+
+/** Puts the system's bar in its demo mode for the store's screenshots, or takes it out and puts the setting back as it was. */
+function demoStatusBar(on: boolean): void {
+  if (STORE_SCREENS === undefined) return;
+  if (!on) {
+    emulator.shell(`${DEMO_BROADCAST} exit`);
+    // Not set ("null") is off, as 0 is.
+    emulator.shell(`settings put global sysui_demo_allowed ${demoAllowedBefore === "1" ? 1 : 0}`);
+    return;
+  }
+  if (demoAllowedBefore === "") demoAllowedBefore = emulator.shell("settings get global sysui_demo_allowed").trim();
+  emulator.shell(
+    [
+      "settings put global sysui_demo_allowed 1",
+      `${DEMO_BROADCAST} enter`,
+      `${DEMO_BROADCAST} clock -e hhmm 0900`,
+      `${DEMO_BROADCAST} battery -e level 100 -e plugged false`,
+      `${DEMO_BROADCAST} network -e wifi show -e level 4 -e fully true`,
+      `${DEMO_BROADCAST} network -e mobile show -e datatype none -e level 4 -e fully true`,
+      `${DEMO_BROADCAST} notifications -e visible false`,
+    ].join("; "),
+  );
+}
+
+/**
+ * The screen as `file` of STORE_SCREENS, if it is set, from the top of the step (`fromTop`) or as it is (a panel over the step).
+ * Checks it is one Google Play takes for a phone: a PNG of 24-bit colour with no alpha, each side 320 to 3,840 pixels, the long side
+ * at most 2.3 times the short (https://support.google.com/googleplay/android-developer/answer/9866151).
+ */
+async function storeShot(file: string, fromTop = true): Promise<void> {
+  if (STORE_SCREENS === undefined) return;
+  if (fromTop) toTop();
+  demoStatusBar(true);
+  await sleep(1_000);
+  const png = emulator.screenshotRgb();
+  demoStatusBar(false);
+  mkdirSync(STORE_SCREENS, { recursive: true });
+  writeFileSync(join(STORE_SCREENS, file), png);
+  // The PNG's signature, then its header (IHDR): the width, the height, the bits of a sample and the colour type (2: RGB, no alpha).
+  const signed = png.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) && png.toString("latin1", 12, 16) === "IHDR";
+  const [width, height] = signed ? [png.readUInt32BE(16), png.readUInt32BE(20)] : [0, 0];
+  check(signed && png[24] === 8 && png[25] === 2, `the store's screenshot ${file} is a PNG of 24-bit colour with no alpha`);
+  const [short, long] = [Math.min(width, height), Math.max(width, height)];
+  check(short >= 320 && long <= 3_840 && long <= 2.3 * short, `the store's screenshot ${file} is ${width}x${height}: each side 320 to 3,840 pixels, the long side at most 2.3 times the short`);
+}
+
 /** The step on the screen as `file` of DESIGN_SCREENS, if it is set: the whole step, on a screen tall enough for it. */
 async function designShot(file: string): Promise<void> {
   if (DESIGN_SCREENS === undefined) return;
@@ -456,9 +517,10 @@ const READ_ITEMS = [say("read.server"), say("app_read.certificate"), say("read.c
 const PROGRESS_ITEMS = [say("progress.server"), say("app_progress.sign"), say("app_progress.compute", { seconds: 10 }), say("progress.submit")];
 
 /** The panel of a tap, while the card is read or signs: what it says in turn (design/copy/card-proof.md, "app：感應的面板"). */
-async function tapWithPanel(o: { signs: boolean }): Promise<void> {
+async function tapWithPanel(o: { signs: boolean; store?: string }): Promise<void> {
   await waitText(say("app_panel.android_wait_title"), "the panel");
   shot("panel-waiting");
+  if (o.store !== undefined) await storeShot(o.store, false);
   shows(textsOf(visible()), "the panel, waiting for the card,", [say("app_panel.android_wait_title"), say("app_panel.android_wait"), say("common.cancel")]);
   await hold(await card(6_000));
   await waitText(say("app_panel.reading"), "the panel while the card is read", 20_000);
@@ -568,7 +630,7 @@ async function cardProof(p: Proof): Promise<string> {
     check(!s.some((t) => t.includes(say("app_read.spot_iphone")) || t === say("app_read.how", { spot: say("app_read.spot_iphone") })), "step 2 does not say where on the phone's back, nor the iPhone's sentence that says not to move the card");
   }
   press(say("app_read.tap_card"));
-  if (p.thorough) await tapWithPanel({ signs: false });
+  if (p.thorough) await tapWithPanel({ signs: false, store: "phone-1-read.png" });
   else await tap();
   await waitText(say("app_read.lift"), "step 2's list to end", 120_000);
   {
@@ -605,9 +667,10 @@ async function cardProof(p: Proof): Promise<string> {
   }
   emulator.tap(field("pin"));
   emulator.type(PIN);
-  if (p.thorough && DESIGN_SCREENS !== undefined) {
+  if (p.thorough && (DESIGN_SCREENS !== undefined || STORE_SCREENS !== undefined)) {
     hideKeyboard();
     await designShot("card-proof-app-3-pin-phone.png");
+    await storeShot("phone-2-pin.png");
   }
   {
     const s = wholeScreen();
@@ -658,6 +721,7 @@ async function cardProof(p: Proof): Promise<string> {
     }
     typeAccount(act.type);
     if (p.thorough) await designShot("card-proof-app-4-accounts-phone.png");
+    if (p.thorough) await storeShot("phone-3-accounts.png");
     press(say("common.next"));
   } else if (act.do === "refresh") {
     press(say("accounts.refresh"));
@@ -909,10 +973,11 @@ async function remindOn(name: string, date: string, design?: string): Promise<vo
  * Step 8 (design/copy/card-proof.md, "8. 完成和分享", app): the title, the card in small, the card's ordinal and the invitation to share.
  * Returns the ordinal the screen wrote.
  */
-async function finishStep(o: { name: string; shortId: string; account: string; title: string; design?: string }): Promise<string> {
+async function finishStep(o: { name: string; shortId: string; account: string; title: string; design?: string; store?: string }): Promise<string> {
   await waitText(step(8), "step 8");
   shot(`step-8-${o.name}`);
   if (o.design !== undefined) await designShot(o.design);
+  if (o.store !== undefined) await storeShot(o.store);
   const s = wholeScreen();
   const invited = new RegExp(`^${say("finish.ordinal", { ordinal: "([0-9,]+)" })}${say("finish.invite")}$`);
   const ordinal = s.map((t) => invited.exec(t)?.[1]).find((x) => x !== undefined) ?? "";
@@ -1668,7 +1733,7 @@ try {
   press(say("common.next"));
   await reminderOffered(shortId);
   press(say("common.next"));
-  const ordinal = await finishStep({ name: "first", shortId, account: HANDLE.alice, title: say("finish.first"), design: "card-proof-app-8-done-phone.png" });
+  const ordinal = await finishStep({ name: "first", shortId, account: HANDLE.alice, title: say("finish.first"), design: "card-proof-app-8-done-phone.png", store: "phone-4-done.png" });
   await settingsFromLastStep();
   const page = await fetch(`${backend.origin}/p/${shortId}`);
   const html = await page.text();
@@ -1804,6 +1869,7 @@ try {
   try {
     emulator.shell(`date @${Math.floor(Date.now() / 1000)}; settings put global auto_time 1; svc wifi enable; svc data enable`);
     emulator.shell(`wm size reset; wm density reset; am force-stop ${APP}`);
+    demoStatusBar(false);
     if (/^[01]$/.test(imeBefore)) emulator.shell(`settings put secure show_ime_with_hard_keyboard ${imeBefore}`);
     emulator.adb("reverse", "--remove", `tcp:${DEVICE_PORT}`);
     emulator.adb("unroot");
