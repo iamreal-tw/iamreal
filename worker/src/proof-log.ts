@@ -26,8 +26,8 @@
 //
 // Whether a record is valid is never decided here: that is the record rules'
 // (protocol/, applyRecord), called with the state this object keeps. What
-// this file decides is the back end's own: the challenge, which roots it
-// takes today, and its policy on switches (docs/api/card-proof.md).
+// this file decides is the back end's own: the challenge and which roots it
+// takes today (docs/api/card-proof.md).
 import { DurableObject } from "cloudflare:workers";
 import { now } from "#target";
 import { encodeBase32 } from "iamreal-protocol/base32.ts";
@@ -36,7 +36,7 @@ import { type CardRow, cardStateFileWriter } from "iamreal-protocol/card-state-f
 import { type Day, formatDay, parseDay, startOfTaiwanDay, taiwanDay } from "iamreal-protocol/date.ts";
 import { EMPTY_FINGERPRINT, type FingerprintLine, LINES_PER_FILE, type RecordFields, type ProofLogRecord, fingerprintLine, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, recordLine, proofLogFileName } from "iamreal-protocol/record.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
-import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, RULES_VERSION, applyRecord, newCard } from "iamreal-protocol/record-rules.ts";
+import { type CardState, type Kind, RULES_VERSION, applyRecord, newCard } from "iamreal-protocol/record-rules.ts";
 import { CARD_TABLE, copiedCards, copyCards, dropCardsCopy, readCard, writeCard } from "./card-table.ts";
 import { type NewestCrls, newestOfEach } from "./crl-index.ts";
 import { ISSUER_NAMES } from "./issuers.ts";
@@ -61,13 +61,6 @@ export const MAX_SUBMISSIONS = 5;
  * announces it to devices.
  */
 export const CRL_MAX_AGE_DAYS = 3;
-
-/**
- * The first switch of a slot that the back end's policy on late switches
- * refuses when it is on: the fourth (settings.ts, `restrictLateSwitches`).
- * The record rules allow five.
- */
-export const RESTRICTED_FROM = 4;
 
 /**
  * The tables. Every statement can run again on an object that has them.
@@ -235,7 +228,7 @@ export const VIEWS_BEHIND = "the object's views are not at its last record";
 export type SubmissionRefusal = "paused" | "challenge_unknown" | "challenge_used" | "challenge_attempts";
 
 /** Why the object does not write a record whose proof verified, in the order of docs/api/card-proof.md. */
-export type RecordRefusal = "paused" | "challenge_unknown" | "challenge_used" | "crl_stale" | "root" | "date_order" | "empty" | "switch_limit" | "daily_limit" | "switch_restricted";
+export type RecordRefusal = "paused" | "challenge_unknown" | "challenge_used" | "crl_stale" | "root" | "date_order" | "empty" | "switch_limit" | "daily_limit";
 
 /** What a record that was written did on one platform (docs/api/card-proof.md, `kinds`). */
 export interface AcceptedKind {
@@ -666,8 +659,7 @@ export class ProofLog extends DurableObject<Env> {
    * `fields` are the record's fields except `seq`, each in its format. In
    * the order of docs/api/card-proof.md: the challenge again (a record may
    * have been written for it, or it may have expired, while the proof was
-   * being verified); the back end's rule on `smt_root`; the record rules;
-   * the back end's policy on switches.
+   * being verified); the back end's rule on `smt_root`; the record rules.
    *
    * The record's `seq` is the count of records plus one, and its hash needs
    * the `seq`. Hashing gives way to other requests, so the hash is computed
@@ -761,9 +753,6 @@ export class ProofLog extends DurableObject<Env> {
       return refused(reason);
     }
     const { kinds } = outcome.result;
-
-    // The back end's policy, if it is on: never a record without a switch.
-    if (this.settings.restrictLateSwitches && usesRestrictedSwitch(before, kinds)) return refused("switch_restricted");
 
     // The line as anyone reading the log file will check it (spec/record.md, "Check a line").
     const line = recordLine(record);
@@ -1506,15 +1495,6 @@ function crlDay(crlDate: string): Day {
   const day = parseDay(crlDate);
   if (day === null) throw new Error("newest_crls: crl_date is not a date");
   return day;
-}
-
-/**
- * Whether a record with these kinds, applied to a card whose state before
- * it is `card`, has a switch that becomes the fourth or a later switch of
- * its slot: what the policy on late switches refuses.
- */
-function usesRestrictedSwitch(card: CardState, kinds: readonly PlatformKind[]): boolean {
-  return kinds.some((k) => k.kind === "switch" && (card.slots.get(k.platform) ?? EMPTY_SLOT).switchCount + 1 >= RESTRICTED_FROM);
 }
 
 /**

@@ -123,7 +123,7 @@ class CountsTest {
             listOf("no_certificate", "expired", "not_yet_valid", "not_citizen_primary", "unsupported_format", "unknown_issuer", "ambiguous_certificate")
                 .map { Stop("certificate", mapOf("problem" to it, "date" to "2027-01-01")) } +
             listOf("crl_unavailable", "crl_hash", "crl_unusable", "crl_rollback", "crl_stale").map { Stop("crl", mapOf("code" to it, "days" to "9")) } +
-            listOf("network", "malformed_response", "paused", "busy", "rate_limited", "internal", "crl_stale", "challenge_unknown", "challenge_used", "challenge_attempts", "proof", "root", "date_order", "empty", "switch_limit", "daily_limit", "switch_restricted", "malformed", "scope", "platform", "challenge_malformed")
+            listOf("network", "malformed_response", "paused", "busy", "rate_limited", "internal", "crl_stale", "challenge_unknown", "challenge_used", "challenge_attempts", "proof", "root", "date_order", "empty", "switch_limit", "daily_limit", "malformed", "scope", "platform", "challenge_malformed")
                 .map { Stop("server", mapOf("code" to it), "req-1") } +
             listOf("other_card", "revoked", "card_signature", "artifact", "engine", "date_mismatch", "date_changed", "idle", "clock", "state").map { Stop(it) } +
             Stop("min_app", mapOf("from" to "2027-03-01"))
