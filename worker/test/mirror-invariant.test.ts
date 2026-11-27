@@ -1,10 +1,11 @@
 // What must hold whatever the bucket does: every time the mirror tells the
 // proof log's object of a root, the index in the bucket lists that root at
 // that moment; and a CRL patch that cannot be written keeps neither the
-// index nor the proof log's object waiting. The local workerd's bucket cannot be made to fail, so here
-// the mirror (src/mirror.ts, `crlMirrorInWorker`) runs in Node over a
-// stand-in for the bucket whose writes of the index can go wrong, and the
-// check is made inside `tell`. The hash is a stand-in too: the roots are
+// index nor the proof log's object waiting. The local workerd's bucket
+// cannot be made to fail, so here the mirror (src/mirror.ts,
+// `crlMirrorInWorker`) runs in Node over a stand-in for the bucket whose
+// writes of the index and of patches can go wrong, and the check is made
+// inside `tell`. The hash is a stand-in too: the roots are
 // not what is tested.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";

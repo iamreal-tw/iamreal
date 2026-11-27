@@ -9,7 +9,7 @@ import { test } from "node:test";
 import { bytesOfHex } from "iamreal-protocol/bytes.ts";
 import { UnusablePatch, applyPatch, makePatch, patchName, restore } from "../src/crl-patch.ts";
 import { WORKER_DIR } from "./build.ts";
-import { makeCrl } from "./crls.ts";
+import { makeCrl, randomSerials as serials } from "./crls.ts";
 
 interface UsableCase {
   readonly label: string;
@@ -52,8 +52,6 @@ test("every unusable patch of the vectors is refused", async () => {
 });
 
 const THEN = new Date("2026-11-19T16:00:00Z");
-/** Serial numbers of 16 bytes that look random, as MOICA's do. */
-const serials = (from: number, n: number): bigint[] => Array.from({ length: n }, (_, i) => BigInt(`0x${sha256(new TextEncoder().encode(String(from + i))).slice(0, 32)}`) >> 1n);
 
 test("a patch the mirror makes gives the file it is made for, and is small when the two CRLs differ by little", () => {
   const before = serials(0, 2000);

@@ -107,9 +107,10 @@ function hashAt(bytes: Uint8Array, at: number): number {
  * multiple of BLOCK, grows a run it finds as far as the bytes agree both
  * ways, and copies it; the bytes between are written. Since the copies go
  * forward through `previous`, a run is used only if it is past the last
- * copy. Of runs of `previous` that are the same, the first is kept: in a
- * CRL those are runs of a revocation date and the bytes around it, and the
- * first keeps the copy from jumping ahead.
+ * copy. Of runs of `previous` with the same hash, the first is kept: in a
+ * CRL the runs that repeat are of a revocation date and the bytes around
+ * it, and the first keeps the copy from jumping ahead. A run left out only
+ * makes the patch larger.
  */
 export function makePatch(previous: Uint8Array, next: Uint8Array): Uint8Array<ArrayBuffer> {
   // An open-addressing table of the runs of `previous`: hash, and where the run starts plus one (0 is empty).

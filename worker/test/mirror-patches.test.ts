@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { applyPatch } from "../src/crl-patch.ts";
-import { makeCrl } from "./crls.ts";
+import { makeCrl, randomSerials as serials } from "./crls.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { sha256Hex } from "./proofs.ts";
 
@@ -35,8 +35,6 @@ async function withWorker(options: Parameters<typeof startWorker>[0], run: (work
 }
 
 const THEN = new Date("2026-11-19T16:00:00Z");
-/** Serial numbers of 16 bytes that look random, as MOICA's do. */
-const serials = (from: number, n: number): bigint[] => Array.from({ length: n }, (_, i) => BigInt(`0x${sha256Hex(new TextEncoder().encode(String(from + i))).slice(0, 32)}`) >> 1n);
 const BASE = serials(0, 300);
 /** The G3 CRL numbered `number`: the base serials and `number` more. */
 const g3 = (number: bigint): Uint8Array => makeCrl({ issuer: "G3", number, thisUpdate: THEN, serials: [...BASE, ...serials(1000, Number(number))] });
