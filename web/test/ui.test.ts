@@ -127,8 +127,6 @@ describe("stops", () => {
     [{ code: "blocked", reason: "daily_limit" }, "這張卡片今天已經過卡 3 次，明天才能再過卡。", null],
     // A switch the row says cannot be made: no sentence in the copy for typing one anyway.
     [{ code: "blocked", reason: "switch_limit", platform: "threads" }, "這一列不能改成別的帳號。請填回原本的帳號，或清空。", null],
-    // The date changed since step 5 (midnight): nothing signed, back to the beginning.
-    [{ code: "date_changed" }, "日期換了一天，這次改動的結果會和剛才畫面說的不同，所以卡片沒有簽，證明紀錄也沒有記下任何東西。請回到開頭重新過卡。", null],
   ];
   for (const [stop, want, item] of cases) {
     test(JSON.stringify(stop, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), () => {
@@ -216,8 +214,6 @@ describe("the lists of steps 2 and 5", () => {
       ["the device cannot prove", "stopped", ["read_again"]],
     ];
     for (const [label, phase, want] of cases) assert.deepEqual(progressButtons(phase), want, label);
-    // The date changed since step 5: nothing was signed; back to the beginning only.
-    assert.deepEqual(progressButtons("stopped", { code: "date_changed" }), ["restart"]);
     assert.equal(COPY.read.read_again, "再讀一次卡片");
     assert.equal(COPY.progress.back, "回到上一步");
   });
@@ -287,7 +283,7 @@ describe("your accounts (step 4)", () => {
     );
     assert.deepEqual(
       v.notes.map((n) => n.map(t).join("")),
-      ["預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。"],
+      ["預覽會在新分頁開這個帳號的頁面，讓你小心確認沒有打錯帳號。"],
     );
     assert.equal(v.dailyLimit, null);
   });
@@ -299,7 +295,7 @@ describe("your accounts (step 4)", () => {
     assert.deepEqual(v.rows[0]!.lines.map(t), ["上一次宣告的是 @bob，已經收回。填回 @bob 不算更換。", "更換過 1 次，還可以更換 4 次。"]);
     assert.deepEqual(
       v.notes.map((n) => n.map(t).join("")),
-      ["預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。"],
+      ["預覽會在新分頁開這個帳號的頁面，讓你小心確認沒有打錯帳號。"],
     );
   });
 
@@ -348,7 +344,7 @@ describe("your accounts (step 4)", () => {
     );
     assert.deepEqual(
       v.notes.map((n) => n.map(t).join("")),
-      ["填上空白的是新宣告，清空是收回，改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。", "預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。"],
+      ["填上空白的是新宣告，清空是收回，改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。", "預覽會在新分頁開這個帳號的頁面，讓你小心確認沒有打錯帳號。"],
     );
   });
 
@@ -364,7 +360,7 @@ describe("your accounts (step 4)", () => {
     );
     assert.deepEqual(
       never.notes.map((n) => n.map(t).join("")),
-      ["一張卡片在每個平台只能宣告一個帳號，之後改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。", "預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。"],
+      ["一張卡片在每個平台只能宣告一個帳號，之後改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。", "預覽會在新分頁開這個帳號的頁面，讓你小心確認沒有打錯帳號。"],
     );
     const nothing = fillOf(accountsView(status([slot(EXAMPLE), slot(THREADS, { lastDeclared: "bob" })])));
     assert.deepEqual(leadOf(nothing), ["這張卡片目前沒有宣告任何帳號。", "填上你要宣告的帳號，至少一個。沒有要宣告的平台留空白。"]);
@@ -377,7 +373,7 @@ describe("your accounts (step 4)", () => {
     assert.equal(t(v.intro), "這張卡片目前宣告 @alice。");
     assert.deepEqual([v.row!.platform, v.row!.current, v.row!.editable, v.row!.preview, v.row!.lines], ["threads", "", true, true, []]);
     assert.deepEqual(v.lines.map(t), ["改了之後，@alice 不再是這張卡片宣告的帳號。", "一張卡終身最多更換 5 次，這次之後還可以更換 3 次。"]);
-    assert.equal(t(v.previewNote!), "預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。");
+    assert.equal(t(v.previewNote!), "預覽會在新分頁開這個帳號的頁面，讓你小心確認沒有打錯帳號。");
     // The last one.
     assert.deepEqual(switchView(status([declared("alice", { switchCount: 4 })])).lines.map(t)[1], "用掉最後一次更換。這次之後，這個平台不能再更換。");
     // Used up: no field, the reason only.

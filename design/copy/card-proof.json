@@ -89,7 +89,6 @@
     "switch_limit": "清單裡有一個平台不能再更換，整份清單都沒有記下，證明紀錄沒有變動。請再讀一次卡片。",
     "empty": "這張卡片現在沒有宣告任何帳號，沒有可以收回的，證明紀錄沒有變動。請再讀一次卡片。",
     "request_id": "回報問題時請附上這個編號：{request_id}",
-    "date_changed": "日期換了一天，這次改動的結果會和剛才畫面說的不同，所以卡片沒有簽，證明紀錄也沒有記下任何東西。請回到開頭重新過卡。",
     "paused": "現在暫停收過卡，證明紀錄沒有變動。請晚點再來。",
     "too_many": "現在人太多，送不出去，證明紀錄沒有變動。請稍等一下再試一次。"
   },
@@ -126,14 +125,13 @@
     "switch_effect": "改了之後，{account} 不再是這張卡片宣告的帳號。",
     "switch_limit": "一張卡終身最多更換 5 次，這次之後還可以更換 {switches_left} 次。",
     "preview": "預覽個人檔案",
-    "preview_note": "預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。",
+    "preview_note": "預覽會在新分頁開這個帳號的頁面，讓你小心確認沒有打錯帳號。",
     "one_per_platform": "一張卡片在每個平台只能宣告一個帳號，之後改成別的帳號是更換。",
     "how_change": "填上空白的是新宣告，清空是收回，改成別的帳號是更換。",
     "switches_limited": "一張卡終身最多只能更換宣告的帳號 5 次。",
     "row_unused": "還沒有宣告過。",
     "row_no_switches_yet": "還沒有更換過，還可以更換 {switches_left} 次。",
     "row_switches": "更換過 {switches_used} 次，還可以更換 {switches_left} 次。",
-    "row_today": "今天才宣告的帳號，今天改掉不另外算一次更換。",
     "row_withdrawn": "上一次宣告的是 {last_declared}，已經收回。填回 {last_declared} 不算更換。",
     "row_used_up": "已經更換 {switches_used} 次，這個平台不能再更換。",
     "row_can_clear": "這一列不能改成別的帳號，可以清空。",
@@ -161,7 +159,6 @@
     "short_id": "{short_id} 開頭",
     "uses_switch": "用掉一次更換，不會恢復。之後還可以更換 {switches_left} 次。",
     "uses_final_switch": "用掉最後一次更換。這次之後，這個平台不能再更換。",
-    "switch_not_counted": "今天才宣告的帳號，這次改掉不另外算一次更換。",
     "withdraw_stays": "收回之後，證明紀錄裡原本的紀錄還在：看得出這張卡片宣告過這個帳號。",
     "history_stays": "歷史證明紀錄無法刪除，依然看得出這張卡片過去曾宣告過的帳號。",
     "not_identifiable": "證明紀錄不包含姓名、生日、身分證字號和卡號。{platform}、政府、我們都查不出這是誰的卡片。",
@@ -330,7 +327,7 @@
   },
   "app_accounts": {
     "preview": "預覽",
-    "preview_note": "預覽會在 {platform} 或瀏覽器打開個人檔案，讓你確認沒有打錯。"
+    "preview_note": "預覽會在 {platform} 或瀏覽器打開個人檔案，讓你小心確認沒有打錯帳號。"
   },
   "app_progress": {
     "keep_open": "請不要關閉 app，也不要切到別的 app。",

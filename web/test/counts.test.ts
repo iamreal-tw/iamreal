@@ -47,7 +47,6 @@ describe("the reason code of a stop", () => {
     [{ code: "engine", detail: "RuntimeError: unreachable at wasm://wasm/0123abcd" }, "engine"],
     [{ code: "proof_check" }, "proof_check"],
     [{ code: "username", platform: "threads" }, "username"],
-    [{ code: "date_changed" }, "date_changed"],
     [{ code: "state" }, "state"],
     [{ code: "server", server: "network", status: 0 }, "server_network"],
     [{ code: "server", server: "malformed_response", status: 200, requestId: "0123456789abcdef" }, "server_malformed_response"],

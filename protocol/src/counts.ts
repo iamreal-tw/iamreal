@@ -99,7 +99,6 @@ export const REASONS = {
   proof_check: ALL,
   challenge_malformed: ALL,
   challenge_not_today: ALL,
-  date_changed: ALL,
   idle: ALL,
   state: ALL,
   app_too_old: APPS,

@@ -849,7 +849,7 @@ export function startApp(o: AppOptions): void {
             buttons,
             kinds.includes("back") ? secondary(c.back, () => confirmScreen(f, cq, back)) : null,
             kinds.includes("read_again") ? secondary(COPY.read.read_again, () => read({ now: true })) : null,
-            // The date changed and nothing was signed: from the beginning (stops.date_changed).
+            // The server takes no card proof for now: from the beginning.
             kinds.includes("restart") ? secondary(COPY.accounts.restart, () => before()) : null,
             kinds.includes("retry")
               ? primary(c.retry, () => {

@@ -1911,9 +1911,6 @@ await tryStep("5 switches: step 4 says none is left; another account typed anywa
   await screenshot("switch-limit-5-progress");
 });
 
-// Since version 3 of the record rules no list does anything else on another date: the check
-// before the challenge (stops.date_changed) has no case left to show here (#510 takes it out).
-
 // 5. Snapshot and re-verification -----------------------------------------------
 
 /** The kinds of the main card's records, in proof log order, as the screens' step 6 showed them. */

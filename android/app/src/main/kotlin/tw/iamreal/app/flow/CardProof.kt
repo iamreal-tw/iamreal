@@ -270,7 +270,6 @@ class CardProof(
     private var scopeSignature: ByteArray? = null
     private var cardState: ByteArray? = null
     private var status: Status? = null
-    private var entries: Map<String, String>? = null
     private var chosen: Consequence? = null
     private var chosenAccountsJson: ByteArray? = null
 
@@ -717,7 +716,6 @@ class CardProof(
                 throw e
             }
         }
-        this.entries = entries.toMap()
         chosen = consequence
         // The list the card signs, as the core takes it.
         chosenAccountsJson = accountsJson(consequence.accounts.toMap())
@@ -769,23 +767,6 @@ class CardProof(
     private fun accountsJson(list: Map<String, String>): ByteArray =
         JSONArray(list.toSortedMap().map { (platform, username) -> JSONObject().put("platform", platform).put("username", username) }).toString().toByteArray()
 
-    /**
-     * The chosen list, worked out again on today's date: it must do on every platform what the screen
-     * said. Only the date can make it differ, so a difference is `date_changed`.
-     */
-    private fun sameAsShown() {
-        val shown = chosen!!
-        val again = try {
-            consequenceOf(entries!!)
-        } catch (e: Blocked) {
-            fail(Stop("date_changed"))
-        }
-        val same = again.accounts == shown.accounts && again.rows.size == shown.rows.size && again.rows.zip(shown.rows).all { (a, b) ->
-            a.platform == b.platform && a.kind == b.kind && a.username == b.username && a.switchesLeft == b.switchesLeft
-        }
-        if (!same) fail(Stop("date_changed"))
-    }
-
     // Tap 3: the card signs the declaration code; the proof; the submission ------------
 
     fun declare(events: Events): Done = counting { declareSteps(events) }
@@ -796,7 +777,8 @@ class CardProof(
         attempt.step("confirmed")
         checkIdle()
         config?.let(::checkMinApp)
-        sameAsShown()
+        // What the list does is not worked out again after midnight: since version 3 of the record rules (ADR-0018)
+        // no event rule reads the date, and a new day only lifts the day's limit.
         val accounts = chosenAccountsJson ?: throw Stop("cancelled")
         val challenge: String
         val code: ByteArray
@@ -824,7 +806,6 @@ class CardProof(
                 }
             }
             code = DeviceCore.declarationCode(accounts, challenge.toByteArray())
-            sameAsShown()
         } catch (e: DeviceCoreException) {
             fail(Stop.core(e))
         }
@@ -858,7 +839,6 @@ class CardProof(
             fail(
                 when (e.code) {
                     DeviceCoreException.INPUT -> Stop("card_signature")
-                    DeviceCoreException.REFUSED -> Stop("date_changed")
                     else -> Stop("engine")
                 },
             )
@@ -925,7 +905,6 @@ class CardProof(
         status = null
         cardState = null
         chosen = null
-        entries = null
         chosenAccountsJson = null
         validUntil = null
         cardStateTurnedAway = false
@@ -1035,7 +1014,6 @@ class CardProof(
  *                   `submitting` when it answered the submission; `too_many` when it
  *                   turned the request away as too many ([tooMany])
  *   date_mismatch   the challenge is not dated today by the phone's clock
- *   date_changed    the list would now do something other than the screen said
  *   idle            [CardProof.IDLE_MS] passed after tap 2
  *   min_app         this build is older than the server's minimum app version, since `from`
  *   clock           the phone's clock is outside the years the core takes
