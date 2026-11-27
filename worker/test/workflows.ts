@@ -596,8 +596,7 @@ export const ANDROID_JOB_STEPS: YamlMap = {
  * with the script upload-ios.yml and upload-ios-test.yml run (#176, #484),
  * so that a pull request that breaks an archive or its check is seen before
  * an upload is started by hand; the version and builds are fixed ones, each
- * in its app's range, and the check's test is given the same. 45 minutes:
- * with the test app's archive the job took 26 (#496), near the 30 it had.
+ * in its app's range, and the check's test is given the same.
  */
 const XCODEBUILD = 'xcodebuild -project IamrealApp.xcodeproj -scheme IamrealApp -destination "platform=iOS Simulator,name=iPhone 17" -derivedDataPath build';
 export const IOS_JOB_STEPS: YamlMap = {

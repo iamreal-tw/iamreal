@@ -54,7 +54,7 @@ env:
 jobs:
   ios:
     runs-on: xcode-27
-    # 26 minutes once it also archived the test app (#496): room above that (.github/README.md).
+    # About 1.7 times the 26 minutes it took once it also archived the test app (#496; .github/README.md).
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
