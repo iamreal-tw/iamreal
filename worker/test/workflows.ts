@@ -9,7 +9,7 @@
 // of the repository or of a package's install scripts; the keys of the
 // apps' uploads are only in the upload jobs, which build nothing
 // (upload-android.yml, upload-android-test.yml: in the env of the two steps
-// that use them; upload-ios.yml, upload-ios-test.yml: in the last step);
+// that use them; upload-ios.yml, upload-ios-test.yml: the certificate and the profile in the env of the two steps that use them, the App Store Connect key in the last step);
 // every action is one of a short list at a fixed commit, and a pull
 // request's checks can only read. It is a whitelist: the files are read by
 // a reader of a small part of YAML (below) and anything outside that part
@@ -714,25 +714,44 @@ export const IOS_TEST_UPLOAD_GROUP = "upload-ios-test";
 /** The GitHub environment whose keys (App Store Connect's, #161; the Android upload key and Google Play's, #162) only main's runs get (ADR-0037), the same for the two apps of each store (ADR-0040). */
 export const APP_ENVIRONMENT = "app-test";
 /**
- * The two jobs of each, exactly, the same but for the step that archives.
- * "build" has no key and runs the repository's code: the core for an iPhone
- * (ios/build-core.sh, which checks Barretenberg's library and the CRS
- * against their SHA-256), then ios/archive.sh, which archives the app
- * unsigned and checks it (ios/check-archive.sh): the production app with
- * the run number as its build, or with --test-app the test app with the run
- * number and 1,000,000 (ADR-0040). The identifier is the configuration's.
- * It hands on the archive in a tar file, so that its files keep their modes
- * (an artifact does not keep them), with ios/ExportOptions.plist.
+ * The two jobs of each, exactly, the same but for the step that archives and
+ * the app the signing is for. "build" has no key and runs the repository's
+ * code: the core for an iPhone (ios/build-core.sh, which checks
+ * Barretenberg's library and the CRS against their SHA-256), then
+ * ios/archive.sh, which archives the app unsigned and checks it
+ * (ios/check-archive.sh): the production app with the run number as its
+ * build, or with --test-app the test app with the run number and 1,000,000
+ * (ADR-0040). The identifier is the configuration's. It hands on the archive
+ * in a tar file, so that its files keep their modes (an artifact does not
+ * keep them), with ios/ExportOptions.plist.
  * "upload" is the only job in the environment app-test. It does not check
  * out the repository and runs no script of it: it unpacks the tar file and
- * runs Xcode's export, which signs and uploads. The archive is unsigned and
- * names no team, so the export options are given the team the environment
- * holds as a variable, APPLE_TEAM_ID (not a secret: every signed app shows
- * it). Only the last step has the key: it writes the key to a file only it
- * reads, and xcodebuild reads it.
+ * runs Xcode's export, which signs and uploads. The App Store Connect key, a
+ * team key with the Developer role, may not sign with a certificate Apple
+ * keeps (#143), so the export signs by hand (ios/ExportOptions.plist,
+ * signingStyle manual) with the Apple Distribution certificate and the App
+ * Store profile the operator made, from the environment (ADR-0036):
+ * - the team, the environment's variable APPLE_TEAM_ID (not a secret: every
+ *   signed app shows it), goes into the export options;
+ * - the certificate and its key go into a keychain of this job's own, with a
+ *   password made for the run, where only codesign may use the key; the
+ *   .p12 is removed once imported. The runner is GitHub's and is destroyed
+ *   after the job, so nothing removes the keychain;
+ * - the profile must be for this app's identifier under the team and allow
+ *   the NFC tag reading the app asks for (ios/Config/IamrealApp.entitlements),
+ *   and the export options name it for the identifier;
+ * - the app is signed once without uploading, and the signed app must carry
+ *   the NFC entitlement: the archive is unsigned, so this is the first place
+ *   it can be seen (ios/README.md);
+ * - only the last step has the App Store Connect key: it writes the key to a
+ *   file only it reads, and xcodebuild signs again and uploads.
+ * Each secret is in the env of the one step that uses it.
  */
 const IOS_UPLOAD_ARTIFACT: YamlMap = { name: "ios-upload", path: "${{ runner.temp }}/ios-upload" };
-const iosUploadJobs = (archive: { name: string; run: string }): YamlMap => ({
+const IOS_KEYCHAIN = '"$RUNNER_TEMP/signing.keychain-db"';
+const IOS_PROFILE = '"$RUNNER_TEMP/profile.plist"';
+const IOS_EXPORT = '-archivePath "$RUNNER_TEMP/IamrealApp.xcarchive" -exportOptionsPlist';
+const iosUploadJobs = (app: { archive: { name: string; run: string }; identifier: string; profile: string }): YamlMap => ({
   build: {
     "runs-on": IOS_RUNNER,
     "timeout-minutes": "30",
@@ -740,7 +759,7 @@ const iosUploadJobs = (archive: { name: string; run: string }): YamlMap => ({
       step("actions/checkout"),
       { name: "Install the Rust of rust-toolchain.toml, with the iPhone's target", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-apple-ios" },
       { name: "Build device-core/ for the iPhone", "working-directory": "ios", run: "./build-core.sh device" },
-      { name: archive.name, "working-directory": "ios", run: archive.run },
+      { name: app.archive.name, "working-directory": "ios", run: app.archive.run },
       {
         name: "Pack the archive, keeping its files' modes, with the export options",
         run: 'mkdir "$RUNNER_TEMP/ios-upload" && tar -C "$RUNNER_TEMP" -cf "$RUNNER_TEMP/ios-upload/IamrealApp.xcarchive.tar" IamrealApp.xcarchive && cp ios/ExportOptions.plist "$RUNNER_TEMP/ios-upload/"',
@@ -762,6 +781,51 @@ const iosUploadJobs = (archive: { name: string; run: string }): YamlMap => ({
         run: 'test -n "$APPLE_TEAM_ID" && plutil -replace teamID -string "$APPLE_TEAM_ID" "$RUNNER_TEMP/ios-upload/ExportOptions.plist"',
       },
       {
+        name: "Put the distribution certificate in a keychain of this job's own",
+        env: { IOS_DIST_P12_BASE64: "${{ secrets.IOS_DIST_P12_BASE64 }}", IOS_DIST_P12_PASSWORD: "${{ secrets.IOS_DIST_P12_PASSWORD }}" },
+        run: [
+          "umask 077",
+          `printf '%s' "$IOS_DIST_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dist.p12"`,
+          'password="$(openssl rand -hex 24)"',
+          `security create-keychain -p "$password" ${IOS_KEYCHAIN}`,
+          `security set-keychain-settings -lut 21600 ${IOS_KEYCHAIN}`,
+          `security unlock-keychain -p "$password" ${IOS_KEYCHAIN}`,
+          `security import "$RUNNER_TEMP/dist.p12" -k ${IOS_KEYCHAIN} -f pkcs12 -P "$IOS_DIST_P12_PASSWORD" -T /usr/bin/codesign`,
+          'rm "$RUNNER_TEMP/dist.p12"',
+          `security set-key-partition-list -S 'apple-tool:,apple:' -s -k "$password" ${IOS_KEYCHAIN} > /dev/null`,
+          `security list-keychains -d user -s ${IOS_KEYCHAIN}`,
+          `security find-identity -v -p codesigning ${IOS_KEYCHAIN} | grep -q 'Apple Distribution'`,
+        ].join(" && "),
+      },
+      {
+        name: `Install the App Store profile of ${app.identifier} and name it in the export options`,
+        env: { [app.profile]: `\${{ secrets.${app.profile} }}`, APPLE_TEAM_ID: "${{ vars.APPLE_TEAM_ID }}" },
+        run: [
+          `printf '%s' "$${app.profile}" | base64 --decode > "$RUNNER_TEMP/app.mobileprovision"`,
+          `security cms -D -i "$RUNNER_TEMP/app.mobileprovision" -o ${IOS_PROFILE}`,
+          `test "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' ${IOS_PROFILE})" = "$APPLE_TEAM_ID.${app.identifier}"`,
+          `/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.nfc.readersession.formats' ${IOS_PROFILE} | grep -qw TAG`,
+          `uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' ${IOS_PROFILE})"`,
+          'mkdir -p "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" "$HOME/Library/MobileDevice/Provisioning Profiles"',
+          'cp "$RUNNER_TEMP/app.mobileprovision" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$uuid.mobileprovision"',
+          'cp "$RUNNER_TEMP/app.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision"',
+          `/usr/libexec/PlistBuddy -c 'Add :provisioningProfiles dict' -c "Add :provisioningProfiles:${app.identifier} string $uuid" "$RUNNER_TEMP/ios-upload/ExportOptions.plist"`,
+        ].join(" && "),
+      },
+      {
+        name: "Sign without uploading, and check that the app has its NFC entitlement",
+        env: { APPLE_TEAM_ID: "${{ vars.APPLE_TEAM_ID }}" },
+        run: [
+          'cp "$RUNNER_TEMP/ios-upload/ExportOptions.plist" "$RUNNER_TEMP/check.plist"',
+          'plutil -replace destination -string export "$RUNNER_TEMP/check.plist"',
+          `xcodebuild -exportArchive ${IOS_EXPORT} "$RUNNER_TEMP/check.plist" -exportPath "$RUNNER_TEMP/check"`,
+          'unzip -q "$RUNNER_TEMP"/check/*.ipa -d "$RUNNER_TEMP/ipa"',
+          'codesign -d --entitlements - --xml "$RUNNER_TEMP/ipa/Payload/IamrealApp.app" > "$RUNNER_TEMP/entitlements.plist"',
+          `/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.nfc.readersession.formats' "$RUNNER_TEMP/entitlements.plist" | grep -qw TAG`,
+          `test "$(/usr/libexec/PlistBuddy -c 'Print :application-identifier' "$RUNNER_TEMP/entitlements.plist")" = "$APPLE_TEAM_ID.${app.identifier}"`,
+        ].join(" && "),
+      },
+      {
         name: "Sign and upload to App Store Connect",
         env: {
           APP_STORE_CONNECT_API_KEY_P8: "${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}",
@@ -771,14 +835,22 @@ const iosUploadJobs = (archive: { name: string; run: string }): YamlMap => ({
         run: [
           "umask 077",
           `printf '%s\\n' "$APP_STORE_CONNECT_API_KEY_P8" > "$RUNNER_TEMP/key.p8"`,
-          'xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/IamrealApp.xcarchive" -exportOptionsPlist "$RUNNER_TEMP/ios-upload/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" -allowProvisioningUpdates -authenticationKeyPath "$RUNNER_TEMP/key.p8" -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID"',
+          `xcodebuild -exportArchive ${IOS_EXPORT} "$RUNNER_TEMP/ios-upload/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" -authenticationKeyPath "$RUNNER_TEMP/key.p8" -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID"`,
         ].join(" && "),
       },
     ],
   },
 });
-export const IOS_UPLOAD_JOBS: YamlMap = iosUploadJobs({ name: "Archive the production app and check it", run: './archive.sh "$RUNNER_TEMP/IamrealApp.xcarchive" "$GITHUB_RUN_NUMBER"' });
-export const IOS_TEST_UPLOAD_JOBS: YamlMap = iosUploadJobs({ name: "Archive the test app and check it", run: './archive.sh --test-app "$RUNNER_TEMP/IamrealApp.xcarchive" "$((GITHUB_RUN_NUMBER + 1000000))"' });
+export const IOS_UPLOAD_JOBS: YamlMap = iosUploadJobs({
+  archive: { name: "Archive the production app and check it", run: './archive.sh "$RUNNER_TEMP/IamrealApp.xcarchive" "$GITHUB_RUN_NUMBER"' },
+  identifier: "tw.iamreal.app",
+  profile: "IOS_APPSTORE_PROFILE_BASE64",
+});
+export const IOS_TEST_UPLOAD_JOBS: YamlMap = iosUploadJobs({
+  archive: { name: "Archive the test app and check it", run: './archive.sh --test-app "$RUNNER_TEMP/IamrealApp.xcarchive" "$((GITHUB_RUN_NUMBER + 1000000))"' },
+  identifier: "tw.iamreal.app.test",
+  profile: "IOS_TEST_APPSTORE_PROFILE_BASE64",
+});
 
 /**
  * reverify.yml (#421, ADR-0025, ADR-0028): the operator's daily
@@ -1003,9 +1075,15 @@ export const SECRET_LINES: readonly string[] = [
   "upload-android.yml:          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}",
   "upload-android.yml:          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}",
   "upload-android.yml:          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}",
+  "upload-ios-test.yml:          IOS_DIST_P12_BASE64: ${{ secrets.IOS_DIST_P12_BASE64 }}",
+  "upload-ios-test.yml:          IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}",
+  "upload-ios-test.yml:          IOS_TEST_APPSTORE_PROFILE_BASE64: ${{ secrets.IOS_TEST_APPSTORE_PROFILE_BASE64 }}",
   "upload-ios-test.yml:          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}",
   "upload-ios-test.yml:          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}",
   "upload-ios-test.yml:          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}",
+  "upload-ios.yml:          IOS_DIST_P12_BASE64: ${{ secrets.IOS_DIST_P12_BASE64 }}",
+  "upload-ios.yml:          IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}",
+  "upload-ios.yml:          IOS_APPSTORE_PROFILE_BASE64: ${{ secrets.IOS_APPSTORE_PROFILE_BASE64 }}",
   "upload-ios.yml:          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}",
   "upload-ios.yml:          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}",
   "upload-ios.yml:          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}",

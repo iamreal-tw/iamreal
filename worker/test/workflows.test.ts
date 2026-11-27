@@ -342,6 +342,11 @@ Object.assign(CHANGES, {
   "ios-upload 9 a run cancelling the one before": [replace(U, "  group: upload-ios\n  cancel-in-progress: false\n", "  group: upload-ios\n  cancel-in-progress: true\n")],
   "ios-upload 10 the default Xcode of the runner": [replace(U, "env:\n  # The one Xcode", "env:\n  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer\n  # The one Xcode")],
   "ios-upload 11 the key written to a file other users of the runner can read": [replace(U, "        run: umask 077 && ", "        run: ")],
+  "ios-upload 12 the distribution certificate given to the step that archives": [
+    replace(U, `${IOS_ARCHIVE_STEP}        working-directory: ios\n`, `${IOS_ARCHIVE_STEP}        working-directory: ios\n        env:\n          IOS_DIST_P12_BASE64: \${{ secrets.IOS_DIST_P12_BASE64 }}\n`),
+  ],
+  "ios-upload 13 the profile not checked for NFC tag reading": [replace(U, " | grep -qw TAG && uuid=", " && uuid=")],
+  "ios-upload 14 the test app's profile signing the production app": [replace(U, "secrets.IOS_APPSTORE_PROFILE_BASE64", "secrets.IOS_TEST_APPSTORE_PROFILE_BASE64")],
 });
 
 // The upload of the iPhone's test app (#484): the same rules, its own group, the test app archived with its build numbers.
