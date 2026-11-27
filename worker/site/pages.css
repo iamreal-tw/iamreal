@@ -3761,7 +3761,7 @@ body.proof .last .yours {
   margin: 4px 0 0;
 }
 
-/* The account owner's question: one heading, broken after its comma rather than inside a word; the address right above the profile. */
+/* The heading above the profile, on both pages; the address right above the profile. */
 body.proof .ask,
 body.account .ask {
   font-size: var(--size-lead);
@@ -3769,6 +3769,7 @@ body.account .ask {
   margin: 0 0 6px;
 }
 
+/* The page of a card: one line when it fits; otherwise broken at its comma or a space, never inside a word (proof-page.md, section 2). */
 body.proof .ask {
   margin-bottom: 12px;
   word-break: keep-all;
@@ -4233,6 +4234,9 @@ body.account-not-a-name .title {
   body.proof .first,
   body.account .first {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.account .first {
     gap: 56px;
   }
 

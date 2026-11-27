@@ -45,8 +45,25 @@ function specialTitles(): string[] {
   return titles;
 }
 
-/** proof-page.md section 3's first code block. */
-const three = (): string[] => block("proof-page.md", "3. ");
+/** proof-page.md section 3's first code block: the last card proof, the record's heading and rows, the two small lines. */
+const recordBlock = (): string[] => block("proof-page.md", "3. ");
+
+/**
+ * A row of the record as proof-page.md section 3's table writes the kind
+ * `kind`, with its date and its accounts (in order) replaced.
+ */
+function recordRow(kind: string, date: string, ...accounts: string[]): string {
+  const table = new Map<string, string>();
+  for (const line of copySection("proof-page.md", "3. ").split("\n")) {
+    const cells = line.split("|");
+    if (cells.length === 4 && !cells[1]!.startsWith("---") && cells[1]!.trim() !== "這一筆紀錄") table.set(cells[1]!.trim(), cells[2]!.trim());
+  }
+  assert.equal(table.size, 7, "the table of section 3 has its 7 kinds of rows");
+  const words = table.get(kind);
+  assert.ok(words !== undefined, `proof-page.md section 3 has a row ${kind}`);
+  let i = 0;
+  return words.replace(/\d{4}-\d{2}-\d{2}/, date).replace(/@[a-z0-9._]+/g, () => `@${accounts[i++]}`);
+}
 
 /**
  * The page of a card (proof-page.md): how to check a proof is on the
@@ -118,34 +135,22 @@ describe("the page of a card", () => {
       r("2026-10-08", e),
       r("2026-10-08", e, "threads:frank"), // another, after a withdrawal, the day of a switch: a correction
     ]);
-    const table = new Map<string, string>();
-    for (const line of copySection("proof-page.md", "3. ").split("\n")) {
-      const cells = line.split("|");
-      if (cells.length === 4 && !cells[1]!.startsWith("---") && cells[1]!.trim() !== "這一筆紀錄") table.set(cells[1]!.trim(), cells[2]!.trim());
-    }
-    assert.equal(table.size, 7, "the table of section 3 has the 7 rows this test writes");
-    const row = (kind: string, date: string, ...accounts: string[]): string => {
-      const words = table.get(kind);
-      assert.ok(words !== undefined, `proof-page.md section 3 has a row ${kind}`);
-      let i = 0;
-      return words.replace(/\d{4}-\d{2}-\d{2}/, date).replace(/@[a-z0-9._]+/g, () => `@${accounts[i++]}`);
-    };
     const { page } = await getPage(worker, "/p/E000000000");
     wantLines(page, [
-      ...copyLines(three().slice(0, 1), "12 天前", "41 天前", "2026-11-06", "2026-10-08"),
-      three()[2]!,
-      row("更正", "2026-10-08", "erin", "frank"),
-      row("收回", "2026-10-08", "erin"),
-      row("更換", "2026-10-08", "carol.tw", "erin"),
-      row("收回之後宣告別的帳號", "2026-10-07", "dave", "carol.tw"),
-      row("收回", "2026-10-06", "dave"),
-      row("收回之後宣告回同一個帳號", "2026-10-05", "dave"),
-      row("收回", "2026-10-04", "dave"),
-      row("更正", "2026-10-03", "alice", "dave"),
-      row("更換", "2026-10-03", "bob", "alice"),
-      row("再次過卡", "2026-10-02"),
-      row("新宣告", "2026-10-01", "bob"),
-      ...copyLines(three().slice(-2)),
+      ...copyLines(recordBlock().slice(0, 1), "12 天前", "41 天前", "2026-11-06", "2026-10-08"),
+      recordBlock()[2]!,
+      recordRow("更正", "2026-10-08", "erin", "frank"),
+      recordRow("收回", "2026-10-08", "erin"),
+      recordRow("更換", "2026-10-08", "carol.tw", "erin"),
+      recordRow("收回之後宣告別的帳號", "2026-10-07", "dave", "carol.tw"),
+      recordRow("收回", "2026-10-06", "dave"),
+      recordRow("收回之後宣告回同一個帳號", "2026-10-05", "dave"),
+      recordRow("收回", "2026-10-04", "dave"),
+      recordRow("更正", "2026-10-03", "alice", "dave"),
+      recordRow("更換", "2026-10-03", "bob", "alice"),
+      recordRow("再次過卡", "2026-10-02"),
+      recordRow("新宣告", "2026-10-01", "bob"),
+      ...copyLines(recordBlock().slice(-2)),
     ]);
   });
 
@@ -153,7 +158,7 @@ describe("the page of a card", () => {
     const c = cardStarting(CARD_A);
     await pagesWorld(worker, "2026-11-18", [r("2026-11-01", c, "threads:alice"), r("2026-11-06", c, "threads:alice")]);
     let { page } = await getPage(worker, `/p/${CARD_A}`);
-    wantLines(page, copyLines(three().slice(0, 1)));
+    wantLines(page, copyLines(recordBlock().slice(0, 1)));
 
     await pagesWorld(worker, "2026-11-18", [r("2026-11-18", c, "threads:alice")]);
     ({ page } = await getPage(worker, `/p/${CARD_A}`));
@@ -168,15 +173,17 @@ describe("the page of a card", () => {
     assert.equal(status, 200);
     wantLines(page, [
       ...copyLines(block("proof-page.md", "5. "), ...ordinal(1), "@alice", "@bob"),
-      three()[2]!,
-      "2026-11-15 收回：@bob",
-      "2026-11-01 新宣告：@alice",
+      recordBlock()[2]!,
+      recordRow("收回", "2026-11-15", "bob"),
+      recordRow("收回之後宣告別的帳號", "2026-11-10", "alice", "bob"),
+      recordRow("收回", "2026-11-05", "alice"),
+      recordRow("新宣告", "2026-11-01", "alice"),
       ...copyLines(block("proof-page.md", "4. ")),
     ]);
     // No account of section 1, no section 2, no small lines at the end of section 3.
     const one = block("proof-page.md", "1. ");
     const two = block("proof-page.md", "2. ");
-    notOnPage(page, one[2]!, one[3]!, two[0]!, ...copyLines(three().slice(-2)), "過卡更新這張證明");
+    notOnPage(page, one[2]!, one[3]!, two[0]!, ...copyLines(recordBlock().slice(-2)), "過卡更新這張證明");
     assert.ok(!page.includes("<iframe"), "no profile on the page of a withdrawn card");
     noCheckSection("withdrawn", page);
     wantPreview(page, specialTitles()[0]!, "島民證明 iamreal.tw");
@@ -194,9 +201,9 @@ describe("the page of a card", () => {
       ...copyLines(each, "7K2Q9FM4XD3A", "7K2Q9FM4XD3A"),
       ...copyLines(block("proof-page.md", "1. "), ...ordinal(2)),
       ...copyLines(block("proof-page.md", "2. ")),
-      ...copyLines(three().slice(0, 3)),
-      "2026-11-06 新宣告：@alice",
-      ...copyLines(three().slice(-2)),
+      ...copyLines(recordBlock().slice(0, 3)),
+      recordRow("新宣告", "2026-11-06", "alice"),
+      ...copyLines(recordBlock().slice(-2)),
       ...copyLines(each, "7K2Q9FM4XD3A", "7K2Q9FM4XD3B"),
       ...copyLines(block("proof-page.md", "5. "), ...ordinal(1), "@alice", "@bob"),
       ...copyLines(block("proof-page.md", "4. ")),

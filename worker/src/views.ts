@@ -393,8 +393,8 @@ export function ordinalOf(sql: SqlStorage, scopeString: string, scopedId: string
  */
 export function cardsOfShortId(sql: SqlStorage, scopeString: string, short: string): PageCard[] {
   const cards = sql
-    .exec<{ scoped_id: string; first_date: number; last_card_proof: number; card_proofs: number }>(
-      "SELECT scoped_id, first_date, last_card_proof, card_proofs FROM view_cards INDEXED BY view_cards_short_id WHERE scope_string = ? AND short_id = ? ORDER BY scoped_id",
+    .exec<{ scoped_id: string; last_card_proof: number }>(
+      "SELECT scoped_id, last_card_proof FROM view_cards INDEXED BY view_cards_short_id WHERE scope_string = ? AND short_id = ? ORDER BY scoped_id",
       scopeString,
       short,
     )
@@ -402,7 +402,7 @@ export function cardsOfShortId(sql: SqlStorage, scopeString: string, short: stri
   return cards.map((card): PageCard => {
     const ordinal = ordinalOf(sql, scopeString, card.scoped_id);
     const slots = sql
-      .exec<{ platform: string; current: string | null; switch_count: number }>("SELECT platform, current, switch_count FROM view_slots WHERE scope_string = ? AND scoped_id = ? ORDER BY platform", scopeString, card.scoped_id)
+      .exec<{ platform: string; current: string | null }>("SELECT platform, current FROM view_slots WHERE scope_string = ? AND scoped_id = ? ORDER BY platform", scopeString, card.scoped_id)
       .toArray();
     const history = sql
       .exec<{ date: number; platform: string; kind: string; after_withdrawal: number; before_username: string | null; after_username: string | null }>(
@@ -415,10 +415,8 @@ export function cardsOfShortId(sql: SqlStorage, scopeString: string, short: stri
     return {
       scopedId: card.scoped_id,
       ordinal,
-      firstCardProof: card.first_date,
       lastCardProof: card.last_card_proof,
-      cardProofs: card.card_proofs,
-      slots: slots.map((s) => ({ platform: s.platform, current: s.current, switchCount: s.switch_count })),
+      slots: slots.map((s) => ({ platform: s.platform, current: s.current })),
       history: history.map(historyRowOf),
     };
   });

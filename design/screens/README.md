@@ -4,7 +4,7 @@
 
 ## 截圖上的字以 `design/copy/` 為準
 
-截圖上的字不是規格。和 `design/copy/` 不同時，以 `design/copy/` 為準；版面和視覺的規則以 `design/DESIGN.md`、`design/tokens.json` 為準。定稿版的截圖上還留著幾句之後才改的字，例如「您」「本人」、小寫的 threads、舊的動作寫法（「宣告了」「把…換給…」）、第 1 步的兩個按鈕；各頁的票照 `design/copy/` 改，不照截圖。
+截圖上的字不是規格。和 `design/copy/` 不同時，以 `design/copy/` 為準；版面和視覺的規則以 `design/DESIGN.md`、`design/tokens.json` 為準。定稿版的截圖上還留著幾句之後才改的字，例如「您」「本人」、小寫的 threads、過卡流程裡舊的動作寫法（「宣告了」「把…換給…」）、第 1 步的兩個按鈕；各頁的票照 `design/copy/` 改，不照截圖。
 
 截圖上的帳號名稱、島民編號、日期、數字都是假資料。
 

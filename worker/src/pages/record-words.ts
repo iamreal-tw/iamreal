@@ -1,5 +1,5 @@
-// What one valid record did on one platform, in words: a row of 全部紀錄 on the
-// page of a card (design/copy/proof-page.md, section 4) and a row of the
+// What one valid record did on one platform, in words: a row of the record on
+// the page of a card (design/copy/proof-page.md, section 3) and a row of the
 // proof log page's list (design/copy/proof-log-page.md, 清單). The two use the
 // same words for the same kinds; the proof log page also names the platform,
 // and names the account of 再次過卡, since its rows are of many cards.

@@ -79,14 +79,17 @@ function titleOf(cards: readonly PageCard[]): string {
 }
 
 /**
- * Section 3 of one card (or its part in section 5): the last card proof,
- * every valid record of the card on Threads, newest first, and, while the
- * card gives its place to an account, the two small lines for its holder.
- * `withdrawn` is the account of the latest withdrawal on a card that gives
- * its place to none.
+ * Section 3 of one card: the last card proof, every valid record of the
+ * card on Threads, newest first, and the two small lines for its holder.
+ * On a card that gives its place to no account (section 5), the line of the
+ * latest withdrawal comes under the last card proof instead, and the two
+ * small lines are left out.
  */
-function lastAndRecords(card: PageCard, shortId: string, today: number, giving: boolean, withdrawn: string | null): Html {
+function lastCardProofAndRecord(card: PageCard, shortId: string, today: number): Html {
   const rows = card.history.filter((row) => row.platform === PLATFORM);
+  const giving = currentOf(card) !== null;
+  // The account of the latest withdrawal on Threads, if there is one.
+  const withdrawn = giving ? null : (rows.find((row) => row.kind === "withdraw")?.before ?? null);
   return html`<section class="last">
 <p class="when">上次過卡：${daysAgo(card.lastCardProof, today)}<span class="date">（${formatDay(card.lastCardProof)}）</span></p>${withdrawn === null ? new Html("") : html`
 <p class="small">那一天收回了 Threads 的 @${withdrawn}。</p>`}
@@ -105,20 +108,18 @@ ${rows.map((row) => html`<li><time>${formatDay(row.date)}</time> <span>${recordW
  * the left column and section 3 in the right (pages.css). `nested` is one
  * of several cards: its title is not the page's.
  */
-function firstScreen(site: Site, card: PageCard, shortId: string, today: number, nested: boolean): Html {
+function cardSections(site: Site, card: PageCard, shortId: string, today: number, nested: boolean): Html {
   const account = currentOf(card);
   if (account !== null && !isThreadsUsername(account)) throw new Error("pages: a card has an account that is not a Threads username");
   // The title, with the ordinal right above it: a small line in the secondary colour, never beside the account.
   const titled = (inside: Html): Html => html`<p class="ordinal">${ordinalOf(card)}</p>
 ${nested ? html`<h2 class="title">${inside}</h2>` : html`<h1 class="title">${inside}</h1>`}`;
   if (account === null) {
-    // The account of the latest withdrawal on Threads, if there is one.
-    const withdrawn = card.history.find((row) => row.platform === PLATFORM && row.kind === "withdraw")?.before ?? null;
     return html`<div class="first">
 <section class="claim withdrawn">
 ${titled(html`這張自然人憑證現在沒有把名額給任何帳號`)}
 </section>
-${lastAndRecords(card, shortId, today, false, withdrawn)}
+${lastCardProofAndRecord(card, shortId, today)}
 </div>`;
   }
   return html`<div class="first">
@@ -132,7 +133,7 @@ ${accountName(account)}`)}
 <p class="backlink">${site.host}/p/${shortId}</p>
 ${embed(account)}
 </section>
-${lastAndRecords(card, shortId, today, true, null)}
+${lastCardProofAndRecord(card, shortId, today)}
 </div>`;
 }
 
@@ -152,7 +153,7 @@ export function proofPage(site: Site, shortId: string, { today, cards }: CardsOf
   if (cards.length === 0) throw new Error("pages: no card for the short ID");
   let content: Html;
   if (cards.length === 1) {
-    content = firstScreen(site, cards[0]!, shortId, today, false);
+    content = cardSections(site, cards[0]!, shortId, today, false);
   } else {
     const starts = prefixes(cards.map((c) => c.scopedId));
     content = html`<section class="many">
@@ -162,7 +163,7 @@ export function proofPage(site: Site, shortId: string, { today, cards }: CardsOf
 ${cards.map(
   (card, i) => html`<article class="one-of-many">
 <p class="prefix">島民編號 <span class="id">${starts[i]!}</span> 開頭</p>
-${firstScreen(site, card, shortId, today, true)}
+${cardSections(site, card, shortId, today, true)}
 </article>`,
 )}`;
   }
