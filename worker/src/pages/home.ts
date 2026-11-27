@@ -310,7 +310,7 @@ ${QUESTIONS.map((q) => html`<details><summary>${q.question}</summary>\n${q.answe
 <li><span class="n">4</span><div><b><a href="/hang">用你的帳號承認這張證明</a></b><span class="small">把證明連結掛到 Threads 的個人檔案上。別人才看得出這個帳號承認這張證明（因為任何卡片都能宣告任何帳號，但一卡只能宣告一帳號）。</span></div></li>
 </ol>
 <div class="after">
-<p class="small">還沒有自然人憑證？本人帶身分證到戶政事務所，250 元，當天拿到。任何一間戶政事務所都可以辦，不限戶籍地。</p>
+<p class="small">還沒有自然人憑證？滿 18 歲，未受監護宣告，本人帶身分證到戶政事務所，250 元，當天拿到。任何一間戶政事務所都可以辦，不限戶籍地。</p>
 <p class="small">我們只收台灣中華民國國民的自然人憑證正卡。非中華民國國籍人所持有的自然人憑證無法使用於島民證明。</p>
 </div>
 </div>

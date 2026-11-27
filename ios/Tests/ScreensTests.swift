@@ -129,19 +129,19 @@ final class ScreensTests: XCTestCase {
             "實體卡片簽章在卡片裡完成，卡片效期約 5 ~ 8 年。",
             "行動自然人憑證簽章依賴內政部伺服器，而且每年會更換金鑰，不適合作為島民證明使用。",
             "還沒有自然人憑證，怎麼申辦？",
-            "本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
+            "滿 18 歲，未受監護宣告，本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
             "找附近的戶政事務所",
-            "內政部憑證管理中心：如何申請自然人憑證（moica.nat.gov.tw）",
+            "內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）",
             "下一步",
         ])
         guard case .question(_, let answer)? = screen.blocks.last else { return XCTFail("no question at the end: \(screen.blocks)") }
         XCTAssertEqual(Array(answer.dropFirst()), [
             .button(Button(label: "找附近的戶政事務所", action: .findOffice), main: false),
-            .action(Button(label: "內政部憑證管理中心：如何申請自然人憑證（moica.nat.gov.tw）", action: .howToApply)),
+            .action(Button(label: "內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）", action: .howToApply)),
         ])
         // The phone's map searches for the word; the app sends no place of its own.
         XCTAssertEqual(CardProofModel.findOffice.absoluteString.removingPercentEncoding, "https://maps.apple.com/?q=戶政事務所")
-        XCTAssertEqual(CardProofModel.moica.absoluteString, "https://moica.nat.gov.tw/")
+        XCTAssertEqual(CardProofModel.moica.absoluteString, "https://moica.nat.gov.tw/rac.html")
     }
 
     /// Step 3 says two things under the field; who holds the card and the PIN is step 5's to say.

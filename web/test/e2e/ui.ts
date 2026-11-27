@@ -379,7 +379,7 @@ const stepLine = (n: number) => fill(C.common.step, { step: n, steps: 7 });
 /** Step 1's two links, in the question on how to get a card: a map's search, MOICA's site; each in a new tab, nothing else (card-proof.md, step 1). */
 const STEP1_LINKS = [
   [C.before.find_office, "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent("戶政事務所")],
-  [C.before.how_to_get_moica, "https://moica.nat.gov.tw/"],
+  [C.before.how_to_get_moica, "https://moica.nat.gov.tw/rac.html"],
 ];
 async function step1Links(label: string, p: Page = page): Promise<void> {
   const links = await p.eval<[string, string, string][]>(`[...document.querySelectorAll('#app a')].map((a) => [a.textContent, a.getAttribute("href"), a.target + " " + a.rel + " " + !!a.closest('.asks details')])`);

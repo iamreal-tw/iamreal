@@ -135,7 +135,7 @@ export const CATEGORIES: readonly Category[] = [
       {
         id: "no-card-yet",
         question: "我還沒有自然人憑證，怎麼辦？",
-        answer: new Html(`<p>本人帶身分證正本，到任何一間戶政事務所申辦，不限戶籍地。申請時要填一個電子郵件信箱。工本費 250 元，當天拿到卡片。</p>`),
+        answer: new Html(`<p>滿 18 歲，未受監護宣告，本人帶身分證正本，到任何一間戶政事務所申辦，不限戶籍地。申請時要填一個電子郵件信箱。工本費 250 元，當天拿到卡片。</p>`),
       },
       {
         id: "mobile-certificate",

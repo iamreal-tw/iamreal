@@ -137,16 +137,16 @@ final class CardProofTests: XCTestCase {
             "實體卡片簽章在卡片裡完成，卡片效期約 5 ~ 8 年。",
             "行動自然人憑證簽章依賴內政部伺服器，而且每年會更換金鑰，不適合作為島民證明使用。",
             "還沒有自然人憑證，怎麼申辦？",
-            "本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
+            "滿 18 歲，未受監護宣告，本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
             "找附近的戶政事務所",
-            "內政部憑證管理中心：如何申請自然人憑證（moica.nat.gov.tw）",
+            "內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）",
             "下一步",
         ])
         // The two ways to a card: the phone's map, and MOICA's site. Nothing of the app goes with them.
         try await press("找附近的戶政事務所", in: model)
         XCTAssertEqual(opened.last?.absoluteString.removingPercentEncoding, "https://maps.apple.com/?q=戶政事務所")
-        try await press("內政部憑證管理中心：如何申請自然人憑證（moica.nat.gov.tw）", in: model)
-        XCTAssertEqual(opened.last?.absoluteString, "https://moica.nat.gov.tw/")
+        try await press("內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）", in: model)
+        XCTAssertEqual(opened.last?.absoluteString, "https://moica.nat.gov.tw/rac.html")
         XCTAssertEqual(model.screen.step, 1)
 
         try await press("下一步", in: model)
