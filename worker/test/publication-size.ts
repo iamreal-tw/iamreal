@@ -30,12 +30,12 @@ if (!Number.isSafeInteger(count) || count < 1) throw new Error("the number of ca
 /** A made-up card: every third has a slot on both platforms, every seventh withdrew its Threads account, switches 0 to 5. */
 function cardOf(i: number): { door: CardToWrite; row: CardRow } {
   const scopedId = newCard();
-  const slots: [string, SlotState][] = [["threads", { current: i % 7 === 0 ? null : `user.${i}`, lastDeclared: `user.${i}`, switchCount: i % 6, correctionDate: null }]];
-  if (i % 3 === 0) slots.push(["test-example", { current: `user-${i}`, lastDeclared: `user-${i}`, switchCount: 0, correctionDate: parseDay("2026-11-19") }]);
-  const json = Object.fromEntries(slots.map(([p, s]) => [p, { current: s.current, last_declared: s.lastDeclared, switch_count: s.switchCount, correction_date: s.correctionDate === null ? null : "2026-11-19" }]));
+  const slots: [string, SlotState][] = [["threads", { current: i % 7 === 0 ? null : `user.${i}`, lastDeclared: `user.${i}`, switchCount: i % 6 }]];
+  if (i % 3 === 0) slots.push(["test-example", { current: `user-${i}`, lastDeclared: `user-${i}`, switchCount: 0 }]);
+  const json = Object.fromEntries(slots.map(([p, s]) => [p, { current: s.current, last_declared: s.lastDeclared, switch_count: s.switchCount }]));
   return {
     door: { scope_string: TEST_SCOPE, scoped_id: scopedId, seq: i + 1, last_card_proof: "2026-11-20", proofs_on_last_date: 1, platforms: json },
-    row: { scopeString: TEST_SCOPE, scopedId, lastSeq: i + 1, card: { lastCardProof: parseDay("2026-11-20"), proofsOnLastDate: 1, slots: new Map(slots) } },
+    row: { scopeString: TEST_SCOPE, scopedId, lastSeq: i + 1, card: { lastCardProof: parseDay("2026-11-20"), slots: new Map(slots) } },
   };
 }
 

@@ -104,7 +104,7 @@
         // The name of the proof log's Durable Object: clearing the test log is giving it a new name.
         // The name of a test log's object always starts with "test-"; keep that when changing it.
         // The production log's never does.
-        "PROOF_LOG_OBJECT_NAME": "test-3",
+        "PROOF_LOG_OBJECT_NAME": "test-4",
         // Which proof log this environment serves, "test" or "production". It selects the scope
         // string and the platform table, which are written in protocol/ (src/settings.ts).
         // It must fit the name above: "test" with a name that starts with "test-", "production"
@@ -123,7 +123,7 @@
         // The date the test log was last cleared on, YYYY-MM-DD: every page says it beside the mark
         // of a test log (design/copy/test-site.md). Change it together with PROOF_LOG_OBJECT_NAME when
         // the proof log is cleared (README.md, "清空測試的證明紀錄").
-        "TEST_PROOF_LOG_CLEARED_ON": "2026-11-23",
+        "TEST_PROOF_LOG_CLEARED_ON": "2026-11-27",
         // How many counts one minute's file holds at most (ADR-0032; src/counts.ts): plain digits, 0 to
         // 100000. More than that in a minute are not kept; the file says how many there were.
         "COUNT_EVENTS_PER_MINUTE": "600",

@@ -73,8 +73,9 @@ const notMoved = (): number => worker.logLines().filter((line) => line.includes(
 // The tests of this group go on from each other, on one proof log: filling a file takes a thousand records.
 describe("the 1,000th record fills a log file", () => {
   const card = cardStarting(CARD_A);
-  // Three cards that declare in the first file and change their list in the second: a correction, a switch, a withdrawal.
-  const [corrects, switches, withdraws] = [newCard(), newCard(), newCard()];
+  // Three cards that declare in the first file and change their list in the second: a switch on the day of the first, a
+  // switch the day after, a withdrawal.
+  const [sameDay, switches, withdraws] = [newCard(), newCard(), newCard()];
   let root: string;
 
   test("the file and its record hash list are in the bucket, the object keeps none of its records, and the proof log goes on", async () => {
@@ -83,7 +84,7 @@ describe("the 1,000th record fills a log file", () => {
     root = await publishCrl(worker, { issuer: "G3", number: 1, thisUpdate: tw("2026-11-16", "05:00:00"), serials: [11, 12] });
     await worker.setClock(tw("2026-11-16", "12:00:00"));
     await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
-    for (const other of [corrects, switches, withdraws]) await mustSubmit(worker, await sub(worker, other, root, "threads:alice"), "threads first");
+    for (const other of [sameDay, switches, withdraws]) await mustSubmit(worker, await sub(worker, other, root, "threads:alice"), "threads first");
     await fillTo(root, LINES_PER_FILE - 1);
     assert.deepEqual([...(await directory()).keys()], [], "a file that is not full is not in the bucket");
     assert.equal((await checkProofLog(worker)).length, LINES_PER_FILE - 1);
@@ -134,16 +135,16 @@ describe("the 1,000th record fills a log file", () => {
   const notFilled = (): number => worker.logLines().filter((line) => line.includes('"views_not_filled"')).length;
 
   test("the views, cleared, are written again from the bucket's log file and the object's records: row for row what they were", async () => {
-    // Records of every kind whose card's earlier records are in the file that was moved: a correction on the day of the
+    // Records of every kind whose card's earlier records are in the file that was moved: a switch on the day of the
     // first declaration, and the day after a switch, a withdrawal and a refresh.
-    await mustSubmit(worker, await sub(worker, corrects, root, "threads:carol"), "threads correction");
+    await mustSubmit(worker, await sub(worker, sameDay, root, "threads:carol"), "threads switch");
     await worker.setClock(tw("2026-11-17", "12:00:00"));
     await mustSubmit(worker, await sub(worker, switches, root, "threads:bob"), "threads switch");
     await mustSubmit(worker, await sub(worker, withdraws, root), "threads withdraw");
     await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads refresh");
     const views = await worker.proofLog.views();
     assert.deepEqual(views.view_state, [{ id: 1, seq: LINES_PER_FILE + 5 }]);
-    assert.deepEqual([...new Set(views.view_history!.map((row) => row.kind))].sort(), ["correction", "first", "refresh", "switch", "withdraw"]);
+    assert.deepEqual([...new Set(views.view_history!.map((row) => row.kind))].sort(), ["first", "refresh", "switch", "withdraw"]);
     const pages = [await page("/"), await page(`/p/${CARD_A}`)];
 
     await worker.proofLog.clearViews();

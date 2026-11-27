@@ -15,7 +15,7 @@ import type { PlatformRow } from "./platforms.ts";
  * number"). A stored card state was computed by one version; the Go
  * implementation has the same constant (prooflog.RulesVersion).
  */
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 
 /** The state of one slot: one card on one platform (spec/record-rules.md, "State"). */
 export interface SlotState {
@@ -23,31 +23,21 @@ export interface SlotState {
   lastDeclared: string | null;
   /** Valid switches of the slot, 0 to 5; it never decreases. */
   switchCount: number;
-  /** The date of the slot's last valid `first` or `switch`. */
-  correctionDate: Day | null;
 }
 
 /** The state of one card: its own items, and its slots by platform ID. Facts only, no conclusions. */
 export interface CardState {
   lastCardProof: Day | null;
-  /** The number of valid records of the card dated `lastCardProof`; 0 without one. */
-  proofsOnLastDate: number;
   slots: ReadonlyMap<string, SlotState>;
 }
 
-/** The card's own items of its state, without its slots. */
-export type CardItems = Pick<CardState, "lastCardProof" | "proofsOnLastDate">;
-
-export const EMPTY_SLOT: Readonly<SlotState> = Object.freeze({ current: null, lastDeclared: null, switchCount: 0, correctionDate: null });
-
-/** At most 3 valid records of a card have the same date (check 6, `daily_limit`). */
-export const MAX_PER_DATE = 3;
+export const EMPTY_SLOT: Readonly<SlotState> = Object.freeze({ current: null, lastDeclared: null, switchCount: 0 });
 /**
  * A record's date is no earlier than this many days before the latest date
  * among the earlier valid records, of any card (check 4, `date_order`).
  */
 export const DATE_ORDER_DAYS = 4;
-/** A card has 5 switches on each platform, for good (spec/record-rules.md, "Switches and corrections"). */
+/** A card has 5 switches on each platform, for good (spec/record-rules.md, "Switches"). */
 export const MAX_SWITCHES = 5;
 /**
  * How many days after today a date in the proof log can be: a record's date is
@@ -62,7 +52,7 @@ export const MAX_DAYS_AHEAD = 3;
 export const ROOT_DAYS_BEFORE = 1;
 
 /** A platform's kind in a valid record. */
-export type Kind = "first" | "refresh" | "correction" | "switch" | "withdraw";
+export type Kind = "first" | "refresh" | "switch" | "withdraw";
 
 /** An account of a record's list: at most one per platform. */
 export interface Account {
@@ -77,10 +67,10 @@ export interface PlatformKind {
 }
 
 /** The reason code of an invalid record (spec/record-rules.md, "Per record"). */
-export type Reason = "proof" | "challenge_reused" | "root" | "date_order" | "empty" | "switch_limit" | "daily_limit";
+export type Reason = "proof" | "challenge_reused" | "root" | "date_order" | "empty" | "switch_limit";
 
-/** The reason codes of checks 5 and 6. */
-export type ListReason = "empty" | "switch_limit" | "daily_limit";
+/** The reason codes of check 5. */
+export type ListReason = "empty" | "switch_limit";
 
 /**
  * The result of one record: valid with its kinds, in ascending order of
@@ -146,7 +136,7 @@ export interface RecordOutcome extends ListOutcome {
 
 /** The state of a card without a valid record: nothing, and an empty slot for every platform. */
 export function newCard(platforms: readonly PlatformRow[]): CardState {
-  return { lastCardProof: null, proofsOnLastDate: 0, slots: new Map(platforms.map((p) => [p.platform, { ...EMPTY_SLOT }])) };
+  return { lastCardProof: null, slots: new Map(platforms.map((p) => [p.platform, { ...EMPTY_SLOT }])) };
 }
 
 /**
@@ -155,12 +145,11 @@ export function newCard(platforms: readonly PlatformRow[]): CardState {
  * first row that applies gives the kind and the slot after it; null is no
  * kind, "blocked" is blocked.
  */
-function applyEntry(slot: SlotState, entry: string | null, day: Day): { kind: Kind; slot: SlotState } | "blocked" | null {
+function applyEntry(slot: SlotState, entry: string | null): { kind: Kind; slot: SlotState } | "blocked" | null {
   if (entry === null) return slot.current === null ? null : { kind: "withdraw", slot: { ...slot, current: null } };
-  if (slot.lastDeclared === null) return { kind: "first", slot: { current: entry, lastDeclared: entry, switchCount: slot.switchCount, correctionDate: day } };
+  if (slot.lastDeclared === null) return { kind: "first", slot: { current: entry, lastDeclared: entry, switchCount: slot.switchCount } };
   if (slot.lastDeclared === entry) return { kind: "refresh", slot: { ...slot, current: entry } };
-  if (slot.correctionDate === day) return { kind: "correction", slot: { ...slot, current: entry, lastDeclared: entry } };
-  if (slot.switchCount < MAX_SWITCHES) return { kind: "switch", slot: { current: entry, lastDeclared: entry, switchCount: slot.switchCount + 1, correctionDate: day } };
+  if (slot.switchCount < MAX_SWITCHES) return { kind: "switch", slot: { current: entry, lastDeclared: entry, switchCount: slot.switchCount + 1 } };
   return "blocked";
 }
 
@@ -198,32 +187,28 @@ function readList(platforms: readonly PlatformRow[], card: CardState, accounts: 
   return { table: [...rows.keys()].sort(byBytes), list };
 }
 
-/** Checks 5 and 6 and the effects of a valid record, for a list readList accepted. */
+/** Check 5 and the effects of a valid record, for a list readList accepted. */
 function checkList(table: readonly string[], card: CardState, list: ReadonlyMap<string, string>, date: Day): ListOutcome<ListReason> {
   // 5. The event rules, on a copy. One blocked platform blocks the record.
   const slots = new Map<string, SlotState>();
   const kinds: PlatformKind[] = [];
   for (const platform of table) {
     const before = card.slots.get(platform) ?? EMPTY_SLOT;
-    const o = applyEntry(before, list.get(platform) ?? null, date);
+    const o = applyEntry(before, list.get(platform) ?? null);
     if (o === "blocked") return { result: { valid: false, reason: "switch_limit", blockedPlatform: platform }, card };
     slots.set(platform, o === null ? { ...before } : o.slot);
     if (o !== null) kinds.push({ platform, kind: o.kind });
   }
   if (kinds.length === 0) return { result: { valid: false, reason: "empty" }, card };
-  // 6. Fewer than 3 earlier valid records of its card have its date.
-  const onDate = card.lastCardProof === date ? card.proofsOnLastDate : 0;
-  if (onDate >= MAX_PER_DATE) return { result: { valid: false, reason: "daily_limit" }, card };
-  return { result: { valid: true, kinds }, card: { lastCardProof: date, proofsOnLastDate: onDate + 1, slots } };
+  return { result: { valid: true, kinds }, card: { lastCardProof: date, slots } };
 }
 
 /**
- * Checks 5 and 6 and the effects of a valid record: the event rules on every
- * platform of the table, whether the list has an entry for it or not, then
- * the card's 3 records a date. It is the second half of applyRecord, for a
- * record that passed checks 1 to 4; `date` is then no earlier than the
- * card's `lastCardProof`. Like applyRecord, it throws for a list that is not
- * a record's.
+ * Check 5 and the effects of a valid record: the event rules on every
+ * platform of the table, whether the list has an entry for it or not. It is
+ * the second half of applyRecord, for a record that passed checks 1 to 4;
+ * `date` is then no earlier than the card's `lastCardProof`. Like
+ * applyRecord, it throws for a list that is not a record's.
  *
  * The device calls it by itself for what a list would do today: of checks 1
  * to 4 it could compute only the card's own half of check 4, and it leaves
@@ -236,7 +221,7 @@ export function applyList(platforms: readonly PlatformRow[], card: CardState, ac
 
 /**
  * The record rules for one record (spec/record-rules.md, "Per record"): the
- * six checks in order, the first that fails giving the reason code. It reads
+ * five checks in order, the first that fails giving the reason code. It reads
  * nothing but its input, changes none of it and keeps nothing; the same
  * input gives the same outcome.
  *
@@ -260,21 +245,9 @@ export function applyRecord(input: RecordInput): RecordOutcome {
   // no earlier than its card's last card proof.
   if (latestValidDate !== null && date < latestValidDate - DATE_ORDER_DAYS) return invalid("date_order");
   if (card.lastCardProof !== null && date < card.lastCardProof) return invalid("date_order");
-  // 5 and 6.
+  // 5.
   const o = checkList(table, card, list, date);
   return { ...o, latestValidDate: o.result.valid && (latestValidDate === null || date > latestValidDate) ? date : latestValidDate };
-}
-
-/**
- * True if the card has 3 valid records dated `day`, so that no card proof of
- * any kind is valid on `day` (check 6, `daily_limit`): what applyList finds
- * for any list the event rules accept, without needing a list. A card's
- * dates do not go back (check 4), so the count of `day` is
- * `proofs_on_last_date` when `day` is `last_card_proof` and 0 when it is
- * later; a `day` before it is `date_order`, and this is false.
- */
-export function dailyLimitReached(state: CardItems, day: Day): boolean {
-  return state.lastCardProof === day && state.proofsOnLastDate >= MAX_PER_DATE;
 }
 
 /**
@@ -283,38 +256,23 @@ export function dailyLimitReached(state: CardItems, day: Day): boolean {
  * the event rules:
  *
  *   - `current` is set only together with `last_declared` (first, refresh,
- *     correction, switch), and a withdrawal clears `current` only. So
- *     `current`, when set, is `last_declared`.
- *   - `last_declared` is first set by a `first`, which sets
- *     `correction_date`; nothing clears either. So one is set exactly when
- *     the other is.
+ *     switch), and a withdrawal clears `current` only. So `current`, when
+ *     set, is `last_declared`.
  *   - `switch_count` is 0 to 5, and grows only by a switch, which needs a
  *     `last_declared` already.
- *   - `correction_date` is the date of a valid record of the card, so it is
- *     no later than `last_card_proof`; every slot's items come from valid
- *     records, so none is set without `last_card_proof`.
+ *   - Every slot's items come from valid records, so none is set without
+ *     `last_card_proof`.
  */
 export function possibleSlot(slot: SlotState, lastCardProof: Day | null): boolean {
-  const { current, lastDeclared, switchCount, correctionDate } = slot;
+  const { current, lastDeclared, switchCount } = slot;
   if (!Number.isSafeInteger(switchCount) || switchCount < 0 || switchCount > MAX_SWITCHES) return false;
   if (current !== null && current !== lastDeclared) return false;
-  if ((lastDeclared === null) !== (correctionDate === null)) return false;
   if (lastDeclared === null && switchCount > 0) return false;
   if (lastDeclared !== null && lastCardProof === null) return false;
-  if (correctionDate !== null && lastCardProof !== null && correctionDate > lastCardProof) return false;
   return true;
 }
 
-/**
- * False if no proof log can give a card these items: `proofs_on_last_date`
- * counts the valid records dated `last_card_proof`, at most 3 of a date
- * (check 6), so it is 0 without `last_card_proof` and 1 to 3 with it; and no
- * date is more than MAX_DAYS_AHEAD days after today.
- */
-export function possibleCard(card: CardItems, today: Day): boolean {
-  const { lastCardProof, proofsOnLastDate } = card;
-  if (!Number.isSafeInteger(proofsOnLastDate)) return false;
-  if (lastCardProof === null) return proofsOnLastDate === 0;
-  if (proofsOnLastDate < 1 || proofsOnLastDate > MAX_PER_DATE) return false;
-  return lastCardProof <= today + MAX_DAYS_AHEAD;
+/** False if no proof log can give a card this `last_card_proof`: no date is more than MAX_DAYS_AHEAD days after today. */
+export function possibleLastCardProof(lastCardProof: Day | null, today: Day): boolean {
+  return lastCardProof === null || lastCardProof <= today + MAX_DAYS_AHEAD;
 }

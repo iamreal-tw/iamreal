@@ -1,6 +1,6 @@
 // The whole way with real proofs (cmd/iamreal-verify/testdata/card-proofs/,
 // its README.md): the mirror fetches the CRLs from a fake MOICA, the back end
-// issues the challenges the fourteen card proofs were made for, verifies each
+// issues the challenges the thirteen card proofs were made for, verifies each
 // proof with the verifier the deployed Worker has, and accepts or refuses it
 // as card-proofs.json there says. Nothing here stands in for the verifier.
 import assert from "node:assert/strict";
@@ -27,11 +27,10 @@ interface CardProof {
 const cardProofs = JSON.parse(readFileSync(join(CARD_PROOF_TESTDATA, "card-proofs.json"), "utf8")) as CardProof[];
 const crl = (name: string): Uint8Array => new Uint8Array(readFileSync(join(CARD_PROOF_TESTDATA, "crl", name)));
 
-describe("fourteen card proofs with real proofs, from the challenge to the proof log", () => {
+describe("thirteen card proofs with real proofs, from the challenge to the proof log", () => {
   let worker: TestWorker;
   before(async () => {
-    // The policy on late switches is on: card proof 10 is a fourth switch (cmd/iamreal-verify/testdata/card-proofs/README.md).
-    worker = await startWorker({ issuers: cardProofIssuers(), settings: { RESTRICT_LATE_SWITCHES: "true" } });
+    worker = await startWorker({ issuers: cardProofIssuers() });
     // MOICA publishes A (G2) and B (G3) on 2026-11-20, C (G3) on 2026-11-21.
     worker.moica.serve("G2", crl("A-G2.crl"));
     worker.moica.serve("G3", crl("B-G3.crl"));
@@ -41,7 +40,7 @@ describe("fourteen card proofs with real proofs, from the challenge to the proof
   after(() => worker.close());
 
   test("each is answered as card-proofs.json says, and a proof submitted with another list is `proof`", async () => {
-    assert.equal(cardProofs.length, 14);
+    assert.equal(cardProofs.length, 13);
     let seq = 0;
     let servesC = false;
     const written: { body: Submission; recordHash: string }[] = [];
@@ -85,19 +84,22 @@ describe("fourteen card proofs with real proofs, from the challenge to the proof
     assert.deepEqual((await worker.proofLog.stored()).records.map((r) => r.record_hash), written.map((w) => w.recordHash));
 
     // The state the back end answers.
-    const never = { current: null, last_declared: null, switch_count: 0, correction_date: null };
+    const never = { current: null, last_declared: null, switch_count: 0 };
     assert.deepEqual(await cardState(worker, cardProofs[0]!.body.scoped_id), {
       last_card_proof: "2026-11-23",
       proofs_on_last_date: 1,
-      platforms: { "test-example": never, threads: { current: null, last_declared: "alice", switch_count: 0, correction_date: "2026-11-20" } },
+      daily_limit: 3,
+      platforms: { "test-example": never, threads: { current: null, last_declared: "alice", switch_count: 0 } },
       count: 11,
     });
+    // threads: alice_ on the day of alice (card proof 3) is the first of its four switches.
     assert.deepEqual(await cardState(worker, cardProofs[1]!.body.scoped_id), {
       last_card_proof: "2026-11-24",
       proofs_on_last_date: 3,
+      daily_limit: 3,
       platforms: {
-        "test-example": { current: null, last_declared: "c-d", switch_count: 1, correction_date: "2026-11-21" },
-        threads: { current: null, last_declared: "dave", switch_count: 3, correction_date: "2026-11-23" },
+        "test-example": { current: null, last_declared: "c-d", switch_count: 1 },
+        threads: { current: null, last_declared: "dave", switch_count: 4 },
       },
       count: 11,
     });

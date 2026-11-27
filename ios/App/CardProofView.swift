@@ -61,20 +61,21 @@ struct ScreenView: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(screen.warnings.enumerated()), id: \.offset) { _, warning in self.notice(warning) }
             if let notice = screen.notice { self.notice(notice) }
-            // A screen in the place of step 1 is none of the steps.
-            if screen.step > 0 { stepBars }
+            // A screen in the place of step 1, and the whole step 6 shown from step 4, are none of the steps.
+            if screen.step > 0, screen.inSteps { stepBars }
             ForEach(Array(screen.blocks.enumerated()), id: \.offset) { index, block in
                 self.block(block, first: index == 0)
             }
             if !screen.buttons.isEmpty {
-                VStack(spacing: 12) {
-                    // The way on, the last of them, on top.
+                // The way on, the last of them, first: on the right side by side, on top one under the other.
+                ButtonRow(firstOnRight: true) {
                     ForEach(Array(screen.buttons.enumerated().reversed()), id: \.offset) { index, button in
                         self.button(button, main: screen.mainButton && index == screen.buttons.count - 1)
                     }
                 }
                 .padding(.top, 36)
             }
+            ForEach(Array(screen.under.enumerated()), id: \.offset) { _, block in self.block(block, first: false) }
             // The ways back, as links: to the screen before, then out of the card proof.
             ForEach(Array((screen.links + [screen.cancel].compactMap { $0 }).enumerated()), id: \.offset) { index, link in
                 SwiftUI.Button { perform(link.action) } label: {
@@ -333,11 +334,8 @@ struct ScreenView: View {
         case .demo(let demo):
             // Without the timeline there is no picture; the written steps under it say the same.
             if let timeline = HangTimeline.bundled {
-                VStack(spacing: 12) {
-                    HangDemoView(demo: demo, timeline: timeline, perform: perform, step: $demoStep)
-                    self.button(demo.control, main: false)
-                }
-                .padding(.top, 24)
+                demoFrame(demo.control) { HangDemoView(demo: demo, timeline: timeline, perform: perform, step: $demoStep) }
+                    .padding(.top, 24)
             }
         case .action(let button):
             SwiftUI.Button { perform(button.action) } label: {
@@ -354,11 +352,8 @@ struct ScreenView: View {
         case .senseDemo(let demo):
             // Without the timeline there is no picture; the sentence above it says where the card goes.
             if let timeline = SenseTimeline.bundled {
-                VStack(spacing: 12) {
-                    SenseDemoView(demo: demo, timeline: timeline, perform: perform)
-                    self.button(demo.control, main: false)
-                }
-                .padding(.top, 22)
+                demoFrame(demo.control) { SenseDemoView(demo: demo, timeline: timeline, perform: perform) }
+                    .padding(.top, 22)
             }
         }
     }
@@ -373,13 +368,40 @@ struct ScreenView: View {
 
     // The parts -----------------------------------------------------------------------
 
-    /// A button as wide as the screen (design/DESIGN.md, the components):
-    /// the main one red with white words, the others framed in ink.
-    private func button(_ button: Button, main: Bool, oneLine: Bool = false) -> some View {
+    /// A demonstration and its one control (design/copy/card-proof.md,
+    /// "示範"): small words in the picture's bottom right corner, in ink and
+    /// underlined, "停止播放" while it plays and "再看一次" otherwise, and
+    /// pressing the picture does the same. Small, so that the step's own
+    /// button is the one that stands out. VoiceOver presses the words: the
+    /// picture reads as its one sentence. Neither while the control cannot
+    /// be pressed (a tap is under way).
+    private func demoFrame<Picture: View>(_ control: Button, @ViewBuilder picture: () -> Picture) -> some View {
+        picture()
+            // Pressing the picture: a layer over it that VoiceOver does not see, so that the picture stays its one sentence.
+            .overlay {
+                Color.clear.contentShape(Rectangle())
+                    .onTapGesture { if control.enabled { perform(control.action) } }
+                    .accessibilityHidden(true)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                SwiftUI.Button { perform(control.action) } label: {
+                    Text(control.label).font(Theme.body(Theme.sizeSmall)).underline().foregroundColor(Theme.ink.color)
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: Theme.minTarget.value)
+                }
+                .disabled(!control.enabled)
+                .opacity(control.enabled ? 1 : 0.45)
+                .padding(4)
+            }
+    }
+
+    /// A button (design/DESIGN.md, the components): the main one red with
+    /// white words, the others framed in ink. As wide as it is given: the
+    /// screen, or half of it beside another (ButtonRow).
+    private func button(_ button: Button, main: Bool) -> some View {
         SwiftUI.Button { perform(button.action) } label: {
             Text(button.label)
                 .font(Theme.body(Theme.sizeBody, Theme.weightHeading))
-                .lineLimit(oneLine ? 1 : nil)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: Theme.buttonHeight.value)
                 .padding(.horizontal, 12)
@@ -390,24 +412,11 @@ struct ScreenView: View {
         .opacity(button.enabled ? 1 : 0.45)
     }
 
-    /// Buttons side by side, the first the main one, each on one line;
-    /// one under the other where that does not fit (a long account, large
-    /// text). Before iOS 16 the system cannot be asked which fits: one
-    /// under the other.
-    @ViewBuilder
+    /// Buttons side by side, the first the main one, on the left: the
+    /// order of step 6's demonstration's first screen (ButtonRow).
     private func sideBySide(_ buttons: [Button]) -> some View {
-        let column = VStack(spacing: 12) {
+        ButtonRow(firstOnRight: false) {
             ForEach(Array(buttons.enumerated()), id: \.offset) { index, button in self.button(button, main: index == 0) }
-        }
-        if #available(iOS 16.0, *) {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) {
-                    ForEach(Array(buttons.enumerated()), id: \.offset) { index, button in self.button(button, main: index == 0, oneLine: true) }
-                }
-                column
-            }
-        } else {
-            column
         }
     }
 
@@ -518,5 +527,87 @@ struct ScreenView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.bg.color)
         .overlay(RoundedRectangle(cornerRadius: Theme.radiusPanel.value).stroke(Theme.ink.color, lineWidth: 1))
+    }
+}
+
+/// Two buttons side by side, each half the width, where the words of both
+/// fit on one line so; one under the other, each as wide as the screen,
+/// where either's would not (a long account, the phone's text made large),
+/// and where there are more than two (design/DESIGN.md, the components:
+/// buttons). One button alone is as wide as the screen. `firstOnRight`:
+/// side by side, the first is on the right (a step's way on); otherwise on
+/// the left (step 6's 複製證明連結, as the first screen of its
+/// demonstration draws it). One under the other, the first is on top.
+/// Before iOS 16 the system cannot be asked how wide a button would be:
+/// one under the other.
+struct ButtonRow<Content: View>: View {
+    var firstOnRight: Bool
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        if #available(iOS 16.0, *) {
+            Halves(firstOnRight: firstOnRight) { content }
+        } else {
+            VStack(spacing: SideBySide.spacing) { content }
+        }
+    }
+
+    @available(iOS 16.0, *)
+    private struct Halves: Layout {
+        var firstOnRight: Bool
+
+        private func beside(_ subviews: Subviews, width: CGFloat) -> SideBySide.Places? {
+            SideBySide.places(ideal: subviews.map { $0.sizeThatFits(.unspecified).width }, width: width, firstOnRight: firstOnRight)
+        }
+
+        func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+            // No width, or no end to it: as wide as the buttons side by side would be.
+            let width = proposal.width.flatMap { $0.isFinite ? $0 : nil }
+                ?? subviews.map { $0.sizeThatFits(.unspecified).width }.reduce(0, +) + SideBySide.spacing * CGFloat(max(subviews.count - 1, 0))
+            if beside(subviews, width: width) != nil {
+                let half = ProposedViewSize(width: SideBySide.half(width), height: nil)
+                return CGSize(width: width, height: subviews.map { $0.sizeThatFits(half).height }.max() ?? 0)
+            }
+            let whole = ProposedViewSize(width: width, height: nil)
+            let heights = subviews.map { $0.sizeThatFits(whole).height }
+            return CGSize(width: width, height: heights.reduce(0, +) + SideBySide.spacing * CGFloat(max(subviews.count - 1, 0)))
+        }
+
+        func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+            if let places = beside(subviews, width: bounds.width) {
+                let half = SideBySide.half(bounds.width)
+                let each = ProposedViewSize(width: half, height: nil)
+                subviews[places.left].place(at: bounds.origin, proposal: each)
+                subviews[places.right].place(at: CGPoint(x: bounds.maxX - half, y: bounds.minY), proposal: each)
+                return
+            }
+            let whole = ProposedViewSize(width: bounds.width, height: nil)
+            var y = bounds.minY
+            for subview in subviews {
+                subview.place(at: CGPoint(x: bounds.minX, y: y), proposal: whole)
+                y += subview.sizeThatFits(whole).height + SideBySide.spacing
+            }
+        }
+    }
+}
+
+/// Whether two buttons go side by side, and which on which side (ButtonRow).
+enum SideBySide {
+    static let spacing: CGFloat = 12
+
+    struct Places: Equatable {
+        var left: Int
+        var right: Int
+    }
+
+    /// Half of `width`, less half the space between.
+    static func half(_ width: CGFloat) -> CGFloat { (width - spacing) / 2 }
+
+    /// By how wide each button would be with its words on one line
+    /// (`ideal`): which goes on the left and which on the right, or nil for
+    /// one under the other.
+    static func places(ideal: [CGFloat], width: CGFloat, firstOnRight: Bool) -> Places? {
+        guard ideal.count == 2, ideal.allSatisfy({ $0 <= half(width) }) else { return nil }
+        return firstOnRight ? Places(left: 1, right: 0) : Places(left: 0, right: 1)
     }
 }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +59,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -80,6 +83,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import tw.iamreal.app.ui.demo.DemoPlayer
 
 // What the screens are drawn with, after design/DESIGN.md and
 // design/screens/card-proof-app-*: the values are Theme.kt's, which are
@@ -175,22 +179,25 @@ internal fun Link(text: String, modifier: Modifier = Modifier, size: TextUnit = 
 )
 
 /**
- * Two buttons side by side, each half the width, where neither has to grow taller for its words; one under the other, each
- * as wide as the screen, where one would (a long account, the system's font made large). One button alone is as wide as the screen.
+ * Two buttons side by side, each half the width, where both of their words fit on one line so; one under the other, each as
+ * wide as the screen, where one's would not (a long account, the system's font made large), and where there are more than
+ * two. One button alone is as wide as the screen. `firstOnRight`: side by side, the first is on the right (a step's way on,
+ * [Actions]); otherwise on the left (step 6's 複製證明連結, as the first screen of its demonstration draws it).
  */
 @Composable
-internal fun SideBySide(modifier: Modifier = Modifier, content: @Composable () -> Unit) = Layout(content, modifier) { measurables, constraints ->
+internal fun SideBySide(modifier: Modifier = Modifier, firstOnRight: Boolean = false, content: @Composable () -> Unit) = Layout(content, modifier) { measurables, constraints ->
     val gap = 12.dp.roundToPx()
     val width = constraints.maxWidth
     val half = (width - gap) / 2
     val tall = Type.buttonHeight.roundToPx()
-    val beside = measurables.size == 2 && measurables.all { it.minIntrinsicHeight(half) <= tall }
-    val each = if (beside) half else width
-    val placed = measurables.map { it.measure(Constraints.fixedWidth(each)) }
+    // Its words on one line: as wide as a button needs to be when nothing makes it wrap.
+    val beside = measurables.size == 2 && measurables.all { it.maxIntrinsicWidth(tall) <= half }
+    val placed = measurables.map { it.measure(Constraints.fixedWidth(if (beside) half else width)) }
     if (beside) {
+        val (left, right) = if (firstOnRight) placed[1] to placed[0] else placed[0] to placed[1]
         layout(width, placed.maxOf { it.height }) {
-            placed[0].place(0, 0)
-            placed[1].place(half + gap, 0)
+            left.place(0, 0)
+            right.place(half + gap, 0)
         }
     } else {
         layout(width, placed.sumOf { it.height } + gap * (placed.size - 1).coerceAtLeast(0)) {
@@ -203,9 +210,41 @@ internal fun SideBySide(modifier: Modifier = Modifier, content: @Composable () -
     }
 }
 
-/** The buttons of a step, one under another, as wide as the screen: the primary one first. */
+/**
+ * A demonstration and its one control (design/copy/card-proof.md, "示範"): small words in the picture's bottom right corner,
+ * "停止播放" while it plays and "再看一次" otherwise, and pressing the picture does the same. Small, so that the step's own button
+ * is the one that stands out. A screen reader presses the words: the picture reads as its one sentence and nothing else.
+ */
 @Composable
-internal fun Actions(content: @Composable () -> Unit) = Column(Modifier.fillMaxWidth().padding(top = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { content() }
+internal fun DemoFrame(player: DemoPlayer, copy: Copy, tag: String, enabled: Boolean = true, picture: @Composable (Modifier) -> Unit) =
+    Box(Modifier.fillMaxWidth()) {
+        val toggle = { if (player.playing) player.stop() else player.play() }
+        val onTap by rememberUpdatedState(toggle)
+        picture(Modifier.pointerInput(enabled) { if (enabled) detectTapGestures { onTap() } })
+        Box(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .padding(8.dp)
+                .alpha(if (enabled) 1f else 0.4f)
+                .clickable(enabled = enabled, role = Role.Button, onClick = toggle)
+                .defaultMinSize(minHeight = Type.minTarget)
+                .padding(horizontal = 12.dp)
+                .testTag(tag),
+            contentAlignment = Alignment.Center,
+        ) {
+            BasicText(
+                if (player.playing) copy.say("app_demo.stop") else copy.say("app_demo.replay"),
+                style = TextStyle(color = Colours.ink, fontSize = 15.sp, textDecoration = TextDecoration.Underline),
+            )
+        }
+    }
+
+/**
+ * The buttons of a step (design/DESIGN.md, "元件", 按鈕), written the way on first: side by side, it is on the right and the
+ * other (上一步, or what is not the step's way on) on the left; one under the other, it is on top ([SideBySide]).
+ */
+@Composable
+internal fun Actions(content: @Composable () -> Unit) = SideBySide(Modifier.fillMaxWidth().padding(top = 20.dp), firstOnRight = true, content = content)
 
 /** One of the points under a screen's main part: a dot in ink before it. `strong`: the words of it in bold ink (not red: design/DESIGN.md keeps red for what you do). */
 @Composable

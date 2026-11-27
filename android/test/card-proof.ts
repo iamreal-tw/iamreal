@@ -600,16 +600,22 @@ async function cardProof(p: Proof): Promise<string> {
   await waitText(step(2), "step 2");
   if (p.thorough) {
     // The demonstration of where the card goes (design/copy/card-proof.md, "示範"): one element to a screen reader; it plays by itself
-    // when the step comes up, three rounds, and 停止 goes straight to its rest: the card in place.
+    // when the step comes up, three rounds, and 停止播放 goes straight to its rest: the card in place.
     {
       const picture = find((n) => n.id === "sense-demo", "the demonstration of step 2");
       check(picture.description === say("app_demo.sense_android"), `step 2's demonstration reads as its one sentence of the copy ("${picture.description.slice(0, 20)}…")`);
       const [stop, replay] = [say("app_demo.stop"), say("app_demo.replay")];
       const says = (label: string): boolean => textsOf(visible()).includes(label);
-      check(says(stop) && !says(replay), "step 2: the demonstration plays by itself, and its button says 停止");
+      check(says(stop) && !says(replay), "step 2: the demonstration plays by itself, and its button says 停止播放");
       press(stop);
       await waitText(replay, "step 2's demonstration stopped", 10_000);
-      check(says(replay) && !says(stop), "step 2: 停止 stops the demonstration, and its button says 再看一次");
+      check(says(replay) && !says(stop), "step 2: 停止播放 stops the demonstration, and its button says 再看一次");
+      // Pressing the picture itself does what its words in the corner say.
+      emulator.tap(find((n) => n.id === "sense-demo", "the demonstration of step 2"));
+      await waitText(stop, "step 2's demonstration played again by pressing it", 10_000);
+      emulator.tap(find((n) => n.id === "sense-demo", "the demonstration of step 2"));
+      await waitText(replay, "step 2's demonstration stopped by pressing it", 10_000);
+      check(true, "step 2: pressing the demonstration plays it again, and stops it");
       if (RECORD_SENSE !== undefined) {
         emulator.adb("emu", "screenrecord", "start", "--fps", "60", "--bit-rate", "12M", "--time-limit", "40", RECORD_SENSE);
         await sleep(1_000);
@@ -623,6 +629,21 @@ async function cardProof(p: Proof): Promise<string> {
     }
     shot("step-2");
     await designShot("card-proof-app-2-read-android-phone.png");
+    {
+      // Before the card is read: 感應卡片 on the first screen, right under the demonstration, beside 上一步; the list under them.
+      toTop();
+      const now = visible();
+      const tapCard = now.find((n) => n.text === say("app_read.tap_card"));
+      const back = now.find((n) => n.text === say("common.back"));
+      const picture = now.find((n) => n.id === "sense-demo");
+      if (check(tapCard !== undefined && back !== undefined && picture !== undefined && tapCard.bottom < emulator.size().height, "step 2: 感應卡片 is on the first screen, without scrolling")) {
+        check(picture!.bottom < tapCard!.top, "step 2: 感應卡片 is under the demonstration");
+        check(Math.abs(tapCard!.y - back!.y) < 40 && back!.x < tapCard!.x, `step 2: 上一步 and 感應卡片 are side by side, 上一步 on the left (${back!.x},${back!.y} and ${tapCard!.x},${tapCard!.y})`);
+        const first = find((n) => n.text === READ_ITEMS[0], "the first item of step 2's list");
+        check(tapCard!.bottom < first.top, "step 2: the list is under the buttons until the card is read");
+        toTop();
+      }
+    }
     const s = wholeScreen();
     shows(s, "step 2", [say("read.title"), say("app_read.how_android"), say("app_demo.replay"), ...READ_ITEMS, say("common.back"), say("app_read.tap_card")]);
     check(![say("read.component"), say("read.reader"), say("read.certificate")].some((x) => s.includes(x)), "step 2's list has no item of MOICA's component or a card reader");
@@ -863,8 +884,8 @@ const RECORD_SENSE = process.env.IAMREAL_RECORD_SENSE;
 const RECORD = process.env.IAMREAL_RECORD;
 
 /**
- * The demonstration of step 6 (design/copy/card-proof.md, "示範"): to a screen reader one element with its one sentence; under it one
- * button, 停止 while it plays and 再看一次 otherwise. It plays by itself once it is on the screen; 停止 goes straight to its last frame.
+ * The demonstration of step 6 (design/copy/card-proof.md, "示範"): to a screen reader one element with its one sentence; in its corner
+ * small words, 停止播放 while it plays and 再看一次 otherwise. It plays by itself once it is on the screen; 停止播放 goes straight to its last frame.
  * Leaves it stopped, at its last frame. `record`: with IAMREAL_RECORD set, it is played once more from its start and recorded.
  */
 async function demonstration(record: boolean): Promise<void> {
@@ -878,10 +899,10 @@ async function demonstration(record: boolean): Promise<void> {
     press(replay);
     await waitText(stop, "the demonstration playing again", 10_000);
   }
-  check(says(stop) && !says(replay), "step 6: while the demonstration plays its button says 停止");
+  check(says(stop) && !says(replay), "step 6: while the demonstration plays its button says 停止播放");
   press(stop);
   await waitText(replay, "the demonstration stopped", 10_000);
-  check(says(replay) && !says(stop), "step 6: 停止 stops the demonstration, and its button says 再看一次");
+  check(says(replay) && !says(stop), "step 6: 停止播放 stops the demonstration, and its button says 再看一次");
   if (record && RECORD !== undefined) {
     // The emulator's own recording, from the host: the one inside it cannot read the screen (no hardware encoder).
     emulator.adb("emu", "screenrecord", "start", "--fps", "60", "--bit-rate", "12M", "--time-limit", "40", RECORD);
@@ -896,7 +917,7 @@ async function demonstration(record: boolean): Promise<void> {
 
 /**
  * Step 6 (design/copy/card-proof.md, "6. 掛上去", app). `short`: a card proof again, asked only whether the link is still there, then
- * 沒有看到連結，重新掛上 for the whole of it. `newCard`: the card's first record. `buttons`: presses what opens something outside the app.
+ * 重新掛上連結 for the whole of it. `newCard`: the card's first record. `buttons`: presses what opens something outside the app.
  * Leaves the whole step 6 on the screen.
  */
 async function hangStep(o: { name: string; shortId: string; account: string; date: string; short: boolean; newCard: boolean; buttons?: boolean; design?: string; record?: boolean }): Promise<void> {
@@ -907,13 +928,25 @@ async function hangStep(o: { name: string; shortId: string; account: string; dat
     await designShot("card-proof-app-6-hang-short-phone.png");
     const s = wholeScreen();
     shows(s, "step 6, the short one,", [step(6), recorded, say("hang.still_there_single", { platform: THREADS }), link, LOOK, WHY, say("hang.rehang"), say("common.next")]);
+    {
+      const now = visible();
+      const rehang = now.find((n) => n.text === say("hang.rehang"));
+      const next = now.find((n) => n.text === say("common.next"));
+      check(rehang !== undefined && next !== undefined && Math.abs(rehang.y - next.y) < 40 && rehang.x < next.x, `step 6, the short one: 下一步 on the right, the way to the whole step on its left (${rehang?.x},${rehang?.y} and ${next?.x},${next?.y})`);
+    }
     for (const a of [...wholeHang(o.account), say("hang.new_card"), say("common.back"), ...neverAfter(o.account)]) check(!s.includes(a), `step 6, the short one, does not say "${a.slice(0, 40)}"`);
     press(LOOK);
     await sleep(4_000);
     check(onTop().includes(`dat=http://${link}`), "step 6, the short one: 打開你的島民證明 opens the card's page in the browser");
     await backToApp(6);
     press(say("hang.rehang"));
-    await waitText(say("hang.copy"), "the whole step 6, after 沒有看到連結，重新掛上", 10_000);
+    await waitText(say("hang.copy"), "the whole step 6, after 重新掛上連結", 10_000);
+    // 上一步 goes back to the short one, and the way to the whole step is there again.
+    press(say("common.back"));
+    await waitText(say("hang.rehang"), "the short step 6 again, after 上一步", 10_000);
+    check(!textsOf(visible()).includes(say("hang.copy")), "step 6: 上一步 of the whole step goes back to the short one");
+    press(say("hang.rehang"));
+    await waitText(say("hang.copy"), "the whole step 6, again", 10_000);
   }
   await demonstration(o.record === true);
   toTop();
@@ -922,7 +955,7 @@ async function hangStep(o: { name: string; shortId: string; account: string; dat
   const s = wholeScreen();
   shows(s, "step 6", [step(6), recorded, ...wholeHang(o.account), WHY, link, say("app_demo.replay"), say("common.next"), ...(o.newCard ? [say("hang.new_card")] : [])]);
   // The words drawn in the demonstration are not read: a screen reader gets its one sentence, and the four steps in words.
-  check(!s.includes(say("app_demo_hang.kick_profile")) && !s.includes(say("app_demo_hang.press")), "step 6: what is drawn in the demonstration is not read");
+  check(!s.includes(say("app_demo_hang.found")) && !s.includes(say("app_demo_hang.row_bio")), "step 6: what is drawn in the demonstration is not read");
   {
     // The two buttons side by side, above the demonstration.
     // All three as one look at the screen has them, from the step's top: the picture starts under the buttons, and may go on below the screen.
@@ -939,7 +972,9 @@ async function hangStep(o: { name: string; shortId: string; account: string; dat
     }
   }
   check(!s.includes(app("settings.open")), "step 6 has no 設定 in its header");
-  const absent = [say("common.back"), say("hang.rehang"), say("done.withdrawn_link"), say("done.share", { platform: THREADS }), say("app_done.reminder_title"), say("finish.done"), ...(o.newCard ? [] : [say("hang.new_card")]), ...neverAfter(o.account)];
+  // 上一步 only where the whole step was reached from the short one: back to it.
+  if (o.short) check(s.includes(say("common.back")), "step 6, reached from the short one, has 上一步");
+  const absent = [...(o.short ? [] : [say("common.back")]), say("hang.rehang"), say("done.withdrawn_link"), say("done.share", { platform: THREADS }), say("app_done.reminder_title"), say("finish.done"), ...(o.newCard ? [] : [say("hang.new_card")]), ...neverAfter(o.account)];
   for (const a of absent) check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);
   if (o.buttons) {
     press(say("hang.copy"));

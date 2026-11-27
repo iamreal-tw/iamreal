@@ -16,10 +16,10 @@ import (
 )
 
 // maxCardStateFile is the largest card state file the command reads. In the
-// production log, a row is at most 212 bytes plus 151 for each slot it
-// lists when its numbers are ones the rules leave, 227 plus 166 at the
-// format's limits: 393 for a card that has used Threads. 4 GiB holds more
-// than 10.9 million such rows.
+// production log, a row is at most 188 bytes plus 120 for each slot it
+// lists when its numbers are ones the rules leave, 188 plus 135 at the
+// format's limits: 323 for a card that has used Threads. 4 GiB holds more
+// than 13.2 million such rows.
 const maxCardStateFile = 4 << 30
 
 // checkCardState compares the card state file of a date with rep, the

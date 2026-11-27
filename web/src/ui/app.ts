@@ -42,6 +42,7 @@
 // attributes are for the headless browser test and hold no value.
 import { type CardProofFlow, type CardStatus, type Config, type Consequence, type Done, FlowStop, type Progress, type Prover, type Stop, askToStart, cardProofsPaused, pageCounts, createCardProof, presentationOf } from "../index.ts";
 import type { Card } from "../card/card.ts";
+import { cardPath, hangPath } from "../platforms.ts";
 import { COPY, fill, parts } from "./copy.ts";
 import { button, el, replace, sentence } from "./dom.ts";
 import { frame } from "./frame.ts";
@@ -101,8 +102,8 @@ const HELP_HREF: Record<HelpTopic, string> = { prepare: "/prepare" };
  * map finds what is near; this page asks for no location.
  */
 const FIND_OFFICE_HREF = "https://www.google.com/maps/search/?api=1&query=%E6%88%B6%E6%94%BF%E4%BA%8B%E5%8B%99%E6%89%80";
-/** before.how_to_get_moica: MOICA's site (its page on applying blocks automated reading, so it is not checked yet: card-proof.md, step 1). */
-const MOICA_HREF = "https://moica.nat.gov.tw/";
+/** before.how_to_get_moica: MOICA's page on applying (who can apply, where, what to bring: card-proof.md, step 1). */
+const MOICA_HREF = "https://moica.nat.gov.tw/rac.html";
 
 /** A link out of the page: in a new tab, as leaving this page would end the card proof. */
 function newTab(href: string, attrs: Record<string, string>, ...children: (Node | string)[]): HTMLAnchorElement {
@@ -521,8 +522,25 @@ export function startApp(o: AppOptions): void {
   /** The card's list as it is: each platform the screen offers, its account now or "". */
   const listNow = (status: CardStatus): Record<string, string> => Object.fromEntries(status.slots.filter((sl) => sl.row !== null).map((sl) => [sl.platform, sl.current ?? ""]));
 
-  /** 3 records of the card today: the sentence, and "back to the beginning" (which drops the PIN, as cancel does). */
-  const dailyLimitBody = (s: Sentence): HTMLElement[] => [el("p", { class: "stop", attrs: { "data-daily-limit": "" } }, say(s)), actions(secondary(COPY.accounts.restart, () => before()))];
+  /**
+   * 3 records of the card today: the sentence; the card's page (done.open_proof, as on step 6) and hang.rehang to the
+   * page that hangs its link, since nothing more is done in this card proof today (card-proof.md, step 4, 3 records today);
+   * and "back to the beginning". The PIN is dropped as the screen shows.
+   */
+  const dailyLimitBody = (s: Sentence, status: CardStatus): HTMLElement[] => {
+    // The card will not sign again in this card proof: the PIN goes now, before a link leaves the page (the page may be kept
+    // by the browser's back and forward cache), as the apps do.
+    drop();
+    return [
+      el("p", { class: "stop", attrs: { "data-daily-limit": "" } }, say(s)),
+      el("p", { class: "look" }, ...parts(COPY.hang.look, { open_proof: COPY.done.open_proof }).map((p) => (p.placeholder === null ? p.text : newTab(`/${cardPath(status.shortId)}`, { "data-open-proof": "" }, p.text)))),
+      actions(
+        // Only for an account on a platform the device knows: nothing to hang when everything was withdrawn today.
+        status.slots.some((sl) => sl.current !== null && sl.row !== null) ? el("a", { class: "btn ghost", attrs: { href: `/${hangPath(status.shortId)}`, "data-hang-again": "" } }, COPY.hang.rehang) : null,
+        secondary(COPY.accounts.restart, () => before()),
+      ),
+    ];
+  };
 
   /** Step 4's screen, with the seven steps' line above it, and its state for the tests. */
   function showAccounts(state: string, mode: string, ...children: (Node | null)[]): void {
@@ -555,7 +573,7 @@ export function startApp(o: AppOptions): void {
     const here = (s: CardStatus): void => accounts(f, s);
     const showHere = (_platform: string | null, m: Message): void => message.show(m);
     const body: (HTMLElement | null)[] = view.dailyLimit
-      ? dailyLimitBody(view.dailyLimit)
+      ? dailyLimitBody(view.dailyLimit, status)
       : [
           message.node,
           // The main button: the list as it is, nothing to type.
@@ -677,7 +695,7 @@ export function startApp(o: AppOptions): void {
 
     const notes = view.notes.length ? el("div", { class: "tips" }, ...view.notes.map((n) => el("p", {}, ...n.map((x) => say(x))))) : null;
     const body: (HTMLElement | null)[] = view.dailyLimit
-      ? dailyLimitBody(view.dailyLimit)
+      ? dailyLimitBody(view.dailyLimit, status)
       : [notes, message.node, actionsEnd(primary(COPY.common.next, next)), o.editList ? actions(textButton(COPY.accounts.keep, () => accounts(f, status))) : null, cancel()];
     const lead = view.lead.map((line, i) => el("p", { class: i === 0 ? "status" : "", attrs: i === 0 ? { "data-status": "" } : { "data-fact": "" } }, ...line.flatMap((m) => messageNodes(m))));
     showAccounts(view.dailyLimit ? "daily_limit" : view.state, o.editList ? "edit" : "fill", el("h1", {}, say(view.title)), ...lead, el("div", { class: "acctlist", attrs: { "data-list": "accounts" } }, ...rowNodes), ...body);
@@ -926,14 +944,16 @@ export function startApp(o: AppOptions): void {
   /**
    * Step 6: hang the link on the profile (hang.md, part 1). `short`: only
    * whether the link is still there; hang.rehang shows the whole step.
+   * `fromShort`: the whole step, reached by hang.rehang: common.back goes
+   * back to the short one (card-proof.md, step 6, its short version).
    */
-  function hangScreen(view: DoneView, short: boolean): void {
+  function hangScreen(view: DoneView, short: boolean, fromShort = false): void {
     const t = COPY.done;
     const h = COPY.hang;
     const { note, record } = recordParts(view);
     const linkbox = el("div", { class: "linkbox" }, el("span", { class: "id", attrs: { "data-link": "" } }, view.link));
     // One main button a screen (design/DESIGN.md): hang.copy on the whole step 6, common.next on the short one.
-    const toFinish = (): void => finishScreen(view, () => hangScreen(view, short));
+    const toFinish = (): void => finishScreen(view, () => hangScreen(view, short, fromShort));
     let body: (HTMLElement | null)[];
     if (short) {
       body = [
@@ -941,7 +961,7 @@ export function startApp(o: AppOptions): void {
         linkbox,
         el("p", { class: "look" }, ...openProofIn(h.look, view)),
         el("p", { class: "why", attrs: { "data-why-hang": "" } }, say(view.why)),
-        actions(secondary(h.rehang, () => hangScreen(view, false)), primary(COPY.common.next, toFinish)),
+        actions(secondary(h.rehang, () => hangScreen(view, false, true)), primary(COPY.common.next, toFinish)),
       ];
     } else {
       const copy = primary(h.copy, () => {
@@ -981,7 +1001,7 @@ export function startApp(o: AppOptions): void {
         ...notes,
         el("div", { class: "hung" }, el("p", { class: "hung-ask" }, ...openProofIn(t.hung, view)), el("p", {}, t.hung_done)),
         ...record,
-        actionsEnd(secondary(COPY.common.next, toFinish)),
+        fromShort ? actions(secondary(COPY.common.back, () => hangScreen(view, true)), secondary(COPY.common.next, toFinish)) : actionsEnd(secondary(COPY.common.next, toFinish)),
       ];
     }
     show(6, el("section", { class: "step", attrs: { "data-step": "hang", "data-short": String(short) } }, note, ...recordedLines(view), ...body));

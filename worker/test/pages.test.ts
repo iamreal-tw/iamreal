@@ -108,21 +108,22 @@ describe("the page of a card", () => {
       r("2026-10-01", e, "threads:bob"),
       r("2026-10-02", e, "threads:bob"),
       r("2026-10-03", e, "threads:alice"),
-      r("2026-10-03", e, "threads:dave"), // a correction
+      r("2026-10-03", e, "threads:dave"), // another on the day of a switch: a switch too
       r("2026-10-04", e), // a withdrawal
       r("2026-10-05", e, "threads:dave"), // declared again
       r("2026-10-06", e),
       r("2026-10-07", e, "threads:carol.tw"), // another, after a withdrawal: a switch
       r("2026-10-08", e, "threads:erin"),
       r("2026-10-08", e),
-      r("2026-10-08", e, "threads:frank"), // another, after a withdrawal, the day of a switch: a correction
+      r("2026-10-08", e, "threads:frank"), // another, after a withdrawal, the day of a switch: a switch too
     ]);
     const table = new Map<string, string>();
     for (const line of copySection("proof-page.md", "4. ").split("\n")) {
       const cells = line.split("|");
       if (cells.length === 4 && !cells[1]!.startsWith("---") && cells[1]!.trim() !== "這一筆紀錄") table.set(cells[1]!.trim(), cells[2]!.trim());
     }
-    assert.equal(table.size, 7, "the table of section 4 has the 7 rows this test writes");
+    // 更正 is a row no record has had since version 3 of the record rules (ADR-0018); the copy loses it in #510.
+    assert.equal(table.size, 7, "the table of section 4 has the 6 rows this test writes, and 更正");
     const row = (kind: string, date: string, ...accounts: string[]): string => {
       const words = table.get(kind);
       assert.ok(words !== undefined, `proof-page.md section 4 has a row ${kind}`);
@@ -132,19 +133,19 @@ describe("the page of a card", () => {
     const { page } = await getPage(worker, "/p/E000000000");
     wantLines(page, [
       "全部紀錄",
-      row("更正", "2026-10-08", "erin", "frank"),
+      row("收回之後宣告別的帳號", "2026-10-08", "erin", "frank"),
       row("收回", "2026-10-08", "erin"),
       row("更換", "2026-10-08", "carol.tw", "erin"),
       row("收回之後宣告別的帳號", "2026-10-07", "dave", "carol.tw"),
       row("收回", "2026-10-06", "dave"),
       row("收回之後宣告回同一個帳號", "2026-10-05", "dave"),
       row("收回", "2026-10-04", "dave"),
-      row("更正", "2026-10-03", "alice", "dave"),
+      row("更換", "2026-10-03", "alice", "dave"),
       row("更換", "2026-10-03", "bob", "alice"),
       row("再次過卡", "2026-10-02"),
       row("新宣告", "2026-10-01", "bob"),
     ]);
-    wantLines(page, copyLines(block("proof-page.md", "4. ").slice(0, 5), ...ordinal(1), "2026-03-02", "2026-10-01", "4 次", "11 次", "1 次", "3 次"));
+    wantLines(page, copyLines(block("proof-page.md", "4. ").slice(0, 5), ...ordinal(1), "2026-03-02", "2026-10-01", "4 次", "11 次", "1 次", "5 次"));
   });
 
   test("no switch is written as 0 switches; a last card proof today is written 今天", async () => {
@@ -267,13 +268,13 @@ describe("the page of a card", () => {
     let { status, page } = await getPage(worker, `/p/${CARD_A}`);
     assert.equal(status, 200);
     wantLines(page, ["@alice", "上次過卡：今天（2026-11-20）", "過卡次數 1 次", "2026-11-20　新宣告：@alice"]);
-    await mustSubmit(worker, await sub(worker, card, root, "threads:bob"), "threads correction");
+    await mustSubmit(worker, await sub(worker, card, root, "threads:bob"), "threads switch");
     ({ status, page } = await getPage(worker, `/p/${CARD_A}`));
-    wantLines(page, ["@bob", "過卡次數 2 次", "2026-11-20　更正：@alice 改成 @bob", "2026-11-20　新宣告：@alice"]);
+    wantLines(page, ["@bob", "過卡次數 2 次", "2026-11-20　更換：@alice 改成 @bob", "2026-11-20　新宣告：@alice"]);
     // An account on another platform of the test log is not shown: the pages list Threads only.
     await mustSubmit(worker, await sub(worker, card, root, "test-example:a-b", "threads:bob"), "test-example first, threads refresh");
     ({ page } = await getPage(worker, `/p/${CARD_A}`));
-    wantLines(page, ["過卡次數 3 次", "2026-11-20　再次過卡", "2026-11-20　更正：@alice 改成 @bob"]);
+    wantLines(page, ["過卡次數 3 次", "2026-11-20　再次過卡", "2026-11-20　更換：@alice 改成 @bob"]);
     notOnPage(page, "a-b");
   });
 });

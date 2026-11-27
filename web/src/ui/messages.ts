@@ -136,8 +136,6 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
       if (stop.server === "daily_limit") return { ...say(s.daily_limit), ...id };
       if (stop.server === "switch_limit") return { ...say(s.switch_limit), ...id };
       if (stop.server === "empty") return { ...say(s.empty), ...id };
-      // The server's operating policy refused a switch the rules allow (none by default).
-      if (stop.server === "switch_restricted") return { ...say(s.switch_restricted), ...id };
       if (REJECTED.has(stop.server)) return { ...say(s.rejected, { code: stop.server }), ...id };
       return { ...say(s.server_unreadable, { code: stop.server }), ...id };
     }
@@ -417,12 +415,7 @@ export function rowLines(slot: SlotStatus): Sentence[] {
   const last = handle(slot.platform, slot.lastDeclared);
   if (slot.current === null) lines.push(say(a.row_withdrawn, { last_declared: last }));
   lines.push(count);
-  // An account put there today can be changed today without a switch (a correction), even when none is left.
-  if (slot.correctionToday) {
-    if (slot.current !== null) lines.push(say(a.row_today));
-  } else if (slot.switchesLeft === 0) {
-    lines.push(slot.current !== null ? say(a.row_can_clear) : say(a.row_only_back, { last_declared: last }));
-  }
+  if (slot.switchesLeft === 0) lines.push(slot.current !== null ? say(a.row_can_clear) : say(a.row_only_back, { last_declared: last }));
   return lines;
 }
 
@@ -527,10 +520,10 @@ export function switchView(st: CardStatus): SwitchView {
   const now = handle(slot.platform, slot.current!);
   const intro = say(a.declared_inline, { account: now });
   const title = accountsTitle(onePlatform(st));
-  // Used up, and not put there today: no other account can be declared.
-  if (!slot.correctionToday && slot.switchesLeft === 0) return { title, intro, row: null, lines: [say(a.row_used_up, { switches_used: slot.switchCount })], previewNote: null };
+  // Used up: no other account can be declared.
+  if (slot.switchesLeft === 0) return { title, intro, row: null, lines: [say(a.row_used_up, { switches_used: slot.switchCount })], previewNote: null };
   const row = rowView(slot, { daily: false, lines: false, current: "" });
-  const cost = slot.correctionToday ? say(a.row_today) : slot.switchesLeft === 1 ? say(COPY.confirm.uses_final_switch) : say(a.switch_limit, { switches_left: slot.switchesLeft - 1 });
+  const cost = slot.switchesLeft === 1 ? say(COPY.confirm.uses_final_switch) : say(a.switch_limit, { switches_left: slot.switchesLeft - 1 });
   return { title, intro, row, lines: [say(a.switch_effect, { account: now }), cost], previewNote: row.preview ? say(a.preview_note) : null };
 }
 
@@ -545,7 +538,6 @@ export function kindSentence(r: { kind: ConsequenceRow["kind"]; username: string
     case "refresh":
       // The account it declares now: unchanged; declared again after a withdrawal: not a switch.
       return r.current === r.username ? say(k.unchanged) : say(k.again);
-    case "correction":
     case "switch":
       return say(k.switch, { previous: handle(r.platform, r.previous ?? "") });
     case "withdraw":
@@ -553,16 +545,15 @@ export function kindSentence(r: { kind: ConsequenceRow["kind"]; username: string
   }
 }
 
-/** For a switch or a correction, the sentence after it: what it uses up (step 5, the table after it). */
+/** For a switch, the sentence after it: what it uses up (step 5, the table after it). */
 export function switchSentence(r: ConsequenceRow): Sentence | null {
   const c = COPY.confirm;
-  if (r.kind === "correction") return say(c.switch_not_counted);
   if (r.kind !== "switch") return null;
   if (r.switchesLeftAfter === 0) return say(c.uses_final_switch);
   return say(c.uses_switch, { switches_left: r.switchesLeftAfter! });
 }
 
-/** What step 5 writes under a row: what it does, and for a switch or a correction what it uses up. */
+/** What step 5 writes under a row: what it does, and for a switch what it uses up. */
 export function rowSentences(r: ConsequenceRow): Sentence[] {
   return [kindSentence(r), switchSentence(r)].filter((x): x is Sentence => x !== null);
 }
@@ -732,7 +723,7 @@ export function doneTitle(d: Done, single: string | null = null): Sentence {
   if (k !== null) {
     const before = d.expected.find((r) => r.platform === k.platform)?.current ?? null;
     if (k.kind === "first" || (k.kind === "refresh" && before === null)) return say(f.first);
-    if (k.kind === "switch" || k.kind === "correction") return say(f.switched, { account: handle(k.platform, k.username) });
+    if (k.kind === "switch") return say(f.switched, { account: handle(k.platform, k.username) });
   }
   return say(t.changed);
 }
@@ -772,7 +763,7 @@ export function doneView(d: Done, single: string | null = null): DoneView {
       const e = expected.get(k.platform);
       // The sentence of the kind recorded; kinds.switch names the account the screen knew was replaced.
       const previous = e ? e.previous ?? e.current : null;
-      const sentence = (k.kind === "switch" || k.kind === "correction") && previous === null ? null : kindSentence({ ...k, current: e ? e.current : null, previous });
+      const sentence = k.kind === "switch" && previous === null ? null : kindSentence({ ...k, current: e ? e.current : null, previous });
       const mismatch = d.mismatches.includes(k.platform);
       rows.push({
         platform: k.platform,

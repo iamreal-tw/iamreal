@@ -1,7 +1,7 @@
 {
   "spec": "list-consequence",
   "status": "draft",
-  "note": "Each case: `platforms` is the `platforms` of GET /api/v1/config and `card_state` the answer of POST /api/v1/card-state, as the server sent them; `known_platforms` the platforms the device has its own definition of; `today` the device's date in Taiwan; `accounts` the cardholder's list for the platforms offered. `result` is one of: `unread` (which answer the device cannot read); `not_offered` (the list names a platform that is not offered: a mistake of the program, not of the cardholder); `valid: false` with `reason` (`empty`, `switch_limit` with `platform`, `daily_limit`, or `username` with `platform`); `valid: true` with the list the card signs, a row per platform the list does something on, and `first_record`. null means none.",
+  "note": "Each case: `platforms` is the `platforms` of GET /api/v1/config and `card_state` the answer of POST /api/v1/card-state, as the server sent them; `known_platforms` the platforms the device has its own definition of; `today` the device's date in Taiwan; `accounts` the cardholder's list for the platforms offered. `result` is one of: `unread` (which answer the device cannot read); `not_offered` (the list names a platform that is not offered: a mistake of the program, not of the cardholder); `valid: false` with `reason` (`empty`, `switch_limit` with `platform`, `daily_limit` when the server writes no more records of the card today, or `username` with `platform`); `valid: true` with the list the card signs, a row per platform the list does something on, and `first_record`. null means none.",
   "generated_by": "web/test/generate/list-consequence.ts",
   "cases": [
     {
@@ -16,12 +16,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -71,12 +71,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -126,12 +126,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -160,7 +160,7 @@
       }
     },
     {
-      "name": "another account on the date of the slot's last first or switch is a correction",
+      "name": "another account on the date of the card's last card proof is a switch too",
       "platforms": [
         {
           "platform": "threads",
@@ -169,14 +169,14 @@
         }
       ],
       "card_state": {
-        "last_card_proof": "2026-03-02",
+        "last_card_proof": "2026-11-16",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -185,7 +185,7 @@
         "test-example",
         "threads"
       ],
-      "today": "2026-03-02",
+      "today": "2026-11-16",
       "accounts": [
         {
           "platform": "threads",
@@ -204,11 +204,11 @@
           {
             "platform": "threads",
             "known": true,
-            "kind": "correction",
+            "kind": "switch",
             "username": "carol",
             "current": "bob",
             "previous": "bob",
-            "switches_left": null
+            "switches_left": 3
           }
         ],
         "first_record": false
@@ -226,12 +226,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": null,
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -281,12 +281,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": null,
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -336,12 +336,12 @@
       "card_state": {
         "last_card_proof": null,
         "proofs_on_last_date": 0,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": null,
             "last_declared": null,
-            "switch_count": 0,
-            "correction_date": null
+            "switch_count": 0
           }
         },
         "count": 137
@@ -391,12 +391,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 4,
-            "correction_date": "2026-03-02"
+            "switch_count": 4
           }
         },
         "count": 137
@@ -446,12 +446,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 5,
-            "correction_date": "2026-03-02"
+            "switch_count": 5
           }
         },
         "count": 137
@@ -485,12 +485,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 5,
-            "correction_date": "2026-03-02"
+            "switch_count": 5
           }
         },
         "count": 137
@@ -529,7 +529,7 @@
       }
     },
     {
-      "name": "no switch left: a correction on the date of the fifth switch",
+      "name": "no switch left: another account on the date of the fifth switch is switch_limit too",
       "platforms": [
         {
           "platform": "threads",
@@ -540,12 +540,12 @@
       "card_state": {
         "last_card_proof": "2026-11-16",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 5,
-            "correction_date": "2026-11-16"
+            "switch_count": 5
           }
         },
         "count": 137
@@ -562,25 +562,9 @@
         }
       ],
       "result": {
-        "valid": true,
-        "accounts": [
-          {
-            "platform": "threads",
-            "username": "carol"
-          }
-        ],
-        "rows": [
-          {
-            "platform": "threads",
-            "known": true,
-            "kind": "correction",
-            "username": "carol",
-            "current": "bob",
-            "previous": "bob",
-            "switches_left": null
-          }
-        ],
-        "first_record": false
+        "valid": false,
+        "reason": "switch_limit",
+        "platform": "threads"
       }
     },
     {
@@ -595,12 +579,12 @@
       "card_state": {
         "last_card_proof": null,
         "proofs_on_last_date": 0,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": null,
             "last_declared": null,
-            "switch_count": 0,
-            "correction_date": null
+            "switch_count": 0
           }
         },
         "count": 137
@@ -628,12 +612,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": null,
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -650,7 +634,7 @@
       }
     },
     {
-      "name": "3 valid records today: daily_limit, whatever the list",
+      "name": "the server's daily_limit of records today: daily_limit, whatever the list",
       "platforms": [
         {
           "platform": "threads",
@@ -661,12 +645,12 @@
       "card_state": {
         "last_card_proof": "2026-11-16",
         "proofs_on_last_date": 3,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -688,6 +672,176 @@
       }
     },
     {
+      "name": "the limit is the answer's daily_limit: 2 records today and a daily_limit of 2",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-16",
+        "proofs_on_last_date": 2,
+        "daily_limit": 2,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 1
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [
+        {
+          "platform": "threads",
+          "username": "bob"
+        }
+      ],
+      "result": {
+        "valid": false,
+        "reason": "daily_limit"
+      }
+    },
+    {
+      "name": "the limit is the answer's daily_limit: 4 records today and a daily_limit of 5, allowed",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-16",
+        "proofs_on_last_date": 4,
+        "daily_limit": 5,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 1
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [
+        {
+          "platform": "threads",
+          "username": "bob"
+        }
+      ],
+      "result": {
+        "valid": true,
+        "accounts": [
+          {
+            "platform": "threads",
+            "username": "bob"
+          }
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "kind": "refresh",
+            "username": "bob",
+            "current": "bob",
+            "previous": null,
+            "switches_left": null
+          }
+        ],
+        "first_record": false
+      }
+    },
+    {
+      "name": "a daily_limit of 0: no list today, also for a card without a record",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": null,
+        "proofs_on_last_date": 0,
+        "daily_limit": 0,
+        "platforms": {
+          "threads": {
+            "current": null,
+            "last_declared": null,
+            "switch_count": 0
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [
+        {
+          "platform": "threads",
+          "username": "alice"
+        }
+      ],
+      "result": {
+        "valid": false,
+        "reason": "daily_limit"
+      }
+    },
+    {
+      "name": "the record rules come first: switch_limit, not daily_limit",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-16",
+        "proofs_on_last_date": 3,
+        "daily_limit": 3,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 5
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [
+        {
+          "platform": "threads",
+          "username": "carol"
+        }
+      ],
+      "result": {
+        "valid": false,
+        "reason": "switch_limit",
+        "platform": "threads"
+      }
+    },
+    {
       "name": "3 valid records on the last date, and today is later: allowed",
       "platforms": [
         {
@@ -699,12 +853,12 @@
       "card_state": {
         "last_card_proof": "2026-11-15",
         "proofs_on_last_date": 3,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -754,12 +908,12 @@
       "card_state": {
         "last_card_proof": "2026-11-19",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -814,18 +968,17 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "test-example": {
             "current": null,
             "last_declared": null,
-            "switch_count": 0,
-            "correction_date": null
+            "switch_count": 0
           },
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -897,18 +1050,17 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "test-example": {
             "current": null,
             "last_declared": null,
-            "switch_count": 0,
-            "correction_date": null
+            "switch_count": 0
           },
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 5,
-            "correction_date": "2026-03-02"
+            "switch_count": 5
           }
         },
         "count": 137
@@ -951,18 +1103,17 @@
       "card_state": {
         "last_card_proof": null,
         "proofs_on_last_date": 0,
+        "daily_limit": 3,
         "platforms": {
           "test-example": {
             "current": null,
             "last_declared": null,
-            "switch_count": 0,
-            "correction_date": null
+            "switch_count": 0
           },
           "threads": {
             "current": null,
             "last_declared": null,
-            "switch_count": 0,
-            "correction_date": null
+            "switch_count": 0
           }
         },
         "count": 137
@@ -1012,12 +1163,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           },
           "example": {
             "current": "Bob Example",
@@ -1087,12 +1238,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           },
           "example": {
             "current": "Bob Example",
@@ -1158,12 +1309,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           },
           "example": {
             "current": "Bob Example",
@@ -1238,18 +1389,17 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "test-example": {
             "current": "carol",
             "last_declared": "carol",
-            "switch_count": 0,
-            "correction_date": "2026-03-02"
+            "switch_count": 0
           },
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -1316,18 +1466,17 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "test-example": {
             "current": null,
             "last_declared": "carol",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           },
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -1381,18 +1530,17 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "test-example": {
             "current": "Bob Example",
             "last_declared": "Bob Example",
-            "switch_count": 0,
-            "correction_date": "2026-03-02"
+            "switch_count": 0
           },
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -1454,12 +1602,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -1506,18 +1654,17 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "test-example": {
             "current": null,
             "last_declared": null,
-            "switch_count": 0,
-            "correction_date": null
+            "switch_count": 0
           },
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -1557,12 +1704,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -1617,12 +1764,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -1658,12 +1805,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -1699,12 +1846,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           },
           "example": {
             "current": "Bob Example",
@@ -1747,12 +1894,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -1786,12 +1933,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -1825,12 +1972,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -1864,12 +2011,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -1903,12 +2050,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -1942,12 +2089,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -1981,12 +2128,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2025,18 +2172,17 @@
       "card_state": {
         "last_card_proof": null,
         "proofs_on_last_date": 0,
+        "daily_limit": 3,
         "platforms": {
           "test-example": {
             "current": null,
             "last_declared": null,
-            "switch_count": 0,
-            "correction_date": null
+            "switch_count": 0
           },
           "threads": {
             "current": null,
             "last_declared": null,
-            "switch_count": 0,
-            "correction_date": null
+            "switch_count": 0
           }
         },
         "count": 137
@@ -2079,12 +2225,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2121,12 +2267,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2163,12 +2309,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2200,12 +2346,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2236,12 +2382,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2267,12 +2413,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2304,12 +2450,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2350,12 +2496,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2405,12 +2551,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2460,12 +2606,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2497,12 +2643,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2552,12 +2698,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2589,12 +2735,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2626,12 +2772,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2663,12 +2809,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2700,12 +2846,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2737,12 +2883,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2774,12 +2920,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2811,12 +2957,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2866,12 +3012,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2921,12 +3067,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -2976,12 +3122,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3031,12 +3177,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3086,12 +3232,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3141,12 +3287,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3178,12 +3324,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3215,12 +3361,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3252,12 +3398,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3289,12 +3435,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3326,12 +3472,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3363,12 +3509,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3400,12 +3546,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3437,12 +3583,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3474,12 +3620,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3511,12 +3657,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3548,12 +3694,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3585,12 +3731,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3622,12 +3768,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3659,12 +3805,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3696,12 +3842,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3733,12 +3879,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3770,12 +3916,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3807,12 +3953,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3844,12 +3990,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3881,12 +4027,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3918,12 +4064,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
             "switch_count": 1,
-            "correction_date": "2026-03-02",
             "next": 2
           }
         },
@@ -3964,12 +4110,12 @@
       ],
       "card_state": {
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -3995,12 +4141,12 @@
       ],
       "card_state": {
         "last_card_proof": "2026-11-04",
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -4027,6 +4173,7 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "count": 137
       },
       "known_platforms": [
@@ -4051,12 +4198,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         }
       },
@@ -4082,12 +4229,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": -1
@@ -4114,12 +4261,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 9007199254740991
@@ -4159,12 +4306,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 9007199254740992
@@ -4191,12 +4338,12 @@
       "card_state": {
         "last_card_proof": null,
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": null,
             "last_declared": null,
-            "switch_count": 0,
-            "correction_date": null
+            "switch_count": 0
           }
         },
         "count": 137
@@ -4221,14 +4368,14 @@
         }
       ],
       "card_state": {
-        "last_card_proof": "2026-11-04",
+        "last_card_proof": "2026-02-30",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-02-30"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -4255,12 +4402,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 1.5
@@ -4287,12 +4434,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1.5,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -4319,12 +4466,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": "1",
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -4351,12 +4498,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 0,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -4372,7 +4519,7 @@
       }
     },
     {
-      "name": "the state: proofs_on_last_date 4",
+      "name": "the state: proofs_on_last_date 4, more than daily_limit: the server's count is read as it is",
       "platforms": [
         {
           "platform": "threads",
@@ -4383,12 +4530,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 4,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -4400,296 +4547,24 @@
       "today": "2026-11-16",
       "accounts": [],
       "result": {
-        "unread": "card_state"
-      }
-    },
-    {
-      "name": "the state: a last card proof 4 days after today",
-      "platforms": [
-        {
-          "platform": "threads",
-          "display_name": "Threads",
-          "username_format": "[a-z0-9._]{1,30}"
-        }
-      ],
-      "card_state": {
-        "last_card_proof": "2026-11-20",
-        "proofs_on_last_date": 1,
-        "platforms": {
-          "threads": {
+        "valid": true,
+        "accounts": [],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "kind": "withdraw",
+            "username": "bob",
             "current": "bob",
-            "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "previous": null,
+            "switches_left": null
           }
-        },
-        "count": 137
-      },
-      "known_platforms": [
-        "test-example",
-        "threads"
-      ],
-      "today": "2026-11-16",
-      "accounts": [],
-      "result": {
-        "unread": "card_state"
+        ],
+        "first_record": false
       }
     },
     {
-      "name": "the state: a date not in its one spelling",
-      "platforms": [
-        {
-          "platform": "threads",
-          "display_name": "Threads",
-          "username_format": "[a-z0-9._]{1,30}"
-        }
-      ],
-      "card_state": {
-        "last_card_proof": "2026-11-4",
-        "proofs_on_last_date": 1,
-        "platforms": {
-          "threads": {
-            "current": "bob",
-            "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
-          }
-        },
-        "count": 137
-      },
-      "known_platforms": [
-        "test-example",
-        "threads"
-      ],
-      "today": "2026-11-16",
-      "accounts": [],
-      "result": {
-        "unread": "card_state"
-      }
-    },
-    {
-      "name": "the state: a date before 2000",
-      "platforms": [
-        {
-          "platform": "threads",
-          "display_name": "Threads",
-          "username_format": "[a-z0-9._]{1,30}"
-        }
-      ],
-      "card_state": {
-        "last_card_proof": "2026-11-04",
-        "proofs_on_last_date": 1,
-        "platforms": {
-          "threads": {
-            "current": "bob",
-            "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "1999-12-31"
-          }
-        },
-        "count": 137
-      },
-      "known_platforms": [
-        "test-example",
-        "threads"
-      ],
-      "today": "2026-11-16",
-      "accounts": [],
-      "result": {
-        "unread": "card_state"
-      }
-    },
-    {
-      "name": "the state: an account but no last card proof",
-      "platforms": [
-        {
-          "platform": "threads",
-          "display_name": "Threads",
-          "username_format": "[a-z0-9._]{1,30}"
-        }
-      ],
-      "card_state": {
-        "last_card_proof": null,
-        "proofs_on_last_date": 1,
-        "platforms": {
-          "threads": {
-            "current": "bob",
-            "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
-          }
-        },
-        "count": 137
-      },
-      "known_platforms": [
-        "test-example",
-        "threads"
-      ],
-      "today": "2026-11-16",
-      "accounts": [],
-      "result": {
-        "unread": "card_state"
-      }
-    },
-    {
-      "name": "the state: switch_count 6",
-      "platforms": [
-        {
-          "platform": "threads",
-          "display_name": "Threads",
-          "username_format": "[a-z0-9._]{1,30}"
-        }
-      ],
-      "card_state": {
-        "last_card_proof": "2026-11-04",
-        "proofs_on_last_date": 1,
-        "platforms": {
-          "threads": {
-            "current": "bob",
-            "last_declared": "bob",
-            "switch_count": 6,
-            "correction_date": "2026-03-02"
-          }
-        },
-        "count": 137
-      },
-      "known_platforms": [
-        "test-example",
-        "threads"
-      ],
-      "today": "2026-11-16",
-      "accounts": [],
-      "result": {
-        "unread": "card_state"
-      }
-    },
-    {
-      "name": "the state: switch_count -1",
-      "platforms": [
-        {
-          "platform": "threads",
-          "display_name": "Threads",
-          "username_format": "[a-z0-9._]{1,30}"
-        }
-      ],
-      "card_state": {
-        "last_card_proof": "2026-11-04",
-        "proofs_on_last_date": 1,
-        "platforms": {
-          "threads": {
-            "current": "bob",
-            "last_declared": "bob",
-            "switch_count": -1,
-            "correction_date": "2026-03-02"
-          }
-        },
-        "count": 137
-      },
-      "known_platforms": [
-        "test-example",
-        "threads"
-      ],
-      "today": "2026-11-16",
-      "accounts": [],
-      "result": {
-        "unread": "card_state"
-      }
-    },
-    {
-      "name": "the state: switch_count missing",
-      "platforms": [
-        {
-          "platform": "threads",
-          "display_name": "Threads",
-          "username_format": "[a-z0-9._]{1,30}"
-        }
-      ],
-      "card_state": {
-        "last_card_proof": "2026-11-04",
-        "proofs_on_last_date": 1,
-        "platforms": {
-          "threads": {
-            "current": "bob",
-            "last_declared": "bob",
-            "correction_date": "2026-03-02"
-          }
-        },
-        "count": 137
-      },
-      "known_platforms": [
-        "test-example",
-        "threads"
-      ],
-      "today": "2026-11-16",
-      "accounts": [],
-      "result": {
-        "unread": "card_state"
-      }
-    },
-    {
-      "name": "the state: current missing",
-      "platforms": [
-        {
-          "platform": "threads",
-          "display_name": "Threads",
-          "username_format": "[a-z0-9._]{1,30}"
-        }
-      ],
-      "card_state": {
-        "last_card_proof": "2026-11-04",
-        "proofs_on_last_date": 1,
-        "platforms": {
-          "threads": {
-            "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
-          }
-        },
-        "count": 137
-      },
-      "known_platforms": [
-        "test-example",
-        "threads"
-      ],
-      "today": "2026-11-16",
-      "accounts": [],
-      "result": {
-        "unread": "card_state"
-      }
-    },
-    {
-      "name": "the state: last_declared missing",
-      "platforms": [
-        {
-          "platform": "threads",
-          "display_name": "Threads",
-          "username_format": "[a-z0-9._]{1,30}"
-        }
-      ],
-      "card_state": {
-        "last_card_proof": "2026-11-04",
-        "proofs_on_last_date": 1,
-        "platforms": {
-          "threads": {
-            "current": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
-          }
-        },
-        "count": 137
-      },
-      "known_platforms": [
-        "test-example",
-        "threads"
-      ],
-      "today": "2026-11-16",
-      "accounts": [],
-      "result": {
-        "unread": "card_state"
-      }
-    },
-    {
-      "name": "the state: correction_date missing",
+      "name": "the state: without daily_limit",
       "platforms": [
         {
           "platform": "threads",
@@ -4720,6 +4595,465 @@
       }
     },
     {
+      "name": "the state: daily_limit a string",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "daily_limit": "3",
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 1
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [],
+      "result": {
+        "unread": "card_state"
+      }
+    },
+    {
+      "name": "the state: daily_limit -1",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "daily_limit": -1,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 1
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [],
+      "result": {
+        "unread": "card_state"
+      }
+    },
+    {
+      "name": "the state: daily_limit with a fraction",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "daily_limit": 2.5,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 1
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [],
+      "result": {
+        "unread": "card_state"
+      }
+    },
+    {
+      "name": "the state: daily_limit null",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "daily_limit": null,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 1
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [],
+      "result": {
+        "unread": "card_state"
+      }
+    },
+    {
+      "name": "the state: a last card proof 4 days after today",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-20",
+        "proofs_on_last_date": 1,
+        "daily_limit": 3,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 1
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [],
+      "result": {
+        "unread": "card_state"
+      }
+    },
+    {
+      "name": "the state: a date not in its one spelling",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-4",
+        "proofs_on_last_date": 1,
+        "daily_limit": 3,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 1
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [],
+      "result": {
+        "unread": "card_state"
+      }
+    },
+    {
+      "name": "the state: a date before 2000",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "1999-12-31",
+        "proofs_on_last_date": 1,
+        "daily_limit": 3,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 1
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [],
+      "result": {
+        "unread": "card_state"
+      }
+    },
+    {
+      "name": "the state: an account but no last card proof",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": null,
+        "proofs_on_last_date": 1,
+        "daily_limit": 3,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 1
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [],
+      "result": {
+        "unread": "card_state"
+      }
+    },
+    {
+      "name": "the state: switch_count 6",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "daily_limit": 3,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 6
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [],
+      "result": {
+        "unread": "card_state"
+      }
+    },
+    {
+      "name": "the state: switch_count -1",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "daily_limit": 3,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": -1
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [],
+      "result": {
+        "unread": "card_state"
+      }
+    },
+    {
+      "name": "the state: switch_count missing",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "daily_limit": 3,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [],
+      "result": {
+        "unread": "card_state"
+      }
+    },
+    {
+      "name": "the state: current missing",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "daily_limit": 3,
+        "platforms": {
+          "threads": {
+            "last_declared": "bob",
+            "switch_count": 1
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [],
+      "result": {
+        "unread": "card_state"
+      }
+    },
+    {
+      "name": "the state: last_declared missing",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "daily_limit": 3,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "switch_count": 1
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [],
+      "result": {
+        "unread": "card_state"
+      }
+    },
+    {
+      "name": "the state: a correction_date, a field of an earlier version, is ignored",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "daily_limit": 3,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 1,
+            "correction_date": "2026-03-02"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [],
+      "result": {
+        "valid": true,
+        "accounts": [],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "kind": "withdraw",
+            "username": "bob",
+            "current": "bob",
+            "previous": null,
+            "switches_left": null
+          }
+        ],
+        "first_record": false
+      }
+    },
+    {
       "name": "the state: current outside the platform's format",
       "platforms": [
         {
@@ -4731,12 +5065,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "Bob",
             "last_declared": "Bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -4763,76 +5097,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "carol",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
-          }
-        },
-        "count": 137
-      },
-      "known_platforms": [
-        "test-example",
-        "threads"
-      ],
-      "today": "2026-11-16",
-      "accounts": [],
-      "result": {
-        "unread": "card_state"
-      }
-    },
-    {
-      "name": "the state: last_declared without correction_date",
-      "platforms": [
-        {
-          "platform": "threads",
-          "display_name": "Threads",
-          "username_format": "[a-z0-9._]{1,30}"
-        }
-      ],
-      "card_state": {
-        "last_card_proof": "2026-11-04",
-        "proofs_on_last_date": 1,
-        "platforms": {
-          "threads": {
-            "current": "bob",
-            "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": null
-          }
-        },
-        "count": 137
-      },
-      "known_platforms": [
-        "test-example",
-        "threads"
-      ],
-      "today": "2026-11-16",
-      "accounts": [],
-      "result": {
-        "unread": "card_state"
-      }
-    },
-    {
-      "name": "the state: correction_date after the last card proof",
-      "platforms": [
-        {
-          "platform": "threads",
-          "display_name": "Threads",
-          "username_format": "[a-z0-9._]{1,30}"
-        }
-      ],
-      "card_state": {
-        "last_card_proof": "2026-11-04",
-        "proofs_on_last_date": 1,
-        "platforms": {
-          "threads": {
-            "current": "bob",
-            "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-11-05"
+            "switch_count": 1
           }
         },
         "count": 137
@@ -4859,12 +5129,12 @@
       "card_state": {
         "last_card_proof": null,
         "proofs_on_last_date": 0,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": null,
             "last_declared": null,
-            "switch_count": 1,
-            "correction_date": null
+            "switch_count": 1
           }
         },
         "count": 137
@@ -4891,6 +5161,7 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": []
         },
@@ -4918,6 +5189,7 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": [],
         "count": 137
       },
@@ -4963,12 +5235,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           },
           "Example": {
             "current": "bob"
@@ -4998,12 +5270,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           },
           "example": {
             "current": "a\"b"
@@ -5033,12 +5305,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           },
           "example": {
             "current": ""
@@ -5068,12 +5340,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           },
           "example": {
             "last_declared": null
@@ -5103,12 +5375,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           },
           "example": "bob"
         },
@@ -5136,12 +5408,12 @@
       "card_state": {
         "last_card_proof": null,
         "proofs_on_last_date": 0,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": null,
             "last_declared": null,
-            "switch_count": 0,
-            "correction_date": null
+            "switch_count": 0
           },
           "example": {
             "current": "bob"
@@ -5171,12 +5443,12 @@
       "card_state": {
         "last_card_proof": "2026-11-04",
         "proofs_on_last_date": 1,
+        "daily_limit": 3,
         "platforms": {
           "threads": {
             "current": "bob",
             "last_declared": "bob",
-            "switch_count": 1,
-            "correction_date": "2026-03-02"
+            "switch_count": 1
           },
           "Example": {
             "current": null

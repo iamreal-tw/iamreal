@@ -8,10 +8,21 @@ struct Screen: Equatable {
     /// 0 for a screen in the place of step 1 that is none of them: this
     /// version can no longer do a card proof, this phone cannot read a card.
     var step: Int
+    /// Says which of the eight steps it is, above it; not the whole of
+    /// step 6 shown from step 4 on a day with 3 records, which is none of them.
+    var inSteps = true
     var blocks: [Block]
     /// The buttons under the blocks, in their order; the last is the way
-    /// on, and the main button of the screen unless `mainButton` is false.
+    /// on (on step 8, sharing), and the main button of the screen unless
+    /// `mainButton` is false.
+    /// Two side by side, the way on on the right; one under the other where
+    /// either's words do not fit on one line in half the width, or where
+    /// there are more than two, the way on on top (design/DESIGN.md, the
+    /// components: buttons).
     var buttons: [Button] = []
+    /// Under the buttons: what is not to read before the way on (step 2's
+    /// list, all still to do, before the card is read).
+    var under: [Block] = []
     /// The last of `buttons` is the screen's main button (design/DESIGN.md,
     /// the components: one main button on a screen).
     var mainButton = true
@@ -33,7 +44,7 @@ struct Screen: Equatable {
     /// Every sentence on the screen, in its order: for tests. The
     /// header's are not among them: they are not card-proof.md's.
     var texts: [String] {
-        warnings.flatMap(\.texts) + (notice?.texts ?? []) + blocks.flatMap(\.texts) + buttons.map(\.label) + links.map(\.label) + (cancel.map { [$0.label] } ?? [])
+        warnings.flatMap(\.texts) + (notice?.texts ?? []) + blocks.flatMap(\.texts) + buttons.map(\.label) + under.flatMap(\.texts) + links.map(\.label) + (cancel.map { [$0.label] } ?? [])
     }
 }
 
@@ -171,40 +182,29 @@ struct ProofCard: Equatable {
 struct HangDemo: Equatable {
     /// The words on the five screens, each from the copy.
     struct Words: Equatable {
-        /// The app's own screen: the small words above it, its title, and the two buttons.
-        var kickOwn: String
+        /// The app's own screen: its title, and the two buttons.
         var title: String
         var copy: String
         var copied: String
         var open: String
         /// The profile on Threads.
-        var kickProfile: String
         var edit: String
         var found: String
         /// Editing the profile: the rows before the links, the links, the row after.
-        var kickEdit: String
         var rows: [String]
         var links: String
         var featured: String
         /// The links.
-        var kickLinks: String
         var add: String
         /// Adding a link.
-        var kickAdd: String
         var done: String
         var url: String
         var paste: String
         var linkTitle: String
-        /// The tags under what is to be pressed.
-        var press: String
-        var pressAgain: String
-        var pressThen: String
-        var pasteHere: String
 
         /// Every one of them, for tests.
         var all: [String] {
-            [kickOwn, title, copy, copied, open, kickProfile, edit, found, kickEdit] + rows
-                + [links, featured, kickLinks, add, kickAdd, done, url, paste, linkTitle, press, pressAgain, pressThen, pasteHere]
+            [title, copy, copied, open, edit, found] + rows + [links, featured, add, done, url, paste, linkTitle]
         }
     }
 
@@ -288,7 +288,7 @@ enum Action: Equatable {
     case openStore
     /// The phone's map, searching for household registration offices (step 1).
     case findOffice
-    /// MOICA's site, in the browser (step 1).
+    /// MOICA's page on applying, in the browser (step 1).
     case howToApply
     /// Tap 3, the proof and the submission.
     case declare
@@ -310,8 +310,11 @@ enum Action: Equatable {
     /// The page of the account typed on a platform.
     case preview(String)
     case openSettings
-    /// "沒有看到連結，重新掛上": the whole of step 6 in the place of the short one.
+    /// "重新掛上連結": the whole of step 6 in the place of the short one.
     case rehang
+    /// "重新掛上連結" of step 4 on a day with 3 records: the whole of step 6
+    /// for the accounts the card declares now.
+    case hangFromLimit
     /// From step 6 to step 7.
     case toRemind
     /// From step 7 to step 8.

@@ -16,8 +16,8 @@ class AccountsViewTest {
     private val copy = Copy(File(System.getProperty("iamreal.copy"), "card-proof.json").readText())
     private val messages = Messages(copy)
 
-    private fun slot(platform: String, current: String?, lastDeclared: String? = current, switchCount: Int = 0, correctionToday: Boolean = false, known: Boolean = true) =
-        Slot(platform, known, current, lastDeclared, switchCount, 5 - switchCount, correctionToday)
+    private fun slot(platform: String, current: String?, lastDeclared: String? = current, switchCount: Int = 0, known: Boolean = true) =
+        Slot(platform, known, current, lastDeclared, switchCount, 5 - switchCount)
 
     private fun status(vararg slots: Slot, daysSince: Int? = null, dailyLimit: Boolean = false, table: List<String> = listOf("threads")) =
         Status("7K2Q9FM4XD", daysSince?.let { "2026-11-04" }, daysSince, slots.toList(), table, dailyLimit, "2026-11-16")
@@ -64,7 +64,7 @@ class AccountsViewTest {
 
     @Test
     fun `the last card proof the same day is today, not 0 days ago`() {
-        val view = messages.accountsView(status(slot("threads", "alice", correctionToday = true), daysSince = 0)) as Messages.DeclaredView
+        val view = messages.accountsView(status(slot("threads", "alice"), daysSince = 0)) as Messages.DeclaredView
         assertEquals("上次過卡是今天", view.last)
     }
 
@@ -75,6 +75,30 @@ class AccountsViewTest {
         assertEquals("上次過卡是今天", view.last)
         assertEquals("這張卡片今天已經過卡 3 次，明天才能再過卡。", view.dailyLimit)
         assertEquals(listOf<String?>(null, null, null), listOf(view.switchAccount, view.withdraw, view.editList))
+    }
+
+    @Test
+    fun `3 records today, the whole of step 6 for the account declared now, with no record of today`() {
+        val view = messages.hangFromLimit(status(slot("threads", "alice"), daysSince = 0, dailyLimit = true), "Threads")
+        assertEquals("把證明掛上你的 Threads 個人檔案", view.title)
+        assertEquals("在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。", view.why)
+        assertEquals(listOf(Messages.OpensProfile("打開 Threads", "打開 @alice 的 Threads 個人檔案", "https://www.threads.com/@alice")), view.profiles)
+        assertEquals(listOf("按「編輯個人檔案」", "按「連結」", "按「新增連結」", "在「網址」貼上剛才複製的連結，按右上角的「完成」"), view.steps)
+        assertEquals("掛好了嗎？打開你的島民證明看看。", view.hung)
+        assertEquals("@alice", view.account)
+        // An account on a platform the app does not know: no button for its profile, and not the one the demonstration draws.
+        val other = messages.hangFromLimit(status(slot("example", "a-b", known = false), slot("threads", "alice"), daysSince = 0, dailyLimit = true, table = listOf("example", "threads")), null)
+        assertEquals(listOf("https://www.threads.com/@alice"), other.profiles.map { it.address })
+        assertEquals("@alice", other.account)
+    }
+
+    @Test
+    fun `3 records today, 重新掛上連結 only for an account the app can hang`() {
+        assertTrue(messages.canHangFromLimit(status(slot("threads", "alice"), daysSince = 0, dailyLimit = true)))
+        // Everything withdrawn today: nothing to hang.
+        assertEquals(false, messages.canHangFromLimit(status(slot("threads", null, lastDeclared = "alice"), daysSince = 0, dailyLimit = true)))
+        // Only an account on a platform the app does not know: no profile to open, no demonstration.
+        assertEquals(false, messages.canHangFromLimit(status(slot("example", "a-b", known = false), slot("threads", null), daysSince = 0, dailyLimit = true, table = listOf("example", "threads"))))
     }
 
     @Test
@@ -104,15 +128,6 @@ class AccountsViewTest {
     fun `another account, the last switch`() {
         val view = messages.switchView(status(slot("threads", "alice", switchCount = 4), daysSince = 87))
         assertEquals("改了之後，@alice 不再是這張卡片宣告的帳號。用掉最後一次更換。這次之後，這個平台不能再更換。", view.cost)
-    }
-
-    @Test
-    fun `another account in place of one put there today costs no switch, even with none left`() {
-        for (used in listOf(0, 5)) {
-            val view = messages.switchView(status(slot("threads", "alice", switchCount = used, correctionToday = true), daysSince = 0))
-            assertEquals("改了之後，@alice 不再是這張卡片宣告的帳號。今天才宣告的帳號，今天改掉不另外算一次更換。", view.cost)
-            assertTrue(view.row != null)
-        }
     }
 
     @Test

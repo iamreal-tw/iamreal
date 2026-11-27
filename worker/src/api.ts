@@ -73,8 +73,8 @@ const MALFORMED = fail(400, "malformed");
  * record with (docs/api/card-proof.md). `503` when nothing is wrong with
  * the request and the back end cannot take it for now: `paused`, no card
  * proof at all; `crl_stale`, none of the record's issuer key, whose newest
- * CRL is too old, while the other issuer key's are taken as ever. `403`
- * for the back end's own policy, `400` otherwise.
+ * CRL is too old, while the other issuer key's are taken as ever. `400`
+ * otherwise.
  */
 const REFUSAL_STATUS: Readonly<Record<SubmissionRefusal | RecordRefusal, number>> = {
   paused: 503,
@@ -87,7 +87,6 @@ const REFUSAL_STATUS: Readonly<Record<SubmissionRefusal | RecordRefusal, number>
   empty: 400,
   switch_limit: 400,
   daily_limit: 400,
-  switch_restricted: 403,
 };
 
 const refuse = (code: SubmissionRefusal | RecordRefusal): Reply => fail(REFUSAL_STATUS[code], code);
@@ -182,8 +181,7 @@ async function postChallenge(_request: Request, env: Env): Promise<Reply> {
  *   3. here: the record verifies (`proof`), outside the object, so that a
  *      proof being verified does not hold up the proof log;
  *   4. the object: the challenge again, the back end's rule on `smt_root`
- *      (`crl_stale`, `root`), the record rules, the back end's policy on
- *      switches (`switch_restricted`); then the record is written.
+ *      (`crl_stale`, `root`), the record rules; then the record is written.
  *
  * A verifier that could not run gives no verdict: the answer is `500`, and
  * the object is not asked to write anything.
@@ -229,11 +227,12 @@ async function postRecord(request: Request, env: Env, parts: ApiParts, notes: No
 
 /**
  * `POST /api/v1/card-state`: the state of one card on every platform of the
- * proof log's table, as the rules left it. Facts, not conclusions. The keys are
+ * proof log's table, as the rules left it, and the back end's count and
+ * limit of its records of a date. Facts, not conclusions. The keys are
  * in the order of docs/api/card-proof.md.
  */
 async function postCardState(request: Request, env: Env): Promise<Reply> {
-  const { kind, platforms: table } = settings(env);
+  const { kind, platforms: table, dailyLimit } = settings(env);
   const text = await readBody(request);
   if (text === null) return MALFORMED;
   const fields = readStrings(text, ["scope_string", "scoped_id"]);
@@ -242,13 +241,14 @@ async function postCardState(request: Request, env: Env): Promise<Reply> {
   if (!lookupScope(kind, fields.scope_string)) return MALFORMED;
   if (parseScopedId(fields.scoped_id) === null) return MALFORMED;
 
-  const { card, count } = await askProofLog(() => proofLogOf(env).cardState(fields.scope_string, fields.scoped_id));
+  const { card, proofsOnLastDate, count } = await askProofLog(() => proofLogOf(env).cardState(fields.scope_string, fields.scoped_id));
   const platforms: Record<string, SlotJson> = {};
   // A platform the stored state has no slot for is a slot never used.
   for (const { platform } of table) platforms[platform] = slotToJson(card?.slots.get(platform) ?? EMPTY_SLOT);
   return ok({
     last_card_proof: card === null || card.lastCardProof === null ? null : formatDay(card.lastCardProof),
-    proofs_on_last_date: card?.proofsOnLastDate ?? 0,
+    proofs_on_last_date: proofsOnLastDate,
+    daily_limit: dailyLimit,
     platforms,
     count,
   });

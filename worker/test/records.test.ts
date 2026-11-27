@@ -171,7 +171,7 @@ describe("reading the request: malformed, scope, platform", () => {
     const s = { ...(await sub(worker, card, root, "test-example:a-b", "threads:alice")), scope_string: PRODUCTION_SCOPE };
     await wantError(worker, s, 400, "platform");
     await mustSubmit(worker, { ...s, accounts: list("threads:alice") }, "threads first");
-    assert.deepEqual((await cardState(worker, card, PRODUCTION_SCOPE)).platforms, { threads: { current: "alice", last_declared: "alice", switch_count: 0, correction_date: "2026-11-20" } });
+    assert.deepEqual((await cardState(worker, card, PRODUCTION_SCOPE)).platforms, { threads: { current: "alice", last_declared: "alice", switch_count: 0 } });
     await wantError(worker, await sub(worker, card, root, "threads:alice"), 400, "scope");
   });
 });
@@ -398,7 +398,7 @@ describe("the record rules", () => {
       [0, b, ["test-example:alice", "threads:alice"], 2, [["test-example", "first", "alice", 1], ["threads", "first", "alice", 2]]],
       [1, a, ["threads:bob"], 1, [["threads", "switch", "bob", 1]]],
       [1, b, ["test-example:alice"], 2, [["test-example", "refresh", "alice", 1], ["threads", "withdraw", "alice", 0]]],
-      [1, a, ["threads:carol"], 1, [["threads", "correction", "carol", 1]]],
+      [1, a, ["threads:carol"], 1, [["threads", "switch", "carol", 1]]],
       [1, c, ["threads:dave"], 3, [["threads", "first", "dave", 1]]],
       [1, b, [], 2, [["test-example", "withdraw", "alice", 0]]],
       [2, a, ["test-example:alice", "threads:alice"], 1, [["test-example", "first", "alice", 1], ["threads", "switch", "alice", 1]]],
@@ -445,43 +445,46 @@ describe("the record rules", () => {
     const card = newCard();
     await wantError(worker, await sub(worker, card, root), 400, "empty");
     await mustSubmit(worker, await sub(worker, card, root, "threads:a"), "threads first");
-    await mustSubmit(worker, await sub(worker, card, root, "threads:b"), "threads correction");
-    for (const [i, u] of ["c", "d", "e", "f", "g"].entries()) {
+    // Another account on the day of the first is a switch too (ADR-0018).
+    await mustSubmit(worker, await sub(worker, card, root, "threads:b"), "threads switch");
+    for (const [i, u] of ["c", "d", "e", "f"].entries()) {
       await day(worker, i + 1);
       await mustSubmit(worker, await sub(worker, card, root, `threads:${u}`), "threads switch");
     }
-    await mustSubmit(worker, await sub(worker, card, root, "test-example:a-b", "threads:h"), "test-example first, threads correction");
-    assert.deepEqual(await slot(card, "threads"), { current: "h", last_declared: "h", switch_count: 5, correction_date: "2026-11-25" });
-    await day(worker, 6);
+    await mustSubmit(worker, await sub(worker, card, root, "test-example:a-b", "threads:f"), "test-example first, threads refresh");
+    assert.deepEqual(await slot(card, "threads"), { current: "f", last_declared: "f", switch_count: 5 });
+    // A sixth on the day of the fifth is refused as on any other.
+    await wantError(worker, await sub(worker, card, root, "test-example:a-b", "threads:g"), 400, "switch_limit");
+    await day(worker, 5);
     const before = await state(card);
     await wantError(worker, await sub(worker, card, root, "test-example:c-d", "threads:i"), 400, "switch_limit");
     assert.deepEqual(await state(card), before);
-    await mustSubmit(worker, await sub(worker, card, root, "test-example:c-d", "threads:h"), "test-example switch, threads refresh");
+    await mustSubmit(worker, await sub(worker, card, root, "test-example:c-d", "threads:f"), "test-example switch, threads refresh");
     await mustSubmit(worker, await sub(worker, card, root, "test-example:c-d"), "test-example refresh, threads withdraw");
     await mustSubmit(worker, await sub(worker, card, root), "test-example withdraw");
-    await day(worker, 7);
+    await day(worker, 6);
     await wantError(worker, await sub(worker, card, root), 400, "empty");
-    await mustSubmit(worker, await sub(worker, card, root, "threads:h"), "threads refresh");
+    await mustSubmit(worker, await sub(worker, card, root, "threads:f"), "threads refresh");
     await wantError(worker, await sub(worker, card, root, "threads:i"), 400, "switch_limit");
-    assert.equal(await count(), 12);
-    // The stored proof log has the twelve records that were written, and nothing of the four that were refused.
+    assert.equal(await count(), 11);
+    // The stored proof log has the eleven records that were written, and nothing of the five that were refused.
     const stored = await checkProofLog(worker);
-    assert.equal(stored.length, 12);
+    assert.equal(stored.length, 11);
     assert.ok(stored.every((r) => r.scopedId === card));
     assert.deepEqual(stored.map((r) => r.accounts.map((a) => `${a.platform}:${a.username}`).join(",")), [
-      "threads:a", "threads:b", "threads:c", "threads:d", "threads:e", "threads:f", "threads:g",
-      "test-example:a-b,threads:h", "test-example:c-d,threads:h", "test-example:c-d", "", "threads:h",
+      "threads:a", "threads:b", "threads:c", "threads:d", "threads:e", "threads:f",
+      "test-example:a-b,threads:f", "test-example:c-d,threads:f", "test-example:c-d", "", "threads:f",
     ]);
   });
 
-  test("daily_limit: the fourth record of a card on one date; a challenge issued before midnight still counts for that date, and the next day is free again", async () => {
+  test("daily_limit, the back end's limit (settings.ts, DAILY_LIMITS): no fourth record of a card on one date; a challenge issued before midnight still counts for that date, and the next day is free again", async () => {
     await fresh();
     const root = await publishG3(worker);
     await worker.setClock(tw("2026-11-20", "23:55:00"));
     const card = newCard();
     await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
     await wantError(worker, await sub(worker, newCard(), root), 400, "empty");
-    await mustSubmit(worker, await sub(worker, card, root, "test-example:a-b", "threads:bob"), "test-example first, threads correction");
+    await mustSubmit(worker, await sub(worker, card, root, "test-example:a-b", "threads:bob"), "test-example first, threads switch");
     await mustSubmit(worker, await sub(worker, card, root, "test-example:a-b"), "test-example refresh, threads withdraw");
     assert.deepEqual([(await state(card)).last_card_proof, (await state(card)).proofs_on_last_date], ["2026-11-20", 3]);
     const fourth = await sub(worker, card, root, "test-example:a-b", "threads:bob");
@@ -499,59 +502,6 @@ describe("the record rules", () => {
     await wantError(worker, fourth, 400, "daily_limit");
     await mustSubmit(worker, await sub(worker, card, root, "test-example:a-b", "threads:bob"), "test-example refresh, threads refresh");
     assert.deepEqual([(await state(card)).last_card_proof, (await state(card)).proofs_on_last_date], ["2026-11-21", 1]);
-  });
-});
-
-describe("the back end's policy on switches", () => {
-  /** A card with three switches on threads and a slot on test-example, on day 4. */
-  async function threeSwitches(): Promise<{ card: string; root: string }> {
-    const root = await publishG3(worker);
-    const card = newCard();
-    await mustSubmit(worker, await sub(worker, card, root, "threads:a"), "threads first");
-    for (const [i, u] of ["b", "c", "d"].entries()) {
-      await day(worker, i + 1);
-      await mustSubmit(worker, await sub(worker, card, root, `threads:${u}`), "threads switch");
-    }
-    await mustSubmit(worker, await sub(worker, card, root, "threads:dd"), "threads correction");
-    await day(worker, 4);
-    await mustSubmit(worker, await sub(worker, card, root, "test-example:a-b", "threads:dd"), "test-example first, threads refresh");
-    await mustSubmit(worker, await sub(worker, card, root, "test-example:c-d", "threads:dd"), "test-example correction, threads refresh");
-    return { card, root };
-  }
-
-  test("by default there is none: the fourth and the fifth switch are written, the sixth is the rules' switch_limit", async () => {
-    await fresh();
-    const { card, root } = await threeSwitches();
-    await mustSubmit(worker, await sub(worker, card, root, "test-example:c-d", "threads:e"), "test-example refresh, threads switch");
-    await day(worker, 5);
-    await mustSubmit(worker, await sub(worker, card, root, "test-example:c-d", "threads:f"), "test-example refresh, threads switch");
-    await mustSubmit(worker, await sub(worker, card, root, "test-example:c-d", "threads:ff"), "test-example refresh, threads correction");
-    await day(worker, 6);
-    await wantError(worker, await sub(worker, card, root, "threads:g"), 400, "switch_limit");
-  });
-
-  test("when it is on: a fourth switch the rules accept is 403 switch_restricted and nothing is written; a record without a switch is never refused for it; the rules' own codes come first", async () => {
-    await fresh({ restrictLateSwitches: true });
-    const { card, root } = await threeSwitches();
-    const fourth = await sub(worker, card, root, "test-example:c-d", "threads:e");
-    const before = await state(card);
-    await wantError(worker, fourth, 403, "switch_restricted");
-    assert.deepEqual(await state(card), before);
-    assert.equal(await count(), 7);
-    assert.equal((await checkProofLog(worker)).length, 7);
-    await mustSubmit(worker, { ...fourth, accounts: list("test-example:c-d") }, "test-example refresh, threads withdraw");
-    // The card's third record of the day was written: a fourth is the rules' daily_limit, not the policy's code.
-    await wantError(worker, await sub(worker, card, root, "threads:e"), 400, "daily_limit");
-    await day(worker, 5);
-    await wantError(worker, await sub(worker, card, root, "threads:e"), 403, "switch_restricted");
-    await wantError(worker, await sub(worker, newCard(), root), 400, "empty");
-    // A first switch of another slot is not a late one.
-    await mustSubmit(worker, await sub(worker, card, root, "test-example:e-f"), "test-example switch");
-  });
-
-  test("a value of the setting that is neither true nor false: nothing answers", async () => {
-    await worker.setSettings({ PROOF_LOG_KIND: "test", PROOF_LOG_OBJECT_NAME: await fresh(), RESTRICT_LATE_SWITCHES: "yes" });
-    for (const [method, path] of [["POST", "/api/v1/challenges"], ["GET", "/api/v1/config"], ["POST", "/api/v1/records"]] as const) assert.equal((await worker.fetch(path, { method })).status, 500, path);
   });
 });
 

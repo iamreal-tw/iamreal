@@ -166,7 +166,9 @@ whose date fits is enough.
   answered with a CRL issued at 00:00.
 - **3 days** is how long the service keeps working if MOICA stops issuing
   CRLs. MOICA issues at least one per day, each valid for at most 36 hours
-  (CPS v2.1 section 4.9.7). Within the 3 days, a card revoked after the last
+  (MOICA's Certification Practice Statement
+  [v2.2](https://moica.nat.gov.tw/moica//upload/repository/1a21204c7f4000008879.pdf),
+  section 4.9.7, page 35). Within the 3 days, a card revoked after the last
   CRL still passes. After them, no card proof is accepted until a new CRL
   appears. The bound may be widened later: records valid under 3 days stay
   valid under a wider bound. Narrowing it can change the result of records

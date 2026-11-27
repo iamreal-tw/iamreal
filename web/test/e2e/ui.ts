@@ -19,24 +19,21 @@
 // 4. Clicks through the seven steps like a cardholder (real mouse events,
 //    cdp.ts; design/copy/card-proof.md): one card proof handles the card's
 //    whole list of accounts (ADR-0017). With one card: a first declaration
-//    of one platform; card proof again with nothing changed; a correction
-//    on the day of the first; 3 records today (step 4 keeps the list and
+//    of one platform; card proof again with nothing changed; a switch on
+//    the day of the first (a switch like any other); 3 records today (step 4 keeps the list and
 //    offers nothing but 回到開頭); a second platform added, with 上一步 back
 //    and forth; a switch; one account withdrawn; the server finding 3
 //    records today when the list is sent; everything withdrawn; an empty
 //    list for a card that declares nothing (請至少填一個帳號); both declared
-//    again; a switch the server records as a switch where the screen said a
-//    correction (the card's state changed on its way: the screen tells the
-//    cardholder, kind_mismatch); the third switch; a fourth refused by the
-//    server's policy, which the Worker was started with for this
-//    (RESTRICT_LATE_SWITCHES: switch_restricted); a platform the page does
+//    again; the third switch, which the server records as a switch where the
+//    screen said nothing changes (the card's state changed on its way: the
+//    screen tells the cardholder, kind_mismatch); a platform the page does
 //    not know (the config without its row): the account kept in the list as
-//    it is; then the Worker restarted as it runs by default (no such
-//    policy): the fourth and fifth switches recorded, step 4 saying none is
-//    left and refusing another account typed anyway, and a sixth refused by
-//    the record rules (switch_limit). Along the way: a submission
-//    that did not get through (再試一次), one the server refused (its
-//    request ID on the screen); 回到開頭 and 取消 on steps 4 and 5, then card
+//    it is; then the Worker restarted: the fourth and fifth switches
+//    recorded, step 4 saying none is left and refusing another account typed
+//    anyway, and a sixth refused by the record rules (switch_limit). Along
+//    the way: a submission that did not get through (再試一次), one the
+//    server refused (its request ID on the screen); 回到開頭 and 取消 on steps 4 and 5, then card
 //    proofs again on the same page with the same proof engine; step 3's
 //    上一步; the PIN's wait running out; a window the browser blocked on each
 //    of the three clicks; every case that stops before the PIN is asked,
@@ -143,10 +140,9 @@ for (const n of ["G2", "G3"] as const) writeFileSync(join(issuersDir, `issuer-${
 const yymmdd = (d: Date) => d.toISOString().slice(2, 10).replace(/-/g, "");
 /**
  * The test's clock, the Worker's and the page's together, runs `day` whole
- * days ahead of the machine's (setDay below): a card has at most 3 valid
- * records a day (spec/record-rules.md, check 6), a switch counts once a day
- * (a change on the day of the last one is a correction), and this test makes
- * many with one card. Each day the fake MOICA publishes a CRL dated that day.
+ * days ahead of the machine's (setDay below): the back end writes at most 3
+ * records of a card a day (docs/api/card-proof.md, `daily_limit`), and this
+ * test makes many with one card. Each day the fake MOICA publishes a CRL dated that day.
  *
  * Under those whole days, all three run `AHEAD` of the machine's clock, so
  * that the run starts at noon in Taiwan (clock.ts): what the test expects
@@ -242,12 +238,8 @@ await build({
   build: { outDir: dist, emptyOutDir: true },
 });
 
-// Started with the policy on the fourth and fifth switch (the setting
-// RESTRICT_LATE_SWITCHES, which wrangler.jsonc does not have), for the case
-// that checks switch_restricted; restarted as it runs by default before the
-// fourth and fifth switches are made.
 console.log("starting the Worker (test build) with that page");
-const site = await startWorkerSite({ proofFiles: dist, issuers, settings: { RESTRICT_LATE_SWITCHES: "true" } });
+const site = await startWorkerSite({ proofFiles: dist, issuers });
 const { worker } = site;
 /** Has the Worker's schedule run once: its mirror fetches what the fake MOICA serves now. */
 async function mirror(): Promise<void> {
@@ -353,12 +345,6 @@ async function setDay(n: number): Promise<void> {
   await page.eval(`window.__iamrealClockDays = ${n}`).catch(() => undefined);
   console.log(`\n== day ${n}: ${today()}`);
 }
-/** Moves the page's clock alone to `days` (whole or not) ahead of the test's (`testNow`); the Worker's stays. */
-async function setPageClock(days: number): Promise<void> {
-  await page.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: clockScript });
-  clockScript = (await page.send("Page.addScriptToEvaluateOnNewDocument", { source: clockSource(days) })).identifier as string;
-  await page.eval(`window.__iamrealClockDays = ${days}`).catch(() => undefined);
-}
 // "複製連結" writes to the clipboard; the test reads it back.
 await browser.send("Browser.grantPermissions", { origin: PAGE_ORIGIN, permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"] });
 const results: Record<string, unknown> = {};
@@ -376,10 +362,10 @@ async function noLinkOut(label: string): Promise<void> {
 }
 const stepLine = (n: number) => fill(C.common.step, { step: n, steps: 7 });
 
-/** Step 1's two links, in the question on how to get a card: a map's search, MOICA's site; each in a new tab, nothing else (card-proof.md, step 1). */
+/** Step 1's two links, in the question on how to get a card: a map's search, MOICA's page on applying; each in a new tab, nothing else (card-proof.md, step 1). */
 const STEP1_LINKS = [
   [C.before.find_office, "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent("戶政事務所")],
-  [C.before.how_to_get_moica, "https://moica.nat.gov.tw/"],
+  [C.before.how_to_get_moica, "https://moica.nat.gov.tw/rac.html"],
 ];
 async function step1Links(label: string, p: Page = page): Promise<void> {
   const links = await p.eval<[string, string, string][]>(`[...document.querySelectorAll('#app a')].map((a) => [a.textContent, a.getAttribute("href"), a.target + " " + a.rel + " " + !!a.closest('.asks details')])`);
@@ -922,7 +908,7 @@ interface HangSeen {
   shortLook: string;
   shortWhy: string;
   shortLink: string;
-  /** The whole step 6, after 沒有看到連結，重新掛上 when it opened short. */
+  /** The whole step 6, after 重新掛上連結 when it opened short. */
   title: string;
   link: string;
   /** What the QR code holds. */
@@ -972,6 +958,8 @@ interface DoneSeen {
   finish: FinishSeen;
   /** 上一步 on the last step went back to step 6 as it was left. */
   backToHang: boolean;
+  /** Step 6 opened short: 上一步 of the whole one went back to the short one. */
+  backToShort: boolean;
   /** The card's short ID, from the link (or, everything withdrawn, the record's line). */
   sid: string;
   /** The card's ordinal as its page on the server writes it (the number of 第 N 張島民證明); "" when no card is named. */
@@ -1020,13 +1008,14 @@ const finishNow = () =>
 
 /**
  * After the submission, through every screen there is: step 6 (short, then
- * the whole one after 沒有看到連結，重新掛上), 下一步 to the last step, 上一步
+ * the whole one after 重新掛上連結), 下一步 to the last step, 上一步
  * back to step 6 as it was left. Ends on step 6, or on the last step when
  * everything was withdrawn. `shots`: the screenshots' prefix.
  */
 async function doneSeen(shots?: string): Promise<DoneSeen> {
   let hang: HangSeen | null = null;
   let backToHang = false;
+  let backToShort = false;
   if (await page.eval<boolean>(`!!${step("hang")}`)) {
     const short = await page.eval<boolean>(`document.querySelector('[data-step="hang"]').dataset.short === "true"`);
     let s = { shortTitle: "", shortLook: "", shortWhy: "", shortLink: "" };
@@ -1039,7 +1028,13 @@ async function doneSeen(shots?: string): Promise<DoneSeen> {
       })`);
       if (shots) await screenshot(`${shots}-6-hang-short`);
       await page.clickButton(C.hang.rehang);
-      await page.waitFor(`document.querySelector('[data-step="hang"]')?.dataset.short === "false" || null`, "沒有看到連結，重新掛上: the whole step 6");
+      await page.waitFor(`document.querySelector('[data-step="hang"]')?.dataset.short === "false" || null`, "重新掛上連結: the whole step 6");
+      // 上一步 of the whole step: the short one again; then the whole one again, to go on as before.
+      await page.clickButton(C.common.back);
+      await page.waitFor(`document.querySelector('[data-step="hang"]')?.dataset.short === "true" || null`, "上一步: the short step 6 again");
+      backToShort = true;
+      await page.clickButton(C.hang.rehang);
+      await page.waitFor(`document.querySelector('[data-step="hang"]')?.dataset.short === "false" || null`, "重新掛上連結: the whole step 6 again");
     }
     hang = { short, ...s, ...(await hangNow()) };
     if (shots) await screenshot(`${shots}-6-hang`);
@@ -1056,7 +1051,7 @@ async function doneSeen(shots?: string): Promise<DoneSeen> {
   }
   const link = hang?.link ?? "";
   const sid = /^(?:test\.)?iamreal\.tw\/p\/([0-9A-Z]{10})$/.exec(link)?.[1] ?? (/島民編號開頭是 ([0-9A-Z]{10})。/.exec(hang?.main ?? finish.main)?.[1] ?? "");
-  return { hang, finish, backToHang, sid, pageOrdinal: await pageOrdinal(sid) };
+  return { hang, finish, backToHang, backToShort, sid, pageOrdinal: await pageOrdinal(sid) };
 }
 
 /** The ordinal the card's page on the server writes: the proof log's, not the answer's. */
@@ -1136,7 +1131,7 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   check(h.where.includes(stepLine(6)), `${o.label}: 第 6 步，共 7 步 "${h.where}"`);
   check(h.main.includes(recorded), `${o.label}: step 6, the day it was recorded, unplug`);
   if (mismatch.length > 0) check(h.first === C.done.mismatch, `${o.label}: the difference, first of all "${h.first}"`);
-  // Short for a card proof again with one platform; 沒有看到連結，重新掛上 shows the whole step.
+  // Short for a card proof again with one platform; 重新掛上連結 shows the whole step.
   check(h.short === !!o.short, `${o.label}: step 6 ${o.short ? "is" : "is not"} short`);
   if (o.short) {
     check(h.shortTitle === fill(C.hang.still_there_single, { platform: o.single! }), `${o.label}: the short step 6 asks "${h.shortTitle}"`);
@@ -1169,6 +1164,7 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   check(fin.comeBack && fin.main.includes(C.done.return_title) && fin.main.includes(C.done.return_note), `${o.label}: the last step, when to come back`);
   check(JSON.stringify(fin.buttons) === JSON.stringify([C.common.back, C.finish.done]), `${o.label}: the last step's buttons ${JSON.stringify(fin.buttons)}`);
   check(d!.backToHang, `${o.label}: 上一步 goes back to step 6 as it was left`);
+  if (d!.hang?.short) check(d!.backToShort, `${o.label}: 上一步 of the whole step 6 goes back to the short one`);
   doneScreens++;
   shown.push(sid);
 }
@@ -1362,7 +1358,7 @@ await tryStep("card proof again, nothing changed (the first submission dropped, 
   // 修改帳號清單: each row with its counts, how to change the list; 不改了 goes back.
   const edit = await openEdit();
   check(edit.state === "declared" && JSON.stringify(edit.lead) === JSON.stringify([A.current]), `修改帳號清單: ${edit.state} ${JSON.stringify(edit.lead)}`);
-  checkRows("refresh", edit.rows, { [EXAMPLE]: [EXAMPLE_NAME, "", [A.row_unused]], [THREADS]: [THREADS_NAME, "alice", [count(0), A.row_today]] });
+  checkRows("refresh", edit.rows, { [EXAMPLE]: [EXAMPLE_NAME, "", [A.row_unused]], [THREADS]: [THREADS_NAME, "alice", [count(0)]] });
   check(edit.main.includes(A.how_change) && edit.main.includes(A.preview_note), "修改帳號清單: how to change the list, the preview");
   check(JSON.stringify(edit.buttons.filter((b) => b !== A.preview)) === JSON.stringify([C.common.next, A.keep, C.common.cancel]), `修改帳號清單: the buttons ${JSON.stringify(edit.buttons)}`);
   await screenshot("refresh-4-accounts-edit");
@@ -1383,28 +1379,36 @@ await tryStep("card proof again, nothing changed (the first submission dropped, 
   });
 });
 
-await tryStep("a correction on the day of the first declaration (@alice to @alicia: not a switch)", async () => {
+// Another account on the day of the first declaration is a switch like any other (ADR-0018).
+await tryStep("a switch on the day of the first declaration (@alice to @alicia: one switch used)", async () => {
   await toAccounts();
   await typeRows({ [THREADS]: "alicia" });
   const c = await waitConfirm();
-  checkConfirm("correction", c, [[THREADS, THREADS_NAME, at("alicia"), [fill(K.switch, { previous: at("alice") }), C.confirm.switch_not_counted]]], C.confirm.button_declare);
-  await screenshot("correction-5-confirm");
+  checkConfirm("same-day switch", c, [[THREADS, THREADS_NAME, at("alicia"), [fill(K.switch, { previous: at("alice") }), fill(C.confirm.uses_switch, { switches_left: 4 })]]], C.confirm.button_declare);
+  await screenshot("same-day-switch-5-confirm");
   await finish({
-    label: "correction",
+    label: "same-day switch",
     button: C.confirm.button_declare,
     title: C.done.changed,
     card: [[THREADS_NAME, at("alicia")]],
     record: [[THREADS_NAME, at("alicia"), [fill(K.switch, { previous: at("alice") })]]],
-    screenshots: "correction",
+    screenshots: "same-day-switch",
   });
 });
 
-await tryStep("3 records today: step 4 keeps the list, says so, and offers only 回到開頭", async () => {
+await tryStep("3 records today: step 4 keeps the list, says so, and offers the card's page, 重新掛上連結 and 回到開頭", async () => {
   const st = await toAccounts();
   check(st.state === "daily_limit" && st.mode === "declared" && JSON.stringify(st.lead) === JSON.stringify([A.declared_now]) && st.last === lastLine(0), `step 4: ${st.state} ${JSON.stringify(st.lead)} ${st.last}`);
   check(JSON.stringify(st.current) === JSON.stringify([[THREADS_NAME, at("alicia")]]), `3 records today: what the card declares ${JSON.stringify(st.current)}`);
   check((await page.text("[data-daily-limit]")) === C.stops.daily_limit, "step 4: the sentence of 3 records today");
-  check(JSON.stringify(st.buttons) === JSON.stringify([A.restart]), `step 4: only 回到開頭 ${JSON.stringify(st.buttons)}`);
+  check(JSON.stringify(st.buttons) === JSON.stringify([A.restart]), `step 4: one button, 回到開頭 ${JSON.stringify(st.buttons)}`);
+  // The card's page, and the page that hangs its link: links, out of this card proof that cannot go on today.
+  const links = await page.eval<{ open: string | null; hang: string | null; hangText: string | null }>(`({
+    open: document.querySelector('[data-daily-limit] ~ .look [data-open-proof]')?.getAttribute('href') ?? null,
+    hang: document.querySelector('[data-hang-again]')?.getAttribute('href') ?? null,
+    hangText: document.querySelector('[data-hang-again]')?.textContent ?? null,
+  })`);
+  check(links.open !== null && /^\/p\/[0-9A-Z]{10}$/.test(links.open) && links.hang === links.open.replace("/p/", "/hang/") && links.hangText === C.hang.rehang, `step 4: 打開你的島民證明 and 重新掛上連結 go to the card's pages ${JSON.stringify(links)}`);
   check(!(await page.eval<boolean>(`!!document.querySelector('[data-account-field]')`)), "no field to type in");
   await screenshot("daily-limit-4-accounts");
   const signs = componentCount("MakeSignature");
@@ -1422,7 +1426,7 @@ await setDay(1);
 await tryStep("a second platform added, with 上一步 back and forth", async () => {
   const st = await toAccounts();
   checkDeclared("add", st, [[THREADS_NAME, at("alicia")]], 1);
-  checkRows("add", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "", [A.row_unused]], [THREADS]: [THREADS_NAME, "alicia", [count(0)]] });
+  checkRows("add", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "", [A.row_unused]], [THREADS]: [THREADS_NAME, "alicia", [count(1)]] });
   const signs = componentCount();
   const states = cardStateCount();
   const challenges = challengeCount();
@@ -1463,7 +1467,7 @@ await tryStep("a switch on Threads (@alicia to @bob)", async () => {
     await waitConfirm(),
     [
       [EXAMPLE, EXAMPLE_NAME, "a-b", [K.unchanged]],
-      [THREADS, THREADS_NAME, at("bob"), [fill(K.switch, { previous: at("alicia") }), fill(C.confirm.uses_switch, { switches_left: 4 })]],
+      [THREADS, THREADS_NAME, at("bob"), [fill(K.switch, { previous: at("alicia") }), fill(C.confirm.uses_switch, { switches_left: 3 })]],
     ],
     C.confirm.button_declare,
   );
@@ -1486,7 +1490,7 @@ await tryStep("a switch on Threads (@alicia to @bob)", async () => {
 
 await tryStep("one account withdrawn (the test-example row emptied)", async () => {
   const st = await toAccounts({ screenshots: "withdraw-one" });
-  checkRows("withdraw one", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0), A.row_today]], [THREADS]: [THREADS_NAME, "bob", [count(1), A.row_today]] });
+  checkRows("withdraw one", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "bob", [count(2)]] });
   await typeRows({ [EXAMPLE]: "" });
   checkConfirm(
     "withdraw one",
@@ -1570,7 +1574,7 @@ await tryStep("everything withdrawn", async () => {
   const st = await toAccounts();
   checkRows("withdraw all", (await openEdit()).rows, {
     [EXAMPLE]: [EXAMPLE_NAME, "", [fill(A.row_withdrawn, { last_declared: "a-b" }), count(0)]],
-    [THREADS]: [THREADS_NAME, "bob", [count(1)]],
+    [THREADS]: [THREADS_NAME, "bob", [count(2)]],
   });
   await screenshot("withdraw-all-4-accounts");
   await typeRows({ [THREADS]: "" });
@@ -1587,7 +1591,7 @@ await tryStep("no account now: an empty list is refused; both declared again (no
   checkAccountsNotes("nothing", st, "nothing");
   checkRows("nothing", st.rows, {
     [EXAMPLE]: [EXAMPLE_NAME, "", [fill(A.row_withdrawn, { last_declared: "a-b" }), count(0)]],
-    [THREADS]: [THREADS_NAME, "", [fill(A.row_withdrawn, { last_declared: at("bob") }), count(1)]],
+    [THREADS]: [THREADS_NAME, "", [fill(A.row_withdrawn, { last_declared: at("bob") }), count(2)]],
   });
   await page.clickButton(C.common.next);
   check((await messageText()) === A.need_one, `下一步 with an empty list, no account now: "${await messageText()}"`);
@@ -1622,16 +1626,14 @@ await tryStep("no account now: an empty list is refused; both declared again (no
 
 await setDay(3);
 
-// The card's state says the Threads account was put there today (its
-// correction_date changed on its way): the screen says the change is a
-// correction, not counted. The proof log records a switch, and step 6 says that
-// what was recorded is not what step 5 said.
-await tryStep("a change the screen called a correction, recorded as a switch (the card's state wrong): kind_mismatch", async () => {
-  // A state the rules can produce (the device does not read one they cannot): as if the card had switched to @bob today.
+// The card's state says the Threads account is @dave already (changed on its way): the screen
+// says nothing changes. The proof log records a switch from @bob, and step 6 says that what was
+// recorded is not what step 5 said.
+await tryStep("a list the screen called unchanged, recorded as a switch (the card's state wrong): kind_mismatch", async () => {
+  // A state the rules can produce (the device does not read one they cannot): as if the card had switched to @dave.
   const undo = await rewrite("*/api/v1/card-state", (b) => {
-    b.platforms.threads.correction_date = today();
-    b.last_card_proof = today();
-    b.proofs_on_last_date = 1;
+    b.platforms.threads.current = "dave";
+    b.platforms.threads.last_declared = "dave";
   });
   let st: AccountsSeen;
   try {
@@ -1639,29 +1641,30 @@ await tryStep("a change the screen called a correction, recorded as a switch (th
   } finally {
     await undo();
   }
-  checkDeclared("correction_date today", st, [[EXAMPLE_NAME, "a-b"], [THREADS_NAME, at("bob")]], 0);
-  checkRows("correction_date today", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "bob", [count(1), A.row_today]] });
-  await typeRows({ [THREADS]: "carol" });
+  checkDeclared("dave already", st, [[EXAMPLE_NAME, "a-b"], [THREADS_NAME, at("dave")]], 1);
+  // 更新島民證明: the list as the screen shows it, nothing typed.
+  await page.clickButton(A.refresh);
   checkConfirm(
-    "said a correction",
+    "said unchanged",
     await waitConfirm(),
     [
       [EXAMPLE, EXAMPLE_NAME, "a-b", [K.unchanged]],
-      [THREADS, THREADS_NAME, at("carol"), [fill(K.switch, { previous: at("bob") }), C.confirm.switch_not_counted]],
+      [THREADS, THREADS_NAME, at("dave"), [K.unchanged]],
     ],
-    C.confirm.button_declare,
+    C.confirm.button_refresh,
   );
   await finish({
     label: "recorded a switch",
-    button: C.confirm.button_declare,
+    button: C.confirm.button_refresh,
     title: C.done.changed,
     card: [
       [EXAMPLE_NAME, "a-b"],
-      [THREADS_NAME, at("carol")],
+      [THREADS_NAME, at("dave")],
     ],
     record: [
       [EXAMPLE_NAME, "a-b", [K.unchanged]],
-      [THREADS_NAME, at("carol"), [fill(K.switch, { previous: at("bob") })]],
+      // kinds.switch names the account the screen took for the current one.
+      [THREADS_NAME, at("dave"), [fill(K.switch, { previous: at("dave") })]],
     ],
     mismatch: [THREADS],
     screenshots: "mismatch",
@@ -1672,42 +1675,9 @@ await tryStep("a change the screen called a correction, recorded as a switch (th
   const expected = await page.text(`dd[data-done-row="${THREADS}"] [data-expected]`);
   const used = await page.text(`dd[data-done-row="${THREADS}"] [data-switch-used]`);
   check(
-    expected === fill(C.done.mismatch_expected, { expected: fill(K.switch, { previous: at("bob") }) + C.confirm.switch_not_counted }) && used === C.done.mismatch_switch_used,
+    expected === fill(C.done.mismatch_expected, { expected: K.unchanged }) && used === C.done.mismatch_switch_used,
     `under the row: what step 5 said ("${expected}"), and that a switch was used ("${used}")`,
   );
-});
-
-// Day 4 -----------------------------------------------------------------------------
-
-await setDay(4);
-
-await tryStep("the third switch (@carol to @dave): 2 left after it", async () => {
-  const st = await toAccounts();
-  checkRows("two switches", (await openEdit()).rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "carol", [count(2)]] });
-  await typeRows({ [THREADS]: "dave" });
-  checkConfirm(
-    "the third",
-    await waitConfirm(),
-    [
-      [EXAMPLE, EXAMPLE_NAME, "a-b", [K.unchanged]],
-      [THREADS, THREADS_NAME, at("dave"), [fill(K.switch, { previous: at("carol") }), fill(C.confirm.uses_switch, { switches_left: 2 })]],
-    ],
-    C.confirm.button_declare,
-  );
-  await screenshot("switch-third-5-confirm");
-  await finish({
-    label: "the third switch",
-    button: C.confirm.button_declare,
-    title: C.done.changed,
-    card: [
-      [EXAMPLE_NAME, "a-b"],
-      [THREADS_NAME, at("dave")],
-    ],
-    record: [
-      [EXAMPLE_NAME, "a-b", [K.unchanged]],
-      [THREADS_NAME, at("dave"), [fill(K.switch, { previous: at("carol") })]],
-    ],
-  });
 });
 
 // Day 5 -----------------------------------------------------------------------------
@@ -1725,33 +1695,6 @@ await tryStep("3 switches: the row says 2 are left; 取消 on step 5", async () 
   await backAtTheBeginning("取消 on step 5");
   await sleep(500);
   check(componentCount("MakeSignature") === signs && challengeCount() === challenges, "取消 on step 5: no second signature, no challenge");
-});
-
-// The Worker was started with RESTRICT_LATE_SWITCHES: the page offers the
-// fourth switch (the record rules allow 5), the server's policy refuses it
-// (switch_restricted).
-await tryStep("a fourth switch the server's policy refuses (RESTRICT_LATE_SWITCHES: switch_restricted)", async () => {
-  await toAccounts({ samePage: true });
-  await typeRows({ [THREADS]: "erin" });
-  checkConfirm(
-    "a fourth",
-    await waitConfirm(),
-    [
-      [EXAMPLE, EXAMPLE_NAME, "a-b", [K.unchanged]],
-      [THREADS, THREADS_NAME, at("erin"), [fill(K.switch, { previous: at("dave") }), fill(C.confirm.uses_switch, { switches_left: 1 })]],
-    ],
-    C.confirm.button_declare,
-  );
-  const before = await recordCount();
-  await page.clickButton(C.confirm.button_declare);
-  const d = await waitDoneOrMessage();
-  const id = await page.text("[data-request-id]");
-  check(!d.done && d.item === "submit" && d.message === `${C.stops.switch_restricted}\n${fill(C.stops.request_id, { request_id: id })}`, `switch_restricted, under 送出: ${JSON.stringify(d.message)}`);
-  const res = browser.responses.filter((r) => r.url.endsWith("/api/v1/records") && r.status === 403).at(-1);
-  check(res?.headers["x-request-id"] === id && refused("switch_restricted", id), `403 switch_restricted, its request ID on the screen (${id})`);
-  check((await recordCount()) === before, "nothing was appended");
-  check(JSON.stringify(await buttonTexts()) === JSON.stringify([C.read.read_again]), "refused: 再讀一次卡片 only");
-  await screenshot("switch-restricted-5-progress");
 });
 
 // The server's config without the test-example row: a platform the page does
@@ -1892,11 +1835,11 @@ await tryStep("the same page after 回到開頭, 取消 and the wait: card proof
   );
 });
 
-// The server as it runs by default: no policy on the fourth and fifth switch ----------
+// The Worker restarted ----------
 
-await tryStep("the Worker restarted without RESTRICT_LATE_SWITCHES (the default)", async () => {
+await tryStep("the Worker restarted", async () => {
   // The whole Worker and its Durable Object stop and start again: what they stored and the bucket's files stay,
-  // the settings the test gave are gone (worker/test/harness.ts), and the clock is set again with the next request.
+  // and the clock is set again with the next request.
   const before = await recordCount();
   await worker.restart();
   const config = await (await fetch(`${PAGE_ORIGIN}/api/v1/config`)).json();
@@ -1968,49 +1911,8 @@ await tryStep("5 switches: step 4 says none is left; another account typed anywa
   await screenshot("switch-limit-5-progress");
 });
 
-// The card's state says test-example's account was put there today (as if it had been), step 5
-// says changing it is a correction; midnight passes before the button is pressed. On the new date
-// the change is a switch: nothing is signed, the sentence, and 回到開頭 only.
-await tryStep("the date changes while step 5 is up: not signed, stops.date_changed, 回到開頭", async () => {
-  // The page's clock (only the page's) set to 23:59:47 in Taiwan of the test's day, so that midnight
-  // passes for real while step 5 is up, within the PIN's wait (25 s in the test build) from the first signature.
-  const target = Date.parse(`${today()}T23:59:47+08:00`);
-  const midnight = target + 13_000; // 00:00:00 of the next day in Taiwan
-  try {
-    await setPageClock((target - testNow()) / 86_400_000);
-    const undo = await rewrite("*/api/v1/card-state", (b) => {
-      b.platforms[EXAMPLE].correction_date = today();
-      b.last_card_proof = today();
-      b.proofs_on_last_date = 1;
-    });
-    try {
-      await toAccounts();
-    } finally {
-      await undo();
-    }
-    await typeRows({ [EXAMPLE]: "a-c" });
-    const c = await waitConfirm();
-    check(JSON.stringify(c.rows[0]?.kinds) === JSON.stringify([fill(K.switch, { previous: "a-b" }), C.confirm.switch_not_counted]), `step 5 says a correction: ${JSON.stringify(c.rows[0]?.kinds)}`);
-    const pageNow = await page.eval<number>("Date.now()");
-    check(pageNow < midnight, `step 5 is up before midnight (${Math.round((midnight - pageNow) / 1000)} s left)`);
-    await sleep(Math.max(0, midnight - pageNow) + 1000);
-    const signs = componentCount("MakeSignature");
-    const challenges = challengeCount();
-    const before = await recordCount();
-    await page.clickButton(C.confirm.button_declare);
-    const d = await waitDoneOrMessage();
-    check(!d.done && d.item === "server" && d.message === C.stops.date_changed, `under 連上島民證明的伺服器: "${d.message}" (${d.item})`);
-    check(JSON.stringify(await buttonTexts()) === JSON.stringify([A.restart]), `回到開頭 only: ${JSON.stringify(await buttonTexts())}`);
-    await screenshot("date-changed-5-progress");
-    await sleep(500);
-    check(componentCount("MakeSignature") === signs && challengeCount() === challenges && (await recordCount()) === before, "no second signature, no challenge, nothing recorded");
-    await page.clickButton(A.restart);
-    await backAtTheBeginning("回到開頭 after the date changed");
-  } finally {
-    // The page's clock back to the test's whole days.
-    await setPageClock(day);
-  }
-});
+// Since version 3 of the record rules no list does anything else on another date: the check
+// before the challenge (stops.date_changed) has no case left to show here (#510 takes it out).
 
 // 5. Snapshot and re-verification -----------------------------------------------
 
@@ -2018,13 +1920,12 @@ await tryStep("the date changes while step 5 is up: not signed, stops.date_chang
 const KINDS: [string, string][][] = [
   [[THREADS, "first"]],
   [[THREADS, "refresh"]],
-  [[THREADS, "correction"]],
+  [[THREADS, "switch"]],
   [[EXAMPLE, "first"], [THREADS, "refresh"]],
   [[EXAMPLE, "refresh"], [THREADS, "switch"]],
   [[EXAMPLE, "withdraw"], [THREADS, "refresh"]],
   [[THREADS, "withdraw"]],
   [[EXAMPLE, "refresh"], [THREADS, "refresh"]],
-  [[EXAMPLE, "refresh"], [THREADS, "switch"]],
   [[EXAMPLE, "refresh"], [THREADS, "switch"]],
   [[EXAMPLE, "refresh"], [THREADS, "refresh"]],
   [[EXAMPLE, "refresh"], [THREADS, "refresh"]],
@@ -2897,13 +2798,13 @@ await tryStep("before the PIN: a CRL older than the one this browser used", () =
   check(workers > 0, `the requests of the workers were seen too (${workers})`);
   const csp = browser.logs.filter((l) => /Content Security Policy/i.test(l.text));
   check(csp.length === 0, `no Content-Security-Policy violation ${JSON.stringify(csp.slice(0, 3))}`);
-  // Six windows had no request: the silent component's, and the five opened for the second
-  // signature that the challenge of another day, the date that changed on step 5, card proofs
-  // stopped on step 5, and the challenge turned away as too many people (rate limited, then the
-  // proof log overloaded; #32) stopped (each closed unused). The blocked clicks opened none. A PIN the bridge does not send: its
+  // Five windows had no request: the silent component's, and the four opened for the second
+  // signature that the challenge of another day, card proofs stopped on step 5, and the
+  // challenge turned away as too many people (rate limited, then the proof log overloaded; #32)
+  // stopped (each closed unused). The blocked clicks opened none. A PIN the bridge does not send: its
   // window is closed unused (and may not have loaded).
   check(
-    popups.size === component.requests.length + 6 + unusedWindows && unusedWindows <= 3,
+    popups.size === component.requests.length + 5 + unusedWindows && unusedWindows <= 3,
     `one component window per request (${popups.size} windows, ${component.requests.length} requests, ${unusedWindows} closed unused for a PIN not sent)`,
   );
   check(component.requests.every((r) => r.func !== "MakeSignature" || (r.pin ?? "") !== ""), "no signing request without a PIN");
@@ -3069,7 +2970,7 @@ await tryStep("the production build's step 1: one platform, named", async () => 
     const s1 = await prod.text();
     check(!(await prod.eval<boolean>(`!!document.querySelector('[data-one-proof]')`)) && !s1.includes(C.before.one_proof), "the production build's step 1: no sentence of what the proof lists");
     check(
-      [C.before.title, C.before.duration, C.before.prepare_card, C.before.citizens_only, C.before.why_physical, C.before.how_to_get].every((x) => s1.includes(x)) && !s1.includes("我們只收台灣中華民國國民的自然人憑證正卡"),
+      [C.before.title, C.before.duration, C.before.prepare_card, C.before.citizens_only, C.before.why_physical, C.before.how_to_get].every((x) => s1.includes(x)) && !s1.includes("我們只收本國國民的自然人憑證"),
       "the production build's step 1: the words of card-proof.md",
     );
     await step1Links("the production build's step 1", prod);

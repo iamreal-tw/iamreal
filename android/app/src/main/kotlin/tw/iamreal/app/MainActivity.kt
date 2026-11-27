@@ -179,8 +179,9 @@ class MainActivity : ComponentActivity() {
                     if (model.panel != null) return model.cancelTap()
                     when (model.step) {
                         Step.BEFORE -> finish()
-                        // Step 6 cannot go back: step 5 has submitted. From the last step of a card proof that withdrew everything, neither.
-                        Step.HANG -> finish()
+                        // Step 6 cannot go back past it: step 5 has submitted. The whole step 6 reached from the short one goes back to
+                        // the short one, as its 上一步. From the last step of a card proof that withdrew everything, no way back either.
+                        Step.HANG -> if (model.hangWhole) model.hangShort() else finish()
                         Step.REMIND -> {
                             reminder.notNow()
                             model.backToHang()
@@ -189,8 +190,10 @@ class MainActivity : ComponentActivity() {
                         Step.READ -> model.backToBefore()
                         Step.PIN -> model.backToRead()
                         Step.CONFIRM -> model.backToAccounts()
-                        // No way back but "取消", which drops the PIN.
-                        Step.ACCOUNTS, Step.PROGRESS -> {}
+                        // The whole step 6 shown from step 4's 今天已經過卡 3 次: back to it, as its 上一步. Otherwise no way back
+                        // but "取消" (or 回到開頭 on that screen).
+                        Step.ACCOUNTS -> if (model.hangFromLimit) model.backFromHangFromLimit()
+                        Step.PROGRESS -> {}
                     }
                 }
             },

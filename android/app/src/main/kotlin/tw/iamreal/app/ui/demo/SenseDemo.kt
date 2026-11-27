@@ -58,11 +58,11 @@ internal class SenseDemoPlayer private constructor(val timeline: SenseTimeline) 
  * element that reads [told].
  */
 @Composable
-internal fun SenseDemo(player: SenseDemoPlayer, told: String) {
+internal fun SenseDemo(player: SenseDemoPlayer, told: String, modifier: Modifier = Modifier) {
     LaunchedEffect(player) { player.playOnce() }
     Frames(player)
     Canvas(
-        Modifier
+        modifier
             .fillMaxWidth()
             .aspectRatio(ASPECT)
             .background(Colours.soft, RoundedCornerShape(Type.radiusPanel))

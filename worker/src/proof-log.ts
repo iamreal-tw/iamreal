@@ -26,8 +26,8 @@
 //
 // Whether a record is valid is never decided here: that is the record rules'
 // (protocol/, applyRecord), called with the state this object keeps. What
-// this file decides is the back end's own: the challenge, which roots it
-// takes today, and its policy on switches (docs/api/card-proof.md).
+// this file decides is the back end's own: the challenge and which roots it
+// takes today (docs/api/card-proof.md).
 import { DurableObject } from "cloudflare:workers";
 import { now } from "#target";
 import { encodeBase32 } from "iamreal-protocol/base32.ts";
@@ -36,8 +36,8 @@ import { type CardRow, cardStateFileWriter } from "iamreal-protocol/card-state-f
 import { type Day, formatDay, parseDay, startOfTaiwanDay, taiwanDay } from "iamreal-protocol/date.ts";
 import { EMPTY_FINGERPRINT, type FingerprintLine, LINES_PER_FILE, type RecordFields, type ProofLogRecord, fingerprintLine, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, recordLine, proofLogFileName } from "iamreal-protocol/record.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
-import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, RULES_VERSION, applyRecord, newCard } from "iamreal-protocol/record-rules.ts";
-import { CARD_TABLE, copiedCards, copyCards, dropCardsCopy, readCard, writeCard } from "./card-table.ts";
+import { type CardState, type Kind, RULES_VERSION, applyRecord, newCard } from "iamreal-protocol/record-rules.ts";
+import { CARD_TABLE, copiedCards, copyCards, dropCardsCopy, readCard, recordsOnDate, writeCard } from "./card-table.ts";
 import { type NewestCrls, newestOfEach } from "./crl-index.ts";
 import { ISSUER_NAMES } from "./issuers.ts";
 import type { CardsOfAccount, CardsOfShortId, Counts, LogPart } from "./page-data.ts";
@@ -61,13 +61,6 @@ export const MAX_SUBMISSIONS = 5;
  * announces it to devices.
  */
 export const CRL_MAX_AGE_DAYS = 3;
-
-/**
- * The first switch of a slot that the back end's policy on late switches
- * refuses when it is on: the fourth (settings.ts, `restrictLateSwitches`).
- * The record rules allow five.
- */
-export const RESTRICTED_FROM = 4;
 
 /**
  * The tables. Every statement can run again on an object that has them.
@@ -235,7 +228,7 @@ export const VIEWS_BEHIND = "the object's views are not at its last record";
 export type SubmissionRefusal = "paused" | "challenge_unknown" | "challenge_used" | "challenge_attempts";
 
 /** Why the object does not write a record whose proof verified, in the order of docs/api/card-proof.md. */
-export type RecordRefusal = "paused" | "challenge_unknown" | "challenge_used" | "crl_stale" | "root" | "date_order" | "empty" | "switch_limit" | "daily_limit" | "switch_restricted";
+export type RecordRefusal = "paused" | "challenge_unknown" | "challenge_used" | "crl_stale" | "root" | "date_order" | "empty" | "switch_limit" | "daily_limit";
 
 /** What a record that was written did on one platform (docs/api/card-proof.md, `kinds`). */
 export interface AcceptedKind {
@@ -269,6 +262,8 @@ type AcceptTry = AcceptAnswer | { readonly outcome: "the count moved" };
 export interface CardStateAnswer {
   /** The state of the card as the rules left it, or null if it has no valid record. */
   readonly card: CardState | null;
+  /** The card's valid records dated its `lastCardProof`; 0 without one. */
+  readonly proofsOnLastDate: number;
   /** The number of records the state was computed at. */
   readonly count: number;
 }
@@ -666,8 +661,7 @@ export class ProofLog extends DurableObject<Env> {
    * `fields` are the record's fields except `seq`, each in its format. In
    * the order of docs/api/card-proof.md: the challenge again (a record may
    * have been written for it, or it may have expired, while the proof was
-   * being verified); the back end's rule on `smt_root`; the record rules;
-   * the back end's policy on switches.
+   * being verified); the back end's rule on `smt_root`; the record rules.
    *
    * The record's `seq` is the count of records plus one, and its hash needs
    * the `seq`. Hashing gives way to other requests, so the hash is computed
@@ -752,7 +746,7 @@ export class ProofLog extends DurableObject<Env> {
     if (crlDates.length === 0) return refused("root");
 
     // The record rules, on the state this object keeps.
-    const { card: before, latestValidDate } = this.ruleState(record.scopeString, record.scopedId);
+    const { card: before, proofsOnLastDate, latestValidDate } = this.ruleState(record.scopeString, record.scopedId);
     const outcome = applyRecord({ platforms, record: { accounts: record.accounts, date, verifies: true }, card: before, latestValidDate, challengeUsed: challenge.accepted, crlDates });
     if (!outcome.result.valid) {
       const { reason } = outcome.result;
@@ -762,8 +756,10 @@ export class ProofLog extends DurableObject<Env> {
     }
     const { kinds } = outcome.result;
 
-    // The back end's policy, if it is on: never a record without a switch.
-    if (this.settings.restrictLateSwitches && usesRestrictedSwitch(before, kinds)) return refused("switch_restricted");
+    // The back end's limit of records a card a date (settings.ts, `dailyLimit`). Check 4 made the date no earlier
+    // than the card's last card proof.
+    const onDate = recordsOnDate(before.lastCardProof, proofsOnLastDate, date);
+    if (onDate >= this.settings.dailyLimit) return refused("daily_limit");
 
     // The line as anyone reading the log file will check it (spec/record.md, "Check a line").
     const line = recordLine(record);
@@ -784,7 +780,7 @@ export class ProofLog extends DurableObject<Env> {
     // made in the transaction too: if anything fails, nothing of the record is written.
     const written = this.ctx.storage.transactionSync((): Accepted => {
       sql.exec("INSERT INTO records (seq, line, record_hash, fingerprint) VALUES (?, ?, ?, ?)", record.seq, line, hash, fingerprint);
-      this.keepRuleState(record.scopeString, record.scopedId, outcome.card, record.seq, outcome.latestValidDate);
+      this.keepRuleState(record.scopeString, record.scopedId, outcome.card, onDate + 1, record.seq, outcome.latestValidDate);
       sql.exec("UPDATE proof_log SET count = ?, fingerprint = ? WHERE id = 1", record.seq, fingerprint);
       writeView(sql, view);
       sql.exec("UPDATE challenges SET accepted = 1 WHERE challenge = ?", record.challenge);
@@ -802,23 +798,28 @@ export class ProofLog extends DurableObject<Env> {
    * What the record rules read of this proof log besides the record itself
    * (protocol/, applyRecord): the state of the record's card, the empty
    * state for a card without a valid record, and the latest date among the
-   * valid records.
+   * valid records; and what the back end's daily limit reads, the card's
+   * valid records dated its last card proof.
    *
    * `protected`, like `keepRuleState`, so that the test build runs the
    * record rules on the stored state through the same reading and writing
    * (its `testApplyRuleEvent` calls both). Neither is overridden.
    */
-  protected ruleState(scopeString: string, scopedId: string): { card: CardState; latestValidDate: Day | null } {
+  protected ruleState(scopeString: string, scopedId: string): { card: CardState; proofsOnLastDate: number; latestValidDate: Day | null } {
     const { platforms } = this.settings;
     const { latest_valid_date } = this.ctx.storage.sql.exec<{ latest_valid_date: string | null }>("SELECT latest_valid_date FROM proof_log WHERE id = 1").one();
     const latestValidDate = latest_valid_date === null ? null : parseDay(latest_valid_date);
     if (latest_valid_date !== null && latestValidDate === null) throw new Error("proof log: latest_valid_date is not a date");
-    return { card: readCard(this.ctx.storage.sql, platforms, scopeString, scopedId)?.card ?? newCard(platforms), latestValidDate };
+    const stored = readCard(this.ctx.storage.sql, platforms, scopeString, scopedId);
+    return { card: stored?.card ?? newCard(platforms), proofsOnLastDate: stored?.proofsOnLastDate ?? 0, latestValidDate };
   }
 
-  /** Keeps what the record rules left after a valid record, `seq` being that record's: the state of its card and the latest valid date. */
-  protected keepRuleState(scopeString: string, scopedId: string, card: CardState, seq: number, latestValidDate: Day | null): void {
-    writeCard(this.ctx.storage.sql, scopeString, scopedId, card, seq);
+  /**
+   * Keeps what the record rules left after a valid record, `seq` being that record's: the state of its card, with
+   * its valid records dated its last card proof, and the latest valid date.
+   */
+  protected keepRuleState(scopeString: string, scopedId: string, card: CardState, proofsOnLastDate: number, seq: number, latestValidDate: Day | null): void {
+    writeCard(this.ctx.storage.sql, scopeString, scopedId, card, proofsOnLastDate, seq);
     this.ctx.storage.sql.exec("UPDATE proof_log SET latest_valid_date = ? WHERE id = 1", latestValidDate === null ? null : formatDay(latestValidDate));
   }
 
@@ -901,7 +902,8 @@ export class ProofLog extends DurableObject<Env> {
   cardState(scopeString: string, scopedId: string): CardStateAnswer {
     this.#checkTables();
     const { platforms } = this.settings;
-    return { card: readCard(this.ctx.storage.sql, platforms, scopeString, scopedId)?.card ?? null, count: this.#proofLogRow().count };
+    const stored = readCard(this.ctx.storage.sql, platforms, scopeString, scopedId);
+    return { card: stored?.card ?? null, proofsOnLastDate: stored?.proofsOnLastDate ?? 0, count: this.#proofLogRow().count };
   }
 
   /**
@@ -1506,15 +1508,6 @@ function crlDay(crlDate: string): Day {
   const day = parseDay(crlDate);
   if (day === null) throw new Error("newest_crls: crl_date is not a date");
   return day;
-}
-
-/**
- * Whether a record with these kinds, applied to a card whose state before
- * it is `card`, has a switch that becomes the fourth or a later switch of
- * its slot: what the policy on late switches refuses.
- */
-function usesRestrictedSwitch(card: CardState, kinds: readonly PlatformKind[]): boolean {
-  return kinds.some((k) => k.kind === "switch" && (card.slots.get(k.platform) ?? EMPTY_SLOT).switchCount + 1 >= RESTRICTED_FROM);
 }
 
 /**

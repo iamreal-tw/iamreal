@@ -124,17 +124,17 @@ func sameDay(t *testing.T) []byte {
 	return file
 }
 
-// The fourth valid record of a card on one date is daily_limit, in both
-// outputs.
-func TestDailyLimit(t *testing.T) {
+// The rules do not count a card's records of one date: the fourth is
+// valid, in both outputs. How many the server appends is its own rule.
+func TestNoDailyCount(t *testing.T) {
 	code, out, _ := runWith(t, sameDay(t), allVerify{}, everyRoot{})
-	for _, line := range []string{"  1 valid threads first\n", "  3 valid threads refresh\n", "  4 invalid daily_limit (3 valid records dated 2026-11-16)\n"} {
+	for _, line := range []string{"  1 valid threads first\n", "  3 valid threads refresh\n", "  4 valid threads refresh\n"} {
 		if !strings.Contains(out, line) {
 			t.Errorf("no %q in\n%s", line, out)
 		}
 	}
-	if code != exitInvalid {
-		t.Errorf("exit %d, want %d", code, exitInvalid)
+	if code != exitAllValid {
+		t.Errorf("exit %d, want %d", code, exitAllValid)
 	}
 	_, out, _ = runWith(t, sameDay(t), allVerify{}, everyRoot{}, "-json")
 	var got struct {
@@ -143,15 +143,15 @@ func TestDailyLimit(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Results) != 4 || !reflect.DeepEqual(got.Results[3], jsonResult{Seq: 4, Reason: "daily_limit"}) ||
+	if len(got.Results) != 4 || !reflect.DeepEqual(got.Results[3], jsonResult{Seq: 4, Valid: true, Kinds: []jsonKind{{"threads", "refresh"}}}) ||
 		!reflect.DeepEqual(got.Results[0], jsonResult{Seq: 1, Valid: true, Kinds: []jsonKind{{"threads", "first"}}}) {
 		t.Errorf("%s", out)
 	}
 }
 
-// A change of account on the date of the first is a correction, in both
-// outputs; on a later date it is a switch.
-func TestCorrection(t *testing.T) {
+// A change of account on the date of the first is a switch, in both
+// outputs, as on a later date.
+func TestSameDaySwitch(t *testing.T) {
 	records, _, broken := prooflog.ReadFile(threeRecords(t), verifier.Production)
 	if broken != nil {
 		t.Fatal(broken)
@@ -167,7 +167,7 @@ func TestCorrection(t *testing.T) {
 		file = append(file, r.Line()...)
 	}
 	code, out, _ := runWith(t, file, allVerify{}, everyRoot{})
-	for _, line := range []string{"  1 valid threads first\n", "  2 valid threads correction\n", "  3 valid threads switch\n"} {
+	for _, line := range []string{"  1 valid threads first\n", "  2 valid threads switch\n", "  3 valid threads switch\n"} {
 		if !strings.Contains(out, line) {
 			t.Errorf("no %q in\n%s", line, out)
 		}
@@ -182,7 +182,7 @@ func TestCorrection(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Results) != 3 || !reflect.DeepEqual(got.Results[1], jsonResult{Seq: 2, Valid: true, Kinds: []jsonKind{{"threads", "correction"}}}) {
+	if len(got.Results) != 3 || !reflect.DeepEqual(got.Results[1], jsonResult{Seq: 2, Valid: true, Kinds: []jsonKind{{"threads", "switch"}}}) {
 		t.Errorf("%s", out)
 	}
 }

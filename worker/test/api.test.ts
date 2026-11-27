@@ -122,7 +122,7 @@ describe("every answer under /api/", () => {
   });
 });
 
-const NEVER_USED = { current: null, last_declared: null, switch_count: 0, correction_date: null };
+const NEVER_USED = { current: null, last_declared: null, switch_count: 0 };
 const PRODUCTION_SCOPE = "iamreal:public:0_______________";
 
 describe("POST /api/v1/card-state", () => {
@@ -142,6 +142,7 @@ describe("POST /api/v1/card-state", () => {
     assert.deepEqual(await jsonOf(res), {
       last_card_proof: null,
       proofs_on_last_date: 0,
+      daily_limit: 3,
       platforms: { "test-example": NEVER_USED, threads: NEVER_USED },
       count: 0,
     });
@@ -150,7 +151,7 @@ describe("POST /api/v1/card-state", () => {
   test("the keys are in the order of the API document, and there is no `head`", async () => {
     assert.equal(
       await (await askFor(CARD)).text(),
-      '{"last_card_proof":null,"proofs_on_last_date":0,"platforms":{"test-example":{"current":null,"last_declared":null,"switch_count":0,"correction_date":null},"threads":{"current":null,"last_declared":null,"switch_count":0,"correction_date":null}},"count":0}',
+      '{"last_card_proof":null,"proofs_on_last_date":0,"daily_limit":3,"platforms":{"test-example":{"current":null,"last_declared":null,"switch_count":0},"threads":{"current":null,"last_declared":null,"switch_count":0}},"count":0}',
     );
   });
 
@@ -243,7 +244,7 @@ describe("POST /api/v1/card-state", () => {
 
     assert.equal(
       await (await askFor(CARD)).text(),
-      '{"last_card_proof":"2026-11-19","proofs_on_last_date":2,"platforms":{"test-example":{"current":"a-b","last_declared":"a-b","switch_count":0,"correction_date":"2026-11-19"},"threads":{"current":null,"last_declared":"bob","switch_count":1,"correction_date":"2026-11-19"}},"count":3}',
+      '{"last_card_proof":"2026-11-19","proofs_on_last_date":2,"daily_limit":3,"platforms":{"test-example":{"current":"a-b","last_declared":"a-b","switch_count":0},"threads":{"current":null,"last_declared":"bob","switch_count":1}},"count":3}',
     );
     // Another card is still one without a record.
     assert.deepEqual(((await jsonOf(await askFor(THIRD_CARD))) as { last_card_proof: unknown }).last_card_proof, null);
@@ -257,12 +258,13 @@ describe("POST /api/v1/card-state", () => {
       seq: 4,
       last_card_proof: "2026-03-02",
       proofs_on_last_date: 3,
-      platforms: { threads: { current: "alice", last_declared: "alice", switch_count: 5, correction_date: "2026-03-02" } },
+      platforms: { threads: { current: "alice", last_declared: "alice", switch_count: 5 } },
     });
     assert.deepEqual(await jsonOf(await askFor(OTHER_CARD)), {
       last_card_proof: "2026-03-02",
       proofs_on_last_date: 3,
-      platforms: { "test-example": NEVER_USED, threads: { current: "alice", last_declared: "alice", switch_count: 5, correction_date: "2026-03-02" } },
+      daily_limit: 3,
+      platforms: { "test-example": NEVER_USED, threads: { current: "alice", last_declared: "alice", switch_count: 5 } },
       count: 3,
     });
   });
@@ -274,7 +276,7 @@ describe("POST /api/v1/card-state", () => {
     const before = await (await askFor(CARD)).text();
     assert.equal(
       before,
-      '{"last_card_proof":"2026-11-20","proofs_on_last_date":1,"platforms":{"test-example":{"current":"a-b","last_declared":"a-b","switch_count":0,"correction_date":"2026-11-19"},"threads":{"current":"carol","last_declared":"carol","switch_count":2,"correction_date":"2026-11-20"}},"count":4}',
+      '{"last_card_proof":"2026-11-20","proofs_on_last_date":1,"daily_limit":3,"platforms":{"test-example":{"current":"a-b","last_declared":"a-b","switch_count":0},"threads":{"current":"carol","last_declared":"carol","switch_count":2}},"count":4}',
     );
 
     await worker.proofLog.restart();
@@ -650,18 +652,17 @@ describe("a stored state of a card that the rules cannot have left", () => {
     last_card_proof: "2026-11-19",
     proofs_on_last_date: 2,
     platforms: {
-      "test-example": { current: "a-b", last_declared: "a-b", switch_count: 0, correction_date: "2026-11-04" },
-      threads: { current: "bob", last_declared: "bob", switch_count: 5, correction_date: "2026-11-19" },
+      "test-example": { current: "a-b", last_declared: "a-b", switch_count: 0 },
+      threads: { current: "bob", last_declared: "bob", switch_count: 5 },
     },
   };
-  const threads = (slot: { current?: string | null; last_declared?: string | null; switch_count?: number; correction_date?: string | null }): object => ({ ...GOOD, platforms: { ...GOOD.platforms, threads: { ...GOOD.platforms.threads, ...slot } } });
+  const threads = (slot: { current?: string | null; last_declared?: string | null; switch_count?: number }): object => ({ ...GOOD, platforms: { ...GOOD.platforms, threads: { ...GOOD.platforms.threads, ...slot } } });
   const BROKEN: Record<string, object> = {
     "switch_count 99": threads({ switch_count: 99 }),
     "switch_count 6, one more than the rules give": threads({ switch_count: 6 }),
     "switch_count -1": threads({ switch_count: -1 }),
     "switch_count 1.5": threads({ switch_count: 1.5 }),
     "proofs_on_last_date 0": { ...GOOD, proofs_on_last_date: 0 },
-    "proofs_on_last_date 4, one more than the rules allow": { ...GOOD, proofs_on_last_date: 4 },
     "the seq of the last record is 0": { ...GOOD, seq: 0 },
     "an account not in the format of its platform: uppercase on threads": threads({ current: "Bob", last_declared: "Bob" }),
     "an account in the format of another platform: a-b on threads": threads({ current: "a-b", last_declared: "a-b" }),
@@ -669,9 +670,7 @@ describe("a stored state of a card that the rules cannot have left", () => {
     "a withdrawn account not in the format": threads({ current: null, last_declared: "@bob" }),
     "a slot on a platform outside the table": { ...GOOD, platforms: { ...GOOD.platforms, instagram: GOOD.platforms.threads } },
     "current is not last_declared": threads({ current: "alice" }),
-    "an account without the date it was declared on": threads({ correction_date: null }),
-    "a correction_date after the last card proof": threads({ correction_date: "2026-11-20" }),
-    "switches without an account": threads({ current: null, last_declared: null, correction_date: null, switch_count: 1 }),
+    "switches without an account": threads({ current: null, last_declared: null, switch_count: 1 }),
   };
 
   let worker: TestWorker;
@@ -686,7 +685,14 @@ describe("a stored state of a card that the rules cannot have left", () => {
     await worker.proofLog.writeCard(GOOD);
     const res = await ask(CARD);
     assert.equal(res.status, 200);
-    assert.deepEqual(await jsonOf(res), { last_card_proof: "2026-11-19", proofs_on_last_date: 2, platforms: GOOD.platforms, count: 0 });
+    assert.deepEqual(await jsonOf(res), { last_card_proof: "2026-11-19", proofs_on_last_date: 2, daily_limit: 3, platforms: GOOD.platforms, count: 0 });
+  });
+
+  test("more records of a date than the daily limit is a count the back end can have kept (a limit lowered since): it is answered", async () => {
+    await worker.proofLog.writeCard({ ...GOOD, proofs_on_last_date: 4 });
+    const res = await ask(CARD);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await jsonOf(res), { last_card_proof: "2026-11-19", proofs_on_last_date: 4, daily_limit: 3, platforms: GOOD.platforms, count: 0 });
   });
 
   for (const [name, card] of Object.entries(BROKEN)) {
@@ -780,7 +786,7 @@ describe("the setting that says which proof log the environment serves", () => {
 
       const state = await cardState(worker, PRODUCTION_SCOPE);
       assert.equal(state.status, 200);
-      assert.deepEqual(await jsonOf(state), { last_card_proof: null, proofs_on_last_date: 0, platforms: { threads: NEVER_USED }, count: 0 });
+      assert.deepEqual(await jsonOf(state), { last_card_proof: null, proofs_on_last_date: 0, daily_limit: 3, platforms: { threads: NEVER_USED }, count: 0 });
 
       const other = await cardState(worker, TEST_SCOPE);
       assert.equal(other.status, 400);
@@ -795,7 +801,7 @@ describe("the setting that says which proof log the environment serves", () => {
         seq: 1,
         last_card_proof: "2026-11-19",
         proofs_on_last_date: 1,
-        platforms: { "test-example": { current: "a-b", last_declared: "a-b", switch_count: 0, correction_date: "2026-11-19" } },
+        platforms: { "test-example": { current: "a-b", last_declared: "a-b", switch_count: 0 } },
       });
       assert.equal((await cardState(worker, PRODUCTION_SCOPE)).status, 500);
     } finally {

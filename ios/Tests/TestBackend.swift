@@ -134,9 +134,13 @@ final class CountingBackend: Backend {
 
     func crlIndex() async throws -> Data { try await backend.crlIndex() }
     func crl(sha256: String) async throws -> Data { try await backend.crl(sha256: sha256) }
+    /// Changes the server's answer to `card-state`: for a card's state the test back end cannot make without
+    /// records a test does not want in the proof log (3 records today).
+    var cardStateAnswer: ((Data) throws -> Data)?
     func cardState(_ body: Data) async throws -> Data {
         try request("card-state")
-        return try await backend.cardState(body)
+        let answer = try await backend.cardState(body)
+        return try cardStateAnswer?(answer) ?? answer
     }
     func challenge() async throws -> String {
         try request("challenges")

@@ -238,7 +238,7 @@ reader, a browser or the server said in words is never sent.
 | `username` | web, android, ios | An account typed is not in its platform's format |
 | `blocked_switch_limit` | web, android, ios | The list switches a slot whose switches are used up |
 | `blocked_empty` | web, android, ios | The list is empty, and the card declares no account |
-| `blocked_daily_limit` | web, android, ios | The card has 3 valid records today |
+| `blocked_daily_limit` | web, android, ios | The server writes no more records of the card today (`card-state`, `daily_limit`) |
 | `server_network` | web, android, ios | No answer from the server |
 | `server_malformed_response` | web, android, ios | An answer the device cannot read |
 | `server_paused` | web, android, ios | The server answered `paused` |
@@ -255,7 +255,6 @@ reader, a browser or the server said in words is never sent.
 | `server_empty` | web, android, ios | The server answered `empty` |
 | `server_switch_limit` | web, android, ios | The server answered `switch_limit` |
 | `server_daily_limit` | web, android, ios | The server answered `daily_limit` |
-| `server_switch_restricted` | web, android, ios | The server answered `switch_restricted` |
 | `server_malformed` | web, android, ios | The server answered `malformed` |
 | `server_scope` | web, android, ios | The server answered `scope` |
 | `server_platform` | web, android, ios | The server answered `platform` |

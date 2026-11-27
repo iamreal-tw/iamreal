@@ -64,7 +64,7 @@ describe("the views and the record are one transaction", () => {
       await worker.proofLog.failWritesTo(null);
       await worker.proofLog.restart();
       assert.deepEqual(await worker.proofLog.views(), views);
-      assert.deepEqual((await submit(worker, change)).body.kinds, [{ platform: "threads", kind: "correction", username: "bob", account_cards: 1 }]);
+      assert.deepEqual((await submit(worker, change)).body.kinds, [{ platform: "threads", kind: "switch", username: "bob", account_cards: 1 }]);
       assert.deepEqual((await submit(worker, other)).body.kinds, [{ platform: "threads", kind: "first", username: "carol", account_cards: 1 }]);
       assert.equal((await checkProofLog(worker)).length, 3);
       assert.match((await pageOf(`/p/${CARD_A}`))[1], /<span class="account">@bob<\/span>/);
@@ -268,11 +268,11 @@ describe("the number of cards that declare an account", () => {
     assert.deepEqual(await cards(b, "threads:alice"), [["first", "alice", 2]]);
     assert.deepEqual(await cards(c, "test-example:alice"), [["first", "alice", 1]], "another platform is another count");
     assert.deepEqual(await cards(a, "threads:alice"), [["refresh", "alice", 2]]);
-    assert.deepEqual(await cards(b, "threads:bob"), [["correction", "bob", 1]]);
+    assert.deepEqual(await cards(b, "threads:bob"), [["switch", "bob", 1]]);
     assert.deepEqual(await cards(a), [["withdraw", "alice", 0]]);
-    assert.deepEqual(await cards(b, "threads:alice"), [["correction", "alice", 1]]);
+    assert.deepEqual(await cards(b, "threads:alice"), [["switch", "alice", 1]]);
     assert.deepEqual(await cards(c, "test-example:alice", "threads:bob"), [["refresh", "alice", 1], ["first", "bob", 1]]);
-    // A day later another account is a switch: counted with the card that already declares it.
+    // A day later, another switch: counted with the card that already declares it.
     await day(worker, 1);
     assert.deepEqual(await cards(b, "threads:bob"), [["switch", "bob", 2]]);
     assert.deepEqual(await cards(c, "test-example:alice", "threads:alice"), [["refresh", "alice", 1], ["switch", "alice", 1]], "the account b left has no card but this one");
@@ -301,7 +301,7 @@ describe("the number of cards that declare an account", () => {
 
       await worker.proofLog.mendCard(broken);
       // Mended, the same submission is written: its challenge was not marked.
-      assert.deepEqual((await submit(worker, own)).body.kinds, [{ platform: "threads", kind: "correction", username: "bob", account_cards: 1 }]);
+      assert.deepEqual((await submit(worker, own)).body.kinds, [{ platform: "threads", kind: "switch", username: "bob", account_cards: 1 }]);
       await wantError(worker, own, 400, "challenge_used");
     } finally {
       await worker.proofLog.mendCard(broken).catch(() => undefined);
@@ -413,8 +413,8 @@ describe("every row of the views", () => {
       readonly ordinals: readonly Row[];
     }
     const { cases } = JSON.parse(readFileSync(join(WORKER_DIR, "..", "spec", "vectors", "record-rules.json"), "utf8")) as { cases: Case[] };
-    // Floors from the vectors as they are now (61 cases, 224 valid records): a file read short, or a loop cut short, fails.
-    assert.ok(cases.length >= 61);
+    // Floors from the vectors as they are now (57 cases, 212 valid records): a file read short, or a loop cut short, fails.
+    assert.ok(cases.length >= 57);
     let written = 0;
     for (const c of cases) {
       await freshProofLog(worker, { kind: c.proof_log });
@@ -439,7 +439,7 @@ describe("every row of the views", () => {
       // The ordinals are the vectors' own, in the order of the table's primary key, the ordinal.
       assert.deepEqual(await worker.proofLog.views(), { view_state: [{ id: 1, seq: 0 }], ...want.rows(), view_ordinals: c.ordinals }, c.name);
     }
-    assert.ok(written >= 224, `${written} valid records`);
+    assert.ok(written >= 212, `${written} valid records`);
   });
 });
 

@@ -82,13 +82,14 @@ describe("a proof log without a record", () => {
 
 /** What `card-state` answers for a card, as the row of the card state file it must be (the slots that are not unused). */
 async function rowOf(scopedId: string, lastSeq: number): Promise<unknown> {
-  const state = (await cardState(worker, scopedId)) as { last_card_proof: string; proofs_on_last_date: number; platforms: Record<string, { current: string | null; last_declared: string | null; switch_count: number; correction_date: string | null }> };
+  const state = (await cardState(worker, scopedId)) as { last_card_proof: string; platforms: Record<string, { current: string | null; last_declared: string | null; switch_count: number }> };
   const slots: Record<string, unknown> = {};
   for (const platform of Object.keys(state.platforms).sort()) {
     const slot = state.platforms[platform]!;
-    if (slot.current !== null || slot.last_declared !== null || slot.switch_count !== 0 || slot.correction_date !== null) slots[platform] = slot;
+    if (slot.current !== null || slot.last_declared !== null || slot.switch_count !== 0) slots[platform] = slot;
   }
-  return { scope_string: TEST_SCOPE, scoped_id: scopedId, last_seq: lastSeq, last_card_proof: state.last_card_proof, proofs_on_last_date: state.proofs_on_last_date, slots };
+  // The back end's count of the card's records of a date (`proofs_on_last_date`) is not an item of the rules: the file does not have it.
+  return { scope_string: TEST_SCOPE, scoped_id: scopedId, last_seq: lastSeq, last_card_proof: state.last_card_proof, slots };
 }
 
 /** The rows of a card state file as JSON, after it is checked to be a valid file of the test log. */
@@ -107,7 +108,7 @@ describe("a proof log with records", () => {
     const [a, b, c] = [newCard(), newCard(), newCard()];
     await mustSubmit(worker, await sub(worker, a, root, "threads:alice"), "threads first");
     await mustSubmit(worker, await sub(worker, b, root, "test-example:bob-example", "threads:bob"), "test-example first, threads first");
-    await mustSubmit(worker, await sub(worker, a, root, "threads:carol"), "threads correction");
+    await mustSubmit(worker, await sub(worker, a, root, "threads:carol"), "threads switch");
     const day1 = await worker.proofLog.stored();
     assert.deepEqual([...(await directory()).keys()], [], "nothing is published before the date changes");
 

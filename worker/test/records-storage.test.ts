@@ -97,7 +97,7 @@ describe("records submitted at once", () => {
 describe("an object that is stopped between every two writes", () => {
   /** Fixed cards and fixed challenges, so that two runs write the same records. */
   const CARDS = ["QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880", "00001W4KYQGM74BGQ5WMHT1K51ENH0C1PS2N1E19M0RY2WJECGR0", "0400000000000000000000000000000000000000000000000000"];
-  /** Each step: the day, the card, its list. Among them every kind, a correction, a sixth switch, an empty list and a fourth record of a date. */
+  /** Each step: the day, the card, its list. Among them every kind, a switch on the day of the first, a sixth switch, an empty list and a fourth record of a date. */
   const STEPS: [number, number, string[]][] = [
     [0, 0, ["threads:a"]],
     [0, 0, ["threads:b"]],
@@ -189,7 +189,7 @@ describe("a write that fails in the middle", () => {
       assert.equal(answer.body.seq, 2);
       assert.deepEqual(answer.body.kinds, [
         { platform: "test-example", kind: "first", username: "a-b", account_cards: 1 },
-        { platform: "threads", kind: "correction", username: "bob", account_cards: 1 },
+        { platform: "threads", kind: "switch", username: "bob", account_cards: 1 },
       ]);
       await wantError(worker, s, 400, "challenge_used");
     });
@@ -225,7 +225,7 @@ describe("a stored state computed by another version of the record rules", () =>
     await worker.proofLog.setStoredRulesVersion("the build's");
     await worker.proofLog.restart();
     // The refused submissions were not counted, and the challenge is still the one issued before.
-    await mustSubmit(worker, s, "threads correction");
+    await mustSubmit(worker, s, "threads switch");
     assert.equal(await count(), 2);
   });
 });
@@ -236,7 +236,7 @@ describe("spec/vectors/record-rules.json on the object's stored state", () => {
     readonly proof_log: "production" | "test";
     readonly events: (RuleEvent & { date: string })[];
     readonly results: { seq: number; valid: boolean; reason?: string; kinds?: unknown }[];
-    readonly state: { scope_string: string; cards: { scoped_id: string; last_card_proof: string; proofs_on_last_date: number; slots: Record<string, unknown> }[] }[];
+    readonly state: { scope_string: string; cards: { scoped_id: string; last_card_proof: string; slots: Record<string, unknown> }[] }[];
   }
   const { cases } = JSON.parse(readFileSync(join(WORKER_DIR, "..", "spec", "vectors", "record-rules.json"), "utf8")) as { cases: Case[] };
   /** A card's state from memory, in the spelling of `card-state`'s answer without `count`. */
@@ -244,36 +244,44 @@ describe("spec/vectors/record-rules.json on the object's stored state", () => {
     const { slots, ...items } = cardJsonOf(card);
     return { ...items, platforms: slots };
   };
-  const stored = async (scope: string, card: string): Promise<Record<string, unknown>> => {
-    const { count: _, ...state } = await cardState(worker, card, scope);
+  /** The stored state as `card-state` answers it, without `count` and without the back end's own count and limit of records a date, which `onDate` checks. */
+  const stored = async (scope: string, card: string, onDate?: number): Promise<Record<string, unknown>> => {
+    const { count: _, proofs_on_last_date, daily_limit, ...state } = await cardState(worker, card, scope);
+    assert.equal(daily_limit, 3);
+    if (onDate !== undefined) assert.equal(proofs_on_last_date, onDate, "the back end's count of the card's records dated its last card proof");
     return state;
   };
 
   test("every case: each record's result is the vectors', and after each record the card's stored state is the one in memory; the object is stopped between every two records", async () => {
-    assert.ok(cases.length >= 61);
+    assert.ok(cases.length >= 57);
     let events = 0;
     for (const c of cases) {
       await freshProofLog(worker, { kind: c.proof_log });
       const memory = new MemoryRules(platformsOf(c.proof_log));
+      /** Each card's valid records dated its last card proof, counted here from the vectors' results. */
+      const onLastDate = new Map<string, { date: string; n: number }>();
       for (const [i, e] of c.events.entries()) {
         const what = `${c.name}, event ${e.seq}`;
         const { seq, ...want } = c.results[i]!;
+        const key = `${e.scope_string} ${e.scoped_id}`;
+        const was = onLastDate.get(key);
+        if (want.valid) onLastDate.set(key, { date: e.date, n: was?.date === e.date ? was.n + 1 : 1 });
         assert.equal(seq, e.seq, what);
         const inMemory = memory.apply({ scopeString: e.scope_string, scopedId: e.scoped_id, challenge: e.challenge, accounts: e.accounts, verifies: e.verifies, crlDates: e.crl_dates.map((d) => parseDay(d)!) });
         const { valid, reason, kinds } = await worker.proofLog.applyRuleEvent(e);
         assert.deepEqual(valid ? { valid, kinds } : { valid, reason }, want, what);
         assert.deepEqual(valid ? { valid, kinds } : { valid, reason }, inMemory.result.valid ? inMemory.result : { valid: false, reason: inMemory.result.reason }, what);
         await worker.proofLog.restart();
-        assert.deepEqual(await stored(e.scope_string, e.scoped_id), answerOf(memory.card(e.scope_string, e.scoped_id)), what);
+        assert.deepEqual(await stored(e.scope_string, e.scoped_id, onLastDate.get(key)?.n ?? 0), answerOf(memory.card(e.scope_string, e.scoped_id)), what);
         events++;
       }
       // The state at the end is the one the vectors give.
       for (const scope of c.state) {
         for (const card of scope.cards) {
-          assert.deepEqual(await stored(scope.scope_string, card.scoped_id), { last_card_proof: card.last_card_proof, proofs_on_last_date: card.proofs_on_last_date, platforms: card.slots }, `${c.name}, card ${card.scoped_id}`);
+          assert.deepEqual(await stored(scope.scope_string, card.scoped_id), { last_card_proof: card.last_card_proof, platforms: card.slots }, `${c.name}, card ${card.scoped_id}`);
         }
       }
     }
-    assert.ok(events >= 287);
+    assert.ok(events >= 262);
   });
 });
