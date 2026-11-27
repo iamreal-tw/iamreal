@@ -884,8 +884,8 @@ const RECORD_SENSE = process.env.IAMREAL_RECORD_SENSE;
 const RECORD = process.env.IAMREAL_RECORD;
 
 /**
- * The demonstration of step 6 (design/copy/card-proof.md, "示範"): to a screen reader one element with its one sentence; under it one
- * button, 停止播放 while it plays and 再看一次 otherwise. It plays by itself once it is on the screen; 停止播放 goes straight to its last frame.
+ * The demonstration of step 6 (design/copy/card-proof.md, "示範"): to a screen reader one element with its one sentence; in its corner
+ * small words, 停止播放 while it plays and 再看一次 otherwise. It plays by itself once it is on the screen; 停止播放 goes straight to its last frame.
  * Leaves it stopped, at its last frame. `record`: with IAMREAL_RECORD set, it is played once more from its start and recorded.
  */
 async function demonstration(record: boolean): Promise<void> {

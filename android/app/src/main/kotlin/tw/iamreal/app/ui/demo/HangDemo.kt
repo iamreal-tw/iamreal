@@ -184,7 +184,7 @@ internal class HangDemoPlayer(val timeline: HangTimeline) : DemoPlayer(timeline.
 internal class Pose(val scale: Float, val x: Float, val y: Float)
 
 /**
- * The picture of the demonstration; its control is the screen's (`ui.Demo`). To a screen reader the picture is one element
+ * The picture of the demonstration; its control is the screen's (`ui.DemoFrame`). To a screen reader the picture is one element
  * that reads [told]; what is drawn in it is not read.
  */
 @Composable
