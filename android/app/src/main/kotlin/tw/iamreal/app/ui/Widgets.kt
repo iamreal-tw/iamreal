@@ -65,7 +65,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -84,6 +83,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import tw.iamreal.app.ui.demo.DemoPlayer
 
 // What the screens are drawn with, after design/DESIGN.md and
 // design/screens/card-proof-app-*: the values are Theme.kt's, which are
@@ -179,22 +179,25 @@ internal fun Link(text: String, modifier: Modifier = Modifier, size: TextUnit = 
 )
 
 /**
- * Two buttons side by side, each half the width, where neither has to grow taller for its words; one under the other, each
- * as wide as the screen, where one would (a long account, the system's font made large). One button alone is as wide as the screen.
+ * Two buttons side by side, each half the width, where both of their words fit on one line so; one under the other, each as
+ * wide as the screen, where one's would not (a long account, the system's font made large), and where there are more than
+ * two. One button alone is as wide as the screen. `firstOnRight`: side by side, the first is on the right (a step's way on,
+ * [Actions]); otherwise on the left (step 6's 複製證明連結, as the first screen of its demonstration draws it).
  */
 @Composable
-internal fun SideBySide(modifier: Modifier = Modifier, content: @Composable () -> Unit) = Layout(content, modifier) { measurables, constraints ->
+internal fun SideBySide(modifier: Modifier = Modifier, firstOnRight: Boolean = false, content: @Composable () -> Unit) = Layout(content, modifier) { measurables, constraints ->
     val gap = 12.dp.roundToPx()
     val width = constraints.maxWidth
     val half = (width - gap) / 2
     val tall = Type.buttonHeight.roundToPx()
-    val beside = measurables.size == 2 && measurables.all { it.minIntrinsicHeight(half) <= tall }
-    val each = if (beside) half else width
-    val placed = measurables.map { it.measure(Constraints.fixedWidth(each)) }
+    // Its words on one line: as wide as a button needs to be when nothing makes it wrap.
+    val beside = measurables.size == 2 && measurables.all { it.maxIntrinsicWidth(tall) <= half }
+    val placed = measurables.map { it.measure(Constraints.fixedWidth(if (beside) half else width)) }
     if (beside) {
+        val (left, right) = if (firstOnRight) placed[1] to placed[0] else placed[0] to placed[1]
         layout(width, placed.maxOf { it.height }) {
-            placed[0].place(0, 0)
-            placed[1].place(half + gap, 0)
+            left.place(0, 0)
+            right.place(half + gap, 0)
         }
     } else {
         layout(width, placed.sumOf { it.height } + gap * (placed.size - 1).coerceAtLeast(0)) {
@@ -213,8 +216,9 @@ internal fun SideBySide(modifier: Modifier = Modifier, content: @Composable () -
  * is the one that stands out. A screen reader presses the words: the picture reads as its one sentence and nothing else.
  */
 @Composable
-internal fun Demo(playing: Boolean, copy: Copy, tag: String, enabled: Boolean = true, toggle: () -> Unit, picture: @Composable (Modifier) -> Unit) =
+internal fun DemoFrame(player: DemoPlayer, copy: Copy, tag: String, enabled: Boolean = true, picture: @Composable (Modifier) -> Unit) =
     Box(Modifier.fillMaxWidth()) {
+        val toggle = { if (player.playing) player.stop() else player.play() }
         val onTap by rememberUpdatedState(toggle)
         picture(Modifier.pointerInput(enabled) { if (enabled) detectTapGestures { onTap() } })
         Box(
@@ -229,42 +233,18 @@ internal fun Demo(playing: Boolean, copy: Copy, tag: String, enabled: Boolean = 
             contentAlignment = Alignment.Center,
         ) {
             BasicText(
-                if (playing) copy.say("app_demo.stop") else copy.say("app_demo.replay"),
+                if (player.playing) copy.say("app_demo.stop") else copy.say("app_demo.replay"),
                 style = TextStyle(color = Colours.ink, fontSize = 15.sp, textDecoration = TextDecoration.Underline),
             )
         }
     }
 
 /**
- * The buttons of a step (design/DESIGN.md, "元件", 按鈕). Written the primary one first. Two of them side by side, each half the
- * width: the first on the right, the other (上一步, or what is not the step's way on) on the left. One under the other, as wide
- * as the screen and the first on top, where either one's words would not fit on one line in half the width (the system's
- * font made large), and where there are three. One alone is as wide as the screen.
+ * The buttons of a step (design/DESIGN.md, "元件", 按鈕), written the way on first: side by side, it is on the right and the
+ * other (上一步, or what is not the step's way on) on the left; one under the other, it is on top ([SideBySide]).
  */
 @Composable
-internal fun Actions(content: @Composable () -> Unit) = Layout(content, Modifier.fillMaxWidth().padding(top = 20.dp)) { measurables, constraints ->
-    val gap = 12.dp.roundToPx()
-    val width = constraints.maxWidth
-    val half = (width - gap) / 2
-    val tall = Type.buttonHeight.roundToPx()
-    // Its words on one line: as wide as a button needs to be when nothing makes it wrap.
-    val beside = measurables.size == 2 && measurables.all { it.maxIntrinsicWidth(tall) <= half }
-    val placed = measurables.map { it.measure(Constraints.fixedWidth(if (beside) half else width)) }
-    if (beside) {
-        layout(width, placed.maxOf { it.height }) {
-            placed[1].place(0, 0)
-            placed[0].place(half + gap, 0)
-        }
-    } else {
-        layout(width, placed.sumOf { it.height } + gap * (placed.size - 1).coerceAtLeast(0)) {
-            var y = 0
-            for (p in placed) {
-                p.place(0, y)
-                y += p.height + gap
-            }
-        }
-    }
-}
+internal fun Actions(content: @Composable () -> Unit) = SideBySide(Modifier.fillMaxWidth().padding(top = 20.dp), firstOnRight = true, content = content)
 
 /** One of the points under a screen's main part: a dot in ink before it. `strong`: the words of it in bold ink (not red: design/DESIGN.md keeps red for what you do). */
 @Composable

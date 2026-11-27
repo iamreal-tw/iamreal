@@ -225,7 +225,7 @@ private fun Read(m: Model, outside: Outside) {
         Body(c.say("app_read.how_android"))
         m.senseDemo?.let { demo ->
             // Not while the card is being read: the demonstration rests then.
-            Demo(demo.playing, c, "sense-demo-button", enabled = !m.readBusy, toggle = { if (demo.playing) demo.stop() else demo.play() }) {
+            DemoFrame(demo, c, "sense-demo-button", enabled = !m.readBusy) {
                 SenseDemo(demo, c.say("app_demo.sense_android"), it)
             }
         }
@@ -604,7 +604,8 @@ private fun Recorded(c: Copy, d: CardProof.Done, view: Messages.DoneView) {
 
 /**
  * Step 6: hang the link on the profile, and nothing else (design/copy/card-proof.md, "6. 掛上去", app). Someone back for a card proof
- * again is asked only whether the link is still there, until "重新掛上連結". No way back: step 5 has submitted.
+ * again is asked only whether the link is still there, until "重新掛上連結", and the whole step then has 上一步 back to the short
+ * one. No way back to step 5: it has submitted.
  */
 @Composable
 private fun Hang(m: Model, outside: Outside) {
@@ -676,7 +677,7 @@ private fun HangWhole(m: Model, outside: Outside, title: String, why: String, pr
     if (demo != null && profile != null) {
         Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val words = HangDemoWords(title, account ?: "", link, url, profile.label)
-            Demo(demo.playing, c, "hang-demo-button", toggle = { if (demo.playing) demo.stop() else demo.play() }) { HangDemo(demo, c, words, c.say("app_demo.hang"), it) }
+            DemoFrame(demo, c, "hang-demo-button") { HangDemo(demo, c, words, c.say("app_demo.hang"), it) }
         }
     }
     val shown = demo?.step ?: 0
