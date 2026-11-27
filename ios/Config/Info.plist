@@ -10,6 +10,8 @@
 		<string>A000000283FF088692535389C00014</string>
 		<string>A0000001510000</string>
 	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>nfc</string>

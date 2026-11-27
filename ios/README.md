@@ -404,7 +404,7 @@ gh workflow run upload-ios-test.yml --repo iamreal-tw/iamreal --ref main   # 測
 
 - **第一次觸發之前**：在 environment `app-test` 加 variable `APPLE_TEAM_ID`（團隊代號，2026-11-27 加了），和上面「簽章用的 secret」那張表的 secret（測試 app 的描述檔要等它的 App ID 註冊，#485）。
 
-- **出口管制的加密問題。** `Info.plist` 沒有寫 `ITSAppUsesNonExemptEncryption`，每個 build 在 App Store Connect 會先停在「Missing Compliance」，營運者回答過才會到測試者手上。app 和卡片之間的安全通道有加密，回答前先查 Apple 的說明（「[規格：手機 app 第一份](https://github.com/iamreal-tw/iamreal/issues/155)」）；答案定了可以寫進 `Info.plist`，之後的 build 就不用每次回答。
+- **出口管制的加密問題：已經寫在 `Config/Info.plist`，不用每個 build 回答。** App Store Connect 問「App 會使用哪種加密演算法？」，營運者 2026-11-27 對 build 3 選「未使用上方提及的任一種演算法」：app 拿來保密的加密只有連伺服器的 HTTPS（`URLSession`）和卡片安全通道的 AES-128、AES-CMAC（`App/CardChannel.swift` 經由系統的 CommonCrypto），都是系統的加密；`device-core/` 只做雜湊、驗簽章和零知識證明。所以 `ITSAppUsesNonExemptEncryption` 是 `NO`：「Set the value for this key to NO in your app's Info.plist file to indicate that your app—including any third-party libraries you link against—either uses no encryption or only uses encryption that's exempt from export compliance requirements」（[ITSAppUsesNonExemptEncryption](https://developer.apple.com/documentation/bundleresources/information-property-list/itsappusesnonexemptencryption)）。app 改用別的加密時，回頭重看這一項。
 - **對外測試的群組**：第一個 build 上傳之後才能建，關掉截圖回饋（#161）。
 
 ## 工具和版本

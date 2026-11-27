@@ -129,6 +129,12 @@ final class BuildTests: XCTestCase {
         XCTAssertTrue((Bundle.main.object(forInfoDictionaryKey: "UIRequiredDeviceCapabilities") as? [String] ?? []).contains("nfc"))
     }
 
+    /// The answer to App Store Connect's export compliance question, given
+    /// once in Info.plist so that no build waits on it (README.md, "上傳之後營運者做的").
+    func testTheAppSaysItUsesOnlyExemptEncryption() {
+        XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "ITSAppUsesNonExemptEncryption") as? Bool, false)
+    }
+
     /// The hashes of the CRS are the ones the page's download checks.
     func testTheCRSHashesAreTheOnesOfThePage() throws {
         let page = try Repository.text("web/scripts/fetch-crs.mjs")
