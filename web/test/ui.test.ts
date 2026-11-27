@@ -109,8 +109,6 @@ describe("stops", () => {
     [{ code: "server", server: "root", status: 400 }, "這次過卡沒有被接受（代碼 root），證明紀錄沒有變動。", 4],
     [{ code: "server", server: "challenge_used", status: 400 }, "這次過卡沒有被接受（代碼 challenge_used），證明紀錄沒有變動。", 4],
     [{ code: "server", server: "platform", status: 400 }, "這次過卡沒有被接受（代碼 platform），證明紀錄沒有變動。", 4],
-    // The server's operating policy refused a switch the rules allow (none by default): its own sentence.
-    [{ code: "server", server: "switch_restricted", status: 403 }, "這個平台目前不接受更多次更換。", 4],
     [{ code: "server", server: "crl_stale", status: 503 }, "內政部的廢止清冊超過 3 天沒有更新，現在不能過卡。", 4],
     // The operator stopped taking card proofs, or the server stopped by itself (docs/api/card-proof.md, paused).
     [{ code: "server", server: "paused", status: 503 }, COPY.stops.paused, 4],
@@ -161,7 +159,7 @@ describe("stops", () => {
   });
 
   test("every server error carries its request ID", () => {
-    for (const server of ["paused", "root", "challenge_unknown", "challenge_used", "crl_stale", "daily_limit", "switch_limit", "empty", "switch_restricted", "malformed_response", "not_found"]) {
+    for (const server of ["paused", "root", "challenge_unknown", "challenge_used", "crl_stale", "daily_limit", "switch_limit", "empty", "malformed_response", "not_found"]) {
       assert.equal(stopMessage({ code: "server", server, status: 400, requestId: "ab" }).requestId, "ab", server);
     }
   });

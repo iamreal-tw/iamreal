@@ -46,8 +46,6 @@ export interface RuleStateAnswer {
 export interface TestSettings {
   readonly PROOF_LOG_KIND?: string;
   readonly PROOF_LOG_OBJECT_NAME?: string;
-  /** The back end's policy on late switches (src/settings.ts): "true" turns it on. wrangler.jsonc does not set it. */
-  readonly RESTRICT_LATE_SWITCHES?: string;
   /** The operator stopped taking card proofs (src/settings.ts): "true" stops it. wrangler.jsonc sets "false". */
   readonly CARD_PROOFS_PAUSED?: string;
   /** The name of a rebuild from the proof log the operator asks for (src/settings.ts). wrangler.jsonc sets "". */

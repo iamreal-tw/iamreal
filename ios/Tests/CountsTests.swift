@@ -124,7 +124,7 @@ final class CountsTests: XCTestCase {
         var stops: [CardProofFlow.Stop] = failures.map { .card($0) }
         stops += ["no_certificate", "expired", "not_yet_valid", "not_citizen_primary", "unsupported_format", "unknown_issuer", "ambiguous_certificate"].map { .certificate(problem: $0, date: "270101000000") }
         stops += ["crl_unavailable", "crl_hash", "crl_unusable", "crl_rollback", "crl_stale", "revoked"].map { .revocation(problem: $0, days: 9) }
-        stops += ["network", "malformed_response", "paused", "busy", "rate_limited", "internal", "crl_stale", "challenge_unknown", "challenge_used", "challenge_attempts", "proof", "root", "date_order", "empty", "switch_limit", "daily_limit", "switch_restricted", "malformed", "scope", "platform", "challenge_malformed"].map { .server(BackendFailure(code: $0, requestID: "0123456789abcdef")) }
+        stops += ["network", "malformed_response", "paused", "busy", "rate_limited", "internal", "crl_stale", "challenge_unknown", "challenge_used", "challenge_attempts", "proof", "root", "date_order", "empty", "switch_limit", "daily_limit", "malformed", "scope", "platform", "challenge_malformed"].map { .server(BackendFailure(code: $0, requestID: "0123456789abcdef")) }
         stops += [.cardSignature, .artifact, .core(IDC_ERR_INTERNAL), .core(IDC_ERR_ARGUMENT), .username(platform: "threads"), .blocked(reason: "empty", platform: nil), .blocked(reason: "switch_limit", platform: "threads"), .blocked(reason: "daily_limit", platform: nil), .challengeNotToday, .dateChanged, .state]
         for stop in stops {
             guard let reason = Counts.reason(of: stop) else {

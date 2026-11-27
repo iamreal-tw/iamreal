@@ -17,6 +17,11 @@ class AppNameTest {
     }
 
     @Test
+    fun `the name under the icon of the test app is the one design copy gives it`() {
+        assertEquals(written("測試 app"), nameIn("iamreal.strings.test"))
+    }
+
+    @Test
     fun `the name under the icon of the development build is the one design copy gives it`() {
         assertEquals(written("開發用 build"), nameIn("iamreal.strings.dev"))
     }

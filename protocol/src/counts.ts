@@ -126,7 +126,6 @@ export const REASONS = {
   server_empty: ALL,
   server_switch_limit: ALL,
   server_daily_limit: ALL,
-  server_switch_restricted: ALL,
   server_malformed: ALL,
   server_scope: ALL,
   server_platform: ALL,
