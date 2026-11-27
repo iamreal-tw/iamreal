@@ -15,7 +15,10 @@
     { "tag": "v2", "deleted_classes": ["Roster"], "new_sqlite_classes": ["ProofLog"] },
     // v3 makes the class of the object that takes the counts (src/counts.ts). It keeps the counts
     // in memory and stores nothing but its alarm.
-    { "tag": "v3", "new_sqlite_classes": ["Counts"] }
+    { "tag": "v3", "new_sqlite_classes": ["Counts"] },
+    // v4 makes the class of the object that keeps the site-wide limit (src/starts.ts). It keeps its count
+    // in memory and stores nothing.
+    { "tag": "v4", "new_sqlite_classes": ["Starts"] }
   ],
   // The CPU time one invocation may use, in every environment: 300,000 ms, the most that can
   // be set. Without it the hourly schedule was stopped after about 30 seconds, less than the
@@ -59,11 +62,14 @@
       // The CRL mirror, every hour.
       "triggers": { "crons": ["0 * * * *"] },
       // PROOF_LOG: the proof log's object. COUNTS: the object that takes the counts (ADR-0032), which
-      // is another one, so that counts never wait on the proof log or it on them.
+      // is another one, so that counts never wait on the proof log or it on them. STARTS: the object that
+      // keeps the site-wide limit (ADR-0026; src/starts.ts), another again, so that neither of the others
+      // being overloaded stops card proofs from starting through it.
       "durable_objects": {
         "bindings": [
           { "name": "PROOF_LOG", "class_name": "ProofLog" },
-          { "name": "COUNTS", "class_name": "Counts" }
+          { "name": "COUNTS", "class_name": "Counts" },
+          { "name": "STARTS", "class_name": "Starts" }
         ]
       },
       // The public files, downloaded from test-data.iamreal.tw (ADR-0027).
@@ -79,7 +85,9 @@
         { "binding": "CONNECTION_LOG", "bucket_name": "iamreal-test-logs" }
       ],
       // The per-IP limits (ADR-0026; src/rate-limit.ts): one binding to a class of request, each
-      // counted by itself, IPv4 by address and IPv6 by /64. "limit" is how many requests one
+      // counted by itself, IPv4 by address and IPv6 by /64. On Cloudflare a binding keeps its count on
+      // each machine: these stop a network that sends many requests over one connection, not one that
+      // opens a connection for each (README.md, "限流"). "limit" is how many requests one
       // network may send in "period" seconds (10 or 60; the code tells a refused request to come
       // back in 60). The numbers are the operator's to tune (README.md, "限流"). A namespace_id is
       // an integer of the account's own choosing, one to a counter: never the same for two bindings
@@ -90,11 +98,7 @@
         { "name": "RATE_RECORDS", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } },
         { "name": "RATE_PUBLIC_READS", "namespace_id": "1004", "simple": { "limit": 180, "period": 60 } },
         { "name": "RATE_PAGES", "namespace_id": "1005", "simple": { "limit": 300, "period": 60 } },
-        { "name": "RATE_COUNTS", "namespace_id": "1006", "simple": { "limit": 120, "period": 60 } },
-        // The site-wide limit (ADR-0026; src/rate-limit.ts, withinStarts): card proofs that may start in a
-        // minute, all networks together, counted on `GET /api/v1/config?start` only. A starting value for
-        // the operator to set (README.md, "限流").
-        { "name": "RATE_STARTS", "namespace_id": "1007", "simple": { "limit": 60, "period": 60 } }
+        { "name": "RATE_COUNTS", "namespace_id": "1006", "simple": { "limit": 120, "period": 60 } }
       ],
       "vars": {
         // The name of the proof log's Durable Object: clearing the test log is giving it a new name.
@@ -122,7 +126,11 @@
         "TEST_PROOF_LOG_CLEARED_ON": "2026-11-23",
         // How many counts one minute's file holds at most (ADR-0032; src/counts.ts): plain digits, 0 to
         // 100000. More than that in a minute are not kept; the file says how many there were.
-        "COUNT_EVENTS_PER_MINUTE": "600"
+        "COUNT_EVENTS_PER_MINUTE": "600",
+        // The site-wide limit (ADR-0026; src/rate-limit.ts, withinStarts): how many card proofs may start in a
+        // minute, all networks together, counted on `GET /api/v1/config?start` only, by the object STARTS.
+        // Plain digits, 0 to 100000. A starting value for the operator to set (README.md, "全站的總量上限").
+        "CARD_PROOF_STARTS_PER_MINUTE": "60"
       }
     }
   }

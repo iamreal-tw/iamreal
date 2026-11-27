@@ -903,9 +903,10 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 | `name` | `iamreal-test` | Worker 的名稱。部署的權杖只能部署這一個 |
 | `workers_dev`、`preview_urls` | `false` | 不開 `workers.dev` 的網址，只走自訂網域 `test.iamreal.tw`。自訂網域在儀表板上設，不在這裡（ADR-0029） |
 | `triggers.crons` | `0 * * * *` | 每小時整點跑一次排程 |
-| `durable_objects` | `PROOF_LOG` → 類別 `ProofLog`；`COUNTS` → 類別 `Counts` | 一份證明紀錄一個 Durable Object；收計數的是另一個（[計數](#計數)），最上層的 migration `v3` 建它的類別 |
+| `durable_objects` | `PROOF_LOG` → 類別 `ProofLog`；`COUNTS` → 類別 `Counts`；`STARTS` → 類別 `Starts` | 一份證明紀錄一個 Durable Object；收計數的是另一個（[計數](#計數)），最上層的 migration `v3` 建它的類別；數開始過卡的又是另一個（[全站的總量上限](#全站的總量上限)），migration `v4` 建它的類別 |
 | `ratelimits` | `RATE_CHALLENGES` 等六個 | 照 IP 的上限，一類一個（[限流](#限流)） |
 | `vars.COUNT_EVENTS_PER_MINUTE` | `600` | 一分鐘的計數明細最多留幾筆（[計數](#計數)）。0 到 100000 的整數；不是的話收計數的介面回 `500` |
+| `vars.CARD_PROOF_STARTS_PER_MINUTE` | `60` | 全站每分鐘最多幾次開始過卡（[全站的總量上限](#全站的總量上限)）。0 到 100000 的整數；不是的話不擋，即時的輸出寫一行 |
 | `r2_buckets` | `DATA` → `iamreal-test-data` | 公開的檔案，經 `test-data.iamreal.tw` 下載（ADR-0027） |
 | `vars.PROOF_LOG_OBJECT_NAME` | `test-3` | 證明紀錄那個 Durable Object 的名稱。清空測試的證明紀錄時換成下一個號碼，用過的名稱不再用（[清空測試的證明紀錄](#清空測試的證明紀錄)）；維持 `test-` 開頭（[證明紀錄和物件的名稱要對得上](#證明紀錄和物件的名稱要對得上)） |
 | `vars.PROOF_LOG_KIND` | `test` | 這個環境用哪一份證明紀錄，`test` 或 `production`。它決定接受哪個場合字串、平台表是哪一張（ADR-0028）；兩者的內容寫在 `protocol/`，不在設定裡。不是這兩個值、或和 `PROOF_LOG_OBJECT_NAME` 對不上時，五個介面和 Worker 產生的每個頁面都回 `500`（Static Assets 的檔案不跑 Worker，照常送） |
@@ -1319,7 +1320,10 @@ ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限
 | 公開的讀取 | `RATE_PUBLIC_READS` | `GET /api/v1/config`、`fingerprint`、`rebuild`，三個合起來 | 180 |
 | 計數 | `RATE_COUNTS` | `POST /api/v1/counts`（[計數](#計數)） | 120 |
 | 頁面 | `RATE_PAGES` | 每一個跑到 Worker 的頁面請求（`GET`、`HEAD`），找不到的網址也算 | 300 |
-| 全站的總量上限（不照 IP） | `RATE_STARTS` | 只有 `GET /api/v1/config?start`，所有網路合起來 | 60 |
+
+全站的總量上限不照 IP，也不是綁定，見[下面](#全站的總量上限)。
+
+- **擋得住的是在同一條連線上連發的來源**：綁定的計數在 Cloudflare 的每台機器各一份（下面「這個綁定的性質」）。每次開新連線的來源，請求散到很多台機器，每一台都沒到上限，這一層擋不住，要靠第二層的 WAF 規則（[營運者的說明](#營運者的說明)）。
 
 - **一類被擋不影響另一類**：看了很多頁面的網路，過卡的三個介面照樣回答。
 - **不算的**：Static Assets 直接送的檔（過卡的頁面 `/proof`、樣式、字型，不跑 Worker）；方法不對的請求（`405`）；`/api/` 底下不是介面的路徑（`404`）。這幾種都不問 Durable Object。
@@ -1344,9 +1348,9 @@ ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限
 **這個綁定的性質**（[文件](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)，2026-11-26 讀的）：
 
 - 期間只能是 10 或 60 秒（「Must be either 10 or 60」）
-- 「Rate limits are approximate and apply separately in each Cloudflare location.」每個機房各算各的，是近似值：擋得住單一來源的大量請求，不是精確的配額
+- 「Rate limits are approximate and apply separately in each Cloudflare location.」文件說每個機房各算各的，是近似值。**實際量到的是每台機器各一份**（2026-11-27，[#466](https://github.com/iamreal-tw/iamreal/issues/466)，測試網站，連線都進 SJC）：同一條連線連送 50 次 `POST /api/v1/challenges`，29 次 `200`、21 次 `429`；每次開新連線平行送 100 次，3 秒內全部 `200`；緊接著再用新連線送 40 次，只有 4 次 `429`，是落到剛才那台機器的。文件寫的「Cloudflare updates shared counts in the background within the same Cloudflare location」在一分鐘內看不出效果
 - 文件寫「It is not recommended to use IP addresses or locations (regions or countries)」當鍵，理由是很多人可能共用一個 IP。這裡照 ADR-0026 用 IP：上限訂成共用 IP 的家庭或辦公室也用不完的量，擋的是單一來源的大量請求；之後查詢介面發金鑰時，帶金鑰的請求改用金鑰當鍵
-- `namespace_id` 是帳號裡自己取的正整數，「unique within your Cloudflare account」：兩個綁定用同一個就會算在一起。測試環境用 1001 到 1007；正式環境要另外七個
+- `namespace_id` 是帳號裡自己取的正整數，「unique within your Cloudflare account」：兩個綁定用同一個就會算在一起。測試環境用 1001 到 1006；正式環境要另外六個。1007 用過（2026-11-26 到 11-27 的全站總量上限），不再用
 
 **改上限**：改 `wrangler.jsonc` 那一行的 `limit`，合併到 `main`，部署後生效。這是「部署會執行到的東西」，營運者看過才合併（`CONTRIBUTING.md`）。照 Cloudflare 的分析裡被擋的量調；被擋的請求後台自己不留紀錄。
 
@@ -1354,14 +1358,17 @@ ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限
 
 ### 全站的總量上限
 
-ADR-0026 的「全站的總量上限」：不照 IP，數的是**每分鐘開始過卡的次數**（`src/rate-limit.ts` 的 `withinStarts`，綁定 `RATE_STARTS`，起始值每分鐘 60 次，正式上線前照量測重定，[#52](https://github.com/iamreal-tw/iamreal/issues/52)）。
+ADR-0026 的「全站的總量上限」：不照 IP，數的是**每分鐘開始過卡的次數**（`src/rate-limit.ts` 的 `withinStarts`，起始值每分鐘 60 次，設定是 `wrangler.jsonc` 的 `CARD_PROOF_STARTS_PER_MINUTE`，正式上線前照量測重定，[#52](https://github.com/iamreal-tw/iamreal/issues/52)）。
 
-- **只算帶記號的那一次 `config`**：持卡人按下「開始過卡」時，客戶端問 `GET /api/v1/config?start`（`docs/api/card-proof.md`）。所有網路用同一個鍵（`starts`）算。其他時候問的 `config` 不帶記號，不算進這裡，只受上面照 IP 的上限。
+- **只算帶記號的那一次 `config`**：持卡人按下「開始過卡」時，客戶端問 `GET /api/v1/config?start`（`docs/api/card-proof.md`）。其他時候問的 `config` 不帶記號，不算進這裡，只受上面照 IP 的上限。
 - **超過時**回 `503`，`{"error":"busy"}`，`Retry-After: 60`。網頁版在讀卡之前就停下，說現在人太多，不開內政部元件的視窗。
-- 先過照 IP 的上限才算這裡：被照 IP 擋下的請求不佔全站的名額。
+- 先過照 IP 的上限才算這裡：被照 IP 擋下的請求不佔全站的名額。被這裡擋下的也不算：一分鐘裡被擋的再多，下一分鐘照樣有 60 個名額。
 - 沒有來源位址的請求（本機）也算：沒有網路可以不算。上限遠比一個人在本機過卡的次數大。
-- 綁定出錯或不在時放行，即時的輸出寫一行 `{"event":"rate_limit_unavailable","class":"starts",…}`，和其他類相同。
-- 和每一類相同，是每個 Cloudflare 機房各自的近似值；台灣的連線大多進同一個機房（ADR-0026）。
+- **誰在數**：一個專用的 Durable Object（[`src/starts.ts`](src/starts.ts)，綁定 `STARTS`，類別 `Starts`，名稱固定是 `starts`）。整個網站只有一份計數，不分機房。分鐘照時鐘（UTC）算；計數只放在記憶體，什麼都不存（每次開始過卡都寫一次，成本比計數本身值得的多）。閒置 10 秒的物件會被移出記憶體，計時器還沒跑完的不會（[計數](#計數)也是這樣做）：有人開始過卡的那一分鐘，物件留一個到這一分鐘結束才跑完的計時器，所以一陣請求之後靜 10 秒，這一分鐘不會從零重算。物件還是被停下時（部署、Cloudflare 搬它），這一分鐘從零重算：只會多放人，不會多擋人。
+- **為什麼是另一個物件**：不是證明紀錄的物件，也不是收計數的物件（[計數](#計數)）。計數只受照 IP 的上限，很多網路一起送計數時那個物件可能撐不住，開始過卡不該跟著停；證明紀錄的物件撐不住時，照下一節回 `busy`。
+- **為什麼不用綁定**：原本用的是 Rate Limiting binding，整個網站一個鍵（綁定 `RATE_STARTS`）。綁定的計數在每台機器各一份，實際的上限是 60 乘上收到請求的機器數：測試網站上 2 秒內 80 次 `config?start` 全部回 `200`（2026-11-27，[#466](https://github.com/iamreal-tw/iamreal/issues/466)）。
+- 物件出錯或不在、或設定不是 0 到 100000 的整數時放行，即時的輸出寫一行 `{"event":"rate_limit_unavailable","class":"starts",…}`，和每一類被綁定放行時相同。物件撐不住（`overloaded`）也一樣放行：接著問的證明紀錄的物件撐不住時，自己會回 `busy`。
+- **改上限**：改 `wrangler.jsonc` 的 `CARD_PROOF_STARTS_PER_MINUTE`，合併到 `main`，部署後生效。這是「部署會執行到的東西」，營運者看過才合併（`CONTRIBUTING.md`）。
 
 ### Durable Object 撐不住時
 
@@ -1383,20 +1390,25 @@ Durable Object 回 `overloaded`（錯誤帶著 `overloaded: true`，文件說不
 - 照什麼算：IP（這一層只能照完整的位址，IPv6 的 /64 由 Worker 那一層管）
 - 上限：訂得比 Worker 裡各類的上限合起來寬很多。這一層擋的是單一來源的洪水；細的分法在 Worker。**起始值待定**：WAF 的規則會不會連快取命中的請求一起算，還沒有在測試網站看過（ADR-0026 的 Consequences），看過再定
 - 動作：Block，期間 10 秒（Free 方案的選項）
-- 打開和關掉：規則列表上的開關。關掉之後只剩 Worker 裡的那一層
+- 打開和關掉：規則列表上的開關。關掉之後只剩 Worker 裡的那一層，而那一層擋不住每次開新連線的來源（上面「這個綁定的性質」）：**每次開新連線的洪水只有這一條擋得住**，上線前一定要設好
 - 被這一條擋下的請求不會跑到 Worker，後台什麼都不知道；看 Security → Events
+- **上限要訂多少要重新想**：上面寫「寬很多」，是以為 Worker 那一層擋得住單一來源的洪水。現在每次開新連線的洪水只有這一條擋得住，它的上限就是那種洪水能送多少；Worker 裡六類合起來每分鐘約 690 次，約每 10 秒 115 次，比那個寬很多的上限擋不了什麼。由維護者定（[#466](https://github.com/iamreal-tw/iamreal/issues/466)）
+- 設好之後驗一次：從一台電腦每次開新連線，在 10 秒內平行送比規則的上限多的 `POST /api/v1/challenges`（下面的 `N`），看有沒有被擋下的（被 WAF 擋下的是 Cloudflare 的回應，不是 Worker 的 `429` `rate_limited`）：
+  ```sh
+  seq 1 N | xargs -P 20 -I{} curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'content-type: application/json' --data '{}' https://test.iamreal.tw/api/v1/challenges | sort | uniq -c
+  ```
 
 **二、緊急時的挑戰頁（平時關著）**
 
 - 事先做好一條自訂規則：Security → WAF → Custom rules → Create rule（[custom rules](https://developers.cloudflare.com/waf/custom-rules/)），動作選 Managed Challenge，存成**關著**的
 - 只套在訪客的頁面：首頁 `/`、島民證明 `/p/…`、查詢頁 `/threads/…`、證明紀錄頁 `/proof-log`。**不套**在 `/api/`、`/proof` 和它底下的檔、資料網域（`data.iamreal.tw`、`test-data.iamreal.tw`）：挑戰頁回的是一整頁 HTML，頁面裡的 `fetch()` 會直接失敗，過卡和重驗的工具都會壞（ADR-0026「緊急時的挑戰頁」）
 - 不用整站的 I'm Under Attack 模式
-- 什麼時候打開：限流和（之後的）總量上限都開著，頁面還是撐不住
+- 什麼時候打開：限流和總量上限都開著，頁面還是撐不住
 - 打開：規則列表上把那一條打開。關掉：同一個開關。事後公告開了多久
 - 開著的期間：訪客要先過一次檢查，通過後 Cloudflare 放一個 `cf_clearance` cookie（預設 30 分鐘）；用程式讀頁面會被擋；平台抓連結預覽的程式過不了，那段時間貼出去的島民證明連結可能沒有預覽
 - 上線前在測試網站演練一次：打開、用瀏覽器和 `curl` 各開一頁島民證明、確認 `/api/v1/config` 和 `/proof` 不受影響、關掉
 
-**三、上線後要看、再補回這裡的**（ADR-0026 列的）：WAF 的限流規則算不算快取命中的請求；Rate Limiting binding 的計數實際上多久歸零、不同機房之間差多少；各類被擋的量（Cloudflare 的分析），起始值要不要調。
+**三、上線後要看、再補回這裡的**（ADR-0026 列的）：WAF 的限流規則算不算快取命中的請求；各類被擋的量（Cloudflare 的分析），起始值要不要調。（Rate Limiting binding 的計數放在哪裡已經量過：每台機器各一份，見上面「這個綁定的性質」。）
 
 ## 連線紀錄
 
