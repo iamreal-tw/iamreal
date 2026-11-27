@@ -87,6 +87,7 @@ test("a build of another target is turned away: the tests', the production log's
     ["no link to the app domain: a build with no choice of a way", withCode('"https://test-app.iamreal.tw/"', '""'), /test-app\.iamreal\.tw/],
     ["the production site's app domain", withCode('"https://test-app.iamreal.tw/"', '"https://app.iamreal.tw/"'), /https:\/\/app\.iamreal\.tw/],
     ["the app domain with a path, which the apps would not be given", withCode('"https://test-app.iamreal.tw/"', '"https://test-app.iamreal.tw/hang/7K2Q9FM4XD"'), /links to its app domain/],
+    ["a second link to the app domain, with a path", { ...good, code: `${good.code}const other="https://test-app.iamreal.tw/?id=7K2Q9FM4XD"` }, /with a path/],
     ["both sites' domains", { ...good, code: `${good.code}const other="iamreal.tw"` }, /links with iamreal\.tw/],
     // The header's site name is let through once; a link with the public domain beside it is still caught.
     ["the site's name, and the public domain in a link", { ...good, code: `${good.code}const copy={site_name:"iamreal.tw"};const other="iamreal.tw"` }, /links with iamreal\.tw/],

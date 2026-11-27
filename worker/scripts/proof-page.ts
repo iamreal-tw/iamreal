@@ -155,7 +155,12 @@ export function checkProofPage(page: ProofPage | null, kind: ProofLogKind, clear
   }
   assert.ok(addresses.has(dataOrigin), `the card proof page takes the CRL archive from ${dataOrigin}`);
   // The app domain's link whole, as the QR code and the phone's button hold it: no path (web/src/target-test-site.ts).
-  if (appOrigin !== null) assert.ok(new RegExp(`["'\`]${appOrigin.replaceAll(".", "\\.")}/["'\`]`).test(code), `the card proof page links to its app domain, ${appOrigin}/`);
+  if (appOrigin !== null) {
+    const escaped = appOrigin.replaceAll(".", "\\.");
+    assert.ok(new RegExp(`["'\`]${escaped}/["'\`]`).test(code), `the card proof page links to its app domain, ${appOrigin}/`);
+    const withPath = new RegExp(`${escaped}/[^"'\`]`).exec(code);
+    assert.ok(withPath === null, `the card proof page links to its app domain with a path, which the apps are never given: ${withPath?.[0]}`);
+  }
   // The mark as the build has it: one JSON text in the script of the mark's entry (web/src/ui/test-proof-log.ts), which
   // web/vite.config.ts writes from the date it was given and from the scope string of the target it built with,
   // and does not write for a target that signs another proof log's. It ends with the date and that scope string.

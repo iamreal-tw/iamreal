@@ -202,19 +202,19 @@ export function startApp(o: AppOptions): void {
   /** A FlowStop that leaves the step to be tried again (the flow did not end). */
   const retryable = (f: CardProofFlow, e: unknown): e is FlowStop => e instanceof FlowStop && f.stop === null;
 
-  /** Puts a screen up: the mark, the service's name and the site's; where in the seven steps (none before step 1); the screen. */
-  function show(step: number | null, screen: HTMLElement): void {
-    if (step === null) return void up(screen);
+  /** Puts a step's screen up: where in the seven steps, then the screen (putUp). */
+  function show(step: number, screen: HTMLElement): void {
     const where = el(
       "div",
       { class: "where", attrs: { "data-where": String(step) } },
       el("p", { class: "count" }, fill(COPY.common.step, { step, steps: STEPS })),
       el("span", { class: "bar", attrs: { "aria-hidden": "true" } }, ...Array.from({ length: STEPS }, (_, i) => el("i", { class: i < step ? "on" : "" }))),
     );
-    up(where, screen);
+    putUp(where, screen);
   }
 
-  function up(...children: HTMLElement[]): void {
+  /** Puts a screen up under the header (the mark, the service's name and the site's); the title of the tab is its h1. */
+  function putUp(...children: HTMLElement[]): void {
     frame(root, ...children);
     document.title = children.at(-1)!.querySelector("h1")?.textContent ?? "";
     window.scrollTo(0, 0);
@@ -249,15 +249,14 @@ export function startApp(o: AppOptions): void {
    * After it, the screen stays as it is: nothing pairs the computer with the
    * phone.
    */
-  function ways(link: string): void {
+  function chooseWay(link: string): void {
     drop();
     const c = COPY.choose;
     const view = chooseView();
     const qr = qrSvg(link);
     // The sentences beside it say what to do with it; the code itself is not read out.
     qr.setAttribute("aria-hidden", "true");
-    show(
-      null,
+    putUp(
       el(
         "section",
         { class: "step", attrs: { "data-step": "choose" } },
@@ -332,14 +331,15 @@ export function startApp(o: AppOptions): void {
         read();
       });
     });
-    const back = o.appLink === null ? null : secondary(COPY.common.back, () => ways(o.appLink!));
+    const link = o.appLink;
+    const back = link === null ? null : secondary(COPY.common.back, () => chooseWay(link));
     const next = back ? actions(back, start) : actionsEnd(start);
     // The operator stopped taking card proofs: said here, before a card is read, in place of common.next
     // (card-proof.md, step 1). No answer: common.next stays, and step 2 asks again.
     // common.back stays, under the sentence.
     const paused = (): void => next.replaceWith(pausedLine(), ...(back ? [actions(back)] : []));
-    cardProofsPaused().then((p) => {
-      if (p === true && next.isConnected) paused();
+    cardProofsPaused().then((isPaused) => {
+      if (isPaused === true && next.isConnected) paused();
     });
     show(
       1,
@@ -1139,5 +1139,5 @@ export function startApp(o: AppOptions): void {
   }
 
   if (o.appLink === null) before();
-  else ways(o.appLink);
+  else chooseWay(o.appLink);
 }
