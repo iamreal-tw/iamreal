@@ -42,10 +42,11 @@ val onTestSite = setOf("release", testAppBuild, "debug", fakeBuild)
 val buildNumbers = mapOf("release" to 1..999_999, testAppBuild to 1_000_000..1_999_999, "debug" to 2_000_000..2_000_000, fakeBuild to 2_000_000..2_000_000)
 // The app domain each build type opens for (ADR-0040, "app 網域跟著連的網站"; README.md, "app 網域"): the
 // production app and the test app, on the test site, the test site's; the development build none, so no
-// debug key's fingerprint is published. Each is declared in its build type's AndroidManifest.xml
-// (src/<build type>/), whole host, any path, https only; checkManifest holds the merged manifest to exactly
-// these. The PR of launch day gives "release" app.iamreal.tw, in this map and in src/release/AndroidManifest.xml.
-val appDomains = mapOf("release" to listOf("test-app.iamreal.tw"), testAppBuild to listOf("test-app.iamreal.tw"), "debug" to emptyList<String>(), fakeBuild to emptyList<String>())
+// debug key's fingerprint is published. The two that have one take src/app-domain/AndroidManifest.xml
+// (sourceSets, below), whole host, any path, https only, with this host; checkManifest holds every build
+// type's merged manifest to this map. The PR of launch day gives "release" app.iamreal.tw here.
+val testSiteAppDomain = "test-app.iamreal.tw"
+val appDomains = mapOf("release" to testSiteAppDomain, testAppBuild to testSiteAppDomain)
 // The build types whose build number is fixed, the one of their range, and that take no Gradle property.
 val fixedBuildNumber = setOf("debug", fakeBuild)
 // The build number of a build: the two uploads give theirs (upload-android.yml, upload-android-test.yml:
@@ -173,11 +174,13 @@ android {
             ndk { abiFilters += releaseAbis }
             isMinifyEnabled = true
             proguardFiles("proguard-rules.pro")
+            manifestPlaceholders["appDomain"] = appDomains.getValue("release")
         }
         create(testAppBuild) {
             // The test app (ADR-0040): built as the production app is, under its own identifier.
             initWith(getByName("release"))
             applicationIdSuffix = ".test"
+            manifestPlaceholders["appDomain"] = appDomains.getValue(testAppBuild)
         }
         create(fakeBuild) {
             // The emulator test's: a debug build with src/fake/ in place of src/real/ (sourceSets, below).
@@ -196,6 +199,8 @@ android {
         getByName("debug").kotlin.directories.add("src/real/kotlin")
         getByName("release").kotlin.directories.add("src/real/kotlin")
         getByName(testAppBuild).kotlin.directories.add("src/real/kotlin")
+        // The app domain's declaration (appDomains): the production app's and the test app's, not the development build's.
+        for (buildType in appDomains.keys) getByName(buildType).manifest.srcFile("src/app-domain/AndroidManifest.xml")
         // TestingCore, for the library of the tests: in the fake build and the unit tests only.
         getByName(fakeBuild).kotlin.directories.add("src/testing/kotlin")
         // The emulator test's build is a development build: it has that build's name under the icon.
@@ -668,7 +673,7 @@ androidComponents {
             id = variantId
             lowestBuild = variantBuilds.first
             highestBuild = variantBuilds.last
-            domains = appDomains.getValue(variant.buildType!!)
+            domains = listOfNotNull(appDomains[variant.buildType!!])
         }
         val checkApk = tasks.register<CheckApk>("checkApk$name") {
             design.from(designResources.values)

@@ -121,12 +121,12 @@ Android 有三種 app（ADR-0040），識別碼不同，三個可以同時裝在
 
 ADR-0040，`GLOSSARY.md`「app 網域」，規格 [#527](https://github.com/iamreal-tw/iamreal/issues/527)。在手機上打開 app 網域的任何網址，裝了 app 就打開 app（Android App Links）；網址送什麼、沒裝 app 時落在哪一頁，見 [`worker/README.md`「app 網域」](../worker/README.md#app-網域)。
 
-- **誰認哪一個**：app 網域跟著 build 連的網站。正式 app 和測試 app 都連測試網站，所以都認 `test-app.iamreal.tw`；開發用 build（和模擬器測試的 `fake`）不認任何 app 網域，不用公開 debug 金鑰的指紋。宣告寫在那個 build type 自己的 `app/src/release/AndroidManifest.xml`、`app/src/trial/AndroidManifest.xml`，`app/build.gradle.kts` 的 `appDomains` 寫每個 build type 該有的網域，`checkManifest` 照它核對（「建置時的檢查」）。
+- **誰認哪一個**：app 網域跟著 build 連的網站。正式 app 和測試 app 都連測試網站，所以都認 `test-app.iamreal.tw`；開發用 build（和模擬器測試的 `fake`）不認任何 app 網域，不用公開 debug 金鑰的指紋。網域只寫在 `app/build.gradle.kts` 的 `appDomains`；宣告是 `app/src/app-domain/AndroidManifest.xml` 一份，`release`、`trial` 兩個 build type 都用它，主機從 `appDomains` 填進去。`checkManifest` 照 `appDomains` 核對每一種 build 合併後的 manifest（「建置時的檢查」）。
 - **怎麼宣告**：app 的那一個畫面（`MainActivity`）多一個 `intent-filter`：`VIEW`、`DEFAULT`、`BROWSABLE`，`https`，只有主機、不限路徑，`autoVerify="true"`，系統去抓主機的 `/.well-known/assetlinks.json` 驗證。不註冊自訂的網址前綴（#92）。`test.iamreal.tw` 上的連結（第 6 步的 `/hang/<短編號>`）照舊在瀏覽器裡打開。
-- **從連結打開和從主畫面打開相同**：app 不讀網址裡的任何東西（`MainActivity.kt` 的 `handle`）。畫面只有一份：`MainActivity` 是 `singleTask`，不管是瀏覽器、相機、還是在自己的畫面上直接開它的 app（例如內建的瀏覽器）打開，都是把 app 原本的那一個叫到前面；過卡做到一半時，回到原本的畫面，不重設、不疊出第二份。過卡的狀態本來就只在行程的記憶體裡，app 被系統收掉之後從連結打開，和從主畫面打開一樣從第 1 步開始。
+- **從連結打開和從主畫面打開相同**：app 不讀網址裡的任何東西（`MainActivity.kt` 的 `handle`）。畫面只有一份：`MainActivity` 是 `singleTask`，不管是瀏覽器、相機、還是在自己的畫面上直接開它的 app（例如內建的瀏覽器）打開，都是把 app 原本的那一個叫到前面；過卡做到一半時，回到原本的畫面，不重設、不疊出第二份。代價是 app 再被打開時，會關掉它自己開在同一個 task 裡、疊在上面的畫面：系統的設定頁（「打開通知設定」、NFC 的設定）和通知權限的詢問（當作沒有允許）。分享面板因此開在自己的 task，分享到的 app 裡寫到一半的貼文不會被關掉。過卡的狀態本來就只在行程的記憶體裡，app 被系統收掉之後從連結打開，和從主畫面打開一樣從第 1 步開始。
 - **同一支手機上兩個都裝時**：系統交給最後安裝的那一個（[Add Android App Links](https://developer.android.com/training/app-links/add-applinks)「Check for multiple apps associated with the same domain」）。
 - **測試 app 還驗證不過**：它還沒建在 Play Console（[#479](https://github.com/iamreal-tw/iamreal/issues/479)），沒有 Google 產生的簽章金鑰，`assetlinks.json` 還沒列它。在那之前系統不把連結交給測試 app：Android 12 起，沒驗證過的網域在瀏覽器裡打開（[Verify Android App Links](https://developer.android.com/training/app-links/verify-android-applinks)）。
-- **上線那天**：正式 app 改認 `app.iamreal.tw`，和改連正式網站同一個 PR（「三種 app」）：`app/src/release/AndroidManifest.xml` 的主機和 `appDomains` 的 `release` 一起換。測試 app 的不動。
+- **上線那天**：正式 app 改認 `app.iamreal.tw`，和改連正式網站同一個 PR（「三種 app」）：`appDomains` 的 `release` 換掉。測試 app 的不動。
 
 在手機上確認（裝好從 Google Play 下載的 build 之後；Android 14 以下只在安裝或更新時驗證）：
 
@@ -198,7 +198,8 @@ IAMREAL_STORE_SCREENS=$PWD/../android/test-output/store IAMREAL_BB=<bb 6.0.0 的
 | `app/src/main/kotlin/tw/iamreal/app/reminder/` | 過卡提醒：下次提醒的日子怎麼算、存什麼（`Reminders.kt`），日子和時刻的寫法（`When.kt`），系統的鬧鐘、通知和接收器（`Phone.kt`） |
 | `app/src/main/kotlin/tw/iamreal/app/ui/` | 啟動畫面和八步的畫面（Compose）、感應的面板、哪個情況顯示 `design/copy/` 的哪一句、主題的數值（`Theme.kt`）；提醒的畫面和設定頁（`Reminder.kt`） |
 | `app/src/main/kotlin/tw/iamreal/app/TestSite.kt` | 測試網站的網址和測試的證明紀錄的編號，只寫在這裡 |
-| `app/src/release/`、`app/src/trial/`、`app/src/debug/` | 正式 app、測試 app、開發用 build 各自的 `Environment.kt`（連哪個網站、簽哪一份證明紀錄、商店頁），測試 app 和開發用 build 各自的名稱（`res/`；正式 app 的在 `src/main/res/`），正式 app 和測試 app 各自的 app 網域（`AndroidManifest.xml`，「app 網域」）。「三種 app」 |
+| `app/src/release/`、`app/src/trial/`、`app/src/debug/` | 正式 app、測試 app、開發用 build 各自的 `Environment.kt`（連哪個網站、簽哪一份證明紀錄、商店頁），測試 app 和開發用 build 各自的名稱（`res/`；正式 app 的在 `src/main/res/`）。「三種 app」 |
+| `app/src/app-domain/` | 正式 app 和測試 app 宣告 app 網域的 `AndroidManifest.xml`，主機從 `app/build.gradle.kts` 的 `appDomains` 填。「app 網域」 |
 | `app/src/real/` | 發出去的安裝檔和用線裝的建置接到什麼（`Target.kt`）：`Environment.kt` 的網站、NFC 讀的卡片、核心自己的 session |
 | `app/src/fake/` | 只給模擬器測試的建置（build type `fake`）：假卡片、本機的後台、認測試金鑰的 session，和它自己的 `Environment.kt` |
 | `app/src/testing/` | `TestingCore`：測試用的函式庫才有的那一個函式。只編進 `fake` 和單元測試 |

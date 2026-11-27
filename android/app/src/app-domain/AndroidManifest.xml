@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The app domain the production app opens for (ADR-0040; README.md,
-     "app 網域"). Until launch it talks to the test site, so it opens for the
-     test site's app domain; the PR of launch day makes this app.iamreal.tw,
-     with appDomains in app/build.gradle.kts.
+<!-- The app domain of the production app and of the test app (ADR-0040;
+     README.md, "app 網域"): the manifest of both build types, release and
+     trial (app/build.gradle.kts, sourceSets), with the host each opens for
+     from appDomains. The development build does not have this file and opens
+     for no app domain.
+
      Every address of the host opens the app, whatever its path, https only;
      the system checks the host's /.well-known/assetlinks.json (autoVerify).
      The app reads nothing of the address: opened by it is the same as opened
-     from the home screen (MainActivity.kt). The development build has no
-     such file and opens for no app domain. checkManifest
-     (app/build.gradle.kts) holds the merged manifest to appDomains. -->
+     from the home screen (MainActivity.kt). checkManifest holds the merged
+     manifest of every build type to appDomains. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application>
@@ -18,7 +19,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" />
-                <data android:host="test-app.iamreal.tw" />
+                <data android:host="${appDomain}" />
             </intent-filter>
         </activity>
     </application>
