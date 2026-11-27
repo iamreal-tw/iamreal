@@ -10,7 +10,7 @@ import { type TestWorker, startWorker } from "./harness.ts";
 import { CRL_TIME, freshProofLog, publishCrl, tw } from "./records.ts";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { CONNECTION_LOG_CHECKED, COUNT_EVENTS_CHECKED, COUNT_EVENTS_FILE, COUNT_TOTALS_FIRST, CONNECTION_LOG_FILE, checkFromOutside, runOutsideCheck } from "./outside-check.ts";
+import { CONNECTION_LOG_CHECKED, COUNT_EVENTS_CHECKED, COUNT_EVENTS_FILE, COUNT_TOTALS_FILE, COUNT_TOTALS_FIRST, CONNECTION_LOG_FILE, checkFromOutside, runOutsideCheck } from "./outside-check.ts";
 import type { Reader } from "./site-check.ts";
 
 /** The date this test's proof log was cleared on: the day its object first runs. */
@@ -37,13 +37,15 @@ after(async () => {
 
 const site: Reader = (path, headers) => worker.fetch(path, { redirect: "manual", headers: { ...headers } });
 /**
- * The two files the hourly schedule writes about the bucket that is not
- * public, as it writes them while that bucket holds nothing under the
- * prefix: looked at 09:00 in Taiwan on the day of AS_RUNNING.
+ * A file the hourly schedule writes about the bucket that is not public, as
+ * written at 09:00 in Taiwan on the day of AS_RUNNING.
  */
-const LOOKED = '{"checked":"2026-11-21T01:00:05.000Z","oldest":null}\n';
+const looked = (oldest: string | null): Response =>
+  new Response(`${JSON.stringify({ checked: "2026-11-21T01:00:05.000Z", oldest })}\n`, { headers: { "Content-Type": "application/json" } });
 const data: Reader = async (path) => {
-  if (path === `/${CONNECTION_LOG_FILE}` || path === `/${COUNT_EVENTS_FILE}`) return new Response(LOOKED, { headers: { "Content-Type": "application/json" } });
+  // Nothing under the prefixes that expire; the totals begin on the test site's first day.
+  if (path === `/${CONNECTION_LOG_FILE}` || path === `/${COUNT_EVENTS_FILE}`) return looked(null);
+  if (path === `/${COUNT_TOTALS_FILE}`) return looked(COUNT_TOTALS_FIRST);
   const file = (await worker.files(path.slice(1))).find((f) => `/${f.key}` === path);
   return file === undefined ? new Response(null, { status: 404 }) : new Response(new Blob([new Uint8Array(file.bytes)]));
 };
@@ -52,8 +54,8 @@ type Parts = Parameters<typeof checkFromOutside>[0];
 /** 2026-11-21, 09:30 in Taiwan: the day of the publication above, after it was due. */
 const AS_RUNNING: Parts = { site, data, now: tw("2026-11-21", "09:30:00").getTime(), clearedOn: CLEARED_ON };
 const failed = async (parts: Partial<Parts>): Promise<string[]> => (await checkFromOutside({ ...AS_RUNNING, ...parts })).filter((l) => !l.ok).map((l) => l.what);
-/** For a test of other lines on another day: the two lines of the bucket that is not public, whose files say when the back end looked, are left out. */
-const OTHER_DAY = { connectionLog: false, countEvents: false };
+/** For a test of other lines on another day: the three lines of the bucket that is not public, whose files say when the back end looked, are left out. */
+const OTHER_DAY = { connectionLog: false, countEvents: false, countTotalsFirst: null };
 const answering = (path: string, answer: () => Response, reader: Reader): Reader => async (p, headers) => (p === path ? answer() : reader(p, headers));
 
 /** Fails exactly the line that starts with `line`, saying `saying`. */
@@ -66,16 +68,15 @@ async function failsOnly(parts: Partial<Parts>, line: string, saying: RegExp): P
 
 test("every check passes on a Worker that published today and has CRLs of both issuer keys", async () => {
   const lines = await checkFromOutside(AS_RUNNING);
-  assert.equal(lines.length, 9, "a line for each thing checked, and the one not checked yet");
+  assert.equal(lines.length, 9, "a line for each thing checked");
   assert.deepEqual(lines.filter((l) => !l.ok), []);
-  // The connection logs' line and the counts' line are on (#20, #54 deployed): checked, and passed.
+  // The connection logs' line, the counts' line and the totals' line are on (#20, #54, #435 deployed): checked, and passed.
   assert.equal(CONNECTION_LOG_CHECKED, true);
   assert.equal(lines.at(-3)!.what, "the data domain: connection-log/oldest.json says the back end looked in the last 2 hours, and no connection log is older than 33 days");
   assert.equal(COUNT_EVENTS_CHECKED, true);
   assert.equal(lines.at(-2)!.what, "the data domain: count-events/oldest.json says the back end looked in the last 2 hours, and no file of counts is older than 33 days");
-  // And the totals' line until the test site has its first day of totals (#435).
-  assert.equal(COUNT_TOTALS_FIRST, null);
-  assert.equal(lines.at(-1)!.what, "not checked yet: count-totals/oldest.json, the counts' totals are kept (#435)");
+  assert.equal(COUNT_TOTALS_FIRST, "2026-11-26");
+  assert.equal(lines.at(-1)!.what, "the data domain: count-totals/oldest.json says the back end looked in the last 2 hours, and the counts' totals still begin on 2026-11-26");
 });
 
 test("the connection logs (#20), when checked: the back end looked in the last 2 hours, and none is older than 33 days in UTC; a missing file fails", async () => {
@@ -204,7 +205,7 @@ test("the command: over HTTP, a FAIL line naming what failed, and the number of 
     missing = "/proof-log/card-state/2026-11-21.jsonl";
     assert.equal(await run(), 1, "one failure: the command exits with 1");
     assert.deepEqual(printed.filter((l) => l.startsWith("FAIL")), ["FAIL   the data domain: the card state file of 2026-11-21 or later is there: there is no proof-log/card-state/2026-11-21.jsonl"]);
-    assert.ok(printed.some((l) => l.startsWith("--     not checked yet")), "the totals' line, not checked yet, neither ok nor FAIL");
+    assert.ok(!printed.some((l) => l.startsWith("--")), "every line is checked: none is neither ok nor FAIL");
     assert.equal(printed.at(-1), "1 check(s) failed");
   } finally {
     console.log = log;
