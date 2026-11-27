@@ -107,10 +107,10 @@ let proofLogs = 0;
  * (`switchProofLog`), as is every object the settings named before, before
  * the bucket is emptied: none of them writes there afterwards.
  */
-export async function freshProofLog(worker: TestWorker, settings: { kind?: "test" | "production"; restrictLateSwitches?: boolean; clearedOn?: string } = {}): Promise<string> {
+export async function freshProofLog(worker: TestWorker, settings: { kind?: "test" | "production"; clearedOn?: string } = {}): Promise<string> {
   proofLogs++;
   const name = settings.kind === "production" ? `proof-log-${proofLogs}` : `test-records-${proofLogs}`;
-  await worker.switchProofLog({ PROOF_LOG_KIND: settings.kind ?? "test", PROOF_LOG_OBJECT_NAME: name, ...(settings.restrictLateSwitches && { RESTRICT_LATE_SWITCHES: "true" }), ...(settings.clearedOn !== undefined && { TEST_PROOF_LOG_CLEARED_ON: settings.clearedOn }) });
+  await worker.switchProofLog({ PROOF_LOG_KIND: settings.kind ?? "test", PROOF_LOG_OBJECT_NAME: name, ...(settings.clearedOn !== undefined && { TEST_PROOF_LOG_CLEARED_ON: settings.clearedOn }) });
   for (const file of await worker.files()) await worker.deleteFile(file.key);
   await worker.setClock(START);
   return name;

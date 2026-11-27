@@ -2,10 +2,11 @@ import CryptoKit
 import XCTest
 @testable import IamrealApp
 
-/// What this build of the app is fixed to (ADR-0036, ADR-0037), and what it
+/// What this build of the app is fixed to (ADR-0036, ADR-0040), and what it
 /// carries (ADR-0035). The tests run in the Debug configuration: the
-/// development build. check-app.sh holds the Release one, the store's
-/// build, to its identifier, site and name.
+/// development build. check-app.sh holds the other two, Release (the
+/// production app) and TestApp (the test app), to their identifier, site
+/// and name.
 final class BuildTests: XCTestCase {
     func testTheAppIsTheDevelopmentBuildOnTheTestSite() throws {
         XCTAssertEqual(Bundle.main.bundleIdentifier, "tw.iamreal.app.dev")
@@ -13,19 +14,20 @@ final class BuildTests: XCTestCase {
         XCTAssertEqual(AppEnvironment.publicFiles.absoluteString, "https://test-data.iamreal.tw")
     }
 
-    /// One app in the store (ADR-0037): one number, and only the store's build opens its page.
-    func testTheStorePageIsTheOneAppInTheStoreAndOnlyTheStoreBuildOpensIt() throws {
-        XCTAssertEqual(AppEnvironment.pageInStore(appID: "1234567890", storeBuild: true)?.absoluteString, "https://apps.apple.com/app/id1234567890")
-        // The development build is not in the store: the page would be of another app.
-        XCTAssertNil(AppEnvironment.pageInStore(appID: "1234567890", storeBuild: false))
+    /// Only the production app opens a page in the App Store (#484): the test app is never there, and the development build is in no store.
+    func testOnlyTheProductionAppOpensItsPageInTheStore() throws {
+        XCTAssertEqual(AppEnvironment.pageInStore(appID: "1234567890", app: .production)?.absoluteString, "https://apps.apple.com/app/id1234567890")
+        // The page with the production app's number would be of another app.
+        XCTAssertNil(AppEnvironment.pageInStore(appID: "1234567890", app: .test))
+        XCTAssertNil(AppEnvironment.pageInStore(appID: "1234567890", app: .development))
         // No number, or not a number: no page, so no button.
-        XCTAssertNil(AppEnvironment.pageInStore(appID: nil, storeBuild: true))
-        XCTAssertNil(AppEnvironment.pageInStore(appID: "", storeBuild: true))
-        XCTAssertNil(AppEnvironment.pageInStore(appID: "id1234567890", storeBuild: true))
+        XCTAssertNil(AppEnvironment.pageInStore(appID: nil, app: .production))
+        XCTAssertNil(AppEnvironment.pageInStore(appID: "", app: .production))
+        XCTAssertNil(AppEnvironment.pageInStore(appID: "id1234567890", app: .production))
         // The number the operator was given for tw.iamreal.app.
-        XCTAssertEqual(AppEnvironment.pageInStore(appID: AppEnvironment.storeAppID, storeBuild: true)?.absoluteString, "https://apps.apple.com/app/id6837606453")
+        XCTAssertEqual(AppEnvironment.pageInStore(appID: AppEnvironment.storeAppID, app: .production)?.absoluteString, "https://apps.apple.com/app/id6837606453")
         // This build, the development one.
-        XCTAssertFalse(AppEnvironment.storeBuild)
+        XCTAssertEqual(AppEnvironment.app, .development)
         XCTAssertNil(AppEnvironment.storePage)
     }
 
@@ -33,6 +35,30 @@ final class BuildTests: XCTestCase {
         let expected = try Repository.testScopeString()
         XCTAssertTrue(expected.hasPrefix("iamreal-test:public:0"))
         XCTAssertEqual(String(decoding: try DeviceCore.scopeString(AppEnvironment.proofLog), as: UTF8.self), expected)
+    }
+
+    /// The test app signs the test log's scope string, as the build tested
+    /// here does (the test above), and keeps doing so after launch (#484):
+    /// its configuration, TestApp, is based on Config/Test.xcconfig, whose
+    /// environment is the test one, and compiles with that environment and
+    /// no DEBUG. check-app.sh sees the same in the app TestApp builds: the
+    /// test site's addresses and not the production site's.
+    func testTheTestAppIsBuiltForTheTestEnvironment() throws {
+        let project = try Repository.text("ios/IamrealApp.xcodeproj/project.pbxproj")
+        let configurations = project.components(separatedBy: " /* TestApp */ = {").dropFirst().map { $0.components(separatedBy: "\n\t\t};").first ?? "" }
+        // One for the project, one for the app, one for the tests.
+        XCTAssertEqual(configurations.count, 3)
+        let projectLevel = try XCTUnwrap(configurations.first { $0.contains("SWIFT_ACTIVE_COMPILATION_CONDITIONS") })
+        XCTAssertTrue(projectLevel.contains("baseConfigurationReference = 1A0000000000000000000004 /* Test.xcconfig */;"))
+        // The environment's condition and the test app's, and not DEBUG.
+        XCTAssertTrue(projectLevel.contains("SWIFT_ACTIVE_COMPILATION_CONDITIONS = \"$(IAMREAL_ENVIRONMENT) IAMREAL_TEST_APP\";"))
+        let environment = try Repository.text("ios/Config/Test.xcconfig")
+        XCTAssertTrue(environment.contains("\nIAMREAL_ENVIRONMENT = IAMREAL_ENV_TEST\n"))
+        // And for every configuration: none is given another environment by a condition.
+        XCTAssertFalse(environment.contains("IAMREAL_ENVIRONMENT["))
+        XCTAssertTrue(environment.contains("\nIAMREAL_BUNDLE_IDENTIFIER[config=TestApp] = tw.iamreal.app.test\n"))
+        // No configuration sets an environment of its own.
+        XCTAssertFalse(configurations.contains { $0.contains("IAMREAL_ENVIRONMENT =") })
     }
 
     func testTheAppRunsOnAniPhoneOnly() throws {

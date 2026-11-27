@@ -599,7 +599,7 @@ final class ScreensTests: XCTestCase {
         storeScreens.storePage = true
         let reminderScreens: [(String, Screen)] = [
             ("app-reminder-4-from-notification-phone", screens.before(notice: ReminderScreens(appCopy: appCopy).fromNotification(snoozed: nil))),
-            // The lowest version, as the store's build shows it: with the button to its page in the
+            // The lowest version, as the production app shows it: with the button to its page in the
             // store (AppEnvironment.storePage), which the development build does not have. And a phone without NFC.
             ("app-update-soon-phone", storeScreens.before(updateFrom: "2027-03-01")),
             ("app-update-required-phone", storeScreens.tooOld(from: "2027-03-01")),

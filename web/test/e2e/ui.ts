@@ -27,16 +27,13 @@
 //    list for a card that declares nothing (請至少填一個帳號); both declared
 //    again; a switch the server records as a switch where the screen said a
 //    correction (the card's state changed on its way: the screen tells the
-//    cardholder, kind_mismatch); the third switch; a fourth refused by the
-//    server's policy, which the Worker was started with for this
-//    (RESTRICT_LATE_SWITCHES: switch_restricted); a platform the page does
+//    cardholder, kind_mismatch); the third switch; a platform the page does
 //    not know (the config without its row): the account kept in the list as
-//    it is; then the Worker restarted as it runs by default (no such
-//    policy): the fourth and fifth switches recorded, step 4 saying none is
-//    left and refusing another account typed anyway, and a sixth refused by
-//    the record rules (switch_limit). Along the way: a submission
-//    that did not get through (再試一次), one the server refused (its
-//    request ID on the screen); 回到開頭 and 取消 on steps 4 and 5, then card
+//    it is; then the Worker restarted: the fourth and fifth switches
+//    recorded, step 4 saying none is left and refusing another account typed
+//    anyway, and a sixth refused by the record rules (switch_limit). Along
+//    the way: a submission that did not get through (再試一次), one the
+//    server refused (its request ID on the screen); 回到開頭 and 取消 on steps 4 and 5, then card
 //    proofs again on the same page with the same proof engine; step 3's
 //    上一步; the PIN's wait running out; a window the browser blocked on each
 //    of the three clicks; every case that stops before the PIN is asked,
@@ -242,12 +239,8 @@ await build({
   build: { outDir: dist, emptyOutDir: true },
 });
 
-// Started with the policy on the fourth and fifth switch (the setting
-// RESTRICT_LATE_SWITCHES, which wrangler.jsonc does not have), for the case
-// that checks switch_restricted; restarted as it runs by default before the
-// fourth and fifth switches are made.
 console.log("starting the Worker (test build) with that page");
-const site = await startWorkerSite({ proofFiles: dist, issuers, settings: { RESTRICT_LATE_SWITCHES: "true" } });
+const site = await startWorkerSite({ proofFiles: dist, issuers });
 const { worker } = site;
 /** Has the Worker's schedule run once: its mirror fetches what the fake MOICA serves now. */
 async function mirror(): Promise<void> {
@@ -1737,33 +1730,6 @@ await tryStep("3 switches: the row says 2 are left; 取消 on step 5", async () 
   check(componentCount("MakeSignature") === signs && challengeCount() === challenges, "取消 on step 5: no second signature, no challenge");
 });
 
-// The Worker was started with RESTRICT_LATE_SWITCHES: the page offers the
-// fourth switch (the record rules allow 5), the server's policy refuses it
-// (switch_restricted).
-await tryStep("a fourth switch the server's policy refuses (RESTRICT_LATE_SWITCHES: switch_restricted)", async () => {
-  await toAccounts({ samePage: true });
-  await typeRows({ [THREADS]: "erin" });
-  checkConfirm(
-    "a fourth",
-    await waitConfirm(),
-    [
-      [EXAMPLE, EXAMPLE_NAME, "a-b", [K.unchanged]],
-      [THREADS, THREADS_NAME, at("erin"), [fill(K.switch, { previous: at("dave") }), fill(C.confirm.uses_switch, { switches_left: 1 })]],
-    ],
-    C.confirm.button_declare,
-  );
-  const before = await recordCount();
-  await page.clickButton(C.confirm.button_declare);
-  const d = await waitDoneOrMessage();
-  const id = await page.text("[data-request-id]");
-  check(!d.done && d.item === "submit" && d.message === `${C.stops.switch_restricted}\n${fill(C.stops.request_id, { request_id: id })}`, `switch_restricted, under 送出: ${JSON.stringify(d.message)}`);
-  const res = browser.responses.filter((r) => r.url.endsWith("/api/v1/records") && r.status === 403).at(-1);
-  check(res?.headers["x-request-id"] === id && refused("switch_restricted", id), `403 switch_restricted, its request ID on the screen (${id})`);
-  check((await recordCount()) === before, "nothing was appended");
-  check(JSON.stringify(await buttonTexts()) === JSON.stringify([C.read.read_again]), "refused: 再讀一次卡片 only");
-  await screenshot("switch-restricted-5-progress");
-});
-
 // The server's config without the test-example row: a platform the page does
 // not know, on which the card has an account. The row cannot be changed, and
 // the account goes back into the list as it is (docs/api/card-proof.md).
@@ -1902,11 +1868,11 @@ await tryStep("the same page after 回到開頭, 取消 and the wait: card proof
   );
 });
 
-// The server as it runs by default: no policy on the fourth and fifth switch ----------
+// The Worker restarted ----------
 
-await tryStep("the Worker restarted without RESTRICT_LATE_SWITCHES (the default)", async () => {
+await tryStep("the Worker restarted", async () => {
   // The whole Worker and its Durable Object stop and start again: what they stored and the bucket's files stay,
-  // the settings the test gave are gone (worker/test/harness.ts), and the clock is set again with the next request.
+  // and the clock is set again with the next request.
   const before = await recordCount();
   await worker.restart();
   const config = await (await fetch(`${PAGE_ORIGIN}/api/v1/config`)).json();

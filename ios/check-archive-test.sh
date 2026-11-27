@@ -2,14 +2,20 @@
 # The test of check-archive.sh: it passes the archive that was built, and
 # turns away each altered copy of it below, with the problem named.
 #
-#   ./check-archive-test.sh <path to IamrealApp.xcarchive> <version> <build>
+#   ./check-archive-test.sh [--test-app] <path to IamrealApp.xcarchive> <version> <build>
 #
-# The archive is one archive.sh made, and <version> and <build> are what it
-# was given.
+# The archive is one archive.sh made, with --test-app when it was given it,
+# and <version> and <build> are what it was given.
 set -u
 
 here=$(cd "$(dirname "$0")" && pwd)
-usage="usage: check-archive-test.sh <path to IamrealApp.xcarchive> <version> <build>"
+usage="usage: check-archive-test.sh [--test-app] <path to IamrealApp.xcarchive> <version> <build>"
+# The app archived, the other app that goes through a store, and the build number just out of the archived app's range (ADR-0040).
+app_flag= identifier=tw.iamreal.app other=tw.iamreal.app.test out_of_range=1000000
+if [ "${1-}" = --test-app ]; then
+  app_flag=--test-app identifier=tw.iamreal.app.test other=tw.iamreal.app out_of_range=2000000
+  shift
+fi
 archive=${1:?$usage}
 archive=${archive%/}
 version=${2:?$usage}
@@ -24,7 +30,7 @@ app=$a/Products/Applications/IamrealApp.app
 expect() {
   what=$1
   words=$2
-  if out=$("$here/check-archive.sh" "$a" "${3-$version}" "${4-$build}" 2>&1); then
+  if out=$("$here/check-archive.sh" $app_flag "$a" "${3-$version}" "${4-$build}" 2>&1); then
     echo "not ok: $what: check-archive.sh passed it"
     failed=1
   elif ! printf '%s\n' "$out" | grep -q -F -- "$words"; then
@@ -42,7 +48,7 @@ copy() {
   cp -R "$archive" "$a"
 }
 
-if out=$("$here/check-archive.sh" "$archive" "$version" "$build" 2>&1); then
+if out=$("$here/check-archive.sh" $app_flag "$archive" "$version" "$build" 2>&1); then
   echo "ok: the archive as built"
 else
   echo "not ok: the archive as built:"
@@ -82,10 +88,17 @@ expect "a version with a zero in front" "not three integers" 2026.11.05 "$build"
 copy
 expect "a build that is not an integer" "not a whole number" "$version" 1.2
 
-# The store's build, and nothing in it but the app.
+# The app archived, and nothing in it but the app.
 copy
 plutil -replace CFBundleIdentifier -string tw.iamreal.app.dev "$app/Info.plist"
-expect "the development build's identifier" "tw.iamreal.app.dev"
+expect "the development build's identifier" "the identifier is tw.iamreal.app.dev, not $identifier"
+copy
+plutil -replace CFBundleIdentifier -string $other "$app/Info.plist"
+expect "the other app's identifier" "the identifier is $other, not $identifier"
+copy
+plutil -replace CFBundleVersion -string $out_of_range "$app/Info.plist"
+plutil -replace ApplicationProperties.CFBundleVersion -string $out_of_range "$a/Info.plist"
+expect "a build out of the app's range" "the build is $out_of_range, not from" "$version" $out_of_range
 copy
 mkdir -p "$app/PlugIns/IamrealAppTests.xctest"
 : > "$app/PlugIns/IamrealAppTests.xctest/IamrealAppTests"
@@ -104,7 +117,7 @@ copy
 rm "$app/Assets.car"
 expect "no asset catalog" "Assets.car"
 
-# check-app.sh, as for a Release build: the test site, no library of the tests.
+# check-app.sh, as for that app's configuration: the test site, no library of the tests.
 copy
 printf 'https://iamreal.tw\0' >> "$app/IamrealApp"
 expect "the address of the production site" "https://iamreal.tw"
