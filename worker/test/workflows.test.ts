@@ -347,6 +347,9 @@ Object.assign(CHANGES, {
   ],
   "ios-upload 13 the profile not checked for NFC tag reading": [replace(U, " | grep -qw TAG && uuid=", " && uuid=")],
   "ios-upload 14 the test app's profile signing the production app": [replace(U, "secrets.IOS_APPSTORE_PROFILE_BASE64", "secrets.IOS_TEST_APPSTORE_PROFILE_BASE64")],
+  "ios-upload 16 the archive handed on without the app's entitlements": [
+    replace(U, '      - name: Sign the app ad hoc with its entitlements, for the export to read\n        run: codesign --force --sign - --timestamp=none --entitlements ios/Config/IamrealApp.entitlements "$RUNNER_TEMP/IamrealApp.xcarchive/Products/Applications/IamrealApp.app" && codesign --verify "$RUNNER_TEMP/IamrealApp.xcarchive/Products/Applications/IamrealApp.app"\n', ""),
+  ],
   "ios-upload 15 the signed app's NFC entitlement let through with more than TAG": [
     replace(U, ` && ! /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.nfc.readersession.formats:1' "$RUNNER_TEMP/entitlements.plist" > /dev/null 2>&1`, ""),
   ],

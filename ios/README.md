@@ -360,6 +360,7 @@ gh workflow run upload-ios-test.yml --repo iamreal-tw/iamreal --ref main   # 測
 | 交出去的 | archive 包成一個 tar 檔（artifact 不保留檔案的權限），加 `ExportOptions.plist` | 上傳到 App Store Connect |
 
 - **`archive.sh`** 做 Release（帶 `--test-app` 時 TestApp）的 archive，不簽章（`CODE_SIGNING_ALLOWED=NO`；這個工作沒有能簽章的東西），最後跑 `check-archive.sh`。建置時 `check-app.sh` 照常當最後一個建置階段跑。
+- **archive 之後用 entitlement 檔簽一個 ad hoc 的章。** 沒有簽章的 archive 裡沒有 entitlement，Xcode 匯出時只用它在 app 上找得到的：第一次手動簽章（[run 46001796708](https://github.com/iamreal-tw/iamreal/actions/runs/46001796708)，#143）簽出來的 app 沒有 NFC，`upload` 的檢查擋下了。所以 `build` 在 `archive.sh` 之後跑 `codesign --sign -`（ad hoc：不用金鑰、不用團隊）帶 `Config/IamrealApp.entitlements`，交下去的 app 就帶著 entitlement；`upload` 的匯出再用發布憑證重簽。
 - **`check-archive.sh`** 確認要上傳的就是那一個 app：識別碼 `tw.iamreal.app`（帶 `--test-app` 時 `tw.iamreal.app.test`）；版本和 build 是給它的那兩個數字，app 裡和 archive 自己的紀錄都是；app 有圖示（App Store Connect 不收沒有圖示的 build）；app 裡只有執行檔、Xcode 放的 `Info.plist`、`PkgInfo`、編好的圖示（`Assets.car` 和給舊版 iOS、給 iPad 相容模式的兩張 PNG）和「包進 app 的檔案」那張表的每一個（privacy manifest 也在裡面），沒有測試（`PlugIns/`，假卡片在裡面）、沒有別的檔，執行檔裡沒有 `FakeCard`；再以那個組態跑一次 `check-app.sh`（build 號碼在那個 app 的範圍裡、連測試網站、沒有正式網站的網址、沒有測試用的函式庫 `idc_testing_session_open`、內建的檔和程式庫的相同）。卡片簽哪一份證明紀錄的場合字串，執行檔裡看不出來（兩條都寫死在核心）；它跟著網址走：`App/AppEnvironment.swift` 在同一個編譯條件底下定網址和證明紀錄，執行檔裡是測試網站的網址，所以編進去的是測試那一支，而 `Tests/BuildTests.swift` 確認那一支簽 `iamreal-test:public:0`。
 - **簽章用營運者做的發布憑證，手動簽章**（[#143](https://github.com/iamreal-tw/iamreal/issues/143)）。開發者角色的 API 金鑰用不了 Apple 代管的發布憑證（第一次執行 [run 45933174888](https://github.com/iamreal-tw/iamreal/actions/runs/45933174888)：「You haven't been given access to cloud-managed distribution certificates」），API 金鑰也沒有地方另外給這個權限；它也不能建發布用的描述檔（[Roles](https://developer.apple.com/help/account/access/roles/)：「Create and delete distribution provisioning profiles」開發者那一欄是空的）。所以照 ADR-0036 的備案，營運者做一張 Apple Distribution 憑證和兩份 App Store 描述檔（兩個 app 各一份），放進 `app-test`，`ExportOptions.plist` 寫 `signingStyle` `manual`、`signingCertificate` `Apple Distribution`，描述檔在 `upload` 裡照識別碼寫進 `provisioningProfiles`。API 金鑰只用來上傳。不改用 App Manager 或 Admin 角色的金鑰：兩個都能送審（同一頁的「Submit apps」）。
 - **`app-test` 裡簽章用的 secret**：
@@ -373,7 +374,7 @@ gh workflow run upload-ios-test.yml --repo iamreal-tw/iamreal --ref main   # 測
 
   描述檔要包含 NFC Tag Reading：`upload` 檢查描述檔是這個 app、這個團隊，而且允許 NFC 的 `TAG`，不是就停。App ID 的能力改了，描述檔就失效要重做（[Enable app capabilities](https://developer.apple.com/help/account/identifiers/enable-app-capabilities/)：「Provisioning profiles that contain a modified App ID become invalid.」）。
 - **憑證和描述檔有到期日，到期前要換。** 到期日在 Apple Developer 網站的 Certificates、Profiles 頁上看得到；換的時候營運者重做、換掉上面的 secret。`.p12` 用「鑰匙圈存取」匯出：OpenSSL 3 預設的加密方式做的 `.p12`，`security import` 可能讀不了。撤銷憑證時，App Store 上的 app 不受影響，但已經上傳、還沒送審的 build 可能變成無效（[Certificates overview](https://developer.apple.com/help/account/certificates/certificates-overview/)）。
-- **先簽一次、不上傳，檢查 NFC 的 entitlement。** archive 沒有簽章，裡面沒有 entitlement；`upload` 先用 `destination` `export` 簽一次，從簽好的 app 讀出 entitlement：`com.apple.developer.nfc.readersession.formats` 要剛好是 `TAG` 一個，和 `Config/IamrealApp.entitlements` 相同，不多不少；識別碼要對，才往下簽章上傳。
+- **先簽一次、不上傳，檢查 NFC 的 entitlement。** Xcode 簽出來的 entitlement 要到這裡才看得到；`upload` 先用 `destination` `export` 簽一次，從簽好的 app 讀出 entitlement：`com.apple.developer.nfc.readersession.formats` 要剛好是 `TAG` 一個，和 `Config/IamrealApp.entitlements` 相同，不多不少；識別碼要對，才往下簽章上傳。
 - **團隊代號**是 environment `app-test` 的 variable `APPLE_TEAM_ID`（不是 secret：每個簽過的 app 裡都看得到它）。archive 沒有簽章、沒有團隊，匯出要知道用哪個團隊（`xcodebuild -help`：`teamID`「Defaults to the team used to build the archive」）。沒有設這個 variable，`upload` 在拿到金鑰之前就失敗。團隊代號不寫進程式庫（「怎麼用線裝到手機」）。
 - **`manageAppVersionAndBuildNumber` 是 `false`**：版本和 build 用 `archive.sh` 給的，Xcode 不另外改。`uploadSymbols` 是 `true`：Apple 收到當機報告時能還原成函式名稱（[#94](https://github.com/iamreal-tw/iamreal/issues/94)：當機只看商店自己的報告）。
 
@@ -395,8 +396,8 @@ gh workflow run upload-ios-test.yml --repo iamreal-tw/iamreal --ref main   # 測
 
 - `build` 交下去的 tar 檔、`upload` 解開它和把團隊代號寫進 `ExportOptions.plist`：第一次執行（run 45933174888）都跑過了，失敗在之後的簽章
 - `build` 的指令：`checks-ios.yml` 每次用同樣的 `archive.sh` 做一次 archive、跑 `check-archive-test.sh`，所以拉取請求時就看得到；它沒有包成 tar 檔交下去
-- `upload` 整個工作的手動簽章：鑰匙圈、描述檔、先簽一次的檢查、開發者角色的金鑰能不能上傳（[Roles](https://developer.apple.com/help/account/access/roles/) 的「Upload builds」開發者那一欄寫要有 Certificates, Identifiers & Profiles 的權限，API 金鑰算不算有，文件沒有寫）、App Store Connect 收不收這個 build
-- 讀卡的 entitlement（`Config/IamrealApp.entitlements`，[#174](https://github.com/iamreal-tw/iamreal/issues/174)）：archive 沒有簽章，裡面沒有 entitlement；手動簽章時 Xcode 給的 entitlement 有沒有 NFC，`upload` 先簽一次的那一步會看。沒有的話那一步失敗，不會上傳；那時改成 `build` 在 archive 時帶 entitlement 的檔
+- `upload` 的手動簽章：鑰匙圈、描述檔、Xcode 簽章在 run 46001796708 都跑過了；還沒跑到的是開發者角色的金鑰能不能上傳（[Roles](https://developer.apple.com/help/account/access/roles/) 的「Upload builds」開發者那一欄寫要有 Certificates, Identifiers & Profiles 的權限，API 金鑰算不算有，文件沒有寫）、App Store Connect 收不收這個 build
+- 讀卡的 entitlement（`Config/IamrealApp.entitlements`，[#174](https://github.com/iamreal-tw/iamreal/issues/174)）：沒有 ad hoc 簽章時，Xcode 簽出來的 app 沒有 NFC（run 46001796708）。有了 ad hoc 簽章之後，Xcode 重簽時會不會照它帶上 NFC，`upload` 先簽一次的那一步會看；不會的話那一步失敗，不會上傳
 
 ### 上傳之後營運者做的
 
