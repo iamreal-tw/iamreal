@@ -81,7 +81,7 @@ ${v.rows.map((row) => html`<li><a href="/p/${shortId(row.scopedId)}"><time>${for
     empty
       ? new Html("")
       : html`
-<p class="small">每一列是一張自然人憑證的一次過卡：新宣告、更換、更正、收回或再次過卡。每張自然人憑證對應到唯一的島民編號。帳號主人承不承認，要點進那一張看。</p>`
+<p class="small">每一列是一張自然人憑證的一次過卡：新宣告、更換、收回或再次過卡。每張自然人憑證對應到唯一的島民編號。帳號主人承不承認，要點進那一張看。</p>`
   }
 <p class="download"><a href="${DOWNLOAD}">下載全部的證明紀錄</a> <a href="/verify">如何驗證證明紀錄</a></p>
 </section>

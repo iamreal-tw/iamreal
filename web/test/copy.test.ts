@@ -62,8 +62,8 @@ const EXAMPLES: Record<string, string> = {
   store: "App Store",
   spot: "手機背面的上方",
   seconds: "5",
-  // done.mismatch_expected: the sentences of step 5's row (a switch, and that it is a correction).
-  expected: "更換，原本是 @alice。今天才宣告的帳號，這次改掉不另外算一次更換。",
+  // done.mismatch_expected: the sentences of step 5's row (it stays as it is).
+  expected: "不變",
   // The app's reminder (step 6): the day and the time it is set for, about how far off, the day the certificate expires.
   day: "2027-02-08（星期一）",
   time: "晚上 9:00",

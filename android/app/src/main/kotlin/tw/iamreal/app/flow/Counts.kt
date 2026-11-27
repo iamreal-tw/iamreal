@@ -214,7 +214,7 @@ class Counts(private val deps: Deps) {
             }
             "date_mismatch" -> "challenge_not_today"
             "min_app" -> "app_too_old"
-            "other_card", "revoked", "card_signature", "artifact", "engine", "idle", "date_changed", "clock", "state" -> stop.code
+            "other_card", "revoked", "card_signature", "artifact", "engine", "idle", "clock", "state" -> stop.code
             else -> "state"
         }
 

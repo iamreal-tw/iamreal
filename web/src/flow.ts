@@ -142,13 +142,6 @@ export type Stop =
   | { code: "server"; server: string; status: number; requestId?: string }
   /** The account typed for `platform` is not in that platform's format. */
   | { code: "username"; platform: string }
-  /**
-   * The date changed after the list was confirmed (midnight passed before the
-   * button was pressed, or while the challenge was on its way), and on the
-   * new date the list would do something other than the screen said. The
-   * card did not sign it.
-   */
-  | { code: "date_changed" }
   /** The caller called a step out of order. */
   | { code: "state" };
 
@@ -419,8 +412,6 @@ export class CardProofFlow {
   private state: CardStateResponse | null = null;
   private status: CardStatus | null = null;
   private chosen: Consequence | null = null;
-  /** The entries the consequence was computed from, to compute it again before the card signs. */
-  private choice: Choice | null = null;
   private scopedIdValue: bigint | null = null;
   private submission: Submission | null = null;
   /** When the first signature was made (deps.clock), and the timer that ends the wait for the second. */
@@ -542,7 +533,6 @@ export class CardProofFlow {
     this.status = null;
     this.state = null;
     this.chosen = null;
-    this.choice = null;
     this.submission = null;
   }
 
@@ -934,7 +924,6 @@ export class CardProofFlow {
       throw e;
     }
     this.chosen = consequence;
-    this.choice = { ...entries };
     this.phaseValue = "chosen";
     this.reached("chosen");
     return consequence;
@@ -945,7 +934,6 @@ export class CardProofFlow {
     this.expect("status_known", "chosen");
     this.checkIdle();
     this.chosen = null;
-    this.choice = null;
     this.phaseValue = "status_known";
     return this.status!;
   }
@@ -955,41 +943,21 @@ export class CardProofFlow {
     return consequenceOfChoice(this.status!, this.state!, entries, this.today());
   }
 
-  /**
-   * The chosen list, worked out again on today's date by the device's clock:
-   * the same list must do on every platform what the screen said. Only the
-   * date can make it differ (the card's state is the one the screen showed),
-   * so a difference, or a list no longer possible, is `date_changed`.
-   */
-  private sameAsShown(): void {
-    const chosen = this.chosen!;
-    let again: Consequence;
-    try {
-      again = this.consequenceOf(this.choice!);
-    } catch (e) {
-      const stop = toStop(e);
-      this.fail(stop.code === "blocked" ? { code: "date_changed" } : stop);
-    }
-    // The same list from the same choice: a different list is a program error.
-    if (!sameList(again.accounts, chosen.accounts)) this.fail({ code: "state" });
-    if (!sameRows(again.rows, chosen.rows)) this.fail({ code: "date_changed" });
-  }
-
   // Step 3: the card signs the declaration code, then prove and submit --------
 
   /**
    * `confirmed` is the list the consequence showed the cardholder and they
    * confirmed (Consequence.accounts), in its order. The card signs only if it
-   * is the list the declaration code will name, and only if the list still
-   * does on every platform what was shown, with today's date.
+   * is the list the declaration code will name. What the list does is not
+   * worked out again after midnight: since version 3 of the record rules
+   * (ADR-0018) no event rule reads the date, and a new day only lifts the
+   * day's limit.
    */
   async proceed(confirmed: readonly Account[]): Promise<Done> {
     this.expect("chosen");
     this.checkIdle();
     const chosen = this.chosen!;
     if (!sameList(confirmed, chosen.accounts)) this.fail({ code: "state" });
-    // Again, with today's date: a list that would now do something else is not signed.
-    this.sameAsShown();
     this.checkBackground();
     // The certificate and the CRL, again with today's date: the card may have
     // been read before midnight. No challenge is asked for if they no longer pass.
@@ -1024,11 +992,6 @@ export class CardProofFlow {
     }
     // Midnight may have passed while the server answered.
     this.checkStillValid(today);
-    // Midnight may have passed while the challenge was on its way. The record
-    // is dated the challenge's date (today, checked above): what the list
-    // does is worked out again on it, and a list that would now do something
-    // other than the screen said is not signed.
-    this.sameAsShown();
     this.progress("challenge");
     const challengeText = challenge as string;
     const code = await declarationCode(this.scopeStringValue, accounts, challengeText);
@@ -1342,17 +1305,6 @@ export function statusOf(state: CardStateResponse, table: readonly PlatformRow[]
 /** Two lists with the same accounts in the same order. */
 function sameList(a: readonly Account[], b: readonly Account[]): boolean {
   return a.length === b.length && a.every((x, i) => x.platform === b[i]!.platform && x.username === b[i]!.username);
-}
-
-/** Two consequences that do the same on every platform. */
-function sameRows(a: readonly ConsequenceRow[], b: readonly ConsequenceRow[]): boolean {
-  return (
-    a.length === b.length &&
-    a.every((x, i) => {
-      const y = b[i]!;
-      return x.platform === y.platform && x.username === y.username && x.kind === y.kind && x.switchesLeftAfter === y.switchesLeftAfter;
-    })
-  );
 }
 
 /**

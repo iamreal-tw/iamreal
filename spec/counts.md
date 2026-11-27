@@ -230,7 +230,6 @@ reader, a browser or the server said in words is never sent.
 | `proof_check` | web, android, ios | The proof did not pass the device's own check |
 | `challenge_malformed` | web, android, ios | The challenge is not in its one spelling |
 | `challenge_not_today` | web, android, ios | The challenge is not dated today by the device's clock |
-| `date_changed` | web, android, ios | The date changed after the list was confirmed, and the list would now do something else |
 | `idle` | web, android, ios | The PIN waited longer than 5 minutes for the second signature |
 | `state` | web, android, ios | A step was called out of order: a fault of the program |
 | `app_too_old` | android, ios | The app is older than the minimum version |

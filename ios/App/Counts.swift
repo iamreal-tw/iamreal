@@ -199,7 +199,6 @@ final class Counts {
         case .username: return "username"
         case .blocked(let reason, _): return "blocked_\(reason)"
         case .challengeNotToday: return "challenge_not_today"
-        case .dateChanged: return "date_changed"
         case .state: return "state"
         }
     }

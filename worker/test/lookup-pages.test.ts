@@ -214,8 +214,7 @@ describe("the proof log page", () => {
   });
 
   test("every kind of record as the table of 清單 writes it; a card's 3 valid records of one day, all of them; a record refused is not listed", async () => {
-    // 更正 is a row no record has had since version 3 of the record rules (ADR-0018); the copy loses it in #510.
-    assert.equal(table().size, 7, "the table of 清單 has the 6 rows this test writes, and 更正");
+    assert.equal(table().size, 6, "the table of 清單 has the 6 rows this test writes");
     const e = cardStarting("E000000000");
     await pagesWorld(worker, "2026-10-08", [
       r("2026-10-01", e, "threads:bob"),
