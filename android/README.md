@@ -17,8 +17,19 @@
 
 還沒有的：
 
-- 正式的圖示（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。現在是暫時的：一整片網站的青色（`#226977`，`web/src/ui/style.css` 的 `--teal`），沒有字、沒有圖案，和 iOS 的暫時圖示相同（`app/src/main/res/mipmap-anydpi/ic_launcher.xml`）
 - 第 2 步的示範還沒有在真手機上對過（[#153](https://github.com/iamreal-tw/iamreal/issues/153)）：示範裡卡片在手機背面上下找、停在比中間高一點的地方，是時間表定的，不是量過某一支手機的位置
+
+## 圖示
+
+app 的圖示是記號（紅色的自然人憑證和墨色的台灣，`web/src/ui/logo.ts`）放在頁面的白底上，營運者從三個方向裡選的（[#490](https://github.com/iamreal-tw/iamreal/issues/490)），和 iOS 的相同。每一種 build 都是同一個圖示，靠圖示下面的名稱分。
+
+- `app/src/main/res/mipmap-anydpi/ic_launcher.xml`：adaptive icon，底是 `token_bg`，前景是 `drawable/launcher_mark.xml`。前景 108dp，系統只顯示中間的 72dp、裁成它自己的形狀；記號每單位 0.76dp、放在正中間，卡片的每個角都在直徑 66dp 的圓裡，裁成圓形也不會切到。`ThemeTest` 核對底是 `token_bg`、前景畫的記號和啟動畫面的 `splash_mark.xml` 相同，台灣的每一點和卡片的四個角都在那個圓裡
+- 沒有單色的那一層（`<monochrome>`）：手機設成用主題色的圖示時，這個 app 照樣顯示原本的顏色
+- `test/AppIcon.java` 照 `launcher_mark.xml` 放記號的位置（和台灣的輪廓，卡片照 `web/src/ui/logo.ts` 寫在程式裡）畫出 iOS 的圖示（1024×1024、沒有透明度，寫進 `ios/App/Assets.xcassets/`），和 Google Play 商店頁的兩張圖：圖示（512×512、32 位元 PNG）、主題圖片（1024×500、24 位元 PNG，記號加「島民證明」，名稱從 `design/copy/app.json` 的 `splash.name` 讀、用 `design/fonts/` 的源流明體）。只用 JDK，改了記號或 `launcher_mark.xml` 之後在程式庫的根目錄手動跑；建置和部署都不跑它。商店的兩張由營運者自己換上 Play Console：
+
+  ```sh
+  java android/test/AppIcon.java android/test-output/store
+  ```
 
 ## 讀卡
 
@@ -107,7 +118,7 @@
 
 ## 商店頁的圖片
 
-Google Play 商店頁的圖片，第一版（[#489](https://github.com/iamreal-tw/iamreal/issues/489)）。兩樣都由程式產生，在這台電腦上跑，產生的圖不進程式庫：營運者在 Play Console 的商店資訊上傳。改了 app 的排版、字、顏色之後重跑，換掉商店頁上的。
+Google Play 商店頁的圖片（截圖是 [#489](https://github.com/iamreal-tw/iamreal/issues/489) 的第一版，圖示和主題圖片是 [#490](https://github.com/iamreal-tw/iamreal/issues/490) 的）。都由程式產生，在這台電腦上跑，產生的圖不進程式庫：營運者在 Play Console 的商店資訊上傳。改了 app 的排版、字、顏色之後重跑，換掉商店頁上的。
 
 **手機截圖 4 張**：「模擬器上過一次卡」的測試加上 `IAMREAL_STORE_SCREENS=<目錄>`，在新宣告的那一次拍：
 
@@ -130,13 +141,7 @@ IAMREAL_STORE_SCREENS=$PWD/../android/test-output/store IAMREAL_BB=<bb 6.0.0 的
 - 畫面上的都是假資料：假卡片（姓名「測試用戶」）、帳號 `@alice`、本機後台給的島民編號。沒有真的姓名
 - 測試的 build（`fake`）和發出去的 app 畫面是同一份程式；它連的是本機的後台，畫面上不出現網址
 
-**主題圖片**（1024×500）：`test/FeatureGraphic.java`，頁面的底色（`design/tokens.json` 的 `--bg`）上用標題的字型（`design/fonts/GenRyuMin2TW-B.otf`）、墨色（`--ink`）寫「島民證明」（`design/copy/app.json` 的 `splash.name`）。只用 JDK（和建置 app 的同一個），在程式庫的根目錄跑：
-
-```
-java android/test/FeatureGraphic.java android/test-output/store/feature-graphic.png
-```
-
-正式的圖示定了之後重做（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。
+**圖示和主題圖片**（512×512、1024×500）：`test/AppIcon.java` 照 app 的圖示畫（「圖示」）。
 
 ## PIN、憑證、簽章在哪裡
 
@@ -169,7 +174,7 @@ java android/test/FeatureGraphic.java android/test-output/store/feature-graphic.
 | `app/src/real/` | 發出去的安裝檔和用線裝的建置接到什麼（`Target.kt`）：測試網站、NFC 讀的卡片、核心自己的 session |
 | `app/src/fake/` | 只給模擬器測試的建置（build type `fake`）：假卡片、本機的後台、認測試金鑰的 session |
 | `app/src/testing/` | `TestingCore`：測試用的函式庫才有的那一個函式。只編進 `fake` 和單元測試 |
-| `test/` | 模擬器上過卡的測試（Node），見「模擬器上過一次卡」；它也拍商店頁的截圖，`FeatureGraphic.java` 做主題圖片（「商店頁的圖片」） |
+| `test/` | 模擬器上過卡的測試（Node），見「模擬器上過一次卡」；它也拍商店頁的截圖（「商店頁的圖片」）。畫 app 的圖示、商店頁的圖示和主題圖片的 `AppIcon.java`（「圖示」） |
 | `jni/` | JNI 那一層（C）：把 `idc_` 的 C 函式包成 Kotlin 呼叫得到的函式。照 `device-core/README.md`「C 函式的慣例」釋放和清除；只呼叫 `idc_` 開頭的函式 |
 | `build-native.sh` | 編 `device-core/` 的靜態函式庫，和 JNI 那一層連結成 `libiamreal_device_core_jni.so` |
 | `fetch-zig.sh`、`zig.sha256` | 下載 Zig 0.15.1，核對 SHA-256 |
@@ -299,7 +304,7 @@ cd device-core && rustup target add aarch64-linux-android x86_64-linux-android &
 
 ### 測試
 
-`./gradlew test`。測試在這台機器的 JVM 上跑，不需要模擬器：`build-native.sh host` 把同一份 Rust 和同一份 JNI 的程式編成這台機器的函式庫，Kotlin 的 `DeviceCore` 載入它。測試讀 `spec/vectors/` 的標準答案，不複製。`SubmitAnswerTest` 對著本機只答一次的假後台送出：201 的內文中途斷線或超過 1 MiB 時，`Backend.submit` 給沒有位元組、不是 `network`，交給核心讀是「什麼都沒說」（完成畫面只說記下了，#264）。`PausedTest`、`PausedViewTest` 測停止收過卡（#394）：`config` 說 `paused` 時第 2 步在讀卡之前停下；`challenges`、`records` 對著本機的假後台回 `503` `paused` 時，畫面是 `stops.paused`，只給重新開始。第 1 步每次打開（和回到 app 時）都再問一次 `config`，用來在讀卡之前說停止收過卡。`BusyTest`、`BusyViewTest` 測人太多（ADR-0026，#419），對著本機的假後台，被擋的請求照後台的樣子回 `429` `rate_limited` 或 `503` `busy`：按第 1 步的「下一步」時問一次帶開始記號的 `config?start`，被擋時過卡停在這裡，不感應卡片。接著讀卡時再問一次不帶記號的 `config`（「再感應一次卡片」開始的過卡不經過第 1 步，也是問這一次），被擋時用按「下一步」時拿到的那一份，和網頁相同；那一份讀不懂時沒有可以用的，停在讀卡之前。卡片現況、題目、送出被擋時過卡不結束：`BusyTest` 用 `spec/vectors/` 的一張卡片（測試的發證金鑰）和測試用的核心走完一次過卡，三個請求各被擋一次、各再送一次，卡片總共感應三次、交出 PIN 兩次，再送的卡片現況和紀錄和第一次逐位元組相同。`BusyViewTest` 檢查這三處的句子是 `stops.too_many`、按鈕是「再試一次」，送出被擋時不是「送出失敗」那一句。`AppNameTest` 讀 `design/copy/app.md`，核對正式 app 和開發用 build 圖示下面的名稱各自和它寫的相同、`app.json` 的名稱是三種 app 各一個（測試 app 的是給 #483 的建置用的），三個名稱都不同。`AppCopyTest` 核對 `design/copy/app.md` 和 `app.json` 雙向逐字相同：JSON 的每一個值是 Markdown 某個程式碼區塊的一行，那些區塊的每一行也都是 JSON 的一個值。`SecureChannelTest` 跑 `spec/vectors/card-channel.json` 的每一案（假的金鑰素材）。`GpkiCardTest` 對一張在測試裡模擬的卡片送指令：卡片那一端照 `spec/card-channel.md` 核對每一道加密指令的 MAC、用它自己數的計數器解密，所以計數器少算一道指令，下一道就被拒絕；測的是通道建立不起來時不回送認證、不送 PIN，第一代的卡片停下來，PIN 被拒絕或卡片在送 PIN 時離開都不重送，「取消」在下一道指令之前停下。app 寫在程式裡的金鑰素材是不是真卡片的，只有真卡片測得出來（「真卡片的測試清單」）。`CountsTest` 測計數（`flow/Counts.kt`）：過卡裝置編號照 `spec/vectors/counts.json` 的 `device_ids` 換（規則在核心，`idc_count_device_id`）、一筆計數帶什麼不帶什麼、版本和型號不合格式的拿掉、每一步只送一次、停下來之後不再送、伺服器的代碼表上沒有的送 `server_other`、送不出去時過卡照常；`CardProof` 停下來的每一種都有表上的原因（核心組得出內文才算），第 2 步感應的每一種失敗送的是 stop、retry 還是感應中途掉線的動作，`config` 停止收過卡、沒有回應、版本太舊各送什麼。`RecordedCounts` 是測試記下計數的那一份。`ThemeTest` 讀 `design/tokens.json`，核對 `ui/Theme.kt` 和 `res/values/colors.xml`（視窗和 Android 12 起系統的啟動畫面用的顏色）寫的每一個數值和同名的那一個相同。
+`./gradlew test`。測試在這台機器的 JVM 上跑，不需要模擬器：`build-native.sh host` 把同一份 Rust 和同一份 JNI 的程式編成這台機器的函式庫，Kotlin 的 `DeviceCore` 載入它。測試讀 `spec/vectors/` 的標準答案，不複製。`SubmitAnswerTest` 對著本機只答一次的假後台送出：201 的內文中途斷線或超過 1 MiB 時，`Backend.submit` 給沒有位元組、不是 `network`，交給核心讀是「什麼都沒說」（完成畫面只說記下了，#264）。`PausedTest`、`PausedViewTest` 測停止收過卡（#394）：`config` 說 `paused` 時第 2 步在讀卡之前停下；`challenges`、`records` 對著本機的假後台回 `503` `paused` 時，畫面是 `stops.paused`，只給重新開始。第 1 步每次打開（和回到 app 時）都再問一次 `config`，用來在讀卡之前說停止收過卡。`BusyTest`、`BusyViewTest` 測人太多（ADR-0026，#419），對著本機的假後台，被擋的請求照後台的樣子回 `429` `rate_limited` 或 `503` `busy`：按第 1 步的「下一步」時問一次帶開始記號的 `config?start`，被擋時過卡停在這裡，不感應卡片。接著讀卡時再問一次不帶記號的 `config`（「再感應一次卡片」開始的過卡不經過第 1 步，也是問這一次），被擋時用按「下一步」時拿到的那一份，和網頁相同；那一份讀不懂時沒有可以用的，停在讀卡之前。卡片現況、題目、送出被擋時過卡不結束：`BusyTest` 用 `spec/vectors/` 的一張卡片（測試的發證金鑰）和測試用的核心走完一次過卡，三個請求各被擋一次、各再送一次，卡片總共感應三次、交出 PIN 兩次，再送的卡片現況和紀錄和第一次逐位元組相同。`BusyViewTest` 檢查這三處的句子是 `stops.too_many`、按鈕是「再試一次」，送出被擋時不是「送出失敗」那一句。`AppNameTest` 讀 `design/copy/app.md`，核對正式 app 和開發用 build 圖示下面的名稱各自和它寫的相同、`app.json` 的名稱是三種 app 各一個（測試 app 的是給 #483 的建置用的），三個名稱都不同。`AppCopyTest` 核對 `design/copy/app.md` 和 `app.json` 雙向逐字相同：JSON 的每一個值是 Markdown 某個程式碼區塊的一行，那些區塊的每一行也都是 JSON 的一個值。`SecureChannelTest` 跑 `spec/vectors/card-channel.json` 的每一案（假的金鑰素材）。`GpkiCardTest` 對一張在測試裡模擬的卡片送指令：卡片那一端照 `spec/card-channel.md` 核對每一道加密指令的 MAC、用它自己數的計數器解密，所以計數器少算一道指令，下一道就被拒絕；測的是通道建立不起來時不回送認證、不送 PIN，第一代的卡片停下來，PIN 被拒絕或卡片在送 PIN 時離開都不重送，「取消」在下一道指令之前停下。app 寫在程式裡的金鑰素材是不是真卡片的，只有真卡片測得出來（「真卡片的測試清單」）。`CountsTest` 測計數（`flow/Counts.kt`）：過卡裝置編號照 `spec/vectors/counts.json` 的 `device_ids` 換（規則在核心，`idc_count_device_id`）、一筆計數帶什麼不帶什麼、版本和型號不合格式的拿掉、每一步只送一次、停下來之後不再送、伺服器的代碼表上沒有的送 `server_other`、送不出去時過卡照常；`CardProof` 停下來的每一種都有表上的原因（核心組得出內文才算），第 2 步感應的每一種失敗送的是 stop、retry 還是感應中途掉線的動作，`config` 停止收過卡、沒有回應、版本太舊各送什麼。`RecordedCounts` 是測試記下計數的那一份。`ThemeTest` 讀 `design/tokens.json`，核對 `ui/Theme.kt` 和 `res/values/colors.xml`（視窗和 Android 12 起系統的啟動畫面用的顏色）寫的每一個數值和同名的那一個相同，並核對 app 的圖示（「圖示」）。
 
 這台機器的函式庫是測試用的那一種（`build-native.sh` 的 `test-issuers`：`device-core/` 開 cargo feature `test-issuers`，多一個收測試發證金鑰開 session 的函式 `idc_testing_session_open`，其餘和 app 連結的相同）：標準答案裡的憑證是測試金鑰簽的，不是內政部簽的。`SessionTest` 用它拿 `circuit-inputs.json` 的一張卡片從 Kotlin 走完一次過卡在核心裡的每一步：檢查憑證、選清冊和檢查清冊、建樹、核對內建的檔案、查現況的請求和短編號、算證明和送出的請求，並跑 `list-consequence.json`、`card-status.json` 的每一案。`AnswerTest` 跑 `records-response.json` 的每一案：送出後後台的回應由核心讀（`idc_records_response`），app 拿到的 `seq`、雜湊、每個平台記成什麼、和確認畫面不同的平台，和標準答案相同。`DoneViewTest` 檢查完成畫面說哪幾句（`design/copy/card-proof.json` 的哪幾個鍵）：小卡、掛到個人檔案、還可以做的那幾句，第一筆紀錄、全部收回、超過一個平台時各不同的地方；以及對後台的回應：和確認時相同、讀不出每個平台記成什麼（標題「證明紀錄已經記下這次過卡」、日期和說明原因的那一句；那一句 `design/copy/card-proof.md` 寫了 app 的寫法還沒有定，先用網頁的，和 iOS 相同）、別的卡片也宣告了同一個帳號、和確認時不同的每一種。後台是誠實的時候模擬器上遇不到最後一種，所以在這裡測。
 

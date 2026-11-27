@@ -2,7 +2,7 @@
 // draws (src/pages/layout.ts, LOGO) in the colours of design/tokens.json,
 // at 16, 32 and 48 pixels (#356). Every page links to it, and it is at
 // /favicon.ico, where a browser or a link preview asks for an icon by itself
-// (README.md, "Static Assets"). The app icon of #154 replaces it.
+// (README.md, "Static Assets"). The apps' icon is the same mark on white (#490).
 //
 // Run it by hand after the mark changes:
 //
