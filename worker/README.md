@@ -8,7 +8,7 @@
 
 | 有 | 還沒有 |
 |---|---|
-| 清冊鏡像（[排程做什麼](#排程做什麼)）：每小時抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl`，驗章、建樹，寫清冊存檔的索引 `crl/index.jsonl`。`crl/testdata/` 的每一案和 Go 的 `crl/` 比對過 | |
+| 清冊鏡像（[排程做什麼](#排程做什麼)）：每小時抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl`，驗章、建樹，寫清冊存檔的索引 `crl/index.jsonl`，寫清冊差異檔 `crl/patches/`。`crl/testdata/` 的每一案和 Go 的 `crl/` 比對過 | |
 | 證明紀錄的 Durable Object：題目表、紀錄、卡片狀態表、證明紀錄的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | |
 | 限流（[限流](#限流)）：照 IP 的上限，題目、卡片現況、送出、公開的讀取、計數、頁面六類分開算，IPv4 照單一位址、IPv6 照 /64，超過回 `429` 和 `Retry-After`，訪客頁面回一頁說明；全站的總量上限，只數開始過卡的那一次 `config?start`；Durable Object 撐不住時介面回 `503` `busy`、頁面回人太多的那一頁。第二層的 WAF 限流規則（整個 zone，照 IP 每 10 秒 100 次）開著，緊急時的挑戰頁做好、關著，2026-11-27 在測試網站設好、實際打過一次（[營運者的說明](#營運者的說明)，[#423](https://github.com/iamreal-tw/iamreal/issues/423)） | 正式上線時挑戰頁的規則要加 `iamreal.tw`；資料網域多一個目錄時，WAF 的規則要加進排除；兩層的上限照量測再調（[#52](https://github.com/iamreal-tw/iamreal/issues/52)） |
 | 收計數（[計數](#計數)，ADR-0032、ADR-0039）：`POST /api/v1/counts` 照 `spec/counts.md` 的表收，不合的整筆丟掉；收下的交給專門收計數的 Durable Object，每分鐘寫成不公開的儲存桶裡 `count-events/` 底下的一個檔，裡面沒有 IP，留 31 天；每分鐘的明細有上限；每小時公布最舊一檔的日期。送計數的客戶端有網頁版的過卡和訪客頁面（[頁面和檔案](#頁面和檔案)「訪客頁面送計數」）。加總（[計數的加總](#計數的加總)）：每天的、每月的、每張島民證明每月一筆、每月送出好幾張卡片的裝置，永久存在 `count-totals/`，裡面沒有 IP 和編號；每小時公布最早一天的加總的日期，外部檢查每小時讀它（[#435](https://github.com/iamreal-tw/iamreal/issues/435)，2026-11-27 打開）。營運者在自己的電腦上產生看數字的那一頁（[營運者看數字的那一頁](#營運者看數字的那一頁)） | 兩個 app 送計數（[#433](https://github.com/iamreal-tw/iamreal/issues/433)、[#434](https://github.com/iamreal-tw/iamreal/issues/434)）；島民證明的「下載 app」和商店的來源參數（[#457](https://github.com/iamreal-tw/iamreal/issues/457)）；這個物件一秒收得了多少還沒量；手機型號的加總（表上還沒有這個欄位） |
@@ -985,7 +985,7 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 
 每小時一次。先公布連線紀錄最舊一筆的日期（[連線紀錄](#連線紀錄)）、計數明細最舊一檔的日期（[計數](#計數)）和最早一天的加總的日期（[計數的加總](#計數的加總)），三件各做各的，和下面的鏡像也互不影響；再做一輪清冊鏡像。鏡像之後算計數的加總：鏡像失敗也照算，算完才把鏡像的錯誤丟出來，這一次執行照樣算失敗；加總自己出錯只寫一行 `{"event":"count_totals_not_made","error":"Error"}`，下一個小時再算。鏡像在前，是因為鏡像的一輪從自己開始時算時間（`src/round-budget.ts`）。
 
-清冊鏡像的程式在 [`src/mirror.ts`](src/mirror.ts)，照 [`spec/revocation-tree.md`](../spec/revocation-tree.md)。鏡像三步：
+清冊鏡像的程式在 [`src/mirror.ts`](src/mirror.ts)，照 [`spec/revocation-tree.md`](../spec/revocation-tree.md)。鏡像四步：
 
 **一、抓和存。**
 
@@ -1033,6 +1033,16 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 
 這一條講的是每一次交的當下，不是 Durable Object 任何時刻存著的東西：見下面「兩輪同時跑」。
 
+**四、寫清冊差異檔**（[#545](https://github.com/iamreal-tw/iamreal/issues/545)）。清冊差異檔從同一把發證金鑰的上一份可用清冊還原出這一份，格式、檔名、哪兩份算相鄰、什麼樣的差異檔不可用，寫在規格「CRL patches」；讀它的程式和標準答案的測試在 [`src/crl-patch.ts`](src/crl-patch.ts)、[`test/crl-patch.test.ts`](test/crl-patch.test.ts)（讀 `spec/vectors/crl-patch.json`）。差異檔放在 `crl/patches/<上一份的 SHA-256>-<這一份的 SHA-256>.patch`，不是清冊存檔的一部分：索引不列它，上面兩步列檔案時也不看它。
+
+1. 第二步每補上一份可用清冊的行（交給 Durable Object 之後），就寫它的差異檔：上一份是索引現在列著的、同一把金鑰照清冊編號排在它前面的那一份可用清冊。第一份沒有。不可用的檔不做差異檔，也不當上一份。
+2. 第二步做完之後，把索引裡每一對相鄰、還沒有差異檔的可用清冊補上，新的先補。和第二步補舊的檔用同一條時間界線（`catchUpMs`，從這一輪開始補索引算起）：每開始一份之前先看時間，到了就留給下一輪，這不算錯誤。這一輪抓到的檔的差異檔不看時間，一定做。這一版部署之前已經在存檔裡的清冊，也是這樣補上的。
+3. 一份差異檔：從儲存桶讀出兩份原檔，各自核對 SHA-256 和檔名相同；算出差異檔；在記憶體裡用它還原一次，還原出來的 SHA-256 等於檔名的後半才寫。差異檔怎麼找相同的段落不屬於規格，只影響大小：以上一份每 32 個位元組為一段建雜湊表，在這一份上逐位元組找得到的段落，往前往後延伸成一次複製，中間的寫入。2026-11-27 的兩對量到：G3（多 168 筆）11,295 位元組，G2（多 56 筆）3,906 位元組；本機的 Node 22 做一份約 0.5 秒，還原約 20 毫秒。
+4. 一份差異檔寫不成（原檔讀不到、還原出來對不上、寫入出錯）只是那一份的事：那份清冊的行、交給 Durable Object 都已經做完，不等它；其他差異檔照做；這一次排程最後以例外結束，下一輪再試。列不出 `crl/patches/` 時，只寫這一輪補上行的檔的差異檔，不補其他的。
+5. 一對清冊之間後來多了一份（比較晚才補上行的檔），原本那一對的差異檔留著：它照樣還原得出那一份，只是不再是相鄰的兩份。新的兩對照上面補上。
+
+差異檔從原檔隨時重算得出來，不像原檔那樣鎖（ADR-0033 的鎖只在 `crl/0` 到 `crl/f`）。
+
 ```ts
 interface KnownCrl {
   root: string;      // 樹根，64 個小寫十六進位數字，和紀錄的 smt_root 同一種寫法
@@ -1044,7 +1054,7 @@ type NewestCrls = { G2: KnownCrl[]; G3: KnownCrl[] }; // 每把最多兩份，�
 
 Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（樹根是不是這兩份之一、最新那一份是不是太舊）用的就是它（見[送出一筆](#送出一筆)）。
 
-只要有一份清冊沒抓到、有一個檔沒補上行、索引沒寫成、或沒交給 Durable Object，這一次排程就以例外結束，在 Cloudflare 的紀錄上是失敗的一次；做得到的部分照樣做完。
+只要有一份清冊沒抓到、有一個檔沒補上行、索引沒寫成、沒交給 Durable Object、或有一份差異檔沒寫成，這一次排程就以例外結束，在 Cloudflare 的紀錄上是失敗的一次；做得到的部分照樣做完。
 
 寫進資料儲存桶的每個物件都設 `Cache-Control`：資料網域的快取規則是「有就照它，沒有就不快取」。
 
@@ -1052,6 +1062,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 |---|---|---|
 | `crl/<SHA-256>.crl` | `public, max-age=31536000, immutable` | 檔名就是內容的雜湊，內容不會變 |
 | `crl/index.jsonl` | `public, max-age=60` | 內政部簽發新的清冊就會變 |
+| `crl/patches/<SHA-256>-<SHA-256>.patch` | `public, max-age=31536000, immutable` | 和原檔一樣：檔名是兩份原檔的雜湊，同一個名字還原出來的一定是同一個檔 |
 
 **鏡像在一個換得掉的介面後面**（ADR-0023）：`src/mirror.ts` 的 `CrlMirror`，只有一個方法 `round()`，回傳這一輪做了什麼、哪裡出錯，不丟例外。現在的實作 `crlMirrorInWorker` 全部在 Worker 裡做，要的東西（來源、儲存桶、發證金鑰、雜湊、兩個時間、告訴 Durable Object 的函式 `tell`）由 `src/index.ts` 交給它；超過 Workers 的限制時換掉它（例如在 Containers 跑 Go 的 `crl/`），`src/index.ts` 只改建立它的那幾行。
 
@@ -1062,9 +1073,11 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 ```
 {"event":"crl_mirror","at":"2026-11-20T08:00:00.123Z","issuer":"G3","result":"stored","sha256":"…"}
 {"event":"crl_index","at":"2026-11-20T08:00:00.123Z","result":"indexed","sha256":"…","issuer":"G3","crl_number":"2026112016","crl_date":"2026-11-20","root":"…","entries":178020,"keys":178020,"hashes":434659,"read_ms":113,"tree_ms":15657}
+{"event":"crl_patch","at":"2026-11-20T08:00:00.123Z","result":"written","from":"…","to":"…","bytes":11295,"ms":512}
 ```
 
 - `crl_mirror` 的 `result` 是 `stored`（新的一份）、`already_stored`（整份下載了，已經有）、`not_modified`（內政部回 `304`，沒有下載；`sha256` 是鏡像手上的那一份）、`failed`（附 `error`）。
+- `crl_patch` 的 `result` 是 `written` 或 `failed`（附 `error`）；`from`、`to` 是兩份原檔的 SHA-256，`bytes` 是差異檔的大小，`ms` 是從讀原檔到寫完，和 `read_ms` 一樣只有本機是準的。
 - `crl_index` 的 `result` 是 `indexed` 或 `failed`（附 `error`）。`entries` 是廢止的筆數，`keys` 是樹裡的鍵數，`hashes` 是建樹算了幾次 Poseidon2；`read_ms` 是從儲存桶讀出來到驗完章，`tree_ms` 是建樹，都是毫秒。**`read_ms` 和 `tree_ms` 只有在本機是準的**：Cloudflare 上時鐘在計算時不前進（見上面「這一輪抓到的檔先做」），這兩個數字都是算完才讀時鐘，中間沒有 I/O，線上會偏小，可能是 0。線上用了多少 CPU 時間看儀表板的 Metrics。
 
 ### 和 Go 的 `crl/` 逐案比對
@@ -1073,7 +1086,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 
 1. `crl/testdata/` 的 61 份自製清冊：每一份的可用不可用、原因代碼、樹根、編號、時間、清冊日期，和 `crl/testdata/expected.json`（Go、`web/`、`device-core/` 的測試讀的同一份）相同。包括清冊編號剛好 20 和 21 個位元組、清冊和一筆的延伸欄位剛好 16 和 17 個。
 2. `crl/testdata/times/` 的 75 份（最後十六份不是時間：九份是延伸欄位的 OID，一個數字剛好是 2^31−1 和 2^31、不是最短寫法、沒寫完、空的，規格「Object identifiers」；七份是元素後面多了東西）：`thisUpdate`、`nextUpdate`、一筆的 `revocationDate` 用各種寫法（沒有秒的 UTCTime、帶時差、有小數、`Z` 後面還有字元、西元 0 年和 9999 年、不存在的日期……）。每一份在索引裡的那一行，和 `crl/testdata/times/expected.json` 寫的逐字相同；Go、`web/`、`device-core/` 的測試讀同一份。時間只收 RFC 5280 的兩種寫法（規格「Times」）：`Z` 結尾、有秒的 UTCTime 和 GeneralizedTime，其他寫法的檔是 `-not_usable_der`。線上的清冊每個時間都是 12 位數字加 `Z` 的 UTCTime。
-3. 把儲存桶裡的清冊檔寫到一個目錄，跑 Go 的 `iamreal-crl index`，印出來的索引和儲存桶裡的 `crl/index.jsonl` 逐位元組相同。除了上面 136 份，還有 3 個不是清冊的檔和 1 份測試金鑰簽的清冊。**這一項要有 `go`，沒有就跳過；前兩項不用。**
+3. 把儲存桶裡的清冊檔寫到一個目錄、鏡像寫的清冊差異檔寫到它的子目錄 `patches/`，跑 Go 的 `iamreal-crl index`，印出來的索引和儲存桶裡的 `crl/index.jsonl` 逐位元組相同：子目錄不是存檔的一部分。除了上面 136 份，還有 3 個不是清冊的檔和 1 份測試金鑰簽的清冊。**這一項要有 `go`，沒有就跳過；前兩項不用。**
 
 2026-11-21 跑的結果（#120 之後，那時是 106 份）：三項都過，共 110 個檔，索引 110 行，沒有一行不同。
 
@@ -1189,7 +1202,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 |---|---|
 | 送 HTTP 請求 | `worker.fetch("/路徑")`，或對 `worker.url` 用一般的 `fetch` |
 | 觸發排程 | `worker.runSchedule()`，回傳 `outcome`（`ok` 或 `exception`） |
-| 讀 R2 的模擬裡寫出來的檔案 | `worker.files("crl/")`：檔名、內容、`Cache-Control`、寫入時間 |
+| 讀 R2 的模擬裡寫出來的檔案 | `worker.files("crl/")`：檔名、內容、`Cache-Control`、寫入時間；清冊差異檔也在裡面（`crl/patches/`），只要原檔和索引時濾掉 |
 | 調時鐘 | `worker.setClock(new Date("…"))` |
 | 假的內政部 | `worker.moica.serve("G2", 位元組)`、`.fail("G3", 503)`、`.cutOff(…)`（送到一半斷線）、`.stall(…)`（不回應或送到一半停住）、`.requests` |
 | 縮短等內政部的上限 | `startWorker({ crlTimeoutMs: 1500 })`，預設 2 秒 |

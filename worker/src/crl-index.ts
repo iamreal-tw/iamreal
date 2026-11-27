@@ -53,12 +53,24 @@ export function compareNumbers(a: string, b: string): number {
 
 const compareText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
+/** The order of the index: by issuer, then CRL number as a number, then SHA-256. */
+const compareLines = (a: IndexLine, b: IndexLine): number => compareText(a.issuer, b.issuer) || compareNumbers(a.crlNumber, b.crlNumber) || compareText(a.sha256, b.sha256);
+
 /** The lines as an index file: sorted by issuer, then CRL number as a number, then SHA-256. */
 export function formatIndex(lines: readonly IndexLine[]): string {
-  return [...lines]
-    .sort((a, b) => compareText(a.issuer, b.issuer) || compareNumbers(a.crlNumber, b.crlNumber) || compareText(a.sha256, b.sha256))
-    .map(formatLine)
-    .join("");
+  return [...lines].sort(compareLines).map(formatLine).join("");
+}
+
+/** Two usable CRLs of one issuer key, `from` just before `to` (spec/revocation-tree.md, "CRL patches"). */
+export interface PatchPair {
+  readonly from: IndexLine;
+  readonly to: IndexLine;
+}
+
+/** Every pair of the lines that has a CRL patch, in the order of the index. */
+export function patchPairs(lines: readonly IndexLine[]): PatchPair[] {
+  const sorted = lines.filter(usable).sort(compareLines);
+  return sorted.flatMap((to, i) => (i > 0 && sorted[i - 1]!.issuer === to.issuer ? [{ from: sorted[i - 1]!, to }] : []));
 }
 
 const TIME = String.raw`-|-?\d{4,}-\d\d-\d\dT\d\d:\d\d:\d\dZ`;

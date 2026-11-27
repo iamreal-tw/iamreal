@@ -1,6 +1,7 @@
 // What must hold whatever the bucket does: every time the mirror tells the
 // proof log's object of a root, the index in the bucket lists that root at
-// that moment. The local workerd's bucket cannot be made to fail, so here
+// that moment; and a CRL patch that cannot be written keeps neither the
+// index nor the proof log's object waiting. The local workerd's bucket cannot be made to fail, so here
 // the mirror (src/mirror.ts, `crlMirrorInWorker`) runs in Node over a
 // stand-in for the bucket whose writes of the index can go wrong, and the
 // check is made inside `tell`. The hash is a stand-in too: the roots are
@@ -16,7 +17,7 @@ import { sha256Hex } from "./proofs.ts";
 // (`R2Bucket`), which the tests' Node project does not have: it is loaded
 // without its types, and what the test uses of it is spelled out here.
 interface Mirror {
-  round(): Promise<{ readonly errors: readonly string[] }>;
+  round(): Promise<{ readonly errors: readonly string[]; readonly patches: readonly { readonly result: string; readonly to: string }[] }>;
 }
 interface Parts {
   readonly sources: readonly { readonly issuer: "G2" | "G3"; readonly url: string }[];
@@ -40,6 +41,8 @@ class Bucket {
   #stored = 0;
   indexWrites = 0;
   fault: (write: number) => Fault = () => undefined;
+  /** Whether a write of a CRL patch throws without writing. */
+  patchesFail = false;
 
   set(key: string, value: Uint8Array | string): { etag: string } {
     const object = { bytes: typeof value === "string" ? new TextEncoder().encode(value) : value, etag: `etag-${++this.#stored}`, uploaded: new Date(1e12 + this.#stored * 1000) };
@@ -60,8 +63,9 @@ class Bucket {
   async list({ prefix }: { prefix: string }): Promise<{ objects: { key: string; uploaded: Date }[]; truncated: boolean }> {
     return { objects: [...this.objects].filter(([key]) => key.startsWith(prefix)).map(([key, o]) => ({ key, uploaded: o.uploaded })), truncated: false };
   }
-  async put(key: string, value: string | ArrayBuffer, options: { onlyIf?: Headers | { etagMatches: string } }): Promise<{ etag: string } | null> {
+  async put(key: string, value: string | ArrayBuffer | Uint8Array, options: { onlyIf?: Headers | { etagMatches: string } }): Promise<{ etag: string } | null> {
     const bytes = typeof value === "string" ? value : new Uint8Array(value);
+    if (key.startsWith("crl/patches/") && this.patchesFail) throw new Error("the bucket failed");
     if (key !== INDEX) return this.set(key, bytes);
     const fault = this.fault(++this.indexWrites);
     if (fault === "throws") throw new Error("the bucket failed");
@@ -147,3 +151,29 @@ for (const fault of ["throws", "throws after writing"] as const) {
     assert.deepEqual(told.known.G3.map((c) => c.crlNumber), ["3", "2"]);
   });
 }
+
+test("a CRL patch that cannot be written: the index has the CRL's line, the proof log's object knows it, the round says so, and the next round writes it", async () => {
+  const bucket = new Bucket();
+  const served: Record<string, Uint8Array> = {};
+  const told = { known: { G2: [], G3: [] } as NewestCrls, unlisted: [] as string[] };
+  const mirror = mirrorOver(bucket, served, told);
+  [served[SOURCES[0].url], served[SOURCES[1].url]] = [g2(1n), g3(1n)];
+  assert.deepEqual((await mirror.round()).errors, []);
+
+  bucket.patchesFail = true;
+  const second = g3(2n);
+  served[SOURCES[1].url] = second;
+  const failed = await mirror.round();
+  assert.equal(failed.errors.length, 1, failed.errors.join("; "));
+  assert.match(failed.errors[0]!, /patch .*-([0-9a-f]{64})\.patch was not written: the bucket failed/);
+  assert.deepEqual(failed.patches.map((p) => [p.result, p.to]), [["failed", sha256Hex(second)]]);
+  assert.ok(bucket.index().includes(`"sha256":"${sha256Hex(second)}"`));
+  assert.deepEqual(told.known.G3.map((c) => c.crlNumber), ["2", "1"]);
+  assert.deepEqual(told.unlisted, []);
+
+  bucket.patchesFail = false;
+  const next = await mirror.round();
+  assert.deepEqual(next.errors, []);
+  assert.deepEqual(next.patches.map((p) => [p.result, p.to]), [["written", sha256Hex(second)]]);
+  assert.ok([...bucket.objects.keys()].some((key) => key.startsWith("crl/patches/") && key.endsWith(`-${sha256Hex(second)}.patch`)));
+});

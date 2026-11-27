@@ -29,14 +29,17 @@ export const ROUND_CPU_MS: number = 300_000;
  * to 29 seconds in the local workerd (README.md, "清冊鏡像量到的"). How
  * much longer it takes on Cloudflare is not measured yet; all that is known
  * is that 32 seconds were not enough. So this is five times the local
- * figure, which also leaves room for the CRL to grow.
+ * figure, which also leaves room for the CRL to grow. The CRL patch of
+ * that file, written after its tree, and the last patch a round starts,
+ * take about half a second each in Node (README.md, "排程做什麼", 四): they fit
+ * in what is left over.
  */
 export const RESERVED_FOR_LARGEST_CRL_MS: number = 150_000;
 
 /**
  * For how long a round goes on starting files an earlier round left without
- * a line (src/mirror.ts, `catchUpMs`): until what is left of the CPU time
- * is what is kept back. The round measures it by the clock, from when it
+ * a line, and CRL patches of pairs that have none (src/mirror.ts,
+ * `catchUpMs`): until what is left of the CPU time is what is kept back. The round measures it by the clock, from when it
  * begins on the archive. A Worker cannot read its CPU time; from there on
  * the round computes or waits for the bucket, so the CPU time it uses is
  * never more than the time that has passed. Before that it only fetches
