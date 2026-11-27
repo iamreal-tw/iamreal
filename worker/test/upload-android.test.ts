@@ -13,9 +13,9 @@ import { WORKER_DIR } from "./build.ts";
 
 const WORKFLOWS_DIR = join(WORKER_DIR, "..", ".github", "workflows");
 
-/** Runs android-version.sh as the build job does: the run's number, the time now, and the app's number (0: the production app's). */
-function version(runNumber: string, now: string, added = "0"): { status: number | null; stdout: string; stderr: string } {
-  const r = spawnSync("bash", [join(WORKFLOWS_DIR, "android-version.sh"), runNumber, now, added], { encoding: "utf8", env: { PATH: process.env.PATH ?? "" } });
+/** Runs android-version.sh as the build job does: the run's number, the time now, and the app's build-number offset (0: the production app's). */
+function version(runNumber: string, now: string, offset = "0"): { status: number | null; stdout: string; stderr: string } {
+  const r = spawnSync("bash", [join(WORKFLOWS_DIR, "android-version.sh"), runNumber, now, offset], { encoding: "utf8", env: { PATH: process.env.PATH ?? "" } });
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };
 }
 
@@ -60,19 +60,19 @@ test("android-version.sh: the test app's build is its run's number plus 1,000,00
   assert.equal(version("42", "2026-11-21T03:00:00Z", "1000000").stdout, "name=2026.11.21\ncode=1000042\n");
 });
 
-test("android-version.sh: stops on a number added that is not one, or a build number above what Google Play takes", () => {
-  for (const [runNumber, added] of [
+test("android-version.sh: stops on an offset that is not a number, or a build number above what Google Play takes", () => {
+  for (const [runNumber, offset] of [
     ["7", ""],
     ["7", "-1"],
     ["7", "01000000"],
     ["7", "1e6"],
     ["2100000000", "1"],
   ] as const) {
-    const r = version(runNumber, "2026-11-21T03:00:00Z", added);
-    assert.notEqual(r.status, 0, JSON.stringify([runNumber, added]));
-    assert.equal(r.stdout, "", JSON.stringify([runNumber, added]));
+    const r = version(runNumber, "2026-11-21T03:00:00Z", offset);
+    assert.notEqual(r.status, 0, JSON.stringify([runNumber, offset]));
+    assert.equal(r.stdout, "", JSON.stringify([runNumber, offset]));
   }
-  // Two arguments, as before #483: the app's number is not left to a default.
+  // Two arguments, as before #483: the offset is not left to a default.
   const r = spawnSync("bash", [join(WORKFLOWS_DIR, "android-version.sh"), "7", "2026-11-21T03:00:00Z"], { encoding: "utf8", env: { PATH: process.env.PATH ?? "" } });
   assert.notEqual(r.status, 0);
   assert.equal(r.stdout, "");

@@ -3,20 +3,20 @@
 # operator starts it by hand on main: Actions, upload-android, "Run
 # workflow"; or `gh workflow run upload-android.yml --ref main`. A push or a
 # merge uploads nothing. Until launch the build talks to the test site and
-# signs for the test log (android/README.md, the section on the three
-# apps); the checks of the bundle in android/app/build.gradle.kts stop it
+# signs for the test log (android/README.md, the section on the three apps);
+# the checks of the bundle in android/app/build.gradle.kts stop it
 # otherwise. The test app has a workflow of its own,
-# upload-android-test.yml.
-# .github/README.md has the details; worker/test/workflows.ts holds this
-# file's two jobs, exactly, and worker/test/workflows.test.ts checks this
-# file against them.
+# upload-android-test.yml. .github/README.md has the details;
+# worker/test/workflows.ts holds this file's two jobs, exactly, and
+# worker/test/workflows.test.ts checks this file against them.
 #
 # "build" has no secret. It stops first when the run is not on main. It
 # gives the build its version: the date in Taiwan, 2026.11.21, the same for
 # every run of a day, and the run's number as the build number
-# (android-version.sh), below 1,000,000 (the test app's start there). It builds the bundle with that version the way the
-# android check of checks.yml builds the app (no cache here), which runs the
-# checks of the bundle, and hands the bundle on as an artifact.
+# (android-version.sh), below 1,000,000 (the test app's start there). It
+# builds the bundle with that version the way the android check of
+# checks.yml builds the app (no cache here), which runs the checks of the
+# bundle, and hands the bundle on as an artifact.
 #
 # "upload" is the one job of the environment app-test, which GitHub gives
 # its keys to only for jobs on main (#162). It builds nothing and runs no
@@ -24,11 +24,11 @@
 # (android-sign.sh), keeps the signed bundle as an artifact (for when the
 # API does not take it: the operator uploads it by hand, from Play Console;
 # .github/README.md), then uploads it with the Google Play Developer API
-# (play-upload.sh), to the production app. Each secret is in the env of the one step
-# that uses it. What it trusts besides: the pinned actions; the runner's
-# JDK 17 (jarsigner) and its tools (bash, base64, unzip, awk, curl, openssl,
-# jq); the two scripts, from the same commit as this file; and the bundle
-# the build job handed on.
+# (play-upload.sh), to the production app. Each secret is in the env of the
+# one step that uses it. What it trusts besides: the pinned actions; the
+# runner's JDK 17 (jarsigner) and its tools (bash, base64, unzip, awk, curl,
+# openssl, jq); the two scripts, from the same commit as this file; and the
+# bundle the build job handed on.
 name: upload-android
 
 on:

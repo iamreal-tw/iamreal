@@ -4,21 +4,22 @@
 //
 // What it is: a guard against slips and against plain changes to what
 // ADR-0029, ADR-0036, ADR-0025 (the daily re-verification holds no key of
-// the back end) and CONTRIBUTING.md ("部署會執行到的東西") require: only
-// the deploy job's upload step has the token, nothing before it in that job
-// runs code of the repository or of a package's install scripts; the keys
-// of the apps' uploads are only in the upload jobs, which build nothing
-// (upload-android.yml, upload-android-test.yml: in the env of the two steps that use them;
-// upload-ios.yml: in its last step); every action is one of a short list
-// at a fixed commit, and a pull request's checks can only read. It is a
-// whitelist: the files are read by a reader of a small part of YAML
-// (below) and anything outside that part is a problem, and the deploy
-// workflow's two jobs, the device-core and android jobs of checks.yml, the
-// jobs of cache.yml, the two jobs of upload-android.yml and of upload-android-test.yml, the two jobs of
-// upload-ios.yml (only its upload job in the environment with the App Store
-// Connect key, and that key in its last step only), the two jobs of
-// reverify.yml, and the one job each of checks-ios.yml and
-// checks-circuits.yml, must be exactly the ones written here.
+// the back end) and CONTRIBUTING.md ("部署會執行到的東西") require: only the deploy
+// job's upload step has the token, nothing before it in that job runs code
+// of the repository or of a package's install scripts; the keys of the
+// apps' uploads are only in the upload jobs, which build nothing
+// (upload-android.yml, upload-android-test.yml: in the env of the two steps
+// that use them; upload-ios.yml: in its last step); every action is one of
+// a short list at a fixed commit, and a pull request's checks can only
+// read. It is a whitelist: the files are read by a reader of a small part
+// of YAML (below) and anything outside that part is a problem, and the
+// deploy workflow's two jobs, the device-core and android jobs of
+// checks.yml, the jobs of cache.yml, the two jobs of upload-android.yml and
+// of upload-android-test.yml, the two jobs of upload-ios.yml (only its
+// upload job in the environment with the App Store Connect key, and that
+// key in its last step only), the two jobs of reverify.yml, and the one job
+// each of checks-ios.yml and checks-circuits.yml, must be exactly the ones
+// written here.
 //
 // What it is not: a replacement for reading every line of a change to
 // these files, which CONTRIBUTING.md requires. It does not see:
@@ -699,7 +700,7 @@ export const DEPLOY_JOBS: YamlMap = {
 export const IOS_UPLOAD_WORKFLOW = "upload-ios.yml";
 export const IOS_UPLOAD_ON: Yaml = { workflow_dispatch: null };
 export const IOS_UPLOAD_GROUP = "upload-ios";
-/** The GitHub environment whose keys (App Store Connect's, #161; the Android upload key and Google Play's, #162) only main's runs get (ADR-0037). */
+/** The GitHub environment whose keys (App Store Connect's, #161; the Android upload key and Google Play's, #162) only main's runs get (ADR-0037), the same for the two apps of each store (ADR-0040). */
 export const APP_ENVIRONMENT = "app-test";
 /**
  * Its two jobs, exactly. "build" has no key and runs the repository's code:
@@ -895,8 +896,8 @@ interface AndroidApp {
   /** The step's name for the version and the build task. */
   versionStep: string;
   buildStep: string;
-  /** What android-version.sh adds to the run's number (ADR-0040). */
-  added: string;
+  /** The build-number offset android-version.sh adds to the run's number (ADR-0040). */
+  offset: string;
   /** The artifacts. */
   artifact: string;
   /** The step's name for the upload, and the package on Google Play. */
@@ -921,7 +922,7 @@ function androidUploadJobs(app: AndroidApp): YamlMap {
         {
           name: app.versionStep,
           id: "version",
-          run: `bash .github/workflows/android-version.sh "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" ${app.added} >> "$GITHUB_OUTPUT"`,
+          run: `bash .github/workflows/android-version.sh "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" ${app.offset} >> "$GITHUB_OUTPUT"`,
         },
         ...ANDROID_SETUP,
         {
@@ -961,7 +962,7 @@ export const UPLOAD_ANDROID_JOBS: YamlMap = androidUploadJobs({
   buildType: "release",
   versionStep: "The version, the date in Taiwan, and the run's number",
   buildStep: "gradlew bundleRelease, with the checks of the bundle",
-  added: "0",
+  offset: "0",
   artifact: "android-bundle",
   uploadStep: "Upload to Google Play's internal testing",
   packageName: "tw.iamreal.app",
@@ -970,7 +971,7 @@ export const UPLOAD_ANDROID_TEST_JOBS: YamlMap = androidUploadJobs({
   buildType: "trial",
   versionStep: "The version, the date in Taiwan, and the run's number plus 1,000,000",
   buildStep: "gradlew bundleTrial, the test app, with the checks of the bundle",
-  added: "1000000",
+  offset: "1000000",
   artifact: "android-test-bundle",
   uploadStep: "Upload to Google Play's internal testing of the test app",
   packageName: "tw.iamreal.app.test",

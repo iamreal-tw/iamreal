@@ -31,17 +31,23 @@ val testAppBuild = "trial"
 // test app, debug the development build; a phone can have the three side by side. checkManifest holds each
 // build to it.
 val ids = mapOf("release" to "tw.iamreal.app", testAppBuild to "tw.iamreal.app.test", "debug" to "tw.iamreal.app.dev", fakeBuild to "tw.iamreal.app.dev.fake")
+// The build types that talk to the test site and sign for the test log, and name nothing of production
+// (ADR-0040; checkApk, BuildTest): the test app and the development build always, the production app until
+// launch. The PR of launch day takes "release" out of this set, with its Environment.kt; the others stay.
+val onTestSite = setOf("release", testAppBuild, "debug", fakeBuild)
 // The build numbers (versionCode) each build type may have (ADR-0040, "測試網站的最低版本"; README.md,
 // "build 號碼"): the production app's are below 1,000,000, the test app's from 1,000,000 to below 2,000,000,
 // the development build's is 2,000,000. On launch day the test site's minimum version goes to 1,000,000 and
 // stops only the production app's builds from before launch. checkManifest holds each build to its range.
 val buildNumbers = mapOf("release" to 1..999_999, testAppBuild to 1_000_000..1_999_999, "debug" to 2_000_000..2_000_000, fakeBuild to 2_000_000..2_000_000)
-// The build number of a build that is not given one: the first of its range. The two uploads give theirs
-// (upload-android.yml, upload-android-test.yml: android-version.sh) as the Gradle property iamreal.versionCode;
-// the development build's is fixed and takes none.
+// The build types whose build number is fixed, the one of their range, and that take no Gradle property.
+val fixedBuildNumber = setOf("debug", fakeBuild)
+// The build number of a build: the two uploads give theirs (upload-android.yml, upload-android-test.yml:
+// android-version.sh) as the Gradle property iamreal.versionCode; a build not given one has the first of its
+// range; the development build's is fixed.
 fun buildNumberOf(buildType: String): Int {
     val range = buildNumbers.getValue(buildType)
-    if (range.first == range.last) return range.first
+    if (buildType in fixedBuildNumber) return range.first
     return providers.gradleProperty("iamreal.versionCode").map { it.toInt() }.getOrElse(range.first)
 }
 // The ABIs of each kind of build: what goes out is for phones only; a debug build is also for the emulator on x86-64.
@@ -425,6 +431,8 @@ abstract class CheckApk : DefaultTask() {
     @get:Input abstract val id: Property<String>
     @get:Input abstract val allowed: ListProperty<String>
     @get:Input abstract val testing: Property<Boolean>
+    /** The build type is on the test site (onTestSite): it names the test site and nothing of production. */
+    @get:Input abstract val testSite: Property<Boolean>
     /** design/'s files the installer carries as they are (designResources). */
     @get:InputFiles abstract val design: ConfigurableFileCollection
 
@@ -486,17 +494,19 @@ abstract class CheckApk : DefaultTask() {
                 if (!testing.get() && text.contains("iamreal-device-core:testing-issuer-keys")) problems += "$lib is the library of the tests: it trusts issuer keys other than MOICA's"
             }
             // A class, a method or a text the Kotlin code refers to is in the dex file as text.
-            // Until launch every build talks to the test site (ADR-0040, Environment.kt); the test app and the
-            // development build always do. Its address is in a dex (in a release build, as the start of the
-            // addresses R8 put together). The fake build talks to this machine instead.
-            val testSite = "https://test.iamreal.tw"
+            // A build type on the test site talks to it (onTestSite, ADR-0040, Environment.kt): its address is in a
+            // dex (in a release build, as the start of the addresses R8 put together). The fake build talks to this
+            // machine instead.
+            val testSiteAddress = "https://test.iamreal.tw"
             var talksToTestSite = false
             for (dex in names.filter { it.endsWith(".dex") }) {
                 val text = String(read(dex), Charsets.ISO_8859_1)
-                if (text.contains(testSite)) talksToTestSite = true
-                // Until launch every build signs for the test log only (ADR-0040).
-                for (production in listOf("//iamreal.tw", "//data.iamreal.tw", "iamreal:public:")) {
-                    if (text.contains(production)) problems += "$dex holds $production: until launch no build names anything of production"
+                if (text.contains(testSiteAddress)) talksToTestSite = true
+                // And it signs for the test log only.
+                if (testSite.get()) {
+                    for (production in listOf("//iamreal.tw", "//data.iamreal.tw", "iamreal:public:")) {
+                        if (text.contains(production)) problems += "$dex holds $production: a build on the test site names nothing of production"
+                    }
                 }
                 // The fake card and the session that trusts test keys are in the emulator test's build alone.
                 for (fake in listOf("Ltw/iamreal/app/fake/", "TestingCore")) {
@@ -512,7 +522,7 @@ abstract class CheckApk : DefaultTask() {
                 }.map { (owner, method) -> "$owner.$method" }.toSet()
                 if (writes.isNotEmpty()) problems += "$dex calls $writes: a release build writes no log"
             }
-            if (!testing.get() && !talksToTestSite) problems += "no dex holds $testSite: every build talks to the test site until launch"
+            if (testSite.get() && !testing.get() && !talksToTestSite) problems += "no dex holds $testSiteAddress: a build on the test site talks to it"
         }
         if (problems.isNotEmpty()) throw GradleException("$file:\n" + problems.joinToString("\n"))
     }
@@ -557,18 +567,18 @@ val buildNativeHost = tasks.register<BuildNativeHost>("buildNativeHost") {
 
 androidComponents {
     // The unit tests run against the code of the app that goes out: all of them in the development build's,
-    // and in the production app's and the test app's the ones of what each build type has of its own (its
-    // Environment.kt: BuildTest, and the proof log in DeviceCoreTest). AGP makes unit tests for debug alone
-    // unless told. The fake build has the emulator test.
+    // and in the production app's and the test app's the one of what each build type has of its own (its
+    // Environment.kt: BuildTest). AGP makes unit tests for debug alone unless told. The fake build has the
+    // emulator test.
     beforeVariants { variant ->
         (variant as com.android.build.api.variant.HasUnitTestBuilder).enableUnitTest = variant.buildType != fakeBuild
     }
     onVariants { variant ->
         val name = variant.name.replaceFirstChar { it.uppercase() }
         // The two that go to Google Play: the production app and the test app.
-        val release = variant.buildType == "release" || variant.buildType == testAppBuild
+        val toGooglePlay = variant.buildType == "release" || variant.buildType == testAppBuild
         val fake = variant.buildType == fakeBuild
-        val variantAbis = if (release) releaseAbis else debugAbis
+        val variantAbis = if (toGooglePlay) releaseAbis else debugAbis
         val variantId = ids.getValue(variant.buildType!!)
         val variantBuilds = buildNumbers.getValue(variant.buildType!!)
         for (output in variant.outputs) output.versionCode.set(buildNumberOf(variant.buildType!!))
@@ -610,10 +620,11 @@ androidComponents {
             apks = variant.artifacts.get(SingleArtifact.APK)
             lists.from(bundledLists)
             abis = variantAbis
-            silent = release
+            silent = toGooglePlay
             id = variantId
             allowed = variantPermissions
             testing = fake
+            testSite = variant.buildType in onTestSite
         }
         val checkLibraries = tasks.register<CheckLibraries>("checkLibraries$name") {
             // Every file the app is packaged with, by where it came from: a module of a repository
@@ -630,17 +641,19 @@ androidComponents {
         tasks.matching { it.name == "test${name}UnitTest" }.configureEach {
             this as Test
             systemProperty("iamreal.app", variantId)
-            if (release) filter { includeTestsMatching("tw.iamreal.app.BuildTest"); includeTestsMatching("tw.iamreal.app.core.DeviceCoreTest") }
+            systemProperty("iamreal.onTestSite", (variant.buildType in onTestSite).toString())
+            if (toGooglePlay) filter { includeTestsMatching("tw.iamreal.app.BuildTest") }
         }
         val checkBundle = tasks.register<CheckApk>("checkBundle$name") {
             design.from(designResources.values)
             aab = variant.artifacts.get(SingleArtifact.BUNDLE)
             lists.from(bundledLists)
             abis = variantAbis
-            silent = release
+            silent = toGooglePlay
             id = variantId
             allowed = variantPermissions
             testing = fake
+            testSite = variant.buildType in onTestSite
         }
         // Whoever makes an installer gets it checked, whichever task makes it: an APK
         // (assemble, package) or the bundle Google Play takes (bundle).
