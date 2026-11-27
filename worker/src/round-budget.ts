@@ -31,8 +31,8 @@ export const ROUND_CPU_MS: number = 300_000;
  * is that 32 seconds were not enough. So this is five times the local
  * figure, which also leaves room for the CRL to grow. The CRL patches a
  * round writes after its lines, its own files' and the last one it starts,
- * take about half a second each in Node (README.md, "排程做什麼", 四):
- * they fit in what is left over.
+ * took at most 0.2 seconds each in Node for the test site's archive
+ * (README.md, "清冊差異檔量到的"): they fit in what is left over.
  */
 export const RESERVED_FOR_LARGEST_CRL_MS: number = 150_000;
 
