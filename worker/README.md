@@ -535,7 +535,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - 播放程式不向任何地方要資料、不寫 cookie、不改網址，也不在元素上寫樣式：會動的部分是它把時間表每一秒六十個時刻的狀態交給瀏覽器的 `Element.animate`。`test/site-pages.test.ts` 檢查程式裡沒有那些字
   - 後台的程式不引用 `worker/`、`protocol/` 以外的檔，所以時間表有一份拷貝 `src/pages/hang-timeline.ts`，同一支腳本寫出，同一個測試核對
   - 在瀏覽器裡的行為（播到最後一格、停止、再看一次、標出現在的一步、沒有程式時是靜態圖）由 `web/test/worker-card-proof.ts` 檢查
-- **快取**：Worker 產生的每一頁都帶 `Cache-Control: public, max-age=60`，查不到的 `404` 和轉址（`301`、`302`、`303`）也一樣（ADR-0026：沒帶的話，Workers 前面的快取會把 `404` 放更久）；常見問題、如何驗證證明紀錄、`/hang` 不問證明紀錄，也用同一個值，不分兩種。所以一筆紀錄寫入後，頁面最慢 60 秒後跟上；Worker 自己不另外存一份，每個跑到 Worker 的請求都問當下的證明紀錄。**這個標頭現在只對瀏覽器和中間的代理有用：Cloudflare 上 Worker 前面沒有快取**（Workers Cache 沒有打開，程式也不用 Cache API；會跑到 Worker 的路徑回應沒有 `cf-cache-status`，2026-11-27 量到的，[營運者的說明](#營運者的說明)「三」），所以每一個跑到 Worker 的頁面請求都跑一次 Worker。要不要打開在 [#472](https://github.com/iamreal-tw/iamreal/issues/472)。舊後台把證明紀錄頁的兩個數字在記憶體裡留 60 秒、頁面帶 `no-cache`；這裡數字每次都問，快取靠回應的標頭。樣式表和 `/copy.js` 帶 `no-cache`，靠 `ETag` 重新確認（寫在 `site/_headers`）。`/api/` 的回應是 `no-store`，`405` 和 `500` 也是。
+- **快取**：Worker 產生的每一頁都帶 `Cache-Control: public, max-age=60`，查不到的 `404` 和轉址（`301`、`302`、`303`）也一樣（ADR-0026：Workers 的快取打開時，沒帶的話它會把 `404` 放更久；現在沒有打開，見這一點的最後）；常見問題、如何驗證證明紀錄、`/hang` 不問證明紀錄，也用同一個值，不分兩種。所以一筆紀錄寫入後，頁面最慢 60 秒後跟上；Worker 自己不另外存一份，每個跑到 Worker 的請求都問當下的證明紀錄。**這個標頭現在只對瀏覽器和中間的代理有用：Cloudflare 上 Worker 前面沒有快取**，每一個跑到 Worker 的頁面請求都跑一次 Worker（量到的和文件：[營運者的說明](#營運者的說明)「三」第 2 題；要不要打開在 [#472](https://github.com/iamreal-tw/iamreal/issues/472)）。舊後台把證明紀錄頁的兩個數字在記憶體裡留 60 秒、頁面帶 `no-cache`；這裡數字每次都問，快取靠回應的標頭。樣式表和 `/copy.js` 帶 `no-cache`，靠 `ETag` 重新確認（寫在 `site/_headers`）。`/api/` 的回應是 `no-store`，`405` 和 `500` 也是。
 - **首頁的兩個數字**：現在把 Threads 的名額給了某個帳號的卡片有幾張；其中上次過卡日在今天往回 90 天以內（含第 90 天）的有幾張，今天照台灣的日期。一個查詢、一個索引（`src/views.ts` 的 `counts`）。
 - **頁面只列 Threads**（`src/pages/proof.ts` 的 `PLATFORM`）：測試的證明紀錄另一個平台 `test-example` 的帳號不出現在頁面上。
 
@@ -1396,8 +1396,8 @@ Durable Object 回 `overloaded`（錯誤帶著 `overloaded: true`，文件說不
 - **Static Assets 的檔排除**：`/proof` 和它底下的檔、`/pages.css`、`/copy.js`、`/count.js`、`/demo.js`、`/fonts/`、`/favicon.ico`、`/og-image.png`。`site/` 多一個不跑 Worker 的檔時（[Static Assets](#static-assets)），也加進排除，不然那個檔的請求也算進這條規則的次數
 - 照什麼算：IP，完整的位址（Free 方案只能照 IP；IPv6 的 /64 由 Worker 那一層管）
 - 上限：**每 10 秒 100 次**；動作 Block，擋 10 秒（Free 方案的選項）
-- **為什麼是 100**：Worker 裡六類的上限合起來約每分鐘 690 次，約每 10 秒 115 次。這條規則是唯一擋得住每次開新連線的洪水的一層（上面「這個綁定的性質」，[#466](https://github.com/iamreal-tw/iamreal/issues/466)），訂得比 Worker 寬很多就等於沒有作用；訂在 Worker 合起來的上限附近，照 Worker 的上限走的來源不會先被它擋下。代價：很多人共用一個 IPv4（電信業者的 NAT）時，一起被擋 10 秒；Worker 裡照 IP 的上限本來就有同樣的情形。上線後看 Security → Events 的量再調（[#52](https://github.com/iamreal-tw/iamreal/issues/52) 的量測也會給數字）。（原本寫的是「訂得比 Worker 裡各類的上限合起來寬很多」，那時以為 Worker 那一層擋得住單一來源的洪水。）
-- 打開和關掉：在規則的編輯頁改 Status（Active、Disabled）再存檔，約十幾秒生效。規則列表上的開關在表格太寬時看不到。關掉之後只剩 Worker 裡的那一層，而那一層擋不住每次開新連線的來源
+- **為什麼是 100**：Worker 裡六類的上限合起來約每分鐘 690 次，約每 10 秒 115 次。這條規則是唯一擋得住每次開新連線的洪水的一層（上面「這個綁定的性質」，[#466](https://github.com/iamreal-tw/iamreal/issues/466)），訂得比 Worker 寬很多就等於沒有作用；訂在 Worker 合起來的上限附近：在一分鐘裡平均送、照 Worker 的上限走的來源，不會先被它擋下；一下子送完一分鐘份量的（例如頁面那一類一分鐘 300 次的一半以上擠在 10 秒裡）會先被它擋 10 秒，因為 Worker 的上限是每 60 秒算的。代價：很多人共用一個 IPv4（電信業者的 NAT）時，一起被擋 10 秒；Worker 裡照 IP 的上限本來就有同樣的情形。上線後看 Security → Events 的量再調（[#52](https://github.com/iamreal-tw/iamreal/issues/52) 的量測也會給數字）。（原本寫的是「訂得比 Worker 裡各類的上限合起來寬很多」，那時以為 Worker 那一層擋得住單一來源的洪水。）
+- 打開和關掉：在規則的編輯頁改 Status（Active、Disabled）再存檔。演練挑戰頁時，規則列表上的開關因為表格太寬看不到，改用這裡（下面「二」）。（原本寫的是「規則列表上的開關」。）關掉之後只剩 Worker 裡的那一層，而那一層擋不住每次開新連線的來源
 - 被這一條擋下的請求不會跑到 Worker，後台什麼都不知道；看 Security → Events
 - **實際打過一次**（2026-11-27 01:24 UTC，從一台電腦，每次新連線，30 個平行）：
 
@@ -1425,7 +1425,7 @@ Durable Object 回 `overloaded`（錯誤帶著 `overloaded: true`，文件說不
 - **不套**在 `/api/`、`/proof` 和它底下的檔、資料網域（`data.iamreal.tw`、`test-data.iamreal.tw`）：挑戰頁回的是一整頁 HTML，頁面裡的 `fetch()` 會直接失敗，過卡和重驗的工具都會壞（ADR-0026「緊急時的挑戰頁」）
 - 不用整站的 I'm Under Attack 模式
 - 什麼時候打開：限流和總量上限都開著，頁面還是撐不住
-- 打開、關掉：規則的編輯頁的 Status，存檔後約十幾秒生效（和上一條一樣，列表上的開關可能看不到）。事後公告開了多久
+- 打開、關掉：規則的編輯頁的 Status，存檔後約十幾秒生效（和上一條一樣，列表上的開關可能看不到；原本寫的是「規則列表上把那一條打開。關掉：同一個開關」）。事後公告開了多久
 - 開著的期間：訪客要先過一次檢查，通過後 Cloudflare 放一個 `cf_clearance` cookie（預設 30 分鐘）；用程式讀頁面會被擋；平台抓連結預覽的程式過不了，那段時間貼出去的島民證明連結可能沒有預覽
 - **演練過一次**（2026-11-27，01:26 UTC 打開、01:27 關掉），照上面做沒有卡住的地方：
 
@@ -1436,11 +1436,11 @@ Durable Object 回 `overloaded`（錯誤帶著 `overloaded: true`，文件說不
   | `/api/v1/config`、`/proof`、`/pages.css` | `200`：不受影響 | |
   | 瀏覽器（Chrome）開 `/p/7K2Q9FM4XD` | 沒有要互動的檢查，自動通過，頁面正常 | |
 
-**三、ADR-0026 列的三個問題**（Consequences「還沒查到」；文件都是 2026-11-27 讀的）
+**三、ADR-0026 列的三個問題**（Consequences「還沒查到」；文件都是 2026-11-27 讀的。原本這裡是「上線後要看、再補回這裡的」，一的上限寫著「起始值待定」，等第 1 題）
 
 1. **WAF 的限流規則算不算快取命中的請求**：算。Free 方案的限流規則沒有「cache exclusion」（[availability](https://developers.cloudflare.com/waf/rate-limiting-rules/#availability) 的表），文件寫這個選項沒有的方案「Cloudflare will also apply rate limiting to cached assets」（[Also apply rate limiting to cached assets](https://developers.cloudflare.com/waf/rate-limiting-rules/parameters/#also-apply-rate-limiting-to-cached-assets)）。對這個網站也不用分：會跑到 Worker 的路徑前面沒有快取（下一題），連送首頁會被這條規則擋下（上面的表），所以這些路徑的每一個請求都算；靜態檔由運算式排除，不算。
 2. **Workers 的快取哪些方案能用**：
-   - **Workers Cache**（[Workers Cache](https://developers.cloudflare.com/workers/cache/)：設定檔的 `cache.enabled`，Cloudflare 在跑 Worker 之前先查快取，命中就不跑 Worker）：文件沒有列方案的限制。[計價](https://developers.cloudflare.com/workers/platform/pricing/#workers)的請求那一欄（Free 和 Standard 兩列）的註腳寫，打開之後從快取回的請求「billed at the same per-request rate as requests that invoke the Worker」：不另外收費，但命中的也算請求數，只有 CPU 時間不算。
+   - **Workers Cache**（[Workers Cache](https://developers.cloudflare.com/workers/cache/)：設定檔的 `cache.enabled`，Cloudflare 在跑 Worker 之前先查快取，命中就不跑 Worker）：文件沒有列方案的限制。[計價](https://developers.cloudflare.com/workers/platform/pricing/#workers)的請求那一欄（Free 和 Standard 兩列）的註腳寫，打開之後從快取回的請求「billed at the same per-request rate as requests that invoke the Worker」：不另外收費，但命中的也算請求數，只有 CPU 時間不算；註腳接著寫「This includes requests to static assets」：打開之後，平常免費、不限次數的 Static Assets 的請求（`/proof` 的檔、字型、樣式表）也照請求計費。
    - **Cache API**（[`caches.default`](https://developers.cloudflare.com/workers/runtime-apis/cache/)：程式自己存、自己讀，只在回答的那個機房）：Workers Free 和 Paid 都能用，差在每個請求能呼叫幾次，50 和 1,000（[Cache API limits](https://developers.cloudflare.com/workers/platform/limits/#cache-api-limits)）；要自訂網域（`test.iamreal.tw` 是）。
    - **這個 Worker 兩樣都沒用**：`wrangler.jsonc` 沒有 `cache`，程式不用 `caches`。#423 量到會跑到 Worker 的路徑回應沒有 `cf-cache-status`；文件也寫「Cloudflare Workers runs before the Cloudflare cache」（[計價](https://developers.cloudflare.com/workers/platform/pricing/)）。所以頁面的 `Cache-Control: public, max-age=60`（[頁面和檔案](#頁面和檔案)「快取」）只對瀏覽器和中間的代理有用，每一個跑到 Worker 的頁面請求都跑一次 Worker。要不要打開 Workers Cache 在 [#472](https://github.com/iamreal-tw/iamreal/issues/472)。
    - 快取命中時 WAF 還跑不跑：文件寫 WAF 的各階段在請求進來時依序跑（[feature interoperability](https://developers.cloudflare.com/waf/feature-interoperability/)），沒有直接寫它和 Workers Cache 誰先；這個網站沒有打開 Workers Cache，沒有量過。
@@ -1964,8 +1964,8 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 | 連線紀錄的儲存桶 `iamreal-test-logs`（[#415](https://github.com/iamreal-tw/iamreal/issues/415)） | Public Access 關著，沒有網域、沒有 CORS。生命週期規則 `connection-31-days`：前綴 `connection/`，物件建立 31 天後刪除。計數的明細在同一個儲存桶：規則 `count-events-31-days`，前綴 `count-events/`，31 天後刪除（2026-11-26，[#54](https://github.com/iamreal-tw/iamreal/issues/54)）；`count-totals/` 不設規則（[計數](#計數)）。不設 bucket lock | 後台存 IP 的地方，留 31 天（ADR-0022，[連線紀錄](#連線紀錄)）。規則沒有在刪時，公開的 `connection-log/oldest.json` 看得出來 |
 | `test-data.iamreal.tw` 的快取規則 | 可以快取；Edge TTL 選「有 `Cache-Control` 就照它，沒有就不快取」，Browser TTL 照物件的標頭。儀表板沒有「沒有就用 60 秒」這個選項 | 所以後台寫進儲存桶的每個物件都自己設 `Cache-Control`：會變的 60 秒，不會變的一年（[排程做什麼](#排程做什麼)、[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)、[每天換日公布證明紀錄](#每天換日公布證明紀錄)）；沒設的物件不會被快取 |
 | Real User Measurements（Web Analytics） | `iamreal.tw` → Speed → Real user monitoring 選 **Disable completely**（2026-11-21，[#240](https://github.com/iamreal-tw/iamreal/issues/240)）。沒設定過時是開著的：每個 HTML 頁面會被加一個 `static.cloudflareinsights.com` 的 `<script>`（[Static Assets](#static-assets)「Cloudflare 上看過的」最後一段）。正式的網域在第一次部署之前同樣關掉 | 頁面只載入自己網域的資源（`CONTRIBUTING.md`「頁面」）、沒有第三方的程式（ADR-0032）。`test/site-check.ts` 的「沒有一頁有不是自己網站的 script」檢查它 |
-| WAF 的限流規則 | `Per IP: Worker paths (API and pages)`，開著：整個 zone 會跑到 Worker 的路徑，照 IP 每 10 秒 100 次，Block 10 秒（2026-11-27，[#423](https://github.com/iamreal-tw/iamreal/issues/423)） | 每次開新連線的洪水只有它擋得住（[營運者的說明](#營運者的說明)）。資料網域多一個目錄、`site/` 多一個不跑 Worker 的檔時要加進排除 |
-| WAF 的自訂規則 | `Emergency: challenge visitor pages (keep off)`，Managed Challenge，關著：只套 `test.iamreal.tw` 的訪客頁面（2026-11-27，[#423](https://github.com/iamreal-tw/iamreal/issues/423)） | 緊急時才打開（[營運者的說明](#營運者的說明)）。正式上線時加 `iamreal.tw` |
+| WAF 的限流規則 | `Per IP: Worker paths (API and pages)`，開著：整個 zone 會跑到 Worker 的路徑，照 IP 每 10 秒 100 次，Block 10 秒（2026-11-27，[#423](https://github.com/iamreal-tw/iamreal/issues/423)） | 每次開新連線的洪水只有它擋得住；什麼時候要改排除，見[營運者的說明](#營運者的說明)「一」 |
+| WAF 的自訂規則 | `Emergency: challenge visitor pages (keep off)`，Managed Challenge，關著：只套 `test.iamreal.tw` 的訪客頁面（2026-11-27，[#423](https://github.com/iamreal-tw/iamreal/issues/423)） | 緊急時才打開；正式上線時要改的，見[營運者的說明](#營運者的說明)「二」 |
 | `iamreal.tw` 這個 zone | 新增網域時關掉「Bot Preference Sync」：它會在網站的 `robots.txt` 前面插入 Cloudflare 的設定；AI 爬蟲的政策留預設 | `robots.txt` 由程式決定 |
 | Cloudflare 的 API 權杖 | 兩把 Account API token：範圍「Specified Workers → `iamreal-test`」，權限「Individual Workers: Editor」。`iamreal-test-ci` 放在程式庫的 Actions secrets（`CLOUDFLARE_API_TOKEN_TEST`，帳號編號是 `CLOUDFLARE_ACCOUNT_ID`），`iamreal-test-local` 放在營運者電腦的 `.env.local`，同樣兩個名稱 | [部署測試環境](#部署測試環境)。這把權杖做得到和做不到的事在[第一次部署量到的](#第一次部署量到的) |
 | GitHub 組織的 Actions 設定 | 所有外部貢獻者的工作流程都要先核准才跑 | ADR-0029「外人的 PR」 |
