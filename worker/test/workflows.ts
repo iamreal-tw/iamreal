@@ -9,17 +9,18 @@
 // of the repository or of a package's install scripts; the keys of the
 // apps' uploads are only in the upload jobs, which build nothing
 // (upload-android.yml, upload-android-test.yml: in the env of the two steps
-// that use them; upload-ios.yml: in its last step); every action is one of
-// a short list at a fixed commit, and a pull request's checks can only
-// read. It is a whitelist: the files are read by a reader of a small part
-// of YAML (below) and anything outside that part is a problem, and the
-// deploy workflow's two jobs, the device-core and android jobs of
-// checks.yml, the jobs of cache.yml, the two jobs of upload-android.yml and
-// of upload-android-test.yml, the two jobs of upload-ios.yml (only its
-// upload job in the environment with the App Store Connect key, and that
-// key in its last step only), the two jobs of reverify.yml, and the one job
-// each of checks-ios.yml and checks-circuits.yml, must be exactly the ones
-// written here.
+// that use them; upload-ios.yml, upload-ios-test.yml: in the last step);
+// every action is one of a short list at a fixed commit, and a pull
+// request's checks can only read. It is a whitelist: the files are read by
+// a reader of a small part of YAML (below) and anything outside that part
+// is a problem, and the deploy workflow's two jobs, the device-core and
+// android jobs of checks.yml, the jobs of cache.yml, the two jobs of
+// upload-android.yml and of upload-android-test.yml, the two jobs of
+// upload-ios.yml and of upload-ios-test.yml (only the upload job in the
+// environment with the App Store Connect key, and that key in its last step
+// only), the two jobs of reverify.yml, and the one job each of
+// checks-ios.yml and checks-circuits.yml, must be exactly the ones written
+// here.
 //
 // What it is not: a replacement for reading every line of a change to
 // these files, which CONTRIBUTING.md requires. It does not see:
@@ -36,7 +37,7 @@
 //   read and no cache; test/workflows.test.ts runs the script with
 //   iamreal-verify replaced, and what the command itself checks is Go's
 //   to test (cmd/iamreal-verify);
-// - what the build job of upload-ios.yml makes (ios/build-core.sh,
+// - what the build jobs of upload-ios.yml and upload-ios-test.yml make (ios/build-core.sh,
 //   ios/archive.sh, Xcode and cargo on the repository's code): its archive
 //   is what gets signed and uploaded; ios/check-archive.sh looks for the
 //   known ways the wrong build could get in, not for everything;
@@ -591,10 +592,11 @@ export const ANDROID_JOB_STEPS: YamlMap = {
  * device-core/fetch-crs.sh, which check each SHA-256 before use, then runs
  * cargo in device-core/. Xcode links what that step left. The destination is
  * a simulator the runner's image has (.github/README.md gives the source).
- * The last two steps archive the store's build for an iPhone with the
- * script upload-ios.yml runs (#176), so that a pull request that breaks the
- * archive or its check is seen before the upload is started by hand; the
- * version and build are fixed ones, the check's test is given the same.
+ * The last steps archive the production app and the test app for an iPhone
+ * with the script upload-ios.yml and upload-ios-test.yml run (#176, #484),
+ * so that a pull request that breaks an archive or its check is seen before
+ * an upload is started by hand; the version and builds are fixed ones, each
+ * in its app's range, and the check's test is given the same.
  */
 const XCODEBUILD = 'xcodebuild -project IamrealApp.xcodeproj -scheme IamrealApp -destination "platform=iOS Simulator,name=iPhone 17" -derivedDataPath build';
 export const IOS_JOB_STEPS: YamlMap = {
@@ -610,9 +612,14 @@ export const IOS_JOB_STEPS: YamlMap = {
     { name: "Add the iPhone's target to the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup target add aarch64-apple-ios" },
     { name: "Build device-core/ for the iPhone", "working-directory": "ios", run: "./build-core.sh device" },
     {
-      name: "Archive the store's build as upload-ios.yml does, and check-archive.sh turns away what it should",
+      name: "Archive the production app as upload-ios.yml does, and check-archive.sh turns away what it should",
       "working-directory": "ios",
       run: "./archive.sh build/IamrealApp.xcarchive 1 2026.1.1 && ./check-archive-test.sh build/IamrealApp.xcarchive 2026.1.1 1",
+    },
+    {
+      name: "Archive the test app as upload-ios-test.yml does, and check-archive.sh turns away what it should",
+      "working-directory": "ios",
+      run: "./archive.sh --test-app build/IamrealApp-test.xcarchive 1000001 2026.1.1 && ./check-archive-test.sh --test-app build/IamrealApp-test.xcarchive 2026.1.1 1000001",
     },
   ],
 };
@@ -692,21 +699,28 @@ export const DEPLOY_JOBS: YamlMap = {
 };
 
 /**
- * The workflow that uploads the iPhone app to App Store Connect (#176,
- * ADR-0036, ADR-0037): started by hand only, one run at a time, none
- * cancelled; the group's name is no other workflow's. Its environment is the
- * one Xcode of checks-ios.yml.
+ * The two workflows that upload the iPhone app to App Store Connect (#176,
+ * #484, ADR-0036, ADR-0040): the production app's and the test app's, each
+ * its own so that their run numbers, which their build numbers come from,
+ * are counted apart. Each is started by hand only, one run at a time, none
+ * cancelled; the group's name is no other workflow's. Their environment is
+ * the one Xcode of checks-ios.yml.
  */
 export const IOS_UPLOAD_WORKFLOW = "upload-ios.yml";
+export const IOS_TEST_UPLOAD_WORKFLOW = "upload-ios-test.yml";
 export const IOS_UPLOAD_ON: Yaml = { workflow_dispatch: null };
 export const IOS_UPLOAD_GROUP = "upload-ios";
+export const IOS_TEST_UPLOAD_GROUP = "upload-ios-test";
 /** The GitHub environment whose keys (App Store Connect's, #161; the Android upload key and Google Play's, #162) only main's runs get (ADR-0037), the same for the two apps of each store (ADR-0040). */
 export const APP_ENVIRONMENT = "app-test";
 /**
- * Its two jobs, exactly. "build" has no key and runs the repository's code:
- * the core for an iPhone (ios/build-core.sh, which checks Barretenberg's
- * library and the CRS against their SHA-256), then ios/archive.sh, which
- * archives the store's build unsigned and checks it (ios/check-archive.sh).
+ * The two jobs of each, exactly, the same but for the step that archives.
+ * "build" has no key and runs the repository's code: the core for an iPhone
+ * (ios/build-core.sh, which checks Barretenberg's library and the CRS
+ * against their SHA-256), then ios/archive.sh, which archives the app
+ * unsigned and checks it (ios/check-archive.sh): the production app with
+ * the run number as its build, or with --test-app the test app with the run
+ * number and 1,000,000 (ADR-0040). The identifier is the configuration's.
  * It hands on the archive in a tar file, so that its files keep their modes
  * (an artifact does not keep them), with ios/ExportOptions.plist.
  * "upload" is the only job in the environment app-test. It does not check
@@ -718,7 +732,7 @@ export const APP_ENVIRONMENT = "app-test";
  * reads, and xcodebuild reads it.
  */
 const IOS_UPLOAD_ARTIFACT: YamlMap = { name: "ios-upload", path: "${{ runner.temp }}/ios-upload" };
-export const IOS_UPLOAD_JOBS: YamlMap = {
+const iosUploadJobs = (archive: { name: string; run: string }): YamlMap => ({
   build: {
     "runs-on": IOS_RUNNER,
     "timeout-minutes": "30",
@@ -726,7 +740,7 @@ export const IOS_UPLOAD_JOBS: YamlMap = {
       step("actions/checkout"),
       { name: "Install the Rust of rust-toolchain.toml, with the iPhone's target", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-apple-ios" },
       { name: "Build device-core/ for the iPhone", "working-directory": "ios", run: "./build-core.sh device" },
-      { name: "Archive the store's build and check it", "working-directory": "ios", run: './archive.sh "$RUNNER_TEMP/IamrealApp.xcarchive" "$GITHUB_RUN_NUMBER"' },
+      { name: archive.name, "working-directory": "ios", run: archive.run },
       {
         name: "Pack the archive, keeping its files' modes, with the export options",
         run: 'mkdir "$RUNNER_TEMP/ios-upload" && tar -C "$RUNNER_TEMP" -cf "$RUNNER_TEMP/ios-upload/IamrealApp.xcarchive.tar" IamrealApp.xcarchive && cp ios/ExportOptions.plist "$RUNNER_TEMP/ios-upload/"',
@@ -762,7 +776,9 @@ export const IOS_UPLOAD_JOBS: YamlMap = {
       },
     ],
   },
-};
+});
+export const IOS_UPLOAD_JOBS: YamlMap = iosUploadJobs({ name: "Archive the production app and check it", run: './archive.sh "$RUNNER_TEMP/IamrealApp.xcarchive" "$GITHUB_RUN_NUMBER"' });
+export const IOS_TEST_UPLOAD_JOBS: YamlMap = iosUploadJobs({ name: "Archive the test app and check it", run: './archive.sh --test-app "$RUNNER_TEMP/IamrealApp.xcarchive" "$((GITHUB_RUN_NUMBER + 1000000))"' });
 
 /**
  * reverify.yml (#421, ADR-0025, ADR-0028): the operator's daily
@@ -987,6 +1003,9 @@ export const SECRET_LINES: readonly string[] = [
   "upload-android.yml:          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}",
   "upload-android.yml:          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}",
   "upload-android.yml:          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}",
+  "upload-ios-test.yml:          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}",
+  "upload-ios-test.yml:          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}",
+  "upload-ios-test.yml:          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}",
   "upload-ios.yml:          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}",
   "upload-ios.yml:          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}",
   "upload-ios.yml:          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}",
@@ -1429,6 +1448,7 @@ export const WORKFLOW_FILES: readonly string[] = [
   REVERIFY_WORKFLOW,
   UPLOAD_ANDROID_TEST_WORKFLOW,
   UPLOAD_ANDROID_WORKFLOW,
+  IOS_TEST_UPLOAD_WORKFLOW,
   IOS_UPLOAD_WORKFLOW,
   WATCH_WORKFLOW,
 ];
@@ -1507,12 +1527,13 @@ export function workflowProblems(files: Readonly<Record<string, string>>, checkP
       if (!same(doc.jobs, jobs)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
-    if (f === IOS_UPLOAD_WORKFLOW) {
+    if (f === IOS_UPLOAD_WORKFLOW || f === IOS_TEST_UPLOAD_WORKFLOW) {
+      const [group, jobs] = f === IOS_UPLOAD_WORKFLOW ? [IOS_UPLOAD_GROUP, IOS_UPLOAD_JOBS] : [IOS_TEST_UPLOAD_GROUP, IOS_TEST_UPLOAD_JOBS];
       // Started by hand only: not on a push, a pull request or any event a change can bring about.
       if (!same(doc.on, IOS_UPLOAD_ON)) p(`not triggered by hand only: ${JSON.stringify(doc.on)}`);
       if (!same(doc.env, { DEVELOPER_DIR: IOS_DEVELOPER_DIR })) p("the env at the top is not the one in test/workflows.ts");
-      if (!same(doc.concurrency, { group: IOS_UPLOAD_GROUP, "cancel-in-progress": "false" })) p(`concurrency is not group ${IOS_UPLOAD_GROUP}, one run at a time and none cancelled`);
-      if (!same(doc.jobs, IOS_UPLOAD_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
+      if (!same(doc.concurrency, { group, "cancel-in-progress": "false" })) p(`concurrency is not group ${group}, one run at a time and none cancelled`);
+      if (!same(doc.jobs, jobs)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
     if (f === WATCH_WORKFLOW) {

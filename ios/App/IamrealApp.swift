@@ -37,10 +37,11 @@ struct IamrealApp: App {
         _pages = StateObject(wrappedValue: pages)
     }
 
-    /// The version the settings write: the store's date version; `dev` for
-    /// the development build (design/copy/app.md, the settings).
+    /// The version the settings write: the date archive.sh gave the
+    /// production app or the test app; `dev` for the development build
+    /// (design/copy/app.md, the settings).
     private static var version: String {
-        AppEnvironment.storeBuild ? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "" : "dev"
+        AppEnvironment.app != .development ? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "" : "dev"
     }
 
     var body: some Scene {
