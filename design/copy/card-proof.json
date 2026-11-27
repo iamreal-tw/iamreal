@@ -68,7 +68,7 @@
     "card_locked": "這張卡片已經被鎖住。請到內政部憑證管理中心的網站解鎖後再試。",
     "expired": "這張卡片的憑證在 {expiry_date} 到期，不能過卡。",
     "not_yet_valid": "這張卡片的憑證從 {valid_from} 才生效，現在不能過卡。",
-    "not_citizen_primary": "這張卡片不是國民的自然人憑證正卡，不能過卡。",
+    "not_citizen_primary": "這張卡片不是本國國民的自然人憑證，不能過卡。",
     "unknown_issuer": "這張卡片的憑證不是內政部憑證管理中心簽發的，不能過卡。",
     "unsupported_format": "這張卡片的憑證格式目前不支援。",
     "two_certificates": "讀到兩張可以過卡的自然人憑證。請只留下要用的那一張，再讀一次。",
