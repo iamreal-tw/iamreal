@@ -135,6 +135,15 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 
 索引只是方便：重驗的人可以從檔案重建它，完整重算就是這樣做。
 
+### 清冊差異檔：`crl.ApplyPatch`
+
+規格「CRL patches」：從同一把發證金鑰的上一份可用清冊還原出這一份的檔，放在存檔目錄的子目錄 `patches/`（`crl.PatchesDir`），檔名 `<上一份的 SHA-256>-<這一份的 SHA-256>.patch`（`crl.PatchName`）。它不是清冊存檔的一部分：`crl.BuildIndex`、`crl.RebuildArchive` 跳過子目錄，本機的存檔不用有它。
+
+- `crl.ApplyPatch(上一份, 差異檔)`：照兩種指令（複製上一份的一段、寫入接下來的位元組）還原，檔不合格式時回傳 `*crl.UnusablePatch`。複製只能往前、不重疊，所以時間和記憶體和兩個輸入的大小成正比。
+- `crl.RestorePatch(上一份, 差異檔, SHA-256)`：再核對還原出來的 SHA-256 等於檔名的後半，不等也是 `*crl.UnusablePatch`。還原出來的只有這樣才算數，所以差異檔和做它的人都不用信。
+
+`cmd/iamreal-verify` 從網址讀清冊存檔時用它（那邊的 README「下載」）。產生差異檔不在規格裡，這裡也沒有：鏡像（`worker/src/crl-patch.ts`）自己做。
+
 ## 檔案
 
 | 檔案 | 內容 |
@@ -142,6 +151,7 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 | `crl.go` | 解析 `CertificateList`（嚴格的 DER），`Check` 判斷可不可用並取出每個序號的鍵，原因代碼，清冊日期 |
 | `index.go` | 存檔索引的一行（`IndexFile`）、整個目錄（`BuildIndex`）、排序、讀索引並檢查寫法（`ParseIndex`）、`Archive`（`RebuildArchive`、`ReadArchiveIndex`） |
 | `key.go` | 鍵：序號內容位元組的無號大端值，最多 20 個位元組 |
+| `patch.go` | 清冊差異檔：還原（`ApplyPatch`、`RestorePatch`）、檔名（`PatchName`） |
 | `tree.go` | 樹（circomlib 的稀疏 Merkle 樹，Poseidon2）、樹根、「不在樹裡」的證明 |
 | `issuers.go`、`MOICA2.cer`、`MOICA-G3.cer` | 兩把發證金鑰 |
 | `poseidon2/` | Poseidon2（`spec/scoped-id.md`）。`constants.go` 由 `spec/vectors/poseidon2-constants.json` 產生（`go generate ./crl/poseidon2`） |
@@ -163,6 +173,7 @@ go test ./crl/...
 - `testdata/times/` 的九份 `oid-*`：清冊或一筆多一個延伸欄位，它的 OID 裡一個數字是 2^31−1 和 2^31（第一個數字、後面的數字、一筆的延伸欄位各一對），或數字不是最短寫法、沒寫完、OID 是空的（[#227](https://github.com/iamreal-tw/iamreal/issues/227)）。2^31−1 的三份讀得懂（`-not_usable_signature`），其餘是 `-not_usable_der`。這條界線原本是 Go 的 `cryptobyte` 的，現在寫在規格「Object identifiers」，四份實作都照它
 - `testdata/times/` 的 `extension-*`、`entry-then-null`、`entry-extensions-then-null`、`tbs-then-null` 七份：一個延伸欄位、一筆廢止、`tbsCertList` 裡比該有的多一個元素（或延伸欄位少了值），都是 `-not_usable_der`。逐個元素走、不先全部列出來的讀法（[#410](https://github.com/iamreal-tw/iamreal/issues/410)）也要認得多出來的東西
 - `testdata/` 的 `entry-negative-then-entry-critical`、`entry-critical-then-entry-negative`、`entry-duplicate-then-entry-seventeen`：多筆廢止各有不同的問題時，由排在前面的那一筆決定
+- `spec/vectors/crl-patch.json`：每個可用的差異檔還原出標準答案的檔、檔名相同；每個不可用的（複製超出上一份、往回複製、長度超出結尾、不是 `00`、`01` 開頭的指令、還原出來的 SHA-256 不是檔名）都被拒絕。TypeScript 的鏡像讀同一份（`worker/test/crl-patch.test.ts`）。
 - 存檔索引：排序、每一種寫錯的行被拒絕（包括樹根不小於 `p`）、完整重算回報改過的樹根、多出來的檔案、少了的檔案、沒有索引、沒辦法切成行的索引、寫法不對和順序錯的行（附行號），每一個不同都回報，並照重建的索引回答；只信索引時照索引回答，索引不在或寫錯是錯誤。
 
 ### 重新產生自製清冊
