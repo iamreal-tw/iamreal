@@ -1951,7 +1951,7 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 
 ### 要臨時的 Worker 和負載的
 
-同一個 Durable Object 一秒回答幾個頁面讀取、一秒寫得了幾筆（物件那一側）、收計數的物件一秒收多少、從證明紀錄重建十萬筆要多久、每張卡片佔多少位元組，和 #196 的十萬張卡片換日公布，在一個臨時的 Worker 和兩個臨時的儲存桶上一次量。假卡片不進測試的證明紀錄（ADR-0028）。設定、負載的程式和營運者的步驟另外一個 PR。
+同一個 Durable Object 一秒回答幾個頁面讀取、一秒寫得了幾筆（物件那一側）、收計數的物件一秒收多少、從證明紀錄重建十萬筆要多久、每張卡片佔多少位元組，和 #196 的十萬張卡片換日公布，在一個臨時的 Worker 和兩個臨時的儲存桶上一次量。假卡片不進測試的證明紀錄（ADR-0028）。設定、負載的程式和營運者的步驟在 [`measure/README.md`](measure/README.md)：那個建置寫入沒有驗證過的紀錄，為什麼不違反 ADR-0028、怎麼確保它只部署成那一個臨時的 Worker，也寫在那裡。在本機的 workerd 上跑過一次小的（2,000 筆），數字只說明每一步走得通。
 
 ### 滿 32 天後看的
 
@@ -2056,6 +2056,8 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `scripts/operator-page.ts` | 營運者在自己的電腦上產生看數字的那一頁（[營運者看數字的那一頁](#營運者看數字的那一頁)） |
 | `scripts/engine-files.ts` | 建置的第一步：核對 WASM 檔和驗證金鑰的 SHA-256，寫進 `generated/` |
 | `test-build/` | 測試專用的建置換上的那一份 |
+| `measure-build/`、`measure/` | 上線前負載量測的臨時 Worker：部署的 Worker 加幾個要密碼的門、做出來的證明紀錄、設定、部署、負載的程式（[`measure/README.md`](measure/README.md)）。不驗證證明就寫入，只部署成 `iamreal-measure` |
+| `test/measure.test.ts` | 量測的臨時 Worker 只部署成那一個名稱、用自己的儲存桶和權杖、沒有工作流程跑它、門沒有密碼打不開 |
 | `test/harness.ts`、`test/build.ts`、`test/proofs.ts` | 測試的工具、兩種建置、`verifier/testdata/` 的測試證明和驗證的測試共用的小工具 |
 | `test/clearing.test.ts` | 清空測試的證明紀錄，照[清空測試的證明紀錄](#清空測試的證明紀錄)的步驟在本機做一次：新的證明紀錄是空的、鏡像下一輪之後收得下紀錄、隔天公布的只有新的證明紀錄；被換掉的物件啟動時寫一行、不再設 alarm、alarm 響了什麼都不寫；晚了才清儲存桶時清掉就恢復；`wrangler.jsonc` 的清空日期不在今天之後 |
 | `test/site-check.ts`、`test/site-check.test.ts` | 部署之後不插卡的檢查（[部署之後不插卡的檢查](#部署之後不插卡的檢查)），和在本機的 Worker 上確認它每一項都擋得到的測試 |
