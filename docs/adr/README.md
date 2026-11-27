@@ -87,7 +87,6 @@
 
 | ADR | 程式現在還是 | 票 |
 |---|---|---|
-| 0015 | 後台收最新兩份清冊的樹根，直到再下一份進來，不看題目是什麼時候發的 | [#543](https://github.com/iamreal-tw/iamreal/issues/543) |
 | 0025 | 每天的重驗有了（`.github/workflows/reverify.yml`），只跑測試的證明紀錄：正式的那一份寫好了、等正式網站才打開；每次從第 1 筆整份重驗，沒有進度檔，`iamreal-verify` 也還不能接著上次做、指定一段序號；沒通過時沒有東西通知營運者 | [#413](https://github.com/iamreal-tw/iamreal/issues/413)，通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
 | 0026 | 後台、網頁版和兩個 app 做完了（照 IP 的上限 [#418](https://github.com/iamreal-tw/iamreal/issues/418)；全站的總量上限、Durable Object 撐不住時的 `busy`、網頁版的處理 [#32](https://github.com/iamreal-tw/iamreal/issues/32)；Android [#419](https://github.com/iamreal-tw/iamreal/issues/419)、iOS [#420](https://github.com/iamreal-tw/iamreal/issues/420)）。WAF 的限流規則和挑戰頁在測試網站設好、演練過（2026-11-27，[#423](https://github.com/iamreal-tw/iamreal/issues/423)）；照 IP 的上限擋不住每次開新連線的來源，那種只有 WAF 的規則擋得住（2026-11-27，[#466](https://github.com/iamreal-tw/iamreal/issues/466)）。訪客的頁面在 Cloudflare 上沒有快取，要不要打開見 [#472](https://github.com/iamreal-tw/iamreal/issues/472) | [#413](https://github.com/iamreal-tw/iamreal/issues/413) |
 | 0027 | 指紋檔沒有另一份；沒有清冊差異檔（`crl/patches/`），規格沒有它的格式，`iamreal-verify` 不用它 | [#35](https://github.com/iamreal-tw/iamreal/issues/35)；差異檔 [#545](https://github.com/iamreal-tw/iamreal/issues/545)、[#546](https://github.com/iamreal-tw/iamreal/issues/546) |
