@@ -103,7 +103,7 @@ final class CardProofModel: ObservableObject {
     private var finished: (done: CardProofFlow.Done, single: String?)?
     /// Which of the steps after the record was sent is up.
     private var after = After.hang
-    /// "沒有看到連結，重新掛上" was pressed: step 6 is the whole one.
+    /// "重新掛上連結" was pressed: step 6 is the whole one.
     private var rehanging = false
     /// The demonstration of step 6 is playing; it has played in this card proof.
     private var demoPlaying = false

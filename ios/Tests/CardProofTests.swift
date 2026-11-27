@@ -453,12 +453,12 @@ final class CardProofTests: XCTestCase {
             "\(try XCTUnwrap(backend.origin.host))/p/\(shortID)",
             "打開你的島民證明看看。",
             "在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。",
-            "沒有看到連結，重新掛上",
+            "重新掛上連結",
             "下一步",
         ])
         await Snapshot.save(model, as: "6-hang-short")
-        // "沒有看到連結，重新掛上": the whole step, still step 6.
-        try await press("沒有看到連結，重新掛上", in: model)
+        // "重新掛上連結": the whole step, still step 6.
+        try await press("重新掛上連結", in: model)
         XCTAssertEqual(model.screen.step, 6)
         XCTAssertTrue(model.screen.texts.contains("把證明掛上你的 Threads 個人檔案"))
         XCTAssertTrue(model.screen.texts.contains("複製證明連結"))

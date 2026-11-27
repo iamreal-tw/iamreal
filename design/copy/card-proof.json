@@ -234,7 +234,7 @@
     "new_card": "如果你換了新的自然人憑證，請把個人檔案的連結換成新的連結。",
     "still_there_single": "你的 {platform} 個人檔案上，還有這個連結嗎？",
     "look": "{open_proof}看看。",
-    "rehang": "沒有看到連結，重新掛上",
+    "rehang": "重新掛上連結",
     "open_threads": "打開 {platform}"
   },
   "finish": {

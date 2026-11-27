@@ -896,7 +896,7 @@ async function demonstration(record: boolean): Promise<void> {
 
 /**
  * Step 6 (design/copy/card-proof.md, "6. 掛上去", app). `short`: a card proof again, asked only whether the link is still there, then
- * 沒有看到連結，重新掛上 for the whole of it. `newCard`: the card's first record. `buttons`: presses what opens something outside the app.
+ * 重新掛上連結 for the whole of it. `newCard`: the card's first record. `buttons`: presses what opens something outside the app.
  * Leaves the whole step 6 on the screen.
  */
 async function hangStep(o: { name: string; shortId: string; account: string; date: string; short: boolean; newCard: boolean; buttons?: boolean; design?: string; record?: boolean }): Promise<void> {
@@ -913,7 +913,7 @@ async function hangStep(o: { name: string; shortId: string; account: string; dat
     check(onTop().includes(`dat=http://${link}`), "step 6, the short one: 打開你的島民證明 opens the card's page in the browser");
     await backToApp(6);
     press(say("hang.rehang"));
-    await waitText(say("hang.copy"), "the whole step 6, after 沒有看到連結，重新掛上", 10_000);
+    await waitText(say("hang.copy"), "the whole step 6, after 重新掛上連結", 10_000);
   }
   await demonstration(o.record === true);
   toTop();

@@ -922,7 +922,7 @@ interface HangSeen {
   shortLook: string;
   shortWhy: string;
   shortLink: string;
-  /** The whole step 6, after 沒有看到連結，重新掛上 when it opened short. */
+  /** The whole step 6, after 重新掛上連結 when it opened short. */
   title: string;
   link: string;
   /** What the QR code holds. */
@@ -1020,7 +1020,7 @@ const finishNow = () =>
 
 /**
  * After the submission, through every screen there is: step 6 (short, then
- * the whole one after 沒有看到連結，重新掛上), 下一步 to the last step, 上一步
+ * the whole one after 重新掛上連結), 下一步 to the last step, 上一步
  * back to step 6 as it was left. Ends on step 6, or on the last step when
  * everything was withdrawn. `shots`: the screenshots' prefix.
  */
@@ -1039,7 +1039,7 @@ async function doneSeen(shots?: string): Promise<DoneSeen> {
       })`);
       if (shots) await screenshot(`${shots}-6-hang-short`);
       await page.clickButton(C.hang.rehang);
-      await page.waitFor(`document.querySelector('[data-step="hang"]')?.dataset.short === "false" || null`, "沒有看到連結，重新掛上: the whole step 6");
+      await page.waitFor(`document.querySelector('[data-step="hang"]')?.dataset.short === "false" || null`, "重新掛上連結: the whole step 6");
     }
     hang = { short, ...s, ...(await hangNow()) };
     if (shots) await screenshot(`${shots}-6-hang`);
@@ -1136,7 +1136,7 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   check(h.where.includes(stepLine(6)), `${o.label}: 第 6 步，共 7 步 "${h.where}"`);
   check(h.main.includes(recorded), `${o.label}: step 6, the day it was recorded, unplug`);
   if (mismatch.length > 0) check(h.first === C.done.mismatch, `${o.label}: the difference, first of all "${h.first}"`);
-  // Short for a card proof again with one platform; 沒有看到連結，重新掛上 shows the whole step.
+  // Short for a card proof again with one platform; 重新掛上連結 shows the whole step.
   check(h.short === !!o.short, `${o.label}: step 6 ${o.short ? "is" : "is not"} short`);
   if (o.short) {
     check(h.shortTitle === fill(C.hang.still_there_single, { platform: o.single! }), `${o.label}: the short step 6 asks "${h.shortTitle}"`);

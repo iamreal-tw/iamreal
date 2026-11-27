@@ -573,7 +573,7 @@ private fun Recorded(c: Copy, d: CardProof.Done, view: Messages.DoneView) {
 
 /**
  * Step 6: hang the link on the profile, and nothing else (design/copy/card-proof.md, "6. 掛上去", app). Someone back for a card proof
- * again is asked only whether the link is still there, until "沒有看到連結，重新掛上". No way back: step 5 has submitted.
+ * again is asked only whether the link is still there, until "重新掛上連結". No way back: step 5 has submitted.
  */
 @Composable
 private fun Hang(m: Model, outside: Outside) {
