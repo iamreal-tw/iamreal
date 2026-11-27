@@ -6,8 +6,8 @@
 #   ./check-app.sh <path to IamrealApp.app>
 #
 # What it checks:
-# - the app is the build its configuration makes (ADR-0037): Debug the
-#   development build, tw.iamreal.app.dev, Release the store's build,
+# - the app is the build its configuration makes (ADR-0040): Debug the
+#   development build, tw.iamreal.app.dev, Release the production app,
 #   tw.iamreal.app; the name under its icon is the one design/copy/app.md
 #   gives that build; until launch both talk to the test site: the addresses
 #   of the test site in its executable and not the ones of the production
@@ -83,17 +83,17 @@ executable_has() {
   done | grep -q yes
 }
 
-# The build the configuration makes (ADR-0037). Xcode hands the
+# The build the configuration makes (ADR-0040). Xcode hands the
 # configuration to this script; run by hand, it goes by Debug, which is what
 # the tests run in.
 case ${CONFIGURATION-Debug} in
   Debug) want=tw.iamreal.app.dev build="開發用 build" ;;
-  Release) want=tw.iamreal.app build="商店的 build" ;;
-  *) want= build= ; problem "the configuration is $CONFIGURATION, neither Debug (the development build) nor Release (the store's build)" ;;
+  Release) want=tw.iamreal.app build="正式 app" ;;
+  *) want= build= ; problem "the configuration is $CONFIGURATION, neither Debug (the development build) nor Release (the production app)" ;;
 esac
 identifier=$(plist CFBundleIdentifier)
 if [ -n "$want" ] && [ "$identifier" != "$want" ]; then
-  problem "the identifier is $identifier, not $want: a ${CONFIGURATION-Debug} build is the $build of ADR-0037"
+  problem "the identifier is $identifier, not $want: a ${CONFIGURATION-Debug} build is the $build of ADR-0040"
 fi
 # The name under the icon: the first line in a code block under "### <build>"
 # in the section "## 主畫面上的名稱" of design/copy/app.md. awk compares

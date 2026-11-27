@@ -32,7 +32,7 @@ class AppCopyTest {
         assertTrue(blockLines().size >= 2)
     }
 
-    /** Every string of app.json, by its path of keys (`name.store`). */
+    /** Every string of app.json, by its path of keys (`name.production`). */
     private fun values(): Map<String, String> {
         val out = linkedMapOf<String, String>()
         fun walk(prefix: String, o: JSONObject) {

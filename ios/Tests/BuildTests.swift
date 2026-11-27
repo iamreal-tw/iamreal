@@ -181,7 +181,7 @@ final class BuildTests: XCTestCase {
         // the purpose of reading NFC, which Config/Info.plist holds.
         let app = try XCTUnwrap(try JSONSerialization.jsonObject(with: Repository.data("design/copy/app.json")) as? [String: [String: String]])
         let all = Set(app.flatMap { group, entries in entries.keys.map { "\(group).\($0)" } })
-        XCTAssertEqual(appKeys, all.subtracting(["name.store", "name.dev", "notification.channel", "nfc.usage"]))
+        XCTAssertEqual(appKeys, all.subtracting(["name.production", "name.test", "name.dev", "notification.channel", "nfc.usage"]))
     }
 
     /// The PIN and a card proof under way are in memory only: the sources
