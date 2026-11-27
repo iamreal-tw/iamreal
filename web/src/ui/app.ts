@@ -42,10 +42,10 @@
 // attributes are for the headless browser test and hold no value.
 import { type CardProofFlow, type CardStatus, type Config, type Consequence, type Done, FlowStop, type Progress, type Prover, type Stop, askToStart, cardProofsPaused, pageCounts, createCardProof, presentationOf } from "../index.ts";
 import type { Card } from "../card/card.ts";
+import { cardPath, hangPath } from "../platforms.ts";
 import { COPY, fill, parts } from "./copy.ts";
 import { button, el, replace, sentence } from "./dom.ts";
 import { frame } from "./frame.ts";
-import { cardPath, hangPath } from "../platforms.ts";
 import { logo } from "./logo.ts";
 import { qrSvg } from "./qr.ts";
 import {
@@ -525,17 +525,22 @@ export function startApp(o: AppOptions): void {
   /**
    * 3 records of the card today: the sentence; the card's page (done.open_proof, as on step 6) and hang.rehang to the
    * page that hangs its link, since nothing more is done in this card proof today (card-proof.md, step 4, 3 records today);
-   * and "back to the beginning" (which drops the PIN, as cancel does). hang.rehang leaves this page: the PIN goes with it.
+   * and "back to the beginning". The PIN is dropped as the screen shows.
    */
-  const dailyLimitBody = (s: Sentence, status: CardStatus): HTMLElement[] => [
-    el("p", { class: "stop", attrs: { "data-daily-limit": "" } }, say(s)),
-    el("p", { class: "look" }, ...parts(COPY.hang.look, { open_proof: COPY.done.open_proof }).map((p) => (p.placeholder === null ? p.text : newTab(`/${cardPath(status.shortId)}`, { "data-open-proof": "" }, p.text)))),
-    // Nothing declared now (everything withdrawn today): no link to hang.
-    actions(
-      status.slots.some((sl) => sl.current !== null) ? el("a", { class: "btn ghost", attrs: { href: `/${hangPath(status.shortId)}`, "data-hang-again": "" } }, COPY.hang.rehang) : null,
-      secondary(COPY.accounts.restart, () => before()),
-    ),
-  ];
+  const dailyLimitBody = (s: Sentence, status: CardStatus): HTMLElement[] => {
+    // The card will not sign again in this card proof: the PIN goes now, before a link leaves the page (the page may be kept
+    // by the browser's back and forward cache), as the apps do.
+    drop();
+    return [
+      el("p", { class: "stop", attrs: { "data-daily-limit": "" } }, say(s)),
+      el("p", { class: "look" }, ...parts(COPY.hang.look, { open_proof: COPY.done.open_proof }).map((p) => (p.placeholder === null ? p.text : newTab(`/${cardPath(status.shortId)}`, { "data-open-proof": "" }, p.text)))),
+      actions(
+        // Only for an account on a platform the device knows: nothing to hang when everything was withdrawn today.
+        status.slots.some((sl) => sl.current !== null && sl.row !== null) ? el("a", { class: "btn ghost", attrs: { href: `/${hangPath(status.shortId)}`, "data-hang-again": "" } }, COPY.hang.rehang) : null,
+        secondary(COPY.accounts.restart, () => before()),
+      ),
+    ];
+  };
 
   /** Step 4's screen, with the seven steps' line above it, and its state for the tests. */
   function showAccounts(state: string, mode: string, ...children: (Node | null)[]): void {

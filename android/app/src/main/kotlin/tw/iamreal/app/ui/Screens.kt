@@ -73,7 +73,8 @@ internal class Outside(
  * Every sentence is the copy's; which one is [Messages]'s and [Model]'s to
  * say. No screen links to a page of the site but steps 6 and 8, whose links
  * are the card's own page and the platform's; step 1's two links are for someone
- * without a card yet, who gets no further (docs/design/principles.md, 1).
+ * without a card yet, who gets no further, and step 4's link to the card's page
+ * for a card that cannot go on today (docs/design/principles.md, 1).
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -84,8 +85,8 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
             // The settings from the first and the last step (design/copy/app.md, "設定"): not while a card proof is under way.
             val settings = m.step == Step.BEFORE || m.step == Step.DONE
             Header(m.copy.say("common.service_name"), if (settings) r.app.say("settings.open") else null) { r.openSettings() }
-            // Each step starts at its top.
-            key(m.step) {
+            // Each step starts at its top, and so does the whole step 6 shown from step 4.
+            key(m.step, m.hangFromLimit) {
                 Column(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Type.gutter).padding(top = 28.dp, bottom = 48.dp).testTag("step-${m.step.name.lowercase()}"),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -311,7 +312,10 @@ private fun Accounts(m: Model, outside: Outside) {
     }
 }
 
-/** 3 records of the card today: the sentence, and "回到開頭", which drops the PIN as "取消" does. */
+/**
+ * 3 records of the card today (the PIN already dropped, [Model]): the sentence, a link to the card's page, 重新掛上連結 where the
+ * card declares an account the app can hang, and 回到開頭.
+ */
 @Composable
 private fun DailyLimit(m: Model, sentence: String, outside: Outside) {
     val c = m.copy
@@ -324,8 +328,7 @@ private fun DailyLimit(m: Model, sentence: String, outside: Outside) {
     OpensProof(c.say("hang.look", "open_proof" to openProof), openProof) { outside.open(m.proofUrl(shortId)) }
     Actions {
         Button(c.say("accounts.restart"), wide) { m.cancel() }
-        // Nothing declared now (everything withdrawn today): no link to hang.
-        if (m.status?.slots?.any { it.current != null } == true) Button(c.say("hang.rehang"), wide) { m.showHangFromLimit() }
+        if (m.status?.let { m.messages.canHangFromLimit(it) } == true) Button(c.say("hang.rehang"), wide) { m.showHangFromLimit() }
     }
 }
 

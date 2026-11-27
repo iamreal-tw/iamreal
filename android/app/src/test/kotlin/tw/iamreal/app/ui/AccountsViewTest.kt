@@ -93,6 +93,15 @@ class AccountsViewTest {
     }
 
     @Test
+    fun `3 records today, 重新掛上連結 only for an account the app can hang`() {
+        assertTrue(messages.canHangFromLimit(status(slot("threads", "alice"), daysSince = 0, dailyLimit = true)))
+        // Everything withdrawn today: nothing to hang.
+        assertEquals(false, messages.canHangFromLimit(status(slot("threads", null, lastDeclared = "alice"), daysSince = 0, dailyLimit = true)))
+        // Only an account on a platform the app does not know: no profile to open, no demonstration.
+        assertEquals(false, messages.canHangFromLimit(status(slot("example", "a-b", known = false), slot("threads", null), daysSince = 0, dailyLimit = true, table = listOf("example", "threads"))))
+    }
+
+    @Test
     fun `3 records today and nothing declared, the row as it is`() {
         val view = messages.accountsView(status(slot("threads", null, lastDeclared = "alice"), daysSince = 0, dailyLimit = true)) as Messages.FillView
         assertEquals("這張卡片今天已經過卡 3 次，明天才能再過卡。", view.dailyLimit)

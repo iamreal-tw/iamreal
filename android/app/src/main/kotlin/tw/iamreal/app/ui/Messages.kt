@@ -409,6 +409,13 @@ internal class Messages(private val c: Copy) {
      */
     class HangFromLimitView(val title: String, val why: String, val profiles: List<OpensProfile>, val steps: List<String>, val hung: String, val account: String?)
 
+    /**
+     * Whether step 4's 今天已經過卡 3 次 offers 重新掛上連結: the card declares an account on a platform the app knows. Not when
+     * it declares nothing now (everything withdrawn today), nor only accounts on platforms the app does not know: no profile
+     * to open, no demonstration.
+     */
+    fun canHangFromLimit(status: CardProof.Status): Boolean = status.slots.any { it.current != null && it.known && Platforms.of(it.platform) != null }
+
     fun hangFromLimit(status: CardProof.Status, single: String?): HangFromLimitView {
         val declared = status.slots.mapNotNull { s -> s.current?.let { Triple(s.platform, it, s.known) } }
         val openProof = c.say("done.open_proof")
