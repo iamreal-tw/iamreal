@@ -38,8 +38,8 @@
 //   day's totals every hour, as count-totals/oldest.json, in the same form.
 //   It passes when `checked` is at most 2 hours old and `oldest` is the
 //   date of the test site's first day of totals (`COUNT_TOTALS_FIRST`): a
-//   later date is a rule that deleted it. Off until that first day's totals
-//   are there on the test site and the date is filled in.
+//   later date is a rule that deleted it. On since the test site's first day
+//   of totals, 2026-11-26, appeared in the file (read 2026-11-27).
 //
 // The proof log is published at midnight in Taiwan, and retried every
 // minute in the first hour (README.md, "每天公布"): until 01:00 in Taiwan
@@ -82,10 +82,10 @@ export const COUNT_EVENTS_CHECKED = true;
 export const COUNT_EVENTS_FILE = "count-events/oldest.json";
 /**
  * The date of the test site's first day of the counts' totals (#435), or
- * null while it is not checked: fill it in, in a pull request of its own,
- * once count-totals/oldest.json on the test site has a date.
+ * null while it is not checked: count-totals/oldest.json on the test site
+ * has said 2026-11-26 since its first day of totals (read 2026-11-27).
  */
-export const COUNT_TOTALS_FIRST: string | null = null;
+export const COUNT_TOTALS_FIRST: string | null = "2026-11-26";
 /** The file the back end writes every hour about the counts' totals (#435), on the data domain. */
 export const COUNT_TOTALS_FILE = "count-totals/oldest.json";
 /** How long ago the back end may have looked last, in hours. */

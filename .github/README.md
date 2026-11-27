@@ -312,7 +312,7 @@ iamreal-verify -bb <bb> -crs <通用參數目錄> -proof-log test -data https://
 | 資料網域有今天的卡片狀態檔 `proof-log/card-state/<日期>.jsonl` | 同上，今天沒有公布 |
 | 資料網域的 `connection-log/oldest.json` 讀得懂，`checked` 在 2 小時內，`oldest` 是 `null` 或不早於今天（UTC）的 33 天前（#20；2026-11-27 打開，見下面） | 後台沒有在看連線紀錄，或有超過期限還沒刪的 |
 | 資料網域的 `count-events/oldest.json`，同一種讀法、同樣的門檻（#54；2026-11-27 打開） | 後台沒有在看計數的明細，或有超過期限還沒刪的 |
-| 資料網域的 `count-totals/oldest.json`，同一種讀法，`checked` 在 2 小時內，`oldest` 是測試網站第一天加總的日期（#435；還沒打開） | 後台沒有在看計數的加總，或最早一天的加總被刪了 |
+| 資料網域的 `count-totals/oldest.json`，同一種讀法，`checked` 在 2 小時內，`oldest` 是測試網站第一天加總的日期 2026-11-26（#435；2026-11-27 打開） | 後台沒有在看計數的加總，或最早一天的加總被刪了 |
 
 門檻和時間：
 
@@ -337,7 +337,7 @@ node --experimental-strip-types test/outside-check.ts
 - 33 天的來歷：31 天，加 R2 的生命週期規則最多晚一天刪，再留一天。
 - #20、#54 部署之後，這兩個檔出現在測試網站上（2026-11-27 讀到的都是 `{"checked":"2026-11-26T18:00:13.633Z","oldest":null}`），`worker/test/outside-check.ts` 的 `CONNECTION_LOG_CHECKED`、`COUNT_EVENTS_CHECKED` 改成 `true`。檔不在、後台超過 2 小時沒看、最舊的超過 33 天，都算失敗。
 
-**加總那一項（#435）也還沒打開。** 加總永久保存，最早一天不會變：後台每小時看 `count-totals/day/` 最早一天的日期，寫成 `count-totals/oldest.json`（同一種格式）；檢查比對的是 `worker/test/outside-check.ts` 的 `COUNT_TOTALS_FIRST`。現在是 `null`（關著）；測試網站有了第一天的加總、這個檔出現日期之後，開一個 PR 填上那一天。日期變晚就是到期規則刪了它。
+**加總那一項（#435）2026-11-27 也打開了。** 加總永久保存，最早一天不會變：後台每小時看 `count-totals/day/` 最早一天的日期，寫成 `count-totals/oldest.json`（同一種格式）；檢查比對的是 `worker/test/outside-check.ts` 的 `COUNT_TOTALS_FIRST`。#435 部署之後，測試網站有了第一天的加總（2026-11-27 讀到的是 `{"checked":"2026-11-27T04:00:12.946Z","oldest":"2026-11-26"}`），`COUNT_TOTALS_FIRST` 填上 `2026-11-26`。日期變晚就是到期規則刪了它；檔不在、後台超過 2 小時沒看，也算失敗。
 
 還沒做的：正式網站。有了之後加上同樣的檢查。
 

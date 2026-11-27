@@ -1701,7 +1701,7 @@ node --experimental-strip-types scripts/connection-log.ts --from 2026-11-20 --to
 
 **檔不見的時候**：每分鐘的檔讀不懂時跳過那一檔，即時的輸出寫一行 `{"event":"count_totals_file_unreadable","key":"count-events/2026-11-26/2026-11-26T14:05Z.json"}`（只有鍵）。
 
-**加總有沒有被刪**：加總是永久的，最早一天不會變。每小時的排程用後台自己的綁定列出 `count-totals/day/` 的第一個鍵，把日期寫成公開資料的 `count-totals/oldest.json`（`{"checked":"<UTC 的時間>","oldest":"<UTC 的日期>"}`，還沒有加總時 `oldest` 是 `null`；ADR-0027）。外部的檢查（`test/outside-check.ts`）比對它和 `COUNT_TOTALS_FIRST`：日期變晚就是到期規則刪了最早一天，失敗。不在部署前讀回規則。那一行現在關著（`COUNT_TOTALS_FIRST` 是 `null`）：測試網站有了第一天的加總、這個檔出現日期之後，在另一個 PR 填上那一天。
+**加總有沒有被刪**：加總是永久的，最早一天不會變。每小時的排程用後台自己的綁定列出 `count-totals/day/` 的第一個鍵，把日期寫成公開資料的 `count-totals/oldest.json`（`{"checked":"<UTC 的時間>","oldest":"<UTC 的日期>"}`，還沒有加總時 `oldest` 是 `null`；ADR-0027）。外部的檢查（`test/outside-check.ts`）比對它和 `COUNT_TOTALS_FIRST`：日期變晚就是到期規則刪了最早一天，失敗。不在部署前讀回規則。測試網站第一天的加總是 2026-11-26，2026-11-27 填進 `COUNT_TOTALS_FIRST`，那一行打開了。
 
 **測試**：[`test/count-totals.test.ts`](test/count-totals.test.ts) 對本機 workerd 上的整個 Worker：把已知的計數照收計數的物件寫的格式放進儲存桶，用假的驗證器送出幾筆紀錄（連線紀錄跟著寫），移動時鐘、跑一次排程，讀加總的檔逐欄比對。測到：每一種加總和放進去的相符；重試後完成算一次完成、跨午夜的嘗試算在開始的那一天；前 100 個網域和其餘的 `other`；不在證明紀錄裡的短編號不在；送出 2 張、3 張卡片的裝置，灌進帶假編號的計數不改變它；31 天的月份 1 日的檔已經刪了、30 天的月份還在；加總的檔裡沒有 IP、請求編號、任何 32 位十六進位的編號；同一段時間跑兩次不變，中途停下再算一次也不變；公布的最早日期。外部檢查的那一行在 `test/outside-check.test.ts`。
 
