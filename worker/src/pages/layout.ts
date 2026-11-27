@@ -85,7 +85,7 @@ export const LOGO = new Html(
 );
 
 /** home.md's 〈需要什麼〉: the one place it is written. The home page shows it once (第一屏). */
-export const NEEDS = "需要實體的自然人憑證，和手機，或讀卡機和電腦。";
+export const NEEDS = "需要實體的自然人憑證，和有 NFC 的手機；或讀卡機和電腦。";
 
 /** The four links of the navigation bar (home.md, 導覽列), and its one button. */
 const NAV_LINKS = html`<a href="/check">如何檢查島民證明</a>

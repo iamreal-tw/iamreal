@@ -62,6 +62,7 @@ import {
   type Sentence,
   accountsView,
   beforeView,
+  chooseView,
   confirmView,
   doneView,
   editListView,
@@ -85,6 +86,12 @@ export interface AppOptions {
   root: HTMLElement;
   prover: Prover;
   card: WindowedCard;
+  /**
+   * The fixed link of the site's app domain (src/target.ts, APP_LINK), or
+   * null: with one, the card proof starts with the choice of a way, before
+   * step 1; without, at step 1.
+   */
+  appLink: string | null;
   /** Step timings, for measurements (they stay on the page). */
   onTiming?: (step: string, ms: number) => void;
 }
@@ -195,16 +202,21 @@ export function startApp(o: AppOptions): void {
   /** A FlowStop that leaves the step to be tried again (the flow did not end). */
   const retryable = (f: CardProofFlow, e: unknown): e is FlowStop => e instanceof FlowStop && f.stop === null;
 
-  /** Puts a screen up: the mark, the service's name and the site's; where in the seven steps; the screen. */
-  function show(step: number, screen: HTMLElement): void {
+  /** Puts a screen up: the mark, the service's name and the site's; where in the seven steps (none before step 1); the screen. */
+  function show(step: number | null, screen: HTMLElement): void {
+    if (step === null) return void up(screen);
     const where = el(
       "div",
       { class: "where", attrs: { "data-where": String(step) } },
       el("p", { class: "count" }, fill(COPY.common.step, { step, steps: STEPS })),
       el("span", { class: "bar", attrs: { "aria-hidden": "true" } }, ...Array.from({ length: STEPS }, (_, i) => el("i", { class: i < step ? "on" : "" }))),
     );
-    frame(root, where, screen);
-    document.title = screen.querySelector("h1")?.textContent ?? "";
+    up(where, screen);
+  }
+
+  function up(...children: HTMLElement[]): void {
+    frame(root, ...children);
+    document.title = children.at(-1)!.querySelector("h1")?.textContent ?? "";
     window.scrollTo(0, 0);
   }
 
@@ -225,14 +237,72 @@ export function startApp(o: AppOptions): void {
     return f;
   }
 
+  // Before step 1: the choice of a way ------------------------------------------------
+
+  /**
+   * The choice of a way (card-proof.md, the choice of a way), on a site with
+   * an app domain: not numbered. On a computer, the phone's way first, with
+   * the QR code on the screen, then the reader's, whose button goes to step
+   * 1. On a phone (narrower than the breakpoint, style.css), the app's button
+   * alone. The QR code and the button hold the app domain's fixed link and
+   * nothing of a card proof; the code is made on this device, no request.
+   * After it, the screen stays as it is: nothing pairs the computer with the
+   * phone.
+   */
+  function ways(link: string): void {
+    drop();
+    const c = COPY.choose;
+    const view = chooseView();
+    const qr = qrSvg(link);
+    // The sentences beside it say what to do with it; the code itself is not read out.
+    qr.setAttribute("aria-hidden", "true");
+    show(
+      null,
+      el(
+        "section",
+        { class: "step", attrs: { "data-step": "choose" } },
+        el("h1", {}, c.title),
+        el("p", { class: "lead" }, say(view.intro), el("span", { class: "on-computer" }, c.same_proof)),
+        el(
+          "div",
+          { class: "ways on-computer" },
+          el(
+            "div",
+            { class: "way", attrs: { "data-way": "phone" } },
+            el("h2", {}, c.by_phone),
+            el("p", {}, c.by_phone_what),
+            el("div", { class: "qr", attrs: { "data-qr": link } }, qr),
+            el("p", { class: "small" }, c.scan, el("br"), c.opens_app),
+            el("p", { class: "small" }, c.rest_on_phone),
+          ),
+          el("p", { class: "or" }, el("span", {}, c.or)),
+          el(
+            "div",
+            { class: "way", attrs: { "data-way": "reader" } },
+            el("h2", {}, c.by_reader),
+            el("p", {}, c.by_reader_what),
+            actionsEnd(primary(c.use_reader, () => before())),
+          ),
+        ),
+        el(
+          "div",
+          { class: "on-phone", attrs: { "data-way": "app" } },
+          el("a", { class: "btn", attrs: { href: link, "data-app-link": "" } }, c.use_app),
+          el("p", { class: "small" }, c.opens_app_short),
+          el("p", { class: "small" }, say(view.readerOnComputer)),
+        ),
+      ),
+    );
+  }
+
   // Step 1: before you start ---------------------------------------------------------
 
   /**
    * Step 1, the beginning: common.cancel and accounts.restart come back here. Everything the
    * last card proof held is dropped first. `why`: the reason the screen came
    * back here (the wait for the second signature ran out). The first screen
-   * has no common.back; until the app is out, no choice of device: common.next only
-   * (card-proof.md, before the app is out).
+   * has common.back to the choice of a way where the site has one, and none
+   * where it starts here (card-proof.md, step 1).
    */
   function before(why: Message | null = null): void {
     drop();
@@ -257,16 +327,19 @@ export function startApp(o: AppOptions): void {
           pageCounts().retry(answer.turnedAway);
           return void next.before(busyLine);
         }
-        if (answer === "paused") return void next.replaceWith(pausedLine());
+        if (answer === "paused") return void paused();
         startConfig = answer;
         read();
       });
     });
-    const next = actionsEnd(start);
+    const back = o.appLink === null ? null : secondary(COPY.common.back, () => ways(o.appLink!));
+    const next = back ? actions(back, start) : actionsEnd(start);
     // The operator stopped taking card proofs: said here, before a card is read, in place of common.next
     // (card-proof.md, step 1). No answer: common.next stays, and step 2 asks again.
-    cardProofsPaused().then((paused) => {
-      if (paused === true && next.isConnected) next.replaceWith(pausedLine());
+    // common.back stays, under the sentence.
+    const paused = (): void => next.replaceWith(pausedLine(), ...(back ? [actions(back)] : []));
+    cardProofsPaused().then((p) => {
+      if (p === true && next.isConnected) paused();
     });
     show(
       1,
@@ -1065,5 +1138,6 @@ export function startApp(o: AppOptions): void {
     );
   }
 
-  before();
+  if (o.appLink === null) before();
+  else ways(o.appLink);
 }

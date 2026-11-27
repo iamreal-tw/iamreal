@@ -10,7 +10,9 @@
 //                   uploaded: the directory holds the page's files and no
 //                   other, and its scripts are the test site's target: MOICA's
 //                   issuer keys and component, the test log's data domain
-//                   and no other address of the project or of this computer,
+//                   and the link of its app domain, which the choice of a
+//                   way before step 1 gives (ADR-0040), and no other
+//                   address of the project or of this computer,
 //                   the mark with that date and with the test log's
 //                   scope string as the one the build's target signs, the
 //                   test site's domain in its links, nothing of the tests.
@@ -121,11 +123,13 @@ const SITE_HOSTS: Readonly<Record<ProofLogKind, string>> = { production: "iamrea
 
 /**
  * Throws unless `page` is the card proof page of a site of that kind of
- * proof log, built with `clearedOn` as the date beside its mark. Only a test
- * log's site has one now: the production log's is not deployed from
- * here yet, and its page would be another build.
+ * proof log, built with `clearedOn` as the date beside its mark, and with the
+ * link of the site's app domain `appHost` (deploy-build-checks.ts,
+ * `APP_DOMAINS`), or none where it has none. Only a test log's site has one
+ * now: the production log's is not deployed from here yet, and its page
+ * would be another build.
  */
-export function checkProofPage(page: ProofPage | null, kind: ProofLogKind, clearedOn: string | null): void {
+export function checkProofPage(page: ProofPage | null, kind: ProofLogKind, clearedOn: string | null, appHost: string | null): void {
   assert.equal(kind, "test", `the card proof page is checked for a test log's site only: a ${kind} log's site needs its own build and its own checks`);
   assert.ok(page !== null, "there is no build of web/ under site/proof/: /proof would answer 404");
   assert.ok(clearedOn !== null, "a test log's site has the date it was last cleared on");
@@ -138,16 +142,20 @@ export function checkProofPage(page: ProofPage | null, kind: ProofLogKind, clear
   assert.ok(code.includes(COMPONENT), `the card proof page names the component, ${COMPONENT}`);
   for (const modulus of moduliInSpec()) assert.ok(code.includes(modulus), "the card proof page holds MOICA's issuer keys, the two of spec/vectors/issuers.json");
   for (const s of TEST_ONLY) assert.ok(!code.includes(s), `the card proof page contains ${JSON.stringify(s)}`);
-  // The only addresses of this computer or of the project: the component's and the proof log's data domain.
+  // The only addresses of this computer or of the project: the component's, the proof log's data domain, and the
+  // site's app domain (a link the screen gives, not a request).
   const dataOrigin = DATA_ORIGINS[kind];
+  const appOrigin = appHost === null ? null : `https://${appHost}`;
   const addresses = new Set([...code.matchAll(/https?:\/\/[A-Za-z0-9.-]+(?::\d+)?/g)].map((m) => m[0]));
   for (const address of addresses) {
-    if (address === COMPONENT || address === dataOrigin) continue;
+    if (address === COMPONENT || address === dataOrigin || address === appOrigin) continue;
     // Names in the libraries' comments (licences, specifications) are not requests; the page's policy lets it
     // connect to its own origin and the data domain only.
     assert.ok(!/localhost|127\.0\.0\.1|iamreal/.test(address), `the card proof page names ${address}`);
   }
   assert.ok(addresses.has(dataOrigin), `the card proof page takes the CRL archive from ${dataOrigin}`);
+  // The app domain's link whole, as the QR code and the phone's button hold it: no path (web/src/target-test-site.ts).
+  if (appOrigin !== null) assert.ok(new RegExp(`["'\`]${appOrigin.replaceAll(".", "\\.")}/["'\`]`).test(code), `the card proof page links to its app domain, ${appOrigin}/`);
   // The mark as the build has it: one JSON text in the script of the mark's entry (web/src/ui/test-proof-log.ts), which
   // web/vite.config.ts writes from the date it was given and from the scope string of the target it built with,
   // and does not write for a target that signs another proof log's. It ends with the date and that scope string.

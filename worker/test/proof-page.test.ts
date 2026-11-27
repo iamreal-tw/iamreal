@@ -12,6 +12,8 @@ import { type ProofPage, buildProofPage, checkProofPage, readProofPage } from ".
 import { WORKER_DIR } from "./build.ts";
 
 const CLEARED_ON = "2026-11-19";
+/** The test site's app domain (scripts/deploy-build-checks.ts, `APP_DOMAINS`). */
+const APP_HOST = "test-app.iamreal.tw";
 const [G2, G3] = moduliInSpec();
 /** A build as the test site's is, as far as the checks look: its files, and what its scripts say. */
 const good: ProofPage = {
@@ -28,7 +30,7 @@ const good: ProofPage = {
     "crs/bn254_g1_compressed_2p18.dat": 8_388_608,
     "crs/bn254_g2.dat": 128,
   },
-  code: `const component="http://localhost:61161";const data="https://test-data.iamreal.tw";const keys=["${G2}","${G3}"];const scopes=["iamreal:public:0_______________","iamreal-test:public:0__________"];const site="test.iamreal.tw";const mark=JSON.parse('{"sentence":"測試的證明紀錄　不定期清空，上次清空：","clearedOn":"${CLEARED_ON}","scope":"iamreal-test:public:0__________"}');// see https://www.w3.org/TR/wasm/`,
+  code: `const component="http://localhost:61161";const data="https://test-data.iamreal.tw";const keys=["${G2}","${G3}"];const scopes=["iamreal:public:0_______________","iamreal-test:public:0__________"];const site="test.iamreal.tw";const app="https://test-app.iamreal.tw/";const mark=JSON.parse('{"sentence":"測試的證明紀錄　不定期清空，上次清空：","clearedOn":"${CLEARED_ON}","scope":"iamreal-test:public:0__________"}');// see https://www.w3.org/TR/wasm/`,
 };
 const withFiles = (change: (files: Record<string, number>) => void): ProofPage => {
   const files = { ...good.files };
@@ -41,7 +43,7 @@ const withCode = (from: string, to: string): ProofPage => {
 };
 
 test("a build as the test site's is passes for a test log's site with that date", () => {
-  checkProofPage(good, "test", CLEARED_ON);
+  checkProofPage(good, "test", CLEARED_ON, APP_HOST);
 });
 
 test("a build with a file missing or empty, or a file that is no part of the page, is turned away", () => {
@@ -60,7 +62,7 @@ test("a build with a file missing or empty, or a file that is no part of the pag
     ["another kind of font under assets/", withFiles((f) => (f["assets/other.ttf"] = 10)), /assets\/other\.ttf/],
     ["an empty file where the CRS is", withFiles((f) => (f["crs/bn254_g2.dat"] = 0)), /crs\/bn254_g2\.dat of the card proof page is not empty/],
   ];
-  for (const [name, page, message] of cases) assert.throws(() => checkProofPage(page, "test", CLEARED_ON), message, name);
+  for (const [name, page, message] of cases) assert.throws(() => checkProofPage(page, "test", CLEARED_ON, APP_HOST), message, name);
 });
 
 test("a build of another target is turned away: the tests', the production log's, the one for a real card on this computer, or one with another date", () => {
@@ -81,17 +83,21 @@ test("a build of another target is turned away: the tests', the production log's
     ["a mark that does not say which scope string", withCode(',"scope":"iamreal-test:public:0__________"', ""), /says the build signs/],
     ["two marks", { ...good, code: `${good.code}'{"clearedOn":"${CLEARED_ON}","scope":"iamreal:public:0_______________"}'` }, /says the build signs/],
     ["the public site's domain in the links", withCode('"test.iamreal.tw"', '"iamreal.tw"'), /test\.iamreal\.tw/],
+    // The choice of a way before step 1 (ADR-0040): its link to the app domain, and no other.
+    ["no link to the app domain: a build with no choice of a way", withCode('"https://test-app.iamreal.tw/"', '""'), /test-app\.iamreal\.tw/],
+    ["the production site's app domain", withCode('"https://test-app.iamreal.tw/"', '"https://app.iamreal.tw/"'), /https:\/\/app\.iamreal\.tw/],
+    ["the app domain with a path, which the apps would not be given", withCode('"https://test-app.iamreal.tw/"', '"https://test-app.iamreal.tw/hang/7K2Q9FM4XD"'), /links to its app domain/],
     ["both sites' domains", { ...good, code: `${good.code}const other="iamreal.tw"` }, /links with iamreal\.tw/],
     // The header's site name is let through once; a link with the public domain beside it is still caught.
     ["the site's name, and the public domain in a link", { ...good, code: `${good.code}const copy={site_name:"iamreal.tw"};const other="iamreal.tw"` }, /links with iamreal\.tw/],
   ];
   // The site's name in the header alone: iamreal.tw on every site (design/copy/test-site.md).
-  checkProofPage({ ...good, code: `${good.code}const copy={common:{site_name:\`iamreal.tw\`}}` }, "test", CLEARED_ON);
-  for (const [name, page, message] of cases) assert.throws(() => checkProofPage(page, "test", CLEARED_ON), message, name);
+  checkProofPage({ ...good, code: `${good.code}const copy={common:{site_name:\`iamreal.tw\`}}` }, "test", CLEARED_ON, APP_HOST);
+  for (const [name, page, message] of cases) assert.throws(() => checkProofPage(page, "test", CLEARED_ON, APP_HOST), message, name);
   // The date the build must carry is the one it is checked against.
-  assert.throws(() => checkProofPage(good, "test", "2026-11-20"), /2026-11-20/);
+  assert.throws(() => checkProofPage(good, "test", "2026-11-20", APP_HOST), /2026-11-20/);
   // No deploy of a production log's site is made here yet: its page is not this build.
-  assert.throws(() => checkProofPage(good, "production", null), /production/);
+  assert.throws(() => checkProofPage(good, "production", null, null), /production/);
 });
 
 test("every environment's page is checked against its own kind of proof log and date; an environment without a page is turned away", () => {
@@ -115,14 +121,14 @@ test("the test site's build of web/ passes, with the date it was given; without 
     // web/crs/ is fetched by `pnpm fetch-crs` and is not in the repository: where a build is made without it (the
     // checks of a pull request), the build has no CRS, and that is what the check finds; where it is there (a
     // deploy's build job fetches it first), the build passes.
-    if (existsSync(join(WORKER_DIR, "..", "web", "crs", "bn254_g2.dat"))) checkProofPage(page, "test", CLEARED_ON);
-    else assert.throws(() => checkProofPage(page, "test", CLEARED_ON), /crs\/bn254_g1_compressed_2p18\.dat/);
+    if (existsSync(join(WORKER_DIR, "..", "web", "crs", "bn254_g2.dat"))) checkProofPage(page, "test", CLEARED_ON, APP_HOST);
+    else assert.throws(() => checkProofPage(page, "test", CLEARED_ON, APP_HOST), /crs\/bn254_g1_compressed_2p18\.dat/);
     // Whatever the CRS, everything else about it holds.
-    checkProofPage({ ...page, files: { ...page.files, "crs/bn254_g1_compressed_2p18.dat": 1, "crs/bn254_g2.dat": 1 } }, "test", CLEARED_ON);
+    checkProofPage({ ...page, files: { ...page.files, "crs/bn254_g1_compressed_2p18.dat": 1, "crs/bn254_g2.dat": 1 } }, "test", CLEARED_ON, APP_HOST);
     // The production build of web/ in its place is turned away: it has no mark, the public proof log's data domain and the public site's links.
     // The checks of a pull request have no CRS: the date is looked at on the copy that has one in its place.
     const whole = { ...page, files: { ...page.files, "crs/bn254_g1_compressed_2p18.dat": 1, "crs/bn254_g2.dat": 1 } };
-    assert.throws(() => checkProofPage(whole, "test", "2026-11-20"), /2026-11-20/);
+    assert.throws(() => checkProofPage(whole, "test", "2026-11-20", APP_HOST), /2026-11-20/);
     assert.equal(readProofPage(join(dir, "nothing-here")), null);
   } finally {
     rmSync(dir, { recursive: true, force: true });

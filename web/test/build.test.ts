@@ -60,8 +60,11 @@ function loadedBy(files: Map<string, string>, page: string): string[] {
   return [...seen].sort();
 }
 
-/** What both builds hold, and what neither does. `dataOrigin` is the one other origin the build may name, if any. */
-function realCardOnly(code: string, mode: string, dataOrigin: string | null): void {
+/**
+ * What both builds hold, and what neither does. `dataOrigin` is the one other origin the build may name, if any;
+ * `appLink`, the app domain's link, the one other the screens link to (not a request: a link the cardholder follows).
+ */
+function realCardOnly(code: string, mode: string, dataOrigin: string | null, appLink: string | null = null): void {
   assert.ok(code.length > 100_000, `${mode}: the build has its scripts`);
   // MOICA's component and issuer keys (the first hex digits of G2's and G3's moduli).
   assert.ok(code.includes("http://localhost:61161"), `${mode}: the component's address`);
@@ -70,15 +73,18 @@ function realCardOnly(code: string, mode: string, dataOrigin: string | null): vo
   for (const s of ["the card signs 31 bytes", "__IAMREAL_TEST", "FakeCard", "fake-component", "testIssuer", "PRIVATE KEY", "pkcs8"]) {
     assert.ok(!code.includes(s), `${mode}: the build contains ${JSON.stringify(s)}`);
   }
-  // The only addresses outside the page's own origin are the component's and the data domain's.
+  // The only addresses outside the page's own origin are the component's and the data domain's, and the app domain's link.
   const urls = new Set([...code.matchAll(/https?:\/\/[A-Za-z0-9.-]+(?::\d+)?/g)].map((m) => m[0]));
   for (const u of urls) {
     // Names in comments of the libraries (licences, specifications) are not requests; the page's CSP
     // allows only its own origin and the data domain, so these could not be fetched anyway.
-    if (u === "http://localhost:61161" || u === dataOrigin) continue;
+    if (u === "http://localhost:61161" || u === dataOrigin || (appLink !== null && u === new URL(appLink).origin)) continue;
     assert.ok(!/localhost|127\.0\.0\.1|iamreal/.test(u), `${mode}: the build names ${u}`);
   }
   if (dataOrigin !== null) assert.ok(urls.has(dataOrigin), `${mode}: the data domain ${dataOrigin}`);
+  // The link whole, as the QR code holds it; no app domain at all in a build without one.
+  if (appLink !== null) assert.match(code, new RegExp(`["'\`]${appLink.replaceAll(".", "\\.")}["'\`]`), `${mode}: the app domain's link ${appLink}`);
+  else assert.ok(!/["'`]https:\/\/[a-z-]*app\.iamreal\.tw/.test(code), `${mode}: no app domain`);
 }
 
 test("a production build holds nothing of the tests, and signs the public proof log's scope string", async () => {
@@ -107,7 +113,7 @@ const MARK = /```\n(.*)\d{4}-\d{2}-\d{2}\n```/.exec(readFileSync(join(web, "..",
 test("the test site's build: MOICA's keys and component, nothing of the tests, the test log's scope string, its data domain and no other address, the test site's links, the mark of a test log", async () => {
   process.env.IAMREAL_TEST_PROOF_LOG_CLEARED_ON = CLEARED_ON;
   const { files, code } = await buildOf("testsite").finally(() => delete process.env.IAMREAL_TEST_PROOF_LOG_CLEARED_ON);
-  realCardOnly(code, "testsite", "https://test-data.iamreal.tw");
+  realCardOnly(code, "testsite", "https://test-data.iamreal.tw", "https://test-app.iamreal.tw/");
   assert.ok(code.includes("iamreal-test:public:0__________"), "the test log's scope string");
   assert.ok(!code.includes("Example (no real service)"), "the test site's build has test-example's definition (#309: Threads only)");
   assert.ok(!code.includes("https://data.iamreal.tw"), "not the production log's data domain");
@@ -188,4 +194,9 @@ test("the test site's target is the local one but for the data domain and the si
   assert.equal(`${site.SITE_DOMAIN}/${cardPath("7K2Q9FM4XD")}`, written);
   const production = await import("../src/target.ts");
   assert.deepEqual([site.SITE_DOMAIN, production.SITE_DOMAIN, local.SITE_DOMAIN], ["test.iamreal.tw", "iamreal.tw", "iamreal.tw"]);
+  // The app domain (ADR-0040): the test site's, as design/copy/app-domain.md names it, with no path; none before the
+  // production site has one (app.iamreal.tw, at launch), and none on this computer's server, which no app connects to.
+  const appDomain = /\n## 測試網站（`([a-z.-]+)`）/.exec(readFileSync(join(web, "..", "design", "copy", "app-domain.md"), "utf8"))?.[1];
+  assert.equal(appDomain, "test-app.iamreal.tw");
+  assert.deepEqual([site.APP_LINK, production.APP_LINK, local.APP_LINK], [`https://${appDomain}/`, null, null]);
 });

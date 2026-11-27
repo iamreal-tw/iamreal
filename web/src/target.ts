@@ -50,3 +50,13 @@ export const IDLE_LIMIT_MS: number = IDLE_MS;
  * itself never connects to it (it is served from its own origin).
  */
 export const SITE_DOMAIN = "iamreal.tw";
+
+/**
+ * The fixed link of the site's app domain (ADR-0040, design/copy/app-domain.md):
+ * on a phone it opens the app, or the page for those without it. Where it is
+ * not null, the card proof starts with the choice of a way, before step 1: the
+ * QR code holds it, and the phone's button links to it (design/copy/card-proof.md,
+ * the choice of a way). The production site's app domain, app.iamreal.tw, comes
+ * at launch; until then this site's card proof starts at step 1.
+ */
+export const APP_LINK: string | null = null;
