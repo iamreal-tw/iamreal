@@ -8,10 +8,21 @@ struct Screen: Equatable {
     /// 0 for a screen in the place of step 1 that is none of them: this
     /// version can no longer do a card proof, this phone cannot read a card.
     var step: Int
+    /// Says which of the eight steps it is, above it; not the whole of
+    /// step 6 shown from step 4 on a day with 3 records, which is none of them.
+    var inSteps = true
     var blocks: [Block]
     /// The buttons under the blocks, in their order; the last is the way
-    /// on, and the main button of the screen unless `mainButton` is false.
+    /// on (on step 8, sharing), and the main button of the screen unless
+    /// `mainButton` is false.
+    /// Two side by side, the way on on the right; one under the other where
+    /// either's words do not fit on one line in half the width, or where
+    /// there are more than two, the way on on top (design/DESIGN.md, the
+    /// components: buttons).
     var buttons: [Button] = []
+    /// Under the buttons: what is not to read before the way on (step 2's
+    /// list, all still to do, before the card is read).
+    var under: [Block] = []
     /// The last of `buttons` is the screen's main button (design/DESIGN.md,
     /// the components: one main button on a screen).
     var mainButton = true
@@ -33,7 +44,7 @@ struct Screen: Equatable {
     /// Every sentence on the screen, in its order: for tests. The
     /// header's are not among them: they are not card-proof.md's.
     var texts: [String] {
-        warnings.flatMap(\.texts) + (notice?.texts ?? []) + blocks.flatMap(\.texts) + buttons.map(\.label) + links.map(\.label) + (cancel.map { [$0.label] } ?? [])
+        warnings.flatMap(\.texts) + (notice?.texts ?? []) + blocks.flatMap(\.texts) + buttons.map(\.label) + under.flatMap(\.texts) + links.map(\.label) + (cancel.map { [$0.label] } ?? [])
     }
 }
 
@@ -301,6 +312,9 @@ enum Action: Equatable {
     case openSettings
     /// "重新掛上連結": the whole of step 6 in the place of the short one.
     case rehang
+    /// "重新掛上連結" of step 4 on a day with 3 records: the whole of step 6
+    /// for the accounts the card declares now.
+    case hangFromLimit
     /// From step 6 to step 7.
     case toRemind
     /// From step 7 to step 8.

@@ -158,12 +158,13 @@ final class CardProofTests: XCTestCase {
             // as the step comes up.
             "示範：手機正面朝你，不用翻面。把自然人憑證貼到手機背面的上方，停住不動。",
             "停止播放",
+            // The buttons right under it, the list, all still to do, under them.
+            "上一步",
+            "感應卡片",
             "連上島民證明的伺服器",
             "感應卡片，讀取卡片上的憑證",
             "檢查憑證",
             "下載內政部的廢止清冊，確認憑證沒有被廢止",
-            "上一步",
-            "感應卡片",
         ])
 
         // Its button stops it, at rest with the card in place, and then plays it again; its three rounds over, as
@@ -392,8 +393,7 @@ final class CardProofTests: XCTestCase {
             "島民證明", "@alice", "島民編號 \(shortID) 開頭",
             "這是第 \(ordinal) 張島民證明。", "愈多人成為島民，知道彼此都是台灣人，我們能讓台灣的網路討論變得更貼近真實、更有意義。",
             "謝謝你加入島民，誠摯的邀請你分享島民證明。",
-            "分享到 Threads",
-            "上一步", "完成",
+            "上一步", "完成", "分享到 Threads",
         ])
         await Snapshot.save(model, as: "8-done")
         // The share sheet, with the sentence and the card's page.
@@ -463,6 +463,12 @@ final class CardProofTests: XCTestCase {
         XCTAssertTrue(model.screen.texts.contains("把證明掛上你的 Threads 個人檔案"))
         XCTAssertTrue(model.screen.texts.contains("複製證明連結"))
         XCTAssertFalse(model.screen.texts.contains { $0.hasPrefix("如果你換了新的自然人憑證") })
+        // Its 上一步: the short one again, and 重新掛上連結 the whole one again.
+        try await press("上一步", in: model)
+        XCTAssertEqual(model.screen.step, 6)
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["重新掛上連結", "下一步"])
+        try await press("重新掛上連結", in: model)
+        XCTAssertTrue(model.screen.texts.contains("複製證明連結"))
 
         // Step 7: the reminder is on, set again from today as last chosen; no way to say no here.
         try await press("下一步", in: model)
@@ -595,9 +601,9 @@ final class CardProofTests: XCTestCase {
         let model = makeModel()
         try await toAccounts(model)
         XCTAssertEqual(Array(model.screen.texts.prefix(4)), ["你的 Threads 帳號", "這張卡片目前宣告：", "@carol.tw", "上次過卡是今天"])
-        // Changed today: changing it again today is not another switch.
+        // Changed today, and changing it again today is another switch all the same (rules version 3: no correction).
         try await press("改成別的帳號", in: model)
-        XCTAssertTrue(model.screen.texts.contains("今天才宣告的帳號，今天改掉不另外算一次更換。"))
+        XCTAssertTrue(model.screen.texts.contains("一張卡終身最多更換 5 次，這次之後還可以更換 3 次。"))
         try await press("不改了", in: model)
         try await press("收回對 @carol.tw 的宣告", in: model)
         let shortID = try shortID(on: model.screen)
@@ -671,6 +677,56 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.step, 1)
         XCTAssertFalse(model.holdsPIN)
         XCTAssertEqual(card.signatures, 1, "the card signed the scope string only")
+    }
+
+    /// The card has had its 3 card proofs today (card-proof.md, 今天已經過卡 3 次): step 4 drops the PIN as it comes
+    /// up, and offers the card's page, 重新掛上連結 and 回到開頭. 重新掛上連結 is the whole of step 6 for the account the
+    /// card declares, out of the eight steps, with no record of today; its 上一步 goes back to step 4. Nothing is signed
+    /// again or sent.
+    func testThreeCardProofsTodayLeadToTheProofAndTheWholeStepSix() async throws {
+        let model = makeModel()
+        let today = CardProofFlow.dateInTaiwan(now)
+        // The server's answer for this card, as if it had declared @alice three times today.
+        asked.cardStateAnswer = { answer in
+            var state = try XCTUnwrap(try JSONSerialization.jsonObject(with: answer) as? [String: Any])
+            var platforms = try XCTUnwrap(state["platforms"] as? [String: Any])
+            var threads = try XCTUnwrap(platforms["threads"] as? [String: Any])
+            threads["current"] = "alice"
+            threads["last_declared"] = "alice"
+            platforms["threads"] = threads
+            state["platforms"] = platforms
+            state["last_card_proof"] = today
+            state["proofs_on_last_date"] = 3
+            return try JSONSerialization.data(withJSONObject: state)
+        }
+        try await toAccounts(model)
+        XCTAssertFalse(model.holdsPIN, "dropped as the screen came up")
+        XCTAssertEqual(Array(model.screen.texts.suffix(4)), ["這張卡片今天已經過卡 3 次，明天才能再過卡。", "打開你的島民證明看看。", "重新掛上連結", "回到開頭"])
+        try await press("打開你的島民證明", in: model)
+        let shortID = try XCTUnwrap(opened.last?.lastPathComponent)
+        XCTAssertEqual(opened.last, backend.origin.appendingPathComponent("p").appendingPathComponent(shortID))
+
+        try await press("重新掛上連結", in: model)
+        XCTAssertFalse(model.screen.inSteps)
+        XCTAssertEqual(model.screen.texts.first, "把證明掛上你的 Threads 個人檔案")
+        XCTAssertFalse(model.screen.texts.contains { $0.hasSuffix("記進了證明紀錄。") })
+        try await press("複製證明連結", in: model)
+        XCTAssertEqual(copied.last, opened.last?.absoluteString)
+        XCTAssertTrue(model.screen.texts.contains("已複製"))
+        try await press("打開 Threads", in: model)
+        XCTAssertEqual(opened.last?.absoluteString, "https://www.threads.com/@alice")
+        try await press("再看一次", in: model)
+        XCTAssertEqual(demonstration(on: model.screen)?.playing, true)
+        await Snapshot.save(model, as: "4-daily-limit-hang")
+
+        try await press("上一步", in: model)
+        XCTAssertTrue(model.screen.inSteps)
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["重新掛上連結", "回到開頭"])
+        try await press("回到開頭", in: model)
+        XCTAssertEqual(model.screen.step, 1)
+        XCTAssertEqual(card.signatures, 1, "the card signed the scope string only")
+        XCTAssertEqual(asked.asked["challenges"] ?? 0, 0)
+        XCTAssertEqual(asked.submitted, [])
     }
 
     /// "感應卡片" was pressed and no card came: the demonstration of where the card goes is at rest with the card
@@ -1230,7 +1286,7 @@ final class CardProofTests: XCTestCase {
             default: return []
             }
         }
-        let inline = model.screen.blocks.flatMap(within)
+        let inline = (model.screen.blocks + model.screen.under).flatMap(within)
         let buttons = model.screen.buttons + model.screen.links + (model.screen.cancel.map { [$0] } ?? []) + inline
         let button = try XCTUnwrap(buttons.first { $0.label == label }, "no button \(label) among \(buttons.map(\.label))", file: file, line: line)
         XCTAssertTrue(button.enabled, "\(label) cannot be pressed", file: file, line: line)

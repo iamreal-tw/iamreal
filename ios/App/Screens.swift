@@ -148,18 +148,21 @@ struct Screens {
             blocks.append(.senseDemo(SenseDemo(
                 description: copy("app_demo.sense_iphone"), control: control, playing: playing, played: playing || demoPlayed || running)))
         }
-        blocks.append(.items(items(labels, reached: reached, running: running, why: stop.map { message($0, tap: 1) })))
-        var buttons: [Button]
-        if done {
-            buttons = [Button(label: copy("common.next"), action: .toPIN)]
-        } else if let stop {
+        let list = Block.items(items(labels, reached: reached, running: running, why: stop.map { message($0, tap: 1) }))
+        // Once the list has something to say (all done, where it stopped and why), it is read before the button.
+        if done { return Screen(step: 2, blocks: blocks + [list], buttons: [Button(label: copy("common.next"), action: .toPIN)]) }
+        if let stop {
             // No card came, or it left: the same tap again. Anything else: the card is read again from the start.
             let again = Self.tapsAgain(stop)
-            buttons = [again ? Button(label: copy("app_read.tap_again"), action: .readCard) : Button(label: copy("app_read.restart"), action: .readAgain)]
-        } else {
-            buttons = [Button(label: copy("common.back"), action: .back, enabled: !running), Button(label: copy("app_read.tap_card"), action: .readCard, enabled: !running)]
+            let button = again ? Button(label: copy("app_read.tap_again"), action: .readCard) : Button(label: copy("app_read.restart"), action: .readAgain)
+            return Screen(step: 2, blocks: blocks + [list], buttons: [button])
         }
-        return Screen(step: 2, blocks: blocks, buttons: buttons)
+        // Before, "感應卡片" right under the demonstration, where it is seen without scrolling, and the list, all still
+        // to do, under it (card-proof.md, "2. 讀取卡片", app).
+        return Screen(
+            step: 2, blocks: blocks,
+            buttons: [Button(label: copy("common.back"), action: .back, enabled: !running), Button(label: copy("app_read.tap_card"), action: .readCard, enabled: !running)],
+            under: [list])
     }
 
     // Step 3: the PIN ------------------------------------------------------------------
@@ -320,8 +323,7 @@ struct Screens {
                 Block.row(name: row.known ? Platform.of(row.platform)?.name ?? row.platform : row.platform, account: "", lines: [])
             }
             if let message { blocks.append(.message(message)) }
-            blocks.append(.text(copy("stops.daily_limit")))
-            return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("accounts.restart"), action: .restart)])
+            return dailyLimit(status, blocks)
         }
         // One platform: no line under a row never declared, and no rules of switching.
         blocks += fields(status, typed: typed, errors: errors, lines: single == nil || !never)
@@ -352,10 +354,7 @@ struct Screens {
             blocks.append(.text(days <= 0 ? copy("accounts.last_proof_today") : copy("accounts.last_proof", ["days_ago": String(days)])))
         }
         if let message { blocks.append(.message(message)) }
-        if status.dailyLimit {
-            blocks.append(.text(copy("stops.daily_limit")))
-            return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("accounts.restart"), action: .restart)])
-        }
+        if status.dailyLimit { return dailyLimit(status, blocks) }
         blocks += [
             .button(Button(label: copy("accounts.refresh"), action: .refresh), main: true),
             .small(copy("accounts.refresh_note")),
@@ -369,6 +368,39 @@ struct Screens {
             blocks.append(.action(Button(label: copy("accounts.edit_list"), action: .editList)))
         }
         return Screen(step: 4, blocks: blocks, cancel: cancel)
+    }
+
+    /// 3 records of the card today (card-proof.md, 今天已經過卡 3 次): under
+    /// what the card declares, the sentence and the card's page; 重新掛上連結
+    /// where the card declares an account the app can hang, and 回到開頭.
+    /// Neither is the main button: the card proof goes no further today.
+    private func dailyLimit(_ status: Flow.CardStatus, _ blocks: [Block]) -> Screen {
+        let rehang = Self.hangable(status).isEmpty ? [] : [Button(label: copy("hang.rehang"), action: .hangFromLimit)]
+        return Screen(
+            step: 4, blocks: blocks + [.text(copy("stops.daily_limit")), openingTheProof("hang.look")],
+            buttons: rehang + [Button(label: copy("accounts.restart"), action: .restart)], mainButton: false)
+    }
+
+    /// The accounts the card declares now on platforms the app knows: those a link can be hung for.
+    static func hangable(_ status: Flow.CardStatus) -> [Flow.Account] {
+        status.rows.compactMap { row in
+            guard row.known, Platform.of(row.platform) != nil, let current = row.current else { return nil }
+            return Flow.Account(platform: row.platform, username: current)
+        }
+    }
+
+    /// 重新掛上連結 of 3 records today: the whole of step 6 for the
+    /// accounts the card declares now (card-proof.md, 今天已經過卡 3 次,
+    /// app). Out of the eight steps, and no record this time: no date, no
+    /// notes of one. 上一步 back to step 4, 回到開頭 to step 1. `copied`,
+    /// `demoPlaying`, `demoPlayed` as for step 6.
+    func hangFromLimit(_ status: Flow.CardStatus, copied: Bool, demoPlaying: Bool = false, demoPlayed: Bool = false) -> Screen {
+        let blocks = hangWhole(Self.hangable(status), shortID: status.shortID, single: Self.onePlatform(status), copied: copied, demoPlaying: demoPlaying, demoPlayed: demoPlayed)
+            + hungYet
+        return Screen(
+            step: 4, inSteps: false, blocks: blocks,
+            buttons: [Button(label: copy("common.back"), action: .back), Button(label: copy("accounts.restart"), action: .restart)],
+            mainButton: false)
     }
 
     /// After "改成別的帳號": the account now, a field for another, what
@@ -625,7 +657,7 @@ struct Screens {
     /// (card-proof.md, step 6 and its "app"). `single`: the one platform's
     /// name, as step 5 decided it. `copied`: the link was copied. `whole`:
     /// the whole step also where the short one would do ("重新掛上連結"
-    /// was pressed). The same parts as the web page's, but for
+    /// was pressed), with 上一步 back to the short one. The same parts as the web page's, but for
     /// what only the page has: the QR code, and "現在可以拔出卡片。" (the
     /// panel said the card can be taken away when it signed). In the
     /// order of the page a phone opens to hang it: the link, the two
@@ -634,7 +666,7 @@ struct Screens {
     /// played in this card proof.
     func hang(_ done: Flow.Done, single: String?, copied: Bool, whole: Bool = false, demoPlaying: Bool = false, demoPlayed: Bool = false) -> Screen {
         let kinds = done.answer.kinds
-        let link = Block.link("\(host)/p/\(done.shortID)")
+        let link = Block.link(address(done.shortID))
         var blocks = mismatch(done)
         blocks.append(.text(copy("done.recorded_on", ["date": done.date])))
         if kinds == nil { blocks.append(.text(copy("done.kinds_unreadable"))) }
@@ -649,25 +681,7 @@ struct Screens {
                 step: 6, blocks: blocks,
                 buttons: [Button(label: copy("hang.rehang"), action: .rehang), Button(label: copy("common.next"), action: .toRemind)])
         }
-        blocks += [
-            .title(single.map { copy("hang.title_single", ["platform": $0]) } ?? copy("hang.title")),
-            .text(single != nil ? copy("hang.why_single") : copy("done.anyone")),
-            link,
-        ]
-        // Copying the link, and beside it the public page of each account of the card on a platform the app
-        // knows: the order of the demonstration's first screen, which is this one.
-        let profiles = done.accounts.compactMap { account in
-            Platform.of(account.platform).map { platform in
-                // The short words, so that the two fit side by side; VoiceOver reads whose profile it opens.
-                Button(
-                    label: copy("hang.open_threads", ["platform": platform.name]),
-                    action: .openProfile(account.platform),
-                    spoken: copy("done.open_profile", ["account": Platform.handle(account.platform, account.username), "platform": platform.name]))
-            }
-        }
-        blocks.append(.sideBySide([Button(label: copied ? copy("done.copied") : copy("hang.copy"), action: .copyLink)] + profiles))
-        if let demo = hangDemo(done, playing: demoPlaying, played: demoPlayed) { blocks.append(.demo(demo)) }
-        blocks.append(.steps([copy("done.step_edit"), copy("done.step_link"), copy("done.step_add"), copy("done.step_paste")]))
+        blocks += hangWhole(done.accounts, shortID: done.shortID, single: single, copied: copied, demoPlaying: demoPlaying, demoPlayed: demoPlayed)
         // A new card's new link, a withdrawn account's link, the other cards that declare an account.
         if done.firstRecord { blocks.append(.small(copy("hang.new_card"))) }
         let withdrew = kinds.map { $0.contains { $0.kind == "withdraw" } } ?? done.expected.contains { $0.kind == "withdraw" }
@@ -677,10 +691,47 @@ struct Screens {
                 ? Platform.handle(kind.platform, kind.username) : kind.username
             return Block.small(copy("done.other_cards", ["account": account]))
         }
-        blocks += [openingTheProof("done.hung"), .text(copy("done.hung_done"))]
+        blocks += hungYet
         blocks += record(done, single: single)
+        // Reached from the short one by "重新掛上連結": back to it, beside the way on (card-proof.md, step 6, the short one).
+        let back = whole && hangIsShort(done, single: single) ? [Button(label: copy("common.back"), action: .back)] : []
         // One main button a screen (design/DESIGN.md): copying the link, here.
-        return Screen(step: 6, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toRemind)], mainButton: false)
+        return Screen(step: 6, blocks: blocks, buttons: back + [Button(label: copy("common.next"), action: .toRemind)], mainButton: false)
+    }
+
+    /// The card's page, as the screens write it: without the scheme.
+    private func address(_ shortID: String) -> String { "\(host)/p/\(shortID)" }
+
+    /// How to tell the link is on the profile: under the whole of step 6.
+    private var hungYet: [Block] { [openingTheProof("done.hung"), .text(copy("done.hung_done"))] }
+
+    /// The whole of step 6 from its title to its four steps, for
+    /// `accounts` on platforms the app knows and the card's page
+    /// (card-proof.md, step 6, app): the title, why, the link, copying it
+    /// and beside it the public page of each account, the demonstration,
+    /// the four steps. Step 6's, and 重新掛上連結's of step 4 on a day
+    /// with 3 records.
+    private func hangWhole(_ accounts: [Flow.Account], shortID: String, single: String?, copied: Bool, demoPlaying: Bool, demoPlayed: Bool) -> [Block] {
+        var blocks: [Block] = [
+            .title(single.map { copy("hang.title_single", ["platform": $0]) } ?? copy("hang.title")),
+            .text(single != nil ? copy("hang.why_single") : copy("done.anyone")),
+            .link(address(shortID)),
+        ]
+        // Copying the link, and beside it the public page of each account of the card on a platform the app
+        // knows: the order of the demonstration's first screen, which is this one.
+        let profiles = accounts.compactMap { account in
+            Platform.of(account.platform).map { platform in
+                // The short words, so that the two fit side by side; VoiceOver reads whose profile it opens.
+                Button(
+                    label: copy("hang.open_threads", ["platform": platform.name]),
+                    action: .openProfile(account.platform),
+                    spoken: copy("done.open_profile", ["account": Platform.handle(account.platform, account.username), "platform": platform.name]))
+            }
+        }
+        blocks.append(.sideBySide([Button(label: copied ? copy("done.copied") : copy("hang.copy"), action: .copyLink)] + profiles))
+        if let demo = hangDemo(accounts, shortID: shortID, playing: demoPlaying, played: demoPlayed) { blocks.append(.demo(demo)) }
+        blocks.append(.steps([copy("done.step_edit"), copy("done.step_link"), copy("done.step_add"), copy("done.step_paste")]))
+        return blocks
     }
 
     /// The demonstration of hanging the link, for the card's account on
@@ -688,10 +739,14 @@ struct Screens {
     /// without one. Its first screen is this step's own, with this step's
     /// words; the other four are the sketches of Threads.
     func hangDemo(_ done: Flow.Done, playing: Bool, played: Bool = false) -> HangDemo? {
+        hangDemo(done.accounts, shortID: done.shortID, playing: playing, played: played)
+    }
+
+    private func hangDemo(_ accounts: [Flow.Account], shortID: String, playing: Bool, played: Bool) -> HangDemo? {
         let threads = Platform.threads
-        guard let account = done.accounts.first(where: { $0.platform == threads.id }) else { return nil }
+        guard let account = accounts.first(where: { $0.platform == threads.id }) else { return nil }
         let handle = Platform.handle(threads.id, account.username)
-        let link = "\(host)/p/\(done.shortID)"
+        let link = address(shortID)
         let words = HangDemo.Words(
             title: copy("hang.title_single", ["platform": threads.name]),
             copy: copy("hang.copy"),
@@ -806,15 +861,13 @@ struct Screens {
             .sentences(ordinal + [copy("finish.invite")]),
             .text(copy("finish.thanks")),
         ]
-        // One share sheet, whichever platform: the button names the one the app knows.
-        if let platform = Platform.known.first {
-            blocks.append(.button(Button(label: copy("done.share", ["platform": platform.name]), action: .share), main: true))
-        }
-        // One main button a screen (design/DESIGN.md): sharing, here.
+        // One share sheet, whichever platform: the button names the one the app knows. The main button, on top of
+        // the three, one under the other (design/DESIGN.md, the components: buttons).
+        let share = Platform.known.first.map { Button(label: copy("done.share", ["platform": $0.name]), action: .share) }
         return Screen(
             step: 8, blocks: blocks,
-            buttons: [Button(label: copy("common.back"), action: .back), end],
-            mainButton: false, settings: settingsButton)
+            buttons: [Button(label: copy("common.back"), action: .back), end] + (share.map { [$0] } ?? []),
+            mainButton: share != nil, settings: settingsButton)
     }
 
     /// The tap ended in a way that leaves it to be made again as it is:
