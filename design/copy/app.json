@@ -1,6 +1,7 @@
 {
   "name": {
-    "store": "島民證明 測試",
+    "production": "島民證明 封測",
+    "test": "島民證明 測試",
     "dev": "島民證明 dev"
   },
   "splash": {
