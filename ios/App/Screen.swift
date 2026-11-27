@@ -8,6 +8,9 @@ struct Screen: Equatable {
     /// 0 for a screen in the place of step 1 that is none of them: this
     /// version can no longer do a card proof, this phone cannot read a card.
     var step: Int
+    /// Says which of the eight steps it is, above it; not the whole of
+    /// step 6 shown from step 4 on a day with 3 records, which is none of them.
+    var inSteps = true
     var blocks: [Block]
     /// The buttons under the blocks, in their order; the last is the way
     /// on (on step 8, sharing), and the main button of the screen unless
@@ -309,6 +312,9 @@ enum Action: Equatable {
     case openSettings
     /// "重新掛上連結": the whole of step 6 in the place of the short one.
     case rehang
+    /// "重新掛上連結" of step 4 on a day with 3 records: the whole of step 6
+    /// for the accounts the card declares now.
+    case hangFromLimit
     /// From step 6 to step 7.
     case toRemind
     /// From step 7 to step 8.

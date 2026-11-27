@@ -254,11 +254,65 @@ final class ScreensTests: XCTestCase {
                 "@alice",
                 "上次過卡是今天",
                 "這張卡片今天已經過卡 3 次，明天才能再過卡。",
-                "回到開頭",
+                "打開你的島民證明看看。",
+                "重新掛上連結", "回到開頭",
             ])
+            // The card's page, and the two ways out of the card proof, neither the main button: there is no way on
+            // (card-proof.md, 今天已經過卡 3 次).
+            XCTAssertEqual(screen.blocks.last, .linked("", Button(label: "打開你的島民證明", action: .openProof), "看看。"))
+            XCTAssertEqual(screen.buttons, [Button(label: "重新掛上連結", action: .hangFromLimit), Button(label: "回到開頭", action: .restart)])
+            XCTAssertFalse(screen.mainButton)
             XCTAssertNil(screen.cancel)
             document.check(screen)
         }
+    }
+
+    /// 3 records today and nothing the app can hang (everything withdrawn today, or only an account on a platform the
+    /// app does not know): the card's page, and 回到開頭 alone.
+    func testStepFourOnADayWithThreeRecordsAndNothingToHang() {
+        let withdrawn = Flow.CardStatus(
+            shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-16", daysSince: 0, dailyLimit: true, knownPlatforms: ["threads"],
+            rows: [Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: "alice", switchCount: 0, switchesLeft: 5, correctionToday: false)])
+        let unknown = Flow.CardStatus(
+            shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-16", daysSince: 0, dailyLimit: true, knownPlatforms: ["threads"],
+            rows: [
+                Flow.StatusRow(platform: "test-example", known: false, current: "alice-b", lastDeclared: "alice-b", switchCount: 0, switchesLeft: 5, correctionToday: false),
+                Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: nil, switchCount: 0, switchesLeft: 5, correctionToday: false),
+            ])
+        for status in [withdrawn, unknown] {
+            let screen = screens.accounts(status, typed: [:], errors: [:], message: nil)
+            XCTAssertTrue(screen.texts.contains("打開你的島民證明看看。"))
+            XCTAssertEqual(screen.buttons, [Button(label: "回到開頭", action: .restart)])
+            document.check(screen)
+        }
+    }
+
+    /// 重新掛上連結 of 3 records today: the whole of step 6 for the account the card declares now, out of the eight steps,
+    /// with no record of today (no date, no sentence of a new card), 上一步 back and 回到開頭 (card-proof.md, 今天已經過卡 3 次, app).
+    func testTheWholeStepSixFromThreeRecordsToday() throws {
+        let screen = screens.hangFromLimit(card(days: 0, dailyLimit: true), copied: false)
+        XCTAssertEqual(screen.step, 4)
+        XCTAssertFalse(screen.inSteps, "no 第 N 步，共 8 步")
+        XCTAssertEqual(screen.texts, [
+            "把證明掛上你的 Threads 個人檔案",
+            "在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。",
+            "iamreal.tw/p/7K2Q9FM4XD",
+            "複製證明連結",
+            "打開 Threads",
+            "示範：按「複製證明連結」，到 Threads 的個人檔案按「編輯個人檔案」、「連結」、「新增連結」，貼上網址後按「完成」，個人檔案上多了一行連結。",
+            "再看一次",
+            "按「編輯個人檔案」", "按「連結」", "按「新增連結」", "在「網址」貼上剛才複製的連結，按右上角的「完成」",
+            "掛好了嗎？打開你的島民證明看看。",
+            "頁面上的個人檔案裡看得到這個連結，就成功了。",
+            "上一步", "回到開頭",
+        ])
+        XCTAssertEqual(screen.buttons, [Button(label: "上一步", action: .back), Button(label: "回到開頭", action: .restart)])
+        XCTAssertFalse(screen.mainButton)
+        guard case .demo(let demo) = try XCTUnwrap(screen.blocks.first { if case .demo = $0 { return true } else { return false } }) else { return }
+        XCTAssertEqual(demo.account, "@alice")
+        XCTAssertEqual(demo.address, "https://iamreal.tw/p/7K2Q9FM4XD")
+        XCTAssertEqual(screens.hangFromLimit(card(days: 0, dailyLimit: true), copied: true).texts[3], "已複製")
+        document.check(screen)
     }
 
     /// The card keeps an account on a platform the app does not know: the
@@ -644,12 +698,6 @@ final class ScreensTests: XCTestCase {
             let drawn = await Self.draw(ScreenView(screen: screen, copy: copy, pinText: .constant(""), perform: { _ in }, type: { _, _ in }, unscrolled: true), height: nil)
             try Self.save(try XCTUnwrap(drawn), as: name)
         }
-        // The phone's text made the largest: step 2's two buttons do not fit side by side, one under the other, the
-        // way on on top (design/DESIGN.md, the components: buttons). Only in the output directory.
-        let large = ScreenView(screen: screens.read(reached: 0, running: false, stop: nil), copy: copy, pinText: .constant(""), perform: { _ in }, type: { _, _ in }, unscrolled: true)
-            .environment(\.sizeCategory, .accessibilityExtraExtraExtraLarge)
-        let drawnLarge = await Self.draw(large, height: nil)
-        try Self.save(try XCTUnwrap(drawnLarge), as: "card-proof-app-2-read-iphone-large-text-phone")
         let (reminders, pages) = reminderPages()
         pages.openSchedule()
         let schedule = await Self.draw(ScheduleView(pages: pages, unscrolled: true), height: nil)

@@ -105,6 +105,8 @@ final class CardProofModel: ObservableObject {
     private var after = After.hang
     /// "重新掛上連結" was pressed: step 6 is the whole one.
     private var rehanging = false
+    /// "重新掛上連結" of step 4 on a day with 3 records: the whole of step 6 is up, for the accounts the card declares now.
+    private var hangingFromLimit = false
     /// The demonstration of step 6 is playing; it has played in this card proof.
     private var demoPlaying = false
     private var demoPlayed = false
@@ -231,23 +233,29 @@ final class CardProofModel: ObservableObject {
             askConfigAgain()
             screen = before()
         case .copyLink:
-            guard let finished else { return }
-            deps.copyText(proofAddress(finished.done).absoluteString)
+            guard let shortID = proofShown else { return }
+            deps.copyText(proofAddress(shortID).absoluteString)
             copied = true
             redraw()
         case .openProof:
-            if let finished { deps.open(proofAddress(finished.done)) }
+            if let shortID = proofShown { deps.open(proofAddress(shortID)) }
         case .openProfile(let platform):
-            if let account = finished?.done.accounts.first(where: { $0.platform == platform }),
-               let address = Platform.of(platform)?.profile(account.username) { deps.open(address) }
+            // The account of the record sent, or the one the card declares now (step 4 on a day with 3 records).
+            let username = finished?.done.accounts.first(where: { $0.platform == platform })?.username
+                ?? status?.rows.first(where: { $0.platform == platform && $0.known })?.current
+            if let username, let address = Platform.of(platform)?.profile(username) { deps.open(address) }
         case .share:
             // The sentence, and on the line under it the card's page (design/copy/card-proof.md, step 8, app).
-            if let finished { deps.share("\(screens.shareText(finished.done))\n\(proofAddress(finished.done).absoluteString)") }
+            if let finished { deps.share("\(screens.shareText(finished.done))\n\(proofAddress(finished.done.shortID).absoluteString)") }
         case .preview(let platform): preview(platform)
         case .openSettings: deps.openSettings()
         case .adjustReminder: deps.openSchedule()
         case .rehang:
             rehanging = true
+            redraw()
+        case .hangFromLimit:
+            guard finished == nil, screen.step == 4, let status, status.dailyLimit else { return }
+            hangingFromLimit = true
             redraw()
         // By itself only once in a card proof: not again on the way back from step 7.
         case .showDemo: if !demoPlayed { playDemo(true) }
@@ -508,7 +516,7 @@ final class CardProofModel: ObservableObject {
             screen = read(reached: reading.reached, running: reading.running, stop: reading.stop)
             return
         }
-        guard finished != nil, after == .hang, demoPlaying != playing else { return }
+        guard (finished != nil && after == .hang) || hangingFromLimit, demoPlaying != playing else { return }
         demoPlaying = playing
         if playing { demoPlayed = true }
         redraw()
@@ -545,7 +553,9 @@ final class CardProofModel: ObservableObject {
     /// The reminder changed, the link was copied, or another step is up:
     /// the screen that shows it is drawn again.
     private func redraw() {
-        if let finished {
+        if hangingFromLimit, let status {
+            screen = screens.hangFromLimit(status, copied: copied, demoPlaying: demoPlaying, demoPlayed: demoPlayed)
+        } else if let finished {
             screen = afterSending(finished)
         } else if flow == nil, screen.step <= 1 {
             // Step 1, or the screen in its place.
@@ -581,6 +591,7 @@ final class CardProofModel: ObservableObject {
         finished = nil
         after = .hang
         rehanging = false
+        hangingFromLimit = false
         demoPlaying = false
         demoPlayed = false
         sensePlaying = false
@@ -591,6 +602,12 @@ final class CardProofModel: ObservableObject {
     }
 
     private func back() {
+        // The whole step 6 shown from step 4 on a day with 3 records: step 4 again.
+        if hangingFromLimit, let status {
+            hangingFromLimit = false
+            screen = accounts(status)
+            return
+        }
         switch screen.step {
         case 2:
             reset()
@@ -620,9 +637,12 @@ final class CardProofModel: ObservableObject {
         }
     }
 
-    private func proofAddress(_ done: CardProofFlow.Done) -> URL {
-        deps.site.appendingPathComponent("p").appendingPathComponent(done.shortID)
+    private func proofAddress(_ shortID: String) -> URL {
+        deps.site.appendingPathComponent("p").appendingPathComponent(shortID)
     }
+
+    /// The card whose page the screen links to: the record's, or on step 4 the card's whose state was read.
+    private var proofShown: String? { finished?.done.shortID ?? (screen.step == 4 ? status?.shortID : nil) }
 
     // Tap 1 -------------------------------------------------------------------------
 
@@ -818,6 +838,16 @@ final class CardProofModel: ObservableObject {
 
     /// Step 4, as it opens for the card's state.
     private func showAccounts(_ status: CardProofFlow.CardStatus) {
+        // The card has had its 3 card proofs today: it signs nothing more in this card proof, so the PIN the flow keeps
+        // for the last tap goes now, not when 回到開頭 is pressed (card-proof.md, 今天已經過卡 3 次).
+        if status.dailyLimit {
+            flow?.cancel()
+            flow = nil
+            pin?.clear()
+            pin = nil
+            pinText = ""
+            stopPINClock()
+        }
         self.status = status
         mode = .open
         typed = Screens.listNow(status)

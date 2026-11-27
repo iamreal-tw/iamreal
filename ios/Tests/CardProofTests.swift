@@ -679,6 +679,58 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(card.signatures, 1, "the card signed the scope string only")
     }
 
+    /// The card has had its 3 card proofs today (card-proof.md, 今天已經過卡 3 次): step 4 drops the PIN as it comes
+    /// up, and offers the card's page, 重新掛上連結 and 回到開頭. 重新掛上連結 is the whole of step 6 for the account the
+    /// card declares, out of the eight steps, with no record of today; its 上一步 goes back to step 4. Nothing is signed
+    /// again or sent.
+    func testThreeCardProofsTodayLeadToTheProofAndTheWholeStepSix() async throws {
+        let model = makeModel()
+        let today = CardProofFlow.dateInTaiwan(now)
+        // The server's answer for this card, as if it had declared @alice three times today.
+        asked.cardStateAnswer = { answer in
+            var state = try XCTUnwrap(try JSONSerialization.jsonObject(with: answer) as? [String: Any])
+            var platforms = try XCTUnwrap(state["platforms"] as? [String: Any])
+            var threads = try XCTUnwrap(platforms["threads"] as? [String: Any])
+            threads["current"] = "alice"
+            threads["last_declared"] = "alice"
+            // Set with it by the first record (spec/list-consequence.md): the day of the first of the three.
+            threads["correction_date"] = today
+            platforms["threads"] = threads
+            state["platforms"] = platforms
+            state["last_card_proof"] = today
+            state["proofs_on_last_date"] = 3
+            return try JSONSerialization.data(withJSONObject: state)
+        }
+        try await toAccounts(model)
+        XCTAssertFalse(model.holdsPIN, "dropped as the screen came up")
+        XCTAssertEqual(Array(model.screen.texts.suffix(4)), ["這張卡片今天已經過卡 3 次，明天才能再過卡。", "打開你的島民證明看看。", "重新掛上連結", "回到開頭"])
+        try await press("打開你的島民證明", in: model)
+        let shortID = try XCTUnwrap(opened.last?.lastPathComponent)
+        XCTAssertEqual(opened.last, backend.origin.appendingPathComponent("p").appendingPathComponent(shortID))
+
+        try await press("重新掛上連結", in: model)
+        XCTAssertFalse(model.screen.inSteps)
+        XCTAssertEqual(model.screen.texts.first, "把證明掛上你的 Threads 個人檔案")
+        XCTAssertFalse(model.screen.texts.contains { $0.hasSuffix("記進了證明紀錄。") })
+        try await press("複製證明連結", in: model)
+        XCTAssertEqual(copied.last, opened.last?.absoluteString)
+        XCTAssertTrue(model.screen.texts.contains("已複製"))
+        try await press("打開 Threads", in: model)
+        XCTAssertEqual(opened.last?.absoluteString, "https://www.threads.com/@alice")
+        try await press("再看一次", in: model)
+        XCTAssertEqual(demonstration(on: model.screen)?.playing, true)
+        await Snapshot.save(model, as: "4-daily-limit-hang")
+
+        try await press("上一步", in: model)
+        XCTAssertTrue(model.screen.inSteps)
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["重新掛上連結", "回到開頭"])
+        try await press("回到開頭", in: model)
+        XCTAssertEqual(model.screen.step, 1)
+        XCTAssertEqual(card.signatures, 1, "the card signed the scope string only")
+        XCTAssertEqual(asked.asked["challenges"] ?? 0, 0)
+        XCTAssertEqual(asked.submitted, [])
+    }
+
     /// "感應卡片" was pressed and no card came: the demonstration of where the card goes is at rest with the card
     /// in place, and does not play again by itself, also not after "再感應一次"; its button plays it again.
     func testTheDemonstrationDoesNotPlayAgainByItselfOnceTheCardWasTapped() async throws {

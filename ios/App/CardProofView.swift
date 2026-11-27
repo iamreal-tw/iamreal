@@ -61,8 +61,8 @@ struct ScreenView: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(screen.warnings.enumerated()), id: \.offset) { _, warning in self.notice(warning) }
             if let notice = screen.notice { self.notice(notice) }
-            // A screen in the place of step 1 is none of the steps.
-            if screen.step > 0 { stepBars }
+            // A screen in the place of step 1, and the whole step 6 shown from step 4, are none of the steps.
+            if screen.step > 0, screen.inSteps { stepBars }
             ForEach(Array(screen.blocks.enumerated()), id: \.offset) { index, block in
                 self.block(block, first: index == 0)
             }
