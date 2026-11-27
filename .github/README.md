@@ -52,6 +52,8 @@
 
 **`upload-ios.yml`、`upload-ios-test.yml`：上傳的工作還信任什麼。** 它不取出程式庫、不跑程式庫的腳本，金鑰只在最後一步（寫到 runner 的暫存目錄裡只有自己讀得到的檔，交給 `xcodebuild -exportArchive`）。它信任的是：釘住的 `actions/download-artifact`、runner 映像上的 Xcode，`build` 從同一個提交做出來、交下來的 archive 和 `ExportOptions.plist`，和 environment 的 variable `APPLE_TEAM_ID`（團隊代號，寫進 `ExportOptions.plist`）。`build` 跑程式庫的程式，所以上傳的是那個提交建出來的東西，這和部署測試網站相同；Xcode 匯出時不執行 archive 裡的程式。`worker/test/workflows.ts` 擋下：手動以外的觸發、`build` 拿到 environment 或金鑰、`upload` 不在 `app-test`、`upload` 多了任何一步，和兩個工作與寫死的不同。environment `app-test` 只讓 `main` 上的執行拿金鑰是 GitHub 上的設定，不在程式庫裡（#161）。
 
+**`checks-ios.yml` 的時間上限是 45 分鐘。** 它 archive 正式 app 和測試 app 各一次之後（#496），跑了 26 分 21 秒（[這一次](https://github.com/iamreal-tw/iamreal/actions/runs/45970030103/job/140407942105)，2026-11-27），離原本的 30 分鐘太近：macOS 的 runner 慢一點就會被中斷。45 分鐘約是那一次的 1.7 倍。
+
 **`checks-ios.yml` 的 `paths`** 列出 app 和它的測試用到的東西：`ios/`、`device-core/`，app 包進去的檔（`web/circuits/`、`verifier/vk/`、`design/fonts/`、`design/motion/`），測試讀的檔（`spec/vectors/`、`design/copy/`、`design/tokens.json`、`web/scripts/fetch-crs.mjs`），和這個工作流程檔自己。規格只寫了前兩個（「[規格：手機 app 第一份](https://github.com/iamreal-tw/iamreal/issues/155)」：macOS 的分鐘數算得重）；後面幾個不加的話，只改它們的 PR 會讓 iOS 的檢查壞掉而沒有人看到。代價是改 `design/copy/`、`design/tokens.json` 或 `spec/vectors/` 的 PR 也會跑一次 macOS。`worker/test/workflows.test.ts` 讀 `ios/Tests/` 和 `ios/check-app.sh` 的原始碼，確認它們寫出來的路徑都在清單裡；用別的方式拼出來的路徑它看不到。
 
 **`checks-circuits.yml`**（#247，ADR-0038）：改電路的 PR 自動確認三件事，和 `circuits/README.md` 寫給人手動跑的是同一串指令：

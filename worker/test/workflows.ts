@@ -601,7 +601,7 @@ export const ANDROID_JOB_STEPS: YamlMap = {
 const XCODEBUILD = 'xcodebuild -project IamrealApp.xcodeproj -scheme IamrealApp -destination "platform=iOS Simulator,name=iPhone 17" -derivedDataPath build';
 export const IOS_JOB_STEPS: YamlMap = {
   "runs-on": IOS_RUNNER,
-  "timeout-minutes": "30",
+  "timeout-minutes": "45",
   steps: [
     step("actions/checkout"),
     { name: "Install the Rust of rust-toolchain.toml, with the simulator's target", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-apple-ios-sim" },
