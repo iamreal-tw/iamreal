@@ -162,6 +162,16 @@ describe("a proof log published over three days, re-verified by Go's iamreal-ver
       assert.match(said, /fingerprints\.jsonl: 3 line\(s\), every fingerprint is the proof log's/);
       assert.match(said, /hashes\/: 3 list\(s\), every list is the proof log's/);
       assert.match(said, /rebuilding/);
+      // The CRL archive read as from the data domain: the first CRL of G3 downloaded whole, the two after it given by
+      // the CRL patches the mirror wrote (spec/revocation-tree.md, "CRL patches"), none of them refused.
+      const downloaded = said.split("\n").filter((line) => line.startsWith("iamreal-verify: downloading ") && line.includes("/crl/"));
+      assert.deepEqual(
+        downloaded.map((line) => (line.endsWith(".patch") ? "patch" : line.endsWith(".crl") ? "whole" : line)),
+        ["whole", "patch", "patch"],
+        said,
+      );
+      assert.equal(names.filter((n) => n.startsWith("crl/patches/")).length, 2, "a patch for each CRL of G3 after the first");
+      assert.ok(!said.includes("downloading the CRL whole"), said);
       const cards = verified.state.find((scope) => scope.scope_string === TEST_SCOPE)!.cards;
       assert.ok(said.includes(`card-state/2026-11-23.jsonl: count 2003 of fingerprints.jsonl, 2003 record(s) re-verified: ${cards.length} card(s) the same, 0 skipped\n`), said);
       assert.equal(cards.length, 2003 - 5, "every record but five is the first of its card");

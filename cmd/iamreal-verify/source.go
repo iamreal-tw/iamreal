@@ -7,6 +7,7 @@ package main
 // the archive index (the CRL archive).
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -16,6 +17,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -53,6 +55,9 @@ const (
 	// maxCRL: the largest CRL MOICA publishes, G2's, is about 17 MB
 	// (worker/README.md); 64 MiB leaves room for it to grow.
 	maxCRL = 64 << 20
+	// maxPatch: a CRL patch larger than the largest CRL is never worth
+	// reading; downloading the CRL whole is less.
+	maxPatch = maxCRL
 )
 
 // errNotFound is a file that is not there: an absent file in a directory,
@@ -227,9 +232,17 @@ func (u urlSource) list(string) ([]string, bool, error) { return nil, false, nil
 // unless trustIndex, names every CRL file the index lists, by its SHA-256
 // as the mirror names them (spec/revocation-tree.md, "Files"), in the
 // order of the index: the CRLs of one issuer key one after another, which
-// is the order in which rebuilding reuses the most (crl.Indexer). A file is
-// downloaded when rebuilding reads it, and not kept: one CRL is in memory
-// at a time, and none is on disk.
+// is the order in which rebuilding reuses the most (crl.Indexer), and in
+// which each CRL patch follows from the one before. A file is obtained
+// when rebuilding reads it, and not kept: besides it, only the previous
+// usable CRL is in memory, and no CRL is on disk.
+//
+// A file is obtained from its CRL patch (patched) when the index says it
+// is usable and the file before it is a usable CRL of the same issuer key
+// that was obtained: the first usable CRL of each key, and every file the
+// index says is not usable, are downloaded whole. The index is not
+// trusted for this: what a patch gives counts only with the SHA-256 of the
+// file's name, so a wrong index costs downloads, never a wrong file.
 //
 // Without a listing, a file the index does not list is not seen. A file
 // the index lists that is not there (404), or whose content's SHA-256 is
@@ -262,38 +275,105 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 	}
 	var problems []string
 	out.problems = func() []string { return problems }
+	// previous is the last file obtained that the index says is a usable
+	// CRL: the previous CRL of the next one of its key.
+	var previous *heldCRL
 	seen := map[string]bool{}
-	for _, m := range indexSHA256.FindAllSubmatch(index, -1) {
-		sha := string(m[1])
-		name := sha + ".crl"
-		if seen[name] {
-			continue
+	for _, line := range bytes.Split(index, []byte("\n")) {
+		issuer, usable := indexUsable(line)
+		for _, m := range indexSHA256.FindAllSubmatch(line, -1) {
+			sha := string(m[1])
+			name := sha + ".crl"
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			out.files = append(out.files, crl.ArchiveFile{Name: name, Read: func() ([]byte, error) {
+				var b []byte
+				if usable && previous != nil && previous.issuer != issuer {
+					previous = nil // the first of another key: let the last one go
+				}
+				if usable && previous != nil {
+					b = u.patched(previous, sha, stderr)
+				}
+				if b == nil {
+					fmt.Fprintf(stderr, "iamreal-verify: downloading %s\n", u.url(name))
+					var err error
+					b, err = u.get(name, maxCRL)
+					if errors.Is(err, errNotFound) {
+						return nil, crl.ErrLeftOut
+					}
+					if err != nil {
+						return nil, err
+					}
+					sum := sha256.Sum256(b)
+					if got := hex.EncodeToString(sum[:]); got != sha {
+						problems = append(problems, fmt.Sprintf("%s: %s is not the SHA-256 of its content, %s; left out of the archive", u.url(name), sha, got))
+						return nil, crl.ErrLeftOut
+					}
+				}
+				if usable {
+					previous = &heldCRL{issuer: issuer, sha256: sha, der: b}
+				}
+				return b, nil
+			}})
 		}
-		seen[name] = true
-		out.files = append(out.files, crl.ArchiveFile{Name: name, Read: func() ([]byte, error) {
-			fmt.Fprintf(stderr, "iamreal-verify: downloading %s\n", u.url(name))
-			b, err := u.get(name, maxCRL)
-			if errors.Is(err, errNotFound) {
-				return nil, crl.ErrLeftOut
-			}
-			if err != nil {
-				return nil, err
-			}
-			sum := sha256.Sum256(b)
-			if got := hex.EncodeToString(sum[:]); got != sha {
-				problems = append(problems, fmt.Sprintf("%s: %s is not the SHA-256 of its content, %s; left out of the archive", u.url(name), sha, got))
-				return nil, crl.ErrLeftOut
-			}
-			return b, nil
-		}})
 	}
 	return out, cleanup, nil
+}
+
+// heldCRL is a CRL file kept in memory as the previous CRL of the next.
+type heldCRL struct {
+	issuer, sha256 string
+	der            []byte
+}
+
+// patched returns the file with SHA-256 sha, given by its CRL patch from
+// previous (spec/revocation-tree.md, "CRL patches"); nil, after one line
+// on stderr, if the patch is missing, cannot be downloaded or cannot be
+// used, or gives a file without that SHA-256 or larger than a CRL can be.
+// The caller then downloads the file whole.
+func (u urlSource) patched(previous *heldCRL, sha string, stderr io.Writer) []byte {
+	p := path.Join(crl.PatchesDir, crl.PatchName(previous.sha256, sha))
+	fmt.Fprintf(stderr, "iamreal-verify: downloading %s\n", u.url(p))
+	patch, err := u.get(p, maxPatch)
+	var file []byte
+	if err == nil {
+		file, err = crl.RestorePatch(previous.der, patch, sha)
+	}
+	if err == nil && len(file) > maxCRL {
+		err = fmt.Errorf("it gives more than %d bytes", maxCRL)
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "iamreal-verify: %s: %v; downloading the CRL whole\n", u.url(p), err)
+		return nil
+	}
+	return file
 }
 
 func (u urlSource) String() string { return u.base.String() }
 
 // indexSHA256 finds the sha256 of each line of an archive index.
 var indexSHA256 = regexp.MustCompile(`"sha256":"([0-9a-f]{64})"`)
+
+// indexIssuer and indexRoot find the issuer and the root of a line; a
+// usable CRL's root is 64 hex digits, an unusable file's "-" and a code.
+var (
+	indexIssuer = regexp.MustCompile(`"issuer":"(G2|G3)"`)
+	indexRoot   = regexp.MustCompile(`"root":"[0-9a-f]{64}"`)
+)
+
+// indexUsable returns the issuer key of a line of an archive index, and
+// whether the line says its file is a usable CRL. A line that does not
+// say both is taken for an unusable file: downloaded whole, the previous
+// CRL of none.
+func indexUsable(line []byte) (string, bool) {
+	m := indexIssuer.FindSubmatch(line)
+	if m == nil || !indexRoot.Match(line) {
+		return "", false
+	}
+	return string(m[1]), true
+}
 
 // tempDirs is the temporary directories not yet removed, so that an
 // interrupted command removes them too (removeTempDirs).

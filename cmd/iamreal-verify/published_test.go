@@ -182,7 +182,8 @@ func TestHashListUpToTheCount(t *testing.T) {
 }
 
 // The CRL archive of testdata/ on a data domain, each file named by its
-// SHA-256 as the mirror names it, with the test log of testdata/.
+// SHA-256 as the mirror names it, with the mirror's patch from B to C
+// (crl/patches/), and the test log of testdata/.
 func testDataDomain(t *testing.T) map[string][]byte {
 	t.Helper()
 	proofLogFile, err := os.ReadFile(filepath.Join("testdata", "proof-log.jsonl"))
@@ -212,17 +213,26 @@ func testDataDomain(t *testing.T) map[string][]byte {
 		}
 	}
 	files["proof-log/card-state/2026-11-24.jsonl"] = prooflog.CardStateFile(x.CardRows())
+	read := map[string][]byte{}
 	for _, name := range []string{crlA, crlB, crlC, crl.IndexFileName} {
 		b, err := os.ReadFile(filepath.Join("testdata", "archive", name))
 		if err != nil {
 			t.Fatal(err)
 		}
+		read[name] = b
 		if name != crl.IndexFileName {
 			name = sha256Hex(b) + ".crl"
 		}
 		files["crl/"+name] = b
 	}
+	// The mirror's patch from B to C, the two CRLs of G3.
+	files[testPatchB2C(read[crlB], read[crlC])] = makeTestPatch(read[crlB], read[crlC])
 	return files
+}
+
+// testPatchB2C is the path on the data domain of the patch from B to C.
+func testPatchB2C(b, c []byte) string {
+	return "crl/" + crl.PatchesDir + "/" + crl.PatchName(sha256Hex(b), sha256Hex(c))
 }
 
 func runDataArchive(t *testing.T, source string, extra ...string) (int, string, string) {
@@ -236,14 +246,19 @@ func runDataArchive(t *testing.T, source string, extra ...string) (int, string, 
 
 func TestDataCRLArchive(t *testing.T) {
 	files := testDataDomain(t)
-	var crlFiles []string
-	for p := range files {
-		if strings.HasSuffix(p, ".crl") {
-			crlFiles = append(crlFiles, "GET "+p)
+	archived := map[string][]byte{}
+	for _, name := range []string{crlA, crlB, crlC} {
+		b, err := os.ReadFile(filepath.Join("testdata", "archive", name))
+		if err != nil {
+			t.Fatal(err)
 		}
+		archived[name] = b
 	}
+	pathOf := func(name string) string { return "crl/" + sha256Hex(archived[name]) + ".crl" }
+	patchBC := testPatchB2C(archived[crlB], archived[crlC])
 
-	// Rebuilt from every CRL the index lists.
+	// Rebuilt from every CRL the index lists: A and B downloaded whole, the
+	// first of each issuer key; C from its patch.
 	srv := serveData(t, files)
 	code, out, errOut := runDataArchive(t, srv.URL)
 	for _, r := range allValid {
@@ -254,10 +269,18 @@ func TestDataCRLArchive(t *testing.T) {
 	if code != exitAllValid || !strings.Contains(errOut, "rebuilding") {
 		t.Fatalf("exit %d\n%s\n%s", code, out, errOut)
 	}
-	for _, p := range append(crlFiles, "GET crl/index.jsonl") {
-		if !slices.Contains(srv.paths(), p) {
-			t.Errorf("did not ask for %s", p)
+	var asked []string
+	for _, p := range srv.paths() {
+		if strings.HasPrefix(p, "GET crl/") {
+			asked = append(asked, p)
 		}
+	}
+	if want := slices.Sorted(slices.Values([]string{"GET " + pathOf(crlA), "GET " + pathOf(crlB), "GET " + patchBC, "GET crl/index.jsonl"})); !slices.Equal(asked, want) {
+		t.Errorf("asked for\n%s\nwant\n%s", strings.Join(asked, "\n"), strings.Join(want, "\n"))
+	}
+	// The same output as with the archive in a directory, read whole.
+	if _, dirOut, _ := runDataArchive(t, writeDir(t, files, "-")); dirOut != out {
+		t.Errorf("a directory gives\n%s", dirOut)
 	}
 
 	// Trusting the index: only the index is downloaded.
@@ -271,15 +294,16 @@ func TestDataCRLArchive(t *testing.T) {
 		}
 	}
 
-	// A CRL the index lists that is not there: a difference; record 3 has
-	// no CRL for its root.
-	cFile := ""
-	for p, b := range files {
-		if c, _ := os.ReadFile(filepath.Join("testdata", "archive", crlC)); bytes.Equal(b, c) {
-			cFile = p
-		}
+	// C's file not there, its patch there: what the patch gives stands for
+	// the file, which is not asked for (README.md, "下載").
+	delete(files, pathOf(crlC))
+	if code, _, errOut := runDataArchive(t, serveData(t, files).URL); code != exitAllValid {
+		t.Errorf("C from its patch alone: exit %d\n%s", code, errOut)
 	}
-	delete(files, cFile)
+
+	// A CRL the index lists that is not there, nor its patch: a difference;
+	// record 3 has no CRL for its root.
+	delete(files, patchBC)
 	code, out, errOut = runDataArchive(t, serveData(t, files).URL)
 	if code != exitInvalid || !strings.Contains(out, "  3 invalid root\n") ||
 		!strings.Contains(errOut, "the index lists a file the archive does not have") {
