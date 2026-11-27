@@ -17,6 +17,7 @@ Android 和 iOS 各有兩個商店的 app：測試 app `tw.iamreal.app.test` 和
 | 給誰 | 封閉測試的測試者；上線後所有人 | 測試網站的測試者 | 營運者 |
 
 - **環境在建置時寫死**，和 ADR-0036 相同。正式 app 連哪個網站是程式庫裡的一個設定，上線那天用一個 PR 改它。
+- **app 網域跟著連的網站。** 連測試網站的 build 認 `test-app.iamreal.tw`，連正式網站的認 `app.iamreal.tw`，不用萬用字元；開發用 build 不認任何 app 網域。所以上線前，測試網站的 app 網域同時開正式 app 和測試 app。
 - **上線前，正式 app 也連測試網站。** Google Play 新的個人帳號，正式 app 自己要跑 12 位測試者、連續 14 天的封閉測試；那 14 天連測試網站（ADR-0036 的理由：測試者可以重複過卡，正式的證明紀錄不在公開之前開張）。
 - **三種 app 能同時裝在一支手機上**，因為識別碼不同。
 - **兩個 app 的 Android 簽章金鑰都由 Google 產生**（Play App Signing 的預設）。營運者和 GitHub 都沒有簽章金鑰；CI 只有上傳金鑰（ADR-0036）。
@@ -61,7 +62,7 @@ Android 和 iOS 各有兩個商店的 app：測試 app `tw.iamreal.app.test` 和
 ## Consequences
 
 - **多一個永久佔著的識別碼、多一份商店的資料**：商店頁、資料安全性、內容分級、App 隱私標示，測試 app 要開封閉測試或 TestFlight 對外測試時各填一份。
-- **上線當天要改正式 app 連的網站**，並調高測試網站的最低版本。
+- **上線當天要改正式 app 連的網站**和它認的 app 網域，調高測試網站的最低版本，並從 `test-app.iamreal.tw` 宣告的 app 裡拿掉正式 app。已經裝著上線前 build 的手機，系統下次驗證網域之後（Android 14 以下要等更新 app）掃測試的 QR code 落在沒裝 app 時的那一頁；在那之前打開舊 build，也會被最低版本擋在要 PIN 之前。
 - **Google Play 下架這個 app 時，已經裝的人收不到更新。** 簽章金鑰在 Google 手上，我們簽不出手機會接受的更新。新 app 的預設就是 Google 產生，第一個版本發到開放測試或正式版之後就換不了（[Use Play App Signing](https://support.google.com/googleplay/android-developer/answer/9842756)：「can change this default before a release is rolled out in the open testing or production track」）。
 - **上線後，商店的測試軌道上，正式 app 是下一版正式版，連正式網站**；在測試網站上測用測試 app。
 - **`android/`、`ios/`、上傳的工作流程現在只有正式 app 和開發用 build**，要加測試 app。
