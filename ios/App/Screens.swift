@@ -700,29 +700,20 @@ struct Screens {
         let handle = Platform.handle(threads.id, account.username)
         let link = "\(host)/p/\(done.shortID)"
         let words = HangDemo.Words(
-            kickOwn: copy("app_demo_hang.kick_own"),
             title: copy("hang.title_single", ["platform": threads.name]),
             copy: copy("hang.copy"),
             copied: copy("done.copied"),
             open: copy("hang.open_threads", ["platform": threads.name]),
-            kickProfile: copy("app_demo_hang.kick_profile"),
             edit: copy("app_demo_hang.edit"),
             found: copy("app_demo_hang.found"),
-            kickEdit: copy("app_demo_hang.kick_edit"),
             rows: [copy("app_demo_hang.row_name"), copy("app_demo_hang.row_username"), copy("app_demo_hang.row_bio"), copy("app_demo_hang.row_interests")],
             links: copy("app_demo_hang.row_links"),
             featured: copy("app_demo_hang.row_featured"),
-            kickLinks: copy("app_demo_hang.kick_links"),
             add: copy("app_demo_hang.add"),
-            kickAdd: copy("app_demo_hang.kick_add"),
             done: copy("app_demo_hang.done"),
             url: copy("app_demo_hang.url"),
             paste: copy("app_demo_hang.paste"),
-            linkTitle: copy("app_demo_hang.link_title"),
-            press: copy("app_demo_hang.press"),
-            pressAgain: copy("app_demo_hang.press_again"),
-            pressThen: copy("app_demo_hang.press_then"),
-            pasteHere: copy("app_demo_hang.paste_here"))
+            linkTitle: copy("app_demo_hang.link_title"))
         return HangDemo(
             description: copy("app_demo.hang"),
             control: playing

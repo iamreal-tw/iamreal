@@ -252,9 +252,6 @@ private val GAP = 80.dp
 private val SHOT_WIDTH = 360.dp
 private val SHOT_HEIGHT = 440.dp
 
-/** Where the label of a mark goes: under the box in the middle, under it at its right edge, or beside it. */
-private enum class TagAt { BELOW, BELOW_END, BESIDE }
-
 /**
  * The five screens, drawn. Lengths are the row's own, in dp, and so are the sizes of the words (not the system's
  * font size: the camera scales the row, and an account of 30 characters stays on its line, cut at the end).
@@ -290,10 +287,11 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
 
     /**
      * A box the timeline names: where it is is told to the player; over it, the ink that darkens it while it is
-     * pressed and the ring of the press; around it the frame of its mark, and the mark's label [tag].
+     * pressed and the ring of the press; around it the frame of its mark. No words beside it: the demonstration goes by
+     * too fast to read them (design/copy/card-proof.md, "示範").
      */
     @Composable
-    fun Target(name: String, modifier: Modifier = Modifier, tag: String? = null, tagAt: TagAt = TagAt.BELOW, corner: Dp = 12.dp, content: @Composable BoxScope.() -> Unit) {
+    fun Target(name: String, modifier: Modifier = Modifier, corner: Dp = 12.dp, content: @Composable BoxScope.() -> Unit) {
         Box(
             modifier
                 .onGloballyPositioned { player.boxPlaced(name, it.positionInRoot(), it.size) }
@@ -311,13 +309,12 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
                 },
         ) {
             content()
-            if (tag != null) Tag(tag, Colours.you, tagAt) { marked(name) }
         }
     }
 
-    /** The label of a mark, outside the box it belongs to: it takes no room there. */
+    /** The label of the line a visitor looks for, under it in the middle: it takes no room there. */
     @Composable
-    private fun BoxScope.Tag(text: String, colour: Color, at: TagAt, shows: () -> Float) {
+    private fun BoxScope.Tag(text: String, colour: Color, shows: () -> Float) {
         Layout(
             content = {
                 BasicText(text, Modifier.background(colour, RoundedCornerShape(6.dp)).padding(horizontal = 9.dp, vertical = 6.dp), style = style(12.dp, Colours.bg), maxLines = 1, softWrap = false)
@@ -327,20 +324,13 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
             val label = measurables[0].measure(Constraints())
             val w = constraints.maxWidth
             val h = constraints.maxHeight
-            layout(w, h) {
-                when (at) {
-                    TagAt.BELOW -> label.place((w - label.width) / 2, h + 10.dp.roundToPx())
-                    TagAt.BELOW_END -> label.place(w + 6.dp.roundToPx() - label.width, h + 10.dp.roundToPx())
-                    TagAt.BESIDE -> label.place(w + 14.dp.roundToPx(), (h - label.height) / 2)
-                }
-            }
+            layout(w, h) { label.place((w - label.width) / 2, h + 10.dp.roundToPx()) }
         }
     }
 
-    /** A screen of the row: its small heading above it, and the screen, which the timeline names [name]. */
+    /** A screen of the row, which the timeline names [name]. No small heading above it, as the words beside the marks. */
     @Composable
-    private fun Shot(name: String, kick: String, content: @Composable () -> Unit) = Column {
-        Line(kick, style(13.dp, Colours.mute), Modifier.padding(start = 4.dp, bottom = 10.dp))
+    private fun Shot(name: String, content: @Composable () -> Unit) = Column {
         Target(name, Modifier.size(SHOT_WIDTH, SHOT_HEIGHT).background(Colours.bg, RoundedCornerShape(18.dp)).border(1.dp, Colours.line, RoundedCornerShape(18.dp)), corner = 18.dp) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 22.dp)) { content() }
         }
@@ -348,7 +338,7 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
 
     /** The first screen: the app's own step 6, with its words. */
     @Composable
-    fun Own(words: HangDemoWords) = Shot("s0", c.say("app_demo_hang.kick_own")) {
+    fun Own(words: HangDemoWords) = Shot("s0") {
         BasicText(words.title, Modifier.padding(top = 20.dp, bottom = 18.dp), style = style(25.dp, weight = Type.weightHeading, family = Type.display), maxLines = 2, overflow = TextOverflow.Ellipsis)
         Line(words.link, style(14.dp, family = Type.mono), Modifier.fillMaxWidth().background(Colours.soft, RoundedCornerShape(8.dp)).padding(12.dp))
         Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -370,7 +360,7 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
 
     /** The profile on Threads: the button that edits it, and at the end the line of the link, which what is under it makes room for. */
     @Composable
-    fun Profile(words: HangDemoWords) = Shot("s1", c.say("app_demo_hang.kick_profile")) {
+    fun Profile(words: HangDemoWords) = Shot("s1") {
         Row(Modifier.fillMaxWidth().padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Column(Modifier.weight(1f)) {
                 Box(Modifier.size(120.dp, 18.dp).background(Colours.line, RoundedCornerShape(6.dp)))
@@ -390,14 +380,14 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
                     Line(words.link, style(15.dp, weight = Type.weightHeading))
                 }
                 Box(Modifier.matchParentSize().drawWithContent { frame(ink, changed("resultLabel")) })
-                Tag(c.say("app_demo_hang.found"), ink, TagAt.BELOW) { changed("resultLabel") }
+                Tag(c.say("app_demo_hang.found"), ink) { changed("resultLabel") }
             }
             // What is under it makes room for the line, and then for the label under the line.
             Column(Modifier.fillMaxWidth().graphicsLayer { translationY = changed("linkOnProfile") * LINK_ROW.toPx() + changed("resultLabel") * FOUND_TAG.toPx() }) {
                 Blank(Modifier.padding(top = 16.dp).fillMaxWidth(0.34f))
                 Row(Modifier.fillMaxWidth().padding(top = 22.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     val button = Modifier.weight(1f).height(38.dp).border(1.dp, Colours.dot, RoundedCornerShape(10.dp))
-                    Target("edit", button, tag = c.say("app_demo_hang.press"), corner = 10.dp) {
+                    Target("edit", button, corner = 10.dp) {
                         Line(c.say("app_demo_hang.edit"), style(14.dp, weight = Type.weightHeading), Modifier.align(Alignment.Center))
                     }
                     Box(button, contentAlignment = Alignment.Center) { Blank(Modifier.fillMaxWidth(0.56f)) }
@@ -434,12 +424,12 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
 
     /** Editing the profile: a list, of which the row of links is the one to press. */
     @Composable
-    fun EditProfile() = Shot("s2", c.say("app_demo_hang.kick_edit")) {
+    fun EditProfile() = Shot("s2") {
         Top { Line(c.say("app_demo_hang.edit"), style(17.dp, weight = Type.weightHeading)) }
         val value = @Composable { Blank(Modifier.width(96.dp)) }
         Column(Modifier.padding(top = 10.dp)) {
             for (name in listOf("row_name", "row_username", "row_bio", "row_interests")) ListRow(c.say("app_demo_hang.$name"), end = value)
-            Target("links", tag = c.say("app_demo_hang.press"), corner = 6.dp) {
+            Target("links", corner = 6.dp) {
                 ListRow(c.say("app_demo_hang.row_links")) {
                     Canvas(Modifier.padding(end = 4.dp).size(8.dp)) {
                         val s = 1.5.dp.toPx()
@@ -457,9 +447,9 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
      * from here is the cross at the top left; what is at the top right is grey and cannot be pressed.
      */
     @Composable
-    fun Links(words: HangDemoWords) = Shot("s3", c.say("app_demo_hang.kick_links")) {
+    fun Links(words: HangDemoWords) = Shot("s3") {
         Top {
-            Target("x3", Modifier.size(34.dp), tag = c.say("app_demo_hang.press"), tagAt = TagAt.BESIDE, corner = 8.dp) {
+            Target("x3", Modifier.size(34.dp), corner = 8.dp) {
                 Canvas(Modifier.align(Alignment.Center).size(14.dp)) {
                     val s = 2.dp.toPx()
                     drawLine(ink, Offset(0f, 0f), Offset(size.width, size.height), s, StrokeCap.Round)
@@ -471,7 +461,7 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
         }
         Box(Modifier.fillMaxWidth().padding(top = 10.dp).height(ROW * 2)) {
             Box(Modifier.graphicsLayer { alpha = changed("linkListed") }) { ListRow(words.link) }
-            Target("add", Modifier.graphicsLayer { translationY = changed("linkListed") * ROW.toPx() }, tag = c.say("app_demo_hang.press"), corner = 6.dp) {
+            Target("add", Modifier.graphicsLayer { translationY = changed("linkListed") * ROW.toPx() }, corner = 6.dp) {
                 ListRow(c.say("app_demo_hang.add"))
             }
         }
@@ -479,10 +469,10 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
 
     /** Adding a link: the field of the address, the paste bubble over it after a long press, and what is at the top right to end with. */
     @Composable
-    fun AddLink(words: HangDemoWords) = Shot("s4", c.say("app_demo_hang.kick_add")) {
+    fun AddLink(words: HangDemoWords) = Shot("s4") {
         Top {
             Line(c.say("app_demo_hang.add"), style(17.dp, weight = Type.weightHeading))
-            Target("done4", Modifier.padding(horizontal = 4.dp, vertical = 6.dp), tag = c.say("app_demo_hang.press_then"), tagAt = TagAt.BELOW_END, corner = 8.dp) {
+            Target("done4", Modifier.padding(horizontal = 4.dp, vertical = 6.dp), corner = 8.dp) {
                 Line(c.say("app_demo_hang.done"), style(16.dp, weight = Type.weightHeading))
             }
         }
@@ -490,7 +480,7 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
         val field = Modifier.fillMaxWidth().height(46.dp).border(1.dp, Colours.dot, RoundedCornerShape(10.dp))
         // Room above the field for the bubble that comes over it.
         Line(c.say("app_demo_hang.url"), label, Modifier.padding(top = 56.dp, bottom = 6.dp))
-        Target("urlfield", field, tag = c.say("app_demo_hang.paste_here"), tagAt = TagAt.BELOW_END, corner = 10.dp) {
+        Target("urlfield", field, corner = 10.dp) {
             Line(words.url, style(12.5.dp, family = Type.mono), Modifier.align(Alignment.CenterStart).padding(horizontal = 12.dp).graphicsLayer { alpha = changed("pasted") })
             // The bubble is a box of its own, which the timeline presses: its ring stays to the end where the bubble was.
             Layout(

@@ -172,22 +172,20 @@ struct HangDemoView: View {
         case s4, urlfield, paste, done4
     }
 
-    private func box(_ name: Name, _ state: HangState, tag: String? = nil, trailing: Bool = false) -> Box {
-        Box(name: name.rawValue, state: state, press: timeline.tap.press, ringFrom: timeline.tap.from, tag: tag, trailing: trailing)
+    private func box(_ name: Name, _ state: HangState) -> Box {
+        Box(name: name.rawValue, state: state, press: timeline.tap.press, ringFrom: timeline.tap.from)
     }
 
-    /// One screen: the small words above it, and its card.
-    private func shot<Content: View>(_ name: Name, _ kick: String, _ state: HangState, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(kick).font(.system(size: 13)).foregroundColor(Theme.mute.color).lineLimit(1)
-            VStack(alignment: .leading, spacing: 14, content: content)
-                .padding(18)
-                .frame(width: width, alignment: .leading)
-                .background(Theme.bg.color)
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line.color, lineWidth: 1))
-        }
-        .frame(width: width, alignment: .leading)
-        .modifier(box(name, state))
+    /// One screen: its card. No small words above it, and none beside what
+    /// is pressed: the demonstration goes by too fast to read them
+    /// (design/copy/card-proof.md, the section on the demonstrations).
+    private func shot<Content: View>(_ name: Name, _ state: HangState, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 14, content: content)
+            .padding(18)
+            .frame(width: width, alignment: .leading)
+            .background(Theme.bg.color)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line.color, lineWidth: 1))
+            .modifier(box(name, state))
     }
 
     /// What the sketch does not write: a grey bar.
@@ -202,7 +200,7 @@ struct HangDemoView: View {
     /// The app's own screen: this step's title, the link, the two buttons.
     private func own(_ state: HangState) -> some View {
         let copied = state.states["copied"] ?? 0
-        return shot(.s0, demo.words.kickOwn, state) {
+        return shot(.s0, state) {
             Text(demo.words.title).font(.system(size: 20, weight: .bold)).foregroundColor(Theme.ink.color)
                 .fixedSize(horizontal: false, vertical: true)
             Text(demo.link).font(.system(size: 13, design: .monospaced)).foregroundColor(Theme.ink.color).lineLimit(1)
@@ -242,7 +240,7 @@ struct HangDemoView: View {
     private func profile(_ state: HangState) -> some View {
         let hung = CGFloat(state.states["linkOnProfile"] ?? 0)
         let labelled = CGFloat(state.states["resultLabel"] ?? 0)
-        return shot(.s1, demo.words.kickProfile, state) {
+        return shot(.s1, state) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
                     blank(120, 14)
@@ -282,7 +280,7 @@ struct HangDemoView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 38)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line.color, lineWidth: 1))
-                    .modifier(box(.edit, state, tag: demo.words.press))
+                    .modifier(box(.edit, state))
                 blank(60)
                     .frame(maxWidth: .infinity)
                     .frame(height: 38)
@@ -308,7 +306,7 @@ struct HangDemoView: View {
 
     /// Editing the profile: the list, of which the links are pressed.
     private func editing(_ state: HangState) -> some View {
-        shot(.s2, demo.words.kickEdit, state) {
+        shot(.s2, state) {
             bold(demo.words.edit)
             VStack(spacing: 0) {
                 ForEach(Array(demo.words.rows.enumerated()), id: \.offset) { _, name in row(name) }
@@ -318,7 +316,7 @@ struct HangDemoView: View {
                     Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.mute.color)
                 }
                 .frame(height: 46)
-                .modifier(box(.links, state, tag: demo.words.press))
+                .modifier(box(.links, state))
                 // Room for the tag under the row.
                 .padding(.bottom, 30)
                 Divider().overlay(Theme.line.color)
@@ -330,11 +328,11 @@ struct HangDemoView: View {
     /// The links: the row that adds one, and once one was added, it above that row.
     private func links(_ state: HangState) -> some View {
         let listed = CGFloat(state.states["linkListed"] ?? 0)
-        return shot(.s3, demo.words.kickLinks, state) {
+        return shot(.s3, state) {
             HStack {
                 bold(demo.words.links)
                 Spacer()
-                bold(demo.words.done, 15).modifier(box(.done3, state, tag: demo.words.pressAgain, trailing: true))
+                bold(demo.words.done, 15).modifier(box(.done3, state))
             }
             // Room for the tag under what is at the top right.
             .padding(.bottom, 26)
@@ -347,7 +345,7 @@ struct HangDemoView: View {
                 Text(demo.words.add).font(.system(size: 15)).foregroundColor(Theme.ink.color).lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(height: 46)
-                    .modifier(box(.add, state, tag: demo.words.press))
+                    .modifier(box(.add, state))
             }
             .padding(.bottom, 30)
         }
@@ -357,11 +355,11 @@ struct HangDemoView: View {
     private func adding(_ state: HangState) -> some View {
         let menu = state.states["pasteMenu"] ?? 0
         let pasted = state.states["pasted"] ?? 0
-        return shot(.s4, demo.words.kickAdd, state) {
+        return shot(.s4, state) {
             HStack {
                 bold(demo.words.add)
                 Spacer()
-                bold(demo.words.done, 15).modifier(box(.done4, state, tag: demo.words.pressThen, trailing: true))
+                bold(demo.words.done, 15).modifier(box(.done4, state))
             }
             // Room for the tag under what is at the top right, and for the paste bubble over the field.
             .padding(.bottom, 34)
@@ -385,7 +383,7 @@ struct HangDemoView: View {
                             .alignmentGuide(.top) { $0[.bottom] + 6 }
                             .padding(.leading, 12)
                     }
-                    .modifier(box(.urlfield, state, tag: demo.words.pasteHere, trailing: true))
+                    .modifier(box(.urlfield, state))
             }
             // Room for the tag under the field.
             .padding(.bottom, 26)
@@ -398,8 +396,8 @@ struct HangDemoView: View {
 
     // A box the timeline names ----------------------------------------------------------
 
-    /// What the timeline can do to a named box: frame it and tag it (a
-    /// mark), darken it and ring it (a tap). It reports where it was laid
+    /// What the timeline can do to a named box: frame it (a mark), darken
+    /// it and ring it (a tap). It reports where it was laid
     /// out, for the camera.
     private struct Box: ViewModifier {
         let name: String
@@ -408,10 +406,6 @@ struct HangDemoView: View {
         let press: Double
         /// The size of the ring before a tap starts.
         let ringFrom: Double
-        /// The words under the box while it is marked.
-        let tag: String?
-        /// The tag ends where the box ends: for a box at the right of its screen.
-        let trailing: Bool
 
         func body(content: Content) -> some View {
             let mark = state.marks[name] ?? 0
@@ -419,16 +413,6 @@ struct HangDemoView: View {
             return content
                 .overlay(Theme.ink.color.opacity((tap?.pressed ?? 0) * press).clipShape(RoundedRectangle(cornerRadius: 4)))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.you.color, lineWidth: 2).padding(-5).opacity(mark))
-                // The tag hangs under the box. Without one it is an empty view of no size: a
-                // condition here would lose the guide that puts it under the box.
-                .overlay(alignment: trailing ? .bottomTrailing : .bottomLeading) {
-                    Text(tag ?? "").font(.system(size: 12, weight: .bold)).foregroundColor(Theme.bg.color).lineLimit(1)
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(Theme.you.color)
-                        .fixedSize()
-                        .alignmentGuide(.bottom) { $0[.top] - 10 }
-                        .opacity(tag == nil ? 0 : mark)
-                }
                 // The ring, about the middle of the box: out of sight between taps.
                 .overlay(
                     Circle().stroke(Theme.you.color, lineWidth: 3)

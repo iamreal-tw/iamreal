@@ -290,14 +290,6 @@
     "sense_android": "示範：手機正面朝你，不用翻面。把自然人憑證貼到手機背面，慢慢上下移動，感應到就停住。"
   },
   "app_demo_hang": {
-    "kick_own": "島民證明的畫面",
-    "kick_profile": "Threads 的個人檔案（示意）",
-    "kick_edit": "按了「編輯個人檔案」之後（示意）",
-    "kick_links": "按了「連結」之後（示意）",
-    "kick_add": "按了「新增連結」之後（示意）",
-    "press": "按這裡",
-    "press_again": "再按一次",
-    "press_then": "再按這裡",
     "found": "訪客找的就是這一行",
     "edit": "編輯個人檔案",
     "row_name": "名稱",
@@ -310,7 +302,6 @@
     "done": "完成",
     "url": "網址",
     "paste": "貼上",
-    "paste_here": "貼在這裡",
     "link_title": "標題（選填）"
   },
   "app_stops": {

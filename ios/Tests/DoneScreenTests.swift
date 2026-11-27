@@ -203,12 +203,10 @@ final class DoneScreenTests: XCTestCase {
         XCTAssertEqual(demo.link, "iamreal.tw/p/7K2Q9FM4XD")
         XCTAssertEqual(demo.address, "https://iamreal.tw/p/7K2Q9FM4XD")
         XCTAssertEqual(demo.words.all, [
-            "島民證明的畫面", "把證明掛上你的 Threads 個人檔案", "複製證明連結", "已複製", "打開 Threads",
-            "Threads 的個人檔案（示意）", "編輯個人檔案", "訪客找的就是這一行",
-            "按了「編輯個人檔案」之後（示意）", "名稱", "用戶名稱", "個人簡介", "興趣", "連結", "精選",
-            "按了「連結」之後（示意）", "新增連結",
-            "按了「新增連結」之後（示意）", "完成", "網址", "貼上", "標題（選填）",
-            "按這裡", "再按一次", "再按這裡", "貼在這裡",
+            "把證明掛上你的 Threads 個人檔案", "複製證明連結", "已複製", "打開 Threads",
+            "編輯個人檔案", "訪客找的就是這一行",
+            "名稱", "用戶名稱", "個人簡介", "興趣", "連結", "精選",
+            "新增連結", "完成", "網址", "貼上", "標題（選填）",
         ])
         let document = try CopyDocument.load()
         for sentence in demo.words.all { XCTAssertTrue(document.contains(sentence), "not in design/copy/card-proof.md: \(sentence)") }
