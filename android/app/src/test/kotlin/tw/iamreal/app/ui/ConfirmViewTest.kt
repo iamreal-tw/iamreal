@@ -31,7 +31,7 @@ class ConfirmViewTest {
     )
 
     private val notIdentifiable = "證明紀錄不包含姓名、生日、身分證字號和卡號。Threads、政府、我們都查不出這是誰的卡片。"
-    private val holderLater = "持有這張卡片和 PIN 的人，都能查詢、更新、收回或更換這張證明宣告的 Threads 帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。"
+    private val holderLater = "任何持有這張卡片和 PIN 的人，都能查詢、更新、收回或更換這張證明宣告的 Threads 帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。"
 
     private fun points(view: Messages.ConfirmView) = view.points.map { it.text to it.strong }
 
@@ -61,7 +61,7 @@ class ConfirmViewTest {
         val view = messages.confirmView(list(row("threads", "withdraw", "alice", current = "alice")), one)
         assertEquals("按下後，證明紀錄會公開記下這張卡片不再宣告任何帳號：", view.intro)
         assertEquals(
-            listOf<Pair<String, String?>>("歷史證明紀錄無法刪除，依然看得出這張卡片過去曾宣告過的帳號。" to null, notIdentifiable to null, "持有這張卡片和 PIN 的人，都能查詢或再宣告。" to null),
+            listOf<Pair<String, String?>>("歷史證明紀錄無法刪除，依然看得出這張卡片過去曾宣告過的帳號。" to null, notIdentifiable to null, "任何持有這張卡片和 PIN 的人，都能查詢或再宣告。" to null),
             points(view),
         )
         assertEquals("收回對 @alice 的宣告", view.button)
