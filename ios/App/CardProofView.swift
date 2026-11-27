@@ -339,7 +339,9 @@ struct ScreenView: View {
             }
         case .action(let button):
             SwiftUI.Button { perform(button.action) } label: {
+                // A button's label is centred unless told: a link of two lines starts each at the left, as Android's and the web's do.
                 Text(button.label).font(Theme.body(Theme.sizeBody)).underline().foregroundColor(Theme.you.color)
+                    .multilineTextAlignment(.leading)
                     .frame(minHeight: Theme.minTarget.value, alignment: .leading)
             }
             .padding(.top, 4)

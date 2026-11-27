@@ -132,14 +132,14 @@ final class ScreensTests: XCTestCase {
             "還沒有自然人憑證，怎麼申辦？",
             "滿 18 歲，未受監護宣告，本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
             "找附近的戶政事務所",
-            "內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）",
+            "內政部憑證管理中心：怎麼辦自然人憑證（moica.nat.gov.tw）",
         ])
         // The way on above the two questions, which can be skipped (card-proof.md, step 1).
         XCTAssertEqual(screen.buttons.map(\.label), ["下一步"])
         guard case .question(_, let answer)? = screen.under.last else { return XCTFail("no question at the end: \(screen.under)") }
         XCTAssertEqual(Array(answer.dropFirst()), [
             .button(Button(label: "找附近的戶政事務所", action: .findOffice), main: false),
-            .action(Button(label: "內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）", action: .howToApply)),
+            .action(Button(label: "內政部憑證管理中心：怎麼辦自然人憑證（moica.nat.gov.tw）", action: .howToApply)),
         ])
         // The phone's map searches for the word; the app sends no place of its own.
         XCTAssertEqual(CardProofModel.findOffice.absoluteString.removingPercentEncoding, "https://maps.apple.com/?q=戶政事務所")
