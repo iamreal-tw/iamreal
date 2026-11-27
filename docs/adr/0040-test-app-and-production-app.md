@@ -44,16 +44,16 @@ Android 和 iOS 各有兩個商店的 app：測試 app `tw.iamreal.app.test` 和
 ## 理由
 
 - **這個產品上線後不能在正式網站上測。** 過卡會寫進公開、不能修改的證明紀錄，用掉更換的次數。日後每一次在測試網站上測，都需要一個連測試網站、從商店裝得到的 app；ADR-0037 上線後只剩開發用 build，iPhone 只能用 Ad Hoc 給少數人。
-- **正式 app 的 14 天是一次性的成本。** 14 天照 app 算：官方的句子照 app 寫（「must run a closed test for their app」，[App testing requirements for new personal developer accounts](https://support.google.com/googleplay/android-developer/answer/14151465)），申請的入口在每個 app 自己的頁面；Play Console 的說明助理 2026-11-27 也這樣答。所以兩個 app 省不掉正式 app 的封閉測試和上線那天的切換，換到的是上線後的測試。
+- **正式 app 的 14 天是一次性的成本。** 14 天照 app 算：官方的句子照 app 寫（「must run a closed test for their app」，[App testing requirements for new personal developer accounts](https://support.google.com/googleplay/android-developer/answer/14151465)），申請的入口在每個 app 自己的頁面。所以兩個 app 省不掉正式 app 的封閉測試和上線那天的切換，換到的是上線後的測試。
 - **內部測試和封閉測試的限制是同一個 app 裡的。** 「A user who opts into your app's internal test is no longer eligible to receive an open or closed test.」（[Set up an open, closed, or internal test](https://support.google.com/googleplay/android-developer/answer/9845334)）。測試 app 的內部測試者可以直接加入正式 app 的封閉測試。
 - **測試 app 的簽章金鑰丟了補得回來。** 它不做可重現的比對，也不會有人把它當正式版；最壞是重新開一個測試 app。
-- **iOS 的測試 app 上線前不對外發。** TestFlight 的 app「should be intended for public distribution」（App Review Guidelines 2.2）；上線前正式 app 的 TestFlight 已經連測試網站，不需要測試 app。
+- **iOS 的測試 app 上線前不對外發。** TestFlight 的 app「should be intended for public distribution」（[App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/) 2.2）；上線前正式 app 的 TestFlight 已經連測試網站，不需要測試 app。
 
 ## Considered Options
 
 - **一個商店的 app（ADR-0037）**：少一個識別碼、少一份商店的資料。上線後在測試網站上測只剩開發用 build；開發用 build 的 build 號碼固定是 1，上線那天調高測試網站的最低版本會連它一起擋。
 - **正式 app 的封閉測試連正式網站，上線不用切換**：正式的證明紀錄在公開之前開張；測試者過一次卡就沒事可做。
-- **測試 app 跑 14 天，正式 app 直接上正式版**：要 14 天照帳號算才成立，官方的寫法和說明助理的回答都是照 app 算。
+- **測試 app 跑 14 天，正式 app 直接上正式版**：要 14 天照帳號算才成立，官方的寫法是照 app 算。
 - **測試 app 的簽章金鑰也自己產生**：多一把不能重設的金鑰要保管，換到的只有測試 app 用不到的核對。
 - **兩個 app 各一個 GitHub environment**：Android 上能分開，iOS 分不開；兩把都只能傳到測試軌道。
 

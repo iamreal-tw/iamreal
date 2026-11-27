@@ -173,7 +173,7 @@ _Avoid_: 測試版、beta 版
 
 **正式 app**:
 識別碼 `tw.iamreal.app` 的手機 app。上線前連測試網站，上線起連正式網站（ADR-0040）。
-_Avoid_: 商店的 app（現在有兩個商店的 app）
+_Avoid_: 商店的 app、商店的 build（現在有兩個商店的 app）
 
 **測試 app**:
 識別碼 `tw.iamreal.app.test`、永遠連測試網站的手機 app，從 Google Play 的測試軌道和 TestFlight 裝（ADR-0040）。
