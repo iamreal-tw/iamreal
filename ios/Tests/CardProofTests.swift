@@ -132,21 +132,21 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.texts, [
             "開始之前",
             "請準備好你的實體自然人憑證卡片。",
-            "非中華民國國籍者所持有的自然人憑證無法用於島民證明。",
+            "非本國國民持有的自然人憑證無法用於島民證明。",
             "為什麼一定要實體的卡片？",
             "實體卡片簽章在卡片裡完成，卡片效期約 5 ~ 8 年。",
             "行動自然人憑證簽章依賴內政部伺服器，而且每年會更換金鑰，不適合作為島民證明使用。",
             "還沒有自然人憑證，怎麼申辦？",
-            "本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
+            "滿 18 歲，未受監護宣告，本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
             "找附近的戶政事務所",
-            "內政部憑證管理中心：如何申請自然人憑證（moica.nat.gov.tw）",
+            "內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）",
             "下一步",
         ])
-        // The two ways to a card: the phone's map, and MOICA's site. Nothing of the app goes with them.
+        // The two ways to a card: the phone's map, and MOICA's page on applying. Nothing of the app goes with them.
         try await press("找附近的戶政事務所", in: model)
         XCTAssertEqual(opened.last?.absoluteString.removingPercentEncoding, "https://maps.apple.com/?q=戶政事務所")
-        try await press("內政部憑證管理中心：如何申請自然人憑證（moica.nat.gov.tw）", in: model)
-        XCTAssertEqual(opened.last?.absoluteString, "https://moica.nat.gov.tw/")
+        try await press("內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）", in: model)
+        XCTAssertEqual(opened.last?.absoluteString, "https://moica.nat.gov.tw/rac.html")
         XCTAssertEqual(model.screen.step, 1)
 
         try await press("下一步", in: model)
@@ -157,7 +157,7 @@ final class CardProofTests: XCTestCase {
             // The demonstration of where the card goes: what VoiceOver reads in its place, and its button. It plays
             // as the step comes up.
             "示範：手機正面朝你，不用翻面。把自然人憑證貼到手機背面的上方，停住不動。",
-            "停止",
+            "停止播放",
             "連上島民證明的伺服器",
             "感應卡片，讀取卡片上的憑證",
             "檢查憑證",
@@ -170,7 +170,7 @@ final class CardProofTests: XCTestCase {
         // the picture tells it, it is at rest again.
         XCTAssertEqual(senseDemonstration(on: model.screen)?.description, Copy.bundled()("app_demo.sense_iphone"))
         XCTAssertEqual(senseDemonstration(on: model.screen)?.playing, true)
-        try await press("停止", in: model)
+        try await press("停止播放", in: model)
         XCTAssertEqual(senseDemonstration(on: model.screen)?.control.label, Copy.bundled()("app_demo.replay"))
         XCTAssertEqual(senseDemonstration(on: model.screen)?.played, true)
         try await press("再看一次", in: model)
@@ -251,7 +251,7 @@ final class CardProofTests: XCTestCase {
             "日期", today,
             "島民編號", "\(shortID) 開頭",
             "證明紀錄不包含姓名、生日、身分證字號和卡號。Threads、政府、我們都查不出這是誰的卡片。",
-            "之後拿著這張卡片和 PIN 的人，都能查詢、更新、收回或更換這張證明宣告的 Threads 帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。",
+            "任何持有這張卡片和 PIN 的人，都能查詢、更新、收回或更換這張證明宣告的 Threads 帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。",
             "上一步",
             "宣告這個帳號",
             "取消",
@@ -294,7 +294,7 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(demonstration(on: model.screen)?.played, false)
         model.perform(.showDemo)
         XCTAssertEqual(demonstration(on: model.screen)?.control.label, Copy.bundled()("app_demo.stop"))
-        try await press("停止", in: model)
+        try await press("停止播放", in: model)
         XCTAssertEqual(demonstration(on: model.screen)?.control.label, Copy.bundled()("app_demo.replay"))
         XCTAssertEqual(demonstration(on: model.screen)?.playing, false)
         XCTAssertEqual(demonstration(on: model.screen)?.played, true, "at its last frame")
@@ -453,12 +453,12 @@ final class CardProofTests: XCTestCase {
             "\(try XCTUnwrap(backend.origin.host))/p/\(shortID)",
             "打開你的島民證明看看。",
             "在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。",
-            "沒有看到連結，重新掛上",
+            "重新掛上連結",
             "下一步",
         ])
         await Snapshot.save(model, as: "6-hang-short")
-        // "沒有看到連結，重新掛上": the whole step, still step 6.
-        try await press("沒有看到連結，重新掛上", in: model)
+        // "重新掛上連結": the whole step, still step 6.
+        try await press("重新掛上連結", in: model)
         XCTAssertEqual(model.screen.step, 6)
         XCTAssertTrue(model.screen.texts.contains("把證明掛上你的 Threads 個人檔案"))
         XCTAssertTrue(model.screen.texts.contains("複製證明連結"))
@@ -609,7 +609,7 @@ final class CardProofTests: XCTestCase {
             "島民編號", "\(shortID) 開頭",
             "歷史證明紀錄無法刪除，依然看得出這張卡片過去曾宣告過的帳號。",
             "證明紀錄不包含姓名、生日、身分證字號和卡號。Threads、政府、我們都查不出這是誰的卡片。",
-            "之後拿著這張卡片和 PIN 的人，都能查詢或再宣告。",
+            "任何持有這張卡片和 PIN 的人，都能查詢或再宣告。",
             "上一步",
             "收回對 @carol.tw 的宣告",
             "取消",

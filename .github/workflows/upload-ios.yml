@@ -16,16 +16,21 @@
 # the test site, no fake card, no library of the tests). It hands on the archive, in a tar file so that its files keep
 # their modes, with ios/ExportOptions.plist.
 #
-# "upload" runs in the environment app-test, whose App Store Connect API key
-# (a team key with the Developer role, #161) only main's runs get. It does
-# not check out the repository and runs no script of it: it unpacks what
-# "build" handed on and gives it to Xcode's own export, which signs it with
-# a distribution certificate Apple keeps (cloud-managed, signingStyle
-# automatic) and uploads it, for the team the environment's variable
-# APPLE_TEAM_ID names. Only its last step has the key. What it trusts:
-# the pinned action, the runner's Xcode, and the archive and export options
-# "build" made from the same commit. Whether a Developer key may sign with
-# a cloud-managed certificate is issue #143; the first run answers it.
+# "upload" runs in the environment app-test, whose keys only main's runs
+# get. It does not check out the repository and runs no script of it: it
+# unpacks what "build" handed on and gives it to Xcode's own export. The App
+# Store Connect API key (a team key with the Developer role, #161) may not
+# sign with a certificate Apple keeps (#143), so the export signs by hand
+# (signingStyle manual) with the Apple Distribution certificate and the App
+# Store profile of tw.iamreal.app the operator made (ADR-0036), for the team
+# the environment's variable APPLE_TEAM_ID names: the certificate goes into a
+# keychain of the job's own, the profile is checked (this app, the team, NFC
+# tag reading) and named in the export options, the app is signed once
+# without uploading to check its NFC entitlement, then signed again and
+# uploaded. Each secret is in the env of the one step that uses it; the App
+# Store Connect key only in the last. What it trusts: the pinned action, the
+# runner's Xcode and tools, and the archive and export options "build" made
+# from the same commit.
 name: upload-ios
 
 on:
@@ -90,8 +95,30 @@ jobs:
         env:
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
         run: test -n "$APPLE_TEAM_ID" && plutil -replace teamID -string "$APPLE_TEAM_ID" "$RUNNER_TEMP/ios-upload/ExportOptions.plist"
-      # The key to a file only this job's runner has, then Xcode's export: it fetches the
-      # profile and the cloud-managed certificate with the key, signs, and uploads
+      # The Apple Distribution certificate the operator made, and its key, into a keychain of this
+      # job's own, with a password made for this run; only codesign may use the key, and the
+      # .p12 is removed once imported. GitHub destroys the runner after the job (#143, ADR-0036).
+      - name: Put the distribution certificate in a keychain of this job's own
+        env:
+          IOS_DIST_P12_BASE64: ${{ secrets.IOS_DIST_P12_BASE64 }}
+          IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+        run: umask 077 && printf '%s' "$IOS_DIST_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dist.p12" && password="$(openssl rand -hex 24)" && security create-keychain -p "$password" "$RUNNER_TEMP/signing.keychain-db" && security set-keychain-settings -lut 21600 "$RUNNER_TEMP/signing.keychain-db" && security unlock-keychain -p "$password" "$RUNNER_TEMP/signing.keychain-db" && security import "$RUNNER_TEMP/dist.p12" -k "$RUNNER_TEMP/signing.keychain-db" -f pkcs12 -P "$IOS_DIST_P12_PASSWORD" -T /usr/bin/codesign && rm "$RUNNER_TEMP/dist.p12" && security set-key-partition-list -S 'apple-tool:,apple:' -s -k "$password" "$RUNNER_TEMP/signing.keychain-db" > /dev/null && security list-keychains -d user -s "$RUNNER_TEMP/signing.keychain-db" && security find-identity -v -p codesigning "$RUNNER_TEMP/signing.keychain-db" | grep -q 'Apple Distribution'
+      # The App Store profile the operator made: it must be for this app under the team and allow
+      # the NFC tag reading the app asks for; the export options name it for the identifier.
+      - name: Install the App Store profile of tw.iamreal.app and name it in the export options
+        env:
+          IOS_APPSTORE_PROFILE_BASE64: ${{ secrets.IOS_APPSTORE_PROFILE_BASE64 }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: printf '%s' "$IOS_APPSTORE_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/app.mobileprovision" && security cms -D -i "$RUNNER_TEMP/app.mobileprovision" -o "$RUNNER_TEMP/profile.plist" && test "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/profile.plist")" = "$APPLE_TEAM_ID.tw.iamreal.app" && /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.nfc.readersession.formats' "$RUNNER_TEMP/profile.plist" | grep -qw TAG && uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/profile.plist")" && mkdir -p "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" "$HOME/Library/MobileDevice/Provisioning Profiles" && cp "$RUNNER_TEMP/app.mobileprovision" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$uuid.mobileprovision" && cp "$RUNNER_TEMP/app.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision" && /usr/libexec/PlistBuddy -c 'Add :provisioningProfiles dict' -c "Add :provisioningProfiles:tw.iamreal.app string $uuid" "$RUNNER_TEMP/ios-upload/ExportOptions.plist"
+      # The archive is unsigned, so the signed app is the first place its entitlements can be
+      # seen: signed once without uploading, it must carry the NFC tag reading, exactly TAG as
+      # ios/Config/IamrealApp.entitlements has it, no more and no less, and the identifier.
+      - name: Sign without uploading, and check that the app has its NFC entitlement
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: cp "$RUNNER_TEMP/ios-upload/ExportOptions.plist" "$RUNNER_TEMP/check.plist" && plutil -replace destination -string export "$RUNNER_TEMP/check.plist" && xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/IamrealApp.xcarchive" -exportOptionsPlist "$RUNNER_TEMP/check.plist" -exportPath "$RUNNER_TEMP/check" && unzip -q "$RUNNER_TEMP"/check/*.ipa -d "$RUNNER_TEMP/ipa" && codesign -d --entitlements - --xml "$RUNNER_TEMP/ipa/Payload/IamrealApp.app" > "$RUNNER_TEMP/entitlements.plist" && test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.nfc.readersession.formats:0' "$RUNNER_TEMP/entitlements.plist")" = TAG && ! /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.nfc.readersession.formats:1' "$RUNNER_TEMP/entitlements.plist" > /dev/null 2>&1 && test "$(/usr/libexec/PlistBuddy -c 'Print :application-identifier' "$RUNNER_TEMP/entitlements.plist")" = "$APPLE_TEAM_ID.tw.iamreal.app"
+      # The key to a file only this job's runner has, then Xcode's export: it signs again with
+      # the certificate and the profile above (signingStyle manual) and uploads
       # (ExportOptions.plist: destination upload).
       - name: Sign and upload to App Store Connect
         env:

@@ -624,8 +624,8 @@ struct Screens {
     /// Step 6: the link to the card's page, to put on the profile
     /// (card-proof.md, step 6 and its "app"). `single`: the one platform's
     /// name, as step 5 decided it. `copied`: the link was copied. `whole`:
-    /// the whole step also where the short one would do ("沒有看到連結，
-    /// 重新掛上" was pressed). The same parts as the web page's, but for
+    /// the whole step also where the short one would do ("重新掛上連結"
+    /// was pressed). The same parts as the web page's, but for
     /// what only the page has: the QR code, and "現在可以拔出卡片。" (the
     /// panel said the card can be taken away when it signed). In the
     /// order of the page a phone opens to hang it: the link, the two

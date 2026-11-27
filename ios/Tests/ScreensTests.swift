@@ -124,24 +124,24 @@ final class ScreensTests: XCTestCase {
         XCTAssertEqual(screen.texts, [
             "開始之前",
             "請準備好你的實體自然人憑證卡片。",
-            "非中華民國國籍者所持有的自然人憑證無法用於島民證明。",
+            "非本國國民持有的自然人憑證無法用於島民證明。",
             "為什麼一定要實體的卡片？",
             "實體卡片簽章在卡片裡完成，卡片效期約 5 ~ 8 年。",
             "行動自然人憑證簽章依賴內政部伺服器，而且每年會更換金鑰，不適合作為島民證明使用。",
             "還沒有自然人憑證，怎麼申辦？",
-            "本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
+            "滿 18 歲，未受監護宣告，本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
             "找附近的戶政事務所",
-            "內政部憑證管理中心：如何申請自然人憑證（moica.nat.gov.tw）",
+            "內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）",
             "下一步",
         ])
         guard case .question(_, let answer)? = screen.blocks.last else { return XCTFail("no question at the end: \(screen.blocks)") }
         XCTAssertEqual(Array(answer.dropFirst()), [
             .button(Button(label: "找附近的戶政事務所", action: .findOffice), main: false),
-            .action(Button(label: "內政部憑證管理中心：如何申請自然人憑證（moica.nat.gov.tw）", action: .howToApply)),
+            .action(Button(label: "內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）", action: .howToApply)),
         ])
         // The phone's map searches for the word; the app sends no place of its own.
         XCTAssertEqual(CardProofModel.findOffice.absoluteString.removingPercentEncoding, "https://maps.apple.com/?q=戶政事務所")
-        XCTAssertEqual(CardProofModel.moica.absoluteString, "https://moica.nat.gov.tw/")
+        XCTAssertEqual(CardProofModel.moica.absoluteString, "https://moica.nat.gov.tw/rac.html")
     }
 
     /// Step 3 says two things under the field; who holds the card and the PIN is step 5's to say.
@@ -307,7 +307,7 @@ final class ScreensTests: XCTestCase {
             "日期", "2026-11-16",
             "島民編號", "7K2Q9FM4XD 開頭",
             "證明紀錄不包含姓名、生日、身分證字號和卡號。Threads、政府、我們都查不出這是誰的卡片。",
-            "之後拿著這張卡片和 PIN 的人，都能查詢、更新、收回或更換這張證明宣告的 Threads 帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。",
+            "任何持有這張卡片和 PIN 的人，都能查詢、更新、收回或更換這張證明宣告的 Threads 帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。",
             "上一步", "更新島民證明",
             "取消",
         ])
@@ -331,7 +331,7 @@ final class ScreensTests: XCTestCase {
             "島民編號", "7K2Q9FM4XD 開頭",
             "歷史證明紀錄無法刪除，依然看得出這張卡片過去曾宣告過的帳號。",
             "證明紀錄不包含姓名、生日、身分證字號和卡號。Threads、政府、我們都查不出這是誰的卡片。",
-            "之後拿著這張卡片和 PIN 的人，都能查詢或再宣告。",
+            "任何持有這張卡片和 PIN 的人，都能查詢或再宣告。",
             "上一步", "收回對 @alice 的宣告",
             "取消",
         ])
@@ -541,7 +541,7 @@ final class ScreensTests: XCTestCase {
             throw XCTSkip("no demonstration")
         }
         let playing = try demo(screens.read(reached: 0, running: false, stop: nil, demoPlaying: true))
-        XCTAssertEqual(playing.control, Button(label: "停止", action: .stopDemo))
+        XCTAssertEqual(playing.control, Button(label: "停止播放", action: .stopDemo))
         XCTAssertTrue(playing.playing && playing.played)
         let before = try demo(screens.read(reached: 0, running: false, stop: nil))
         XCTAssertEqual(before.control, Button(label: "再看一次", action: .playDemo))

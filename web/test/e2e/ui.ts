@@ -369,10 +369,10 @@ async function noLinkOut(label: string): Promise<void> {
 }
 const stepLine = (n: number) => fill(C.common.step, { step: n, steps: 7 });
 
-/** Step 1's two links, in the question on how to get a card: a map's search, MOICA's site; each in a new tab, nothing else (card-proof.md, step 1). */
+/** Step 1's two links, in the question on how to get a card: a map's search, MOICA's page on applying; each in a new tab, nothing else (card-proof.md, step 1). */
 const STEP1_LINKS = [
   [C.before.find_office, "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent("戶政事務所")],
-  [C.before.how_to_get_moica, "https://moica.nat.gov.tw/"],
+  [C.before.how_to_get_moica, "https://moica.nat.gov.tw/rac.html"],
 ];
 async function step1Links(label: string, p: Page = page): Promise<void> {
   const links = await p.eval<[string, string, string][]>(`[...document.querySelectorAll('#app a')].map((a) => [a.textContent, a.getAttribute("href"), a.target + " " + a.rel + " " + !!a.closest('.asks details')])`);
@@ -915,7 +915,7 @@ interface HangSeen {
   shortLook: string;
   shortWhy: string;
   shortLink: string;
-  /** The whole step 6, after 沒有看到連結，重新掛上 when it opened short. */
+  /** The whole step 6, after 重新掛上連結 when it opened short. */
   title: string;
   link: string;
   /** What the QR code holds. */
@@ -1013,7 +1013,7 @@ const finishNow = () =>
 
 /**
  * After the submission, through every screen there is: step 6 (short, then
- * the whole one after 沒有看到連結，重新掛上), 下一步 to the last step, 上一步
+ * the whole one after 重新掛上連結), 下一步 to the last step, 上一步
  * back to step 6 as it was left. Ends on step 6, or on the last step when
  * everything was withdrawn. `shots`: the screenshots' prefix.
  */
@@ -1032,7 +1032,7 @@ async function doneSeen(shots?: string): Promise<DoneSeen> {
       })`);
       if (shots) await screenshot(`${shots}-6-hang-short`);
       await page.clickButton(C.hang.rehang);
-      await page.waitFor(`document.querySelector('[data-step="hang"]')?.dataset.short === "false" || null`, "沒有看到連結，重新掛上: the whole step 6");
+      await page.waitFor(`document.querySelector('[data-step="hang"]')?.dataset.short === "false" || null`, "重新掛上連結: the whole step 6");
     }
     hang = { short, ...s, ...(await hangNow()) };
     if (shots) await screenshot(`${shots}-6-hang`);
@@ -1129,7 +1129,7 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   check(h.where.includes(stepLine(6)), `${o.label}: 第 6 步，共 7 步 "${h.where}"`);
   check(h.main.includes(recorded), `${o.label}: step 6, the day it was recorded, unplug`);
   if (mismatch.length > 0) check(h.first === C.done.mismatch, `${o.label}: the difference, first of all "${h.first}"`);
-  // Short for a card proof again with one platform; 沒有看到連結，重新掛上 shows the whole step.
+  // Short for a card proof again with one platform; 重新掛上連結 shows the whole step.
   check(h.short === !!o.short, `${o.label}: step 6 ${o.short ? "is" : "is not"} short`);
   if (o.short) {
     check(h.shortTitle === fill(C.hang.still_there_single, { platform: o.single! }), `${o.label}: the short step 6 asks "${h.shortTitle}"`);
@@ -2987,7 +2987,7 @@ await tryStep("the production build's step 1: one platform, named", async () => 
     const s1 = await prod.text();
     check(!(await prod.eval<boolean>(`!!document.querySelector('[data-one-proof]')`)) && !s1.includes(C.before.one_proof), "the production build's step 1: no sentence of what the proof lists");
     check(
-      [C.before.title, C.before.duration, C.before.prepare_card, C.before.citizens_only, C.before.why_physical, C.before.how_to_get].every((x) => s1.includes(x)) && !s1.includes("我們只收台灣中華民國國民的自然人憑證正卡"),
+      [C.before.title, C.before.duration, C.before.prepare_card, C.before.citizens_only, C.before.why_physical, C.before.how_to_get].every((x) => s1.includes(x)) && !s1.includes("我們只收本國國民的自然人憑證"),
       "the production build's step 1: the words of card-proof.md",
     );
     await step1Links("the production build's step 1", prod);

@@ -140,14 +140,14 @@ final class DoneScreenTests: XCTestCase {
             "iamreal.tw/p/7K2Q9FM4XD",
             "打開你的島民證明看看。",
             "在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。",
-            "沒有看到連結，重新掛上",
+            "重新掛上連結",
             "下一步",
         ])
         XCTAssertEqual(screen.buttons.map(\.action), [.rehang, .toRemind])
         XCTAssertTrue(screen.mainButton, "the way on is the main button")
         XCTAssertEqual(inline(screen).map(\.action), [.openProof])
         try CopyDocument.load().check(screen)
-        // "沒有看到連結，重新掛上": the whole step, without the sentence of a new card.
+        // "重新掛上連結": the whole step, without the sentence of a new card.
         XCTAssertFalse(screen.blocks.contains { if case .demo = $0 { return true } else { return false } }, "no demonstration on the short step")
         let whole = screens.hang(again, single: "Threads", copied: false, whole: true)
         XCTAssertEqual(whole.step, 6)
@@ -186,7 +186,7 @@ final class DoneScreenTests: XCTestCase {
         XCTAssertFalse(still.playing)
         XCTAssertFalse(still.played, "its first frame, before it ever played")
         let playing = try XCTUnwrap(demo(of: screens.hang(again, single: "Threads", copied: false, whole: true, demoPlaying: true)))
-        XCTAssertEqual(playing.control, Button(label: "停止", action: .stopDemo))
+        XCTAssertEqual(playing.control, Button(label: "停止播放", action: .stopDemo))
         XCTAssertTrue(playing.playing)
         XCTAssertTrue(playing.played)
         // Stopped or at its end: its last frame.
