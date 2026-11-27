@@ -75,7 +75,7 @@ const ordinalOf = (card: PageCard): string => `第 ${thousands(card.ordinal)} �
 function titleOf(cards: readonly PageCard[]): string {
   if (cards.length > 1) return `這個網址對到 ${cards.length} 張自然人憑證`;
   const account = currentOf(cards[0]!);
-  return account === null ? "這張自然人憑證現在沒有把名額給任何帳號" : `一張自然人憑證把 Threads 的名額給了 @${account}`;
+  return account === null ? "這張自然人憑證現在沒有把名額給任何帳號" : `一張自然人憑證宣告了 Threads 的 @${account}`;
 }
 
 /**
