@@ -1,17 +1,21 @@
 #!/bin/sh
 # Checks a built IamrealApp.app, and the sources it was built from, against
-# what issue #168, ADR-0036 and ADR-0037 require of every build. The last build phase
+# what issue #168, ADR-0036 and ADR-0040 require of every build. The last build phase
 # of the app target runs it, so a build that fails a check fails.
 #
 #   ./check-app.sh <path to IamrealApp.app>
 #
 # What it checks:
-# - the app is the build its configuration makes (ADR-0040): Debug the
+# - the app is the one of ADR-0040 its configuration makes: Debug the
 #   development build, tw.iamreal.app.dev, Release the production app,
-#   tw.iamreal.app; the name under its icon is the one design/copy/app.md
-#   gives that build; until launch both talk to the test site: the addresses
-#   of the test site in its executable and not the ones of the production
-#   site;
+#   tw.iamreal.app, TestApp the test app, tw.iamreal.app.test; the name
+#   under its icon is the one design/copy/app.md gives that app; its build
+#   number is in that app's range (ADR-0040, "測試網站的最低版本"; README.md):
+#   the production app's below 1,000,000, the test app's from 1,000,000 to
+#   below 2,000,000, the development build's 2,000,000; the test app and the
+#   development build always talk to the test site, and the production app
+#   does until launch: the addresses of the test site in its executable and
+#   not the ones of the production site;
 # - iPhone only;
 # - the two circuits, the two verification keys, the two files of sentences
 #   and the typeface in the app are the files of this repository, and the
@@ -87,13 +91,24 @@ executable_has() {
 # configuration to this script; run by hand, it goes by Debug, which is what
 # the tests run in.
 case ${CONFIGURATION-Debug} in
-  Debug) want=tw.iamreal.app.dev build="開發用 build" ;;
-  Release) want=tw.iamreal.app build="正式 app" ;;
-  *) want= build= ; problem "the configuration is $CONFIGURATION, neither Debug (the development build) nor Release (the production app)" ;;
+  Debug) want=tw.iamreal.app.dev build="開發用 build" lowest=2000000 above=2000000 ;;
+  Release) want=tw.iamreal.app build="正式 app" lowest=1 above=999999 ;;
+  TestApp) want=tw.iamreal.app.test build="測試 app" lowest=1000000 above=1999999 ;;
+  *) want= build= lowest= above= ; problem "the configuration is $CONFIGURATION, not Debug (the development build), Release (the production app) or TestApp (the test app)" ;;
 esac
 identifier=$(plist CFBundleIdentifier)
 if [ -n "$want" ] && [ "$identifier" != "$want" ]; then
   problem "the identifier is $identifier, not $want: a ${CONFIGURATION-Debug} build is the $build of ADR-0040"
+fi
+# The build number in the app's range: the test site's lowest version
+# (ADR-0035) only tells Android from iOS, so on launch day it goes up to
+# 1,000,000 and stops the production app's builds from before launch, and
+# none of the test app's or the development build's.
+number=$(plist CFBundleVersion)
+if [ -n "$lowest" ]; then
+  if ! echo "$number" | grep -q -E '^[1-9][0-9]{0,8}$' || [ "$number" -lt "$lowest" ] || [ "$number" -gt "$above" ]; then
+    problem "the build is $number, not from $lowest to $above, the range of the $build (ADR-0040)"
+  fi
 fi
 # The name under the icon: the first line in a code block under "### <build>"
 # in the section "## 主畫面上的名稱" of design/copy/app.md. awk compares
@@ -111,7 +126,10 @@ if [ -n "$build" ]; then
     problem "the name under the icon is $name, not \"$written\", the name design/copy/app.md gives the $build"
   fi
 fi
-# Until launch both builds talk to the test site (ADR-0037).
+# The test app and the development build always talk to the test site, and
+# the production app does until launch (ADR-0040). On launch day the
+# production app is given the production site's addresses here, and the
+# other two keep these.
 # Xcode hands the build settings to this script: the environment of Config/.
 if [ "${IAMREAL_ENVIRONMENT-IAMREAL_ENV_TEST}" != IAMREAL_ENV_TEST ]; then
   problem "the environment is $IAMREAL_ENVIRONMENT, not IAMREAL_ENV_TEST"
@@ -264,8 +282,9 @@ else
 fi
 # The app's target has App/Bridge.h, the tests' target Tests/Bridge.h, and nothing else names a header.
 headers=$(grep -h -E 'SWIFT_OBJC_BRIDGING_HEADER|MODULEMAP_FILE|OTHER_SWIFT_FLAGS|OTHER_CFLAGS' "$project" "$config"/*.xcconfig | tr -d '\t' | sort | uniq -c | tr -s ' ' | sed 's/^ //')
-want='2 SWIFT_OBJC_BRIDGING_HEADER = App/Bridge.h;
-2 SWIFT_OBJC_BRIDGING_HEADER = Tests/Bridge.h;'
+# Once in each of the three configurations (Debug, Release, TestApp) of each target.
+want='3 SWIFT_OBJC_BRIDGING_HEADER = App/Bridge.h;
+3 SWIFT_OBJC_BRIDGING_HEADER = Tests/Bridge.h;'
 [ "$headers" = "$want" ] || problem "the bridging headers of the project and of Config/ are not App/Bridge.h for the app and Tests/Bridge.h for the tests: $headers"
 
 exit $problems

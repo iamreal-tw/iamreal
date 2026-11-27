@@ -4,8 +4,8 @@ import Foundation
 /// app, and nothing a server sends, changes it. Which site the app talks
 /// to and which proof log its cards sign for (ADR-0036), by the
 /// compilation condition Config/<environment>.xcconfig sets; and which of
-/// the two builds it is, the store's or the development one (ADR-0037),
-/// with the store's page of the one app there.
+/// the three apps of ADR-0040 it is, with the production app's page in
+/// the App Store.
 enum AppEnvironment {
     #if IAMREAL_ENV_TEST
     /// The test site (ADR-0028).
@@ -18,33 +18,50 @@ enum AppEnvironment {
     #error("No environment: build with one of the files in Config/")
     #endif
 
-    /// The number App Store Connect gives the one app in the store,
-    /// tw.iamreal.app (ADR-0037): digits only, the same whichever site
-    /// the store's build talks to, since TestFlight and the App Store are
-    /// one record there (its "Apple ID").
-    static let storeAppID: String? = "6837606453"
+    /// The three apps of ADR-0040, each a configuration of the project.
+    enum App {
+        /// tw.iamreal.app (Release): TestFlight, and the App Store from launch.
+        case production
+        /// tw.iamreal.app.test (TestApp): TestFlight only, never the App Store.
+        case test
+        /// tw.iamreal.app.dev (Debug): put on a phone by cable, in no store.
+        case development
+    }
 
-    /// Whether this is the store's build (Release) and not the development
-    /// build (Debug, tw.iamreal.app.dev), which is not in the store. The
-    /// project file defines DEBUG in the Debug configuration only.
-    static var storeBuild: Bool {
+    /// Which app this build is. The project file defines DEBUG in the Debug
+    /// configuration only and IAMREAL_TEST_APP in TestApp only.
+    static var app: App {
         #if DEBUG
-        return false
+        return .development
+        #elseif IAMREAL_TEST_APP
+        return .test
         #else
-        return true
+        return .production
         #endif
     }
 
+    /// Whether this build goes through a store, the production app's or the
+    /// test app's, and so carries the version given when it was archived
+    /// (the date); the development build does not.
+    static var storeBuild: Bool { app != .development }
+
+    /// The number App Store Connect gives the production app,
+    /// tw.iamreal.app: digits only, the same whichever site it talks to,
+    /// since TestFlight and the App Store are one record there (its
+    /// "Apple ID").
+    static let storeAppID: String? = "6837606453"
+
     /// The page "到 App Store 更新" opens; without one, the screens about
     /// the lowest version say to update without the button.
-    static let storePage = pageInStore(appID: storeAppID, storeBuild: storeBuild)
+    static let storePage = pageInStore(appID: storeAppID, app: app)
 
-    /// The store's page of the app with that number. None without
-    /// a number, and none in the development build: the store's
-    /// page is of another app, and updating that one leaves this build as
-    /// old as it was.
-    static func pageInStore(appID: String?, storeBuild: Bool) -> URL? {
-        guard storeBuild, let appID, !appID.isEmpty, appID.allSatisfy({ ("0"..."9").contains($0) }) else { return nil }
+    /// The App Store's page of the app with that number, for the production
+    /// app only. None without a number. None for the test app, which is
+    /// never in the App Store, nor for the development build, in no store:
+    /// the page with that number is the production app's, and updating that
+    /// one leaves this build as old as it was.
+    static func pageInStore(appID: String?, app: App) -> URL? {
+        guard app == .production, let appID, !appID.isEmpty, appID.allSatisfy({ ("0"..."9").contains($0) }) else { return nil }
         return URL(string: "https://apps.apple.com/app/id\(appID)")
     }
 }

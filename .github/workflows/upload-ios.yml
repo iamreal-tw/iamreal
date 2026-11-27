@@ -1,8 +1,8 @@
-# Builds the store's build of the iPhone app (tw.iamreal.app, ADR-0037)
+# Builds the production app of the iPhone (tw.iamreal.app, ADR-0040)
 # and uploads it to App Store Connect, from where TestFlight hands it to
-# testers (ADR-0036, issue #176). Only by hand: the operator, or the coding
-# agent on the operator's computer, starts it on main with
-# `gh workflow run upload-ios.yml --ref main`. ios/README.md has the details;
+# testers (ADR-0036, issue #176); upload-ios-test.yml uploads the test
+# app. Only by hand: the operator, or the coding agent on the operator's
+# computer, starts it on main with `gh workflow run upload-ios.yml --ref main`. ios/README.md has the details;
 # worker/test/workflows.ts holds this file's two jobs, exactly, and
 # worker/test/workflows.test.ts checks this file against them.
 #
@@ -60,7 +60,7 @@ jobs:
       - name: Build device-core/ for the iPhone
         working-directory: ios
         run: ./build-core.sh device
-      - name: Archive the store's build and check it
+      - name: Archive the production app and check it
         working-directory: ios
         run: ./archive.sh "$RUNNER_TEMP/IamrealApp.xcarchive" "$GITHUB_RUN_NUMBER"
       - name: Pack the archive, keeping its files' modes, with the export options
