@@ -24,7 +24,7 @@ export function preparePage(): Document {
 <dl class="items">
 <div><dt>實體的自然人憑證</dt><dd>本國國民的自然人憑證。行動自然人憑證不能用。</dd></div>
 <div><dt>晶片讀卡機</dt><dd>插得進自然人憑證的 USB 讀卡機。</dd></div>
-<div><dt>Windows 或 macOS 的電腦</dt><dd>和一般的瀏覽器。</dd></div>
+<div><dt>Windows 10 以上或 macOS 的電腦</dt><dd>和一般的瀏覽器。</dd></div>
 <div><dt>內政部的「跨平台網頁元件」</dt><dd>讓網頁能透過讀卡機和卡片溝通，裝在你的電腦上。</dd></div>
 <div><dt>卡片的 PIN</dt><dd>自然人憑證的密碼。</dd></div>
 </dl>
@@ -32,7 +32,7 @@ export function preparePage(): Document {
 <section class="how">
 <h2>四個步驟</h2>
 <ol class="items">
-<li><span class="n">1</span><div><b>下載並安裝內政部的「跨平台網頁元件」</b><p>到<a href="${MOICA_DOWNLOAD}">內政部憑證管理中心的下載頁</a>，選你的作業系統（Windows 或 macOS），照畫面安裝。安裝完成後，關掉所有網頁，再重新打開瀏覽器。</p></div></li>
+<li><span class="n">1</span><div><b>下載並安裝內政部的「跨平台網頁元件」</b><p>到<a href="${MOICA_DOWNLOAD}">內政部憑證管理中心的下載頁</a>，選你的作業系統（Windows 或 macOS），照畫面安裝。已經裝過的，也到同一頁下載最新版，先移除舊版再安裝。安裝完成後，關掉所有網頁，再重新打開瀏覽器。</p></div></li>
 <li><span class="n">2</span><div><b>確認元件裝好了</b><p>Windows：「開始」的「所有程式」裡有「跨平台網頁元件」資料夾。macOS：打開「應用程式」裡的 HiPKILocalSignServer，上面寫「目前狀態為：開啟中」；寫「關閉中」的話，按「啟動HiPKILocalSignServer」。</p></div></li>
 <li><span class="n">3</span><div><b>接上讀卡機，插入自然人憑證</b><p>晶片朝讀卡機裡面插到底。</p></div></li>
 <li><span class="n">4</span><div><b>開始過卡</b><p>回到島民證明，按「我要換島民證明」，選「我的電腦有讀卡機」。</p></div></li>
