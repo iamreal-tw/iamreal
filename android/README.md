@@ -21,7 +21,7 @@
 
 ## 圖示
 
-app 的圖示是記號（紅色的自然人憑證和墨色的台灣，`web/src/ui/logo.ts`）放在頁面的白底上，營運者從三個方向裡選的（[#490](https://github.com/iamreal-tw/iamreal/issues/490)），和 iOS 的相同。兩種 build 同一個圖示，靠下面的名稱分。
+app 的圖示是記號（紅色的自然人憑證和墨色的台灣，`web/src/ui/logo.ts`）放在頁面的白底上，營運者從三個方向裡選的（[#490](https://github.com/iamreal-tw/iamreal/issues/490)），和 iOS 的相同。每一種 build 都是同一個圖示，靠圖示下面的名稱分。
 
 - `app/src/main/res/mipmap-anydpi/ic_launcher.xml`：adaptive icon，底是 `token_bg`，前景是 `drawable/launcher_mark.xml`。前景 108dp，系統只顯示中間的 72dp、裁成它自己的形狀；記號每單位 0.76dp、放在正中間，卡片的每個角都在直徑 66dp 的圓裡，裁成圓形也不會切到。`ThemeTest` 核對底是 `token_bg`、前景畫的記號和啟動畫面的 `splash_mark.xml` 相同，台灣的每一點和卡片的四個角都在那個圓裡
 - 沒有單色的那一層（`<monochrome>`）：手機設成用主題色的圖示時，這個 app 照樣顯示原本的顏色
