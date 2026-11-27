@@ -78,6 +78,30 @@ class AccountsViewTest {
     }
 
     @Test
+    fun `3 records today, the whole of step 6 for the account declared now, with no record of today`() {
+        val view = messages.hangFromLimit(status(slot("threads", "alice"), daysSince = 0, dailyLimit = true), "Threads")
+        assertEquals("把證明掛上你的 Threads 個人檔案", view.title)
+        assertEquals("在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。", view.why)
+        assertEquals(listOf(Messages.OpensProfile("打開 Threads", "打開 @alice 的 Threads 個人檔案", "https://www.threads.com/@alice")), view.profiles)
+        assertEquals(listOf("按「編輯個人檔案」", "按「連結」", "按「新增連結」", "在「網址」貼上剛才複製的連結，按右上角的「完成」"), view.steps)
+        assertEquals("掛好了嗎？打開你的島民證明看看。", view.hung)
+        assertEquals("@alice", view.account)
+        // An account on a platform the app does not know: no button for its profile, and not the one the demonstration draws.
+        val other = messages.hangFromLimit(status(slot("example", "a-b", known = false), slot("threads", "alice"), daysSince = 0, dailyLimit = true, table = listOf("example", "threads")), null)
+        assertEquals(listOf("https://www.threads.com/@alice"), other.profiles.map { it.address })
+        assertEquals("@alice", other.account)
+    }
+
+    @Test
+    fun `3 records today, 重新掛上連結 only for an account the app can hang`() {
+        assertTrue(messages.canHangFromLimit(status(slot("threads", "alice"), daysSince = 0, dailyLimit = true)))
+        // Everything withdrawn today: nothing to hang.
+        assertEquals(false, messages.canHangFromLimit(status(slot("threads", null, lastDeclared = "alice"), daysSince = 0, dailyLimit = true)))
+        // Only an account on a platform the app does not know: no profile to open, no demonstration.
+        assertEquals(false, messages.canHangFromLimit(status(slot("example", "a-b", known = false), slot("threads", null), daysSince = 0, dailyLimit = true, table = listOf("example", "threads"))))
+    }
+
+    @Test
     fun `3 records today and nothing declared, the row as it is`() {
         val view = messages.accountsView(status(slot("threads", null, lastDeclared = "alice"), daysSince = 0, dailyLimit = true)) as Messages.FillView
         assertEquals("這張卡片今天已經過卡 3 次，明天才能再過卡。", view.dailyLimit)

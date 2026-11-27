@@ -1402,12 +1402,19 @@ await tryStep("a correction on the day of the first declaration (@alice to @alic
   });
 });
 
-await tryStep("3 records today: step 4 keeps the list, says so, and offers only 回到開頭", async () => {
+await tryStep("3 records today: step 4 keeps the list, says so, and offers the card's page, 重新掛上連結 and 回到開頭", async () => {
   const st = await toAccounts();
   check(st.state === "daily_limit" && st.mode === "declared" && JSON.stringify(st.lead) === JSON.stringify([A.declared_now]) && st.last === lastLine(0), `step 4: ${st.state} ${JSON.stringify(st.lead)} ${st.last}`);
   check(JSON.stringify(st.current) === JSON.stringify([[THREADS_NAME, at("alicia")]]), `3 records today: what the card declares ${JSON.stringify(st.current)}`);
   check((await page.text("[data-daily-limit]")) === C.stops.daily_limit, "step 4: the sentence of 3 records today");
-  check(JSON.stringify(st.buttons) === JSON.stringify([A.restart]), `step 4: only 回到開頭 ${JSON.stringify(st.buttons)}`);
+  check(JSON.stringify(st.buttons) === JSON.stringify([A.restart]), `step 4: one button, 回到開頭 ${JSON.stringify(st.buttons)}`);
+  // The card's page, and the page that hangs its link: links, out of this card proof that cannot go on today.
+  const links = await page.eval<{ open: string | null; hang: string | null; hangText: string | null }>(`({
+    open: document.querySelector('[data-daily-limit] ~ .look [data-open-proof]')?.getAttribute('href') ?? null,
+    hang: document.querySelector('[data-hang-again]')?.getAttribute('href') ?? null,
+    hangText: document.querySelector('[data-hang-again]')?.textContent ?? null,
+  })`);
+  check(links.open !== null && /^\/p\/[0-9A-Z]{10}$/.test(links.open) && links.hang === links.open.replace("/p/", "/hang/") && links.hangText === C.hang.rehang, `step 4: 打開你的島民證明 and 重新掛上連結 go to the card's pages ${JSON.stringify(links)}`);
   check(!(await page.eval<boolean>(`!!document.querySelector('[data-account-field]')`)), "no field to type in");
   await screenshot("daily-limit-4-accounts");
   const signs = componentCount("MakeSignature");
