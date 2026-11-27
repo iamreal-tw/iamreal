@@ -158,12 +158,13 @@ final class CardProofTests: XCTestCase {
             // as the step comes up.
             "示範：手機正面朝你，不用翻面。把自然人憑證貼到手機背面的上方，停住不動。",
             "停止播放",
+            // The buttons right under it, the list, all still to do, under them.
+            "上一步",
+            "感應卡片",
             "連上島民證明的伺服器",
             "感應卡片，讀取卡片上的憑證",
             "檢查憑證",
             "下載內政部的廢止清冊，確認憑證沒有被廢止",
-            "上一步",
-            "感應卡片",
         ])
 
         // Its button stops it, at rest with the card in place, and then plays it again; its three rounds over, as
