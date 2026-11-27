@@ -324,7 +324,8 @@ private fun DailyLimit(m: Model, sentence: String, outside: Outside) {
     OpensProof(c.say("hang.look", "open_proof" to openProof), openProof) { outside.open(m.proofUrl(shortId)) }
     Actions {
         Button(c.say("accounts.restart"), wide) { m.cancel() }
-        Button(c.say("hang.rehang"), wide) { m.showHangFromLimit() }
+        // Nothing declared now (everything withdrawn today): no link to hang.
+        if (m.status?.slots?.any { it.current != null } == true) Button(c.say("hang.rehang"), wide) { m.showHangFromLimit() }
     }
 }
 

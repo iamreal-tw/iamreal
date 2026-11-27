@@ -527,10 +527,14 @@ export function startApp(o: AppOptions): void {
    * page that hangs its link, since nothing more is done in this card proof today (card-proof.md, step 4, 3 records today);
    * and "back to the beginning" (which drops the PIN, as cancel does). hang.rehang leaves this page: the PIN goes with it.
    */
-  const dailyLimitBody = (s: Sentence, shortId: string): HTMLElement[] => [
+  const dailyLimitBody = (s: Sentence, status: CardStatus): HTMLElement[] => [
     el("p", { class: "stop", attrs: { "data-daily-limit": "" } }, say(s)),
-    el("p", { class: "look" }, ...parts(COPY.hang.look, { open_proof: COPY.done.open_proof }).map((p) => (p.placeholder === null ? p.text : newTab(`/${cardPath(shortId)}`, { "data-open-proof": "" }, p.text)))),
-    actions(el("a", { class: "btn ghost", attrs: { href: `/${hangPath(shortId)}`, "data-hang-again": "" } }, COPY.hang.rehang), secondary(COPY.accounts.restart, () => before())),
+    el("p", { class: "look" }, ...parts(COPY.hang.look, { open_proof: COPY.done.open_proof }).map((p) => (p.placeholder === null ? p.text : newTab(`/${cardPath(status.shortId)}`, { "data-open-proof": "" }, p.text)))),
+    // Nothing declared now (everything withdrawn today): no link to hang.
+    actions(
+      status.slots.some((sl) => sl.current !== null) ? el("a", { class: "btn ghost", attrs: { href: `/${hangPath(status.shortId)}`, "data-hang-again": "" } }, COPY.hang.rehang) : null,
+      secondary(COPY.accounts.restart, () => before()),
+    ),
   ];
 
   /** Step 4's screen, with the seven steps' line above it, and its state for the tests. */
@@ -564,7 +568,7 @@ export function startApp(o: AppOptions): void {
     const here = (s: CardStatus): void => accounts(f, s);
     const showHere = (_platform: string | null, m: Message): void => message.show(m);
     const body: (HTMLElement | null)[] = view.dailyLimit
-      ? dailyLimitBody(view.dailyLimit, status.shortId)
+      ? dailyLimitBody(view.dailyLimit, status)
       : [
           message.node,
           // The main button: the list as it is, nothing to type.
@@ -686,7 +690,7 @@ export function startApp(o: AppOptions): void {
 
     const notes = view.notes.length ? el("div", { class: "tips" }, ...view.notes.map((n) => el("p", {}, ...n.map((x) => say(x))))) : null;
     const body: (HTMLElement | null)[] = view.dailyLimit
-      ? dailyLimitBody(view.dailyLimit, status.shortId)
+      ? dailyLimitBody(view.dailyLimit, status)
       : [notes, message.node, actionsEnd(primary(COPY.common.next, next)), o.editList ? actions(textButton(COPY.accounts.keep, () => accounts(f, status))) : null, cancel()];
     const lead = view.lead.map((line, i) => el("p", { class: i === 0 ? "status" : "", attrs: i === 0 ? { "data-status": "" } : { "data-fact": "" } }, ...line.flatMap((m) => messageNodes(m))));
     showAccounts(view.dailyLimit ? "daily_limit" : view.state, o.editList ? "edit" : "fill", el("h1", {}, say(view.title)), ...lead, el("div", { class: "acctlist", attrs: { "data-list": "accounts" } }, ...rowNodes), ...body);
