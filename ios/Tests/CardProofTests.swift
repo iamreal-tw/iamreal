@@ -601,9 +601,9 @@ final class CardProofTests: XCTestCase {
         let model = makeModel()
         try await toAccounts(model)
         XCTAssertEqual(Array(model.screen.texts.prefix(4)), ["你的 Threads 帳號", "這張卡片目前宣告：", "@carol.tw", "上次過卡是今天"])
-        // Changed today: changing it again today is not another switch.
+        // Changed today, and changing it again today is another switch all the same (rules version 3: no correction).
         try await press("改成別的帳號", in: model)
-        XCTAssertTrue(model.screen.texts.contains("今天才宣告的帳號，今天改掉不另外算一次更換。"))
+        XCTAssertTrue(model.screen.texts.contains("一張卡終身最多更換 5 次，這次之後還可以更換 3 次。"))
         try await press("不改了", in: model)
         try await press("收回對 @carol.tw 的宣告", in: model)
         let shortID = try shortID(on: model.screen)
