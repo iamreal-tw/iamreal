@@ -16,6 +16,12 @@
 #   development build always talk to the test site, and the production app
 #   does until launch: the addresses of the test site in its executable and
 #   not the ones of the production site;
+# - its entitlements are that app's (#532): TAG to read a card, and the
+#   test site's app domain, test-app.iamreal.tw, for the production app and
+#   the test app and none for the development build: the file the
+#   configuration signs with, and what the app carries when it carries any;
+# - the app reads nothing of the address it was opened with and registers
+#   no URL scheme of its own (#92);
 # - iPhone only;
 # - the two circuits, the two verification keys, the two files of sentences
 #   and the typeface in the app are the files of this repository, and the
@@ -62,7 +68,11 @@ sources=${IAMREAL_APP_SOURCES:-$here/App}
 tests=${IAMREAL_TEST_SOURCES:-$here/Tests}
 project=${IAMREAL_PROJECT_FILE:-$here/IamrealApp.xcodeproj/project.pbxproj}
 config=${IAMREAL_CONFIG_DIR:-$here/Config}
+# The test site's app domain (ADR-0040, #527).
+app_domain=test-app.iamreal.tw
 problems=0
+tmp_entitlements=$(mktemp)
+trap 'rm -f "$tmp_entitlements"' EXIT
 
 problem() {
   echo "check-app: $*" >&2
@@ -91,10 +101,10 @@ executable_has() {
 # configuration to this script; run by hand, it goes by Debug, which is what
 # the tests run in.
 case ${CONFIGURATION-Debug} in
-  Debug) want=tw.iamreal.app.dev build="開發用 build" lowest=2000000 highest=2000000 ;;
-  Release) want=tw.iamreal.app build="正式 app" lowest=1 highest=999999 ;;
-  TestApp) want=tw.iamreal.app.test build="測試 app" lowest=1000000 highest=1999999 ;;
-  *) want= build= lowest= highest= ; problem "the configuration is $CONFIGURATION, not Debug (the development build), Release (the production app) or TestApp (the test app)" ;;
+  Debug) want=tw.iamreal.app.dev build="開發用 build" lowest=2000000 highest=2000000 entitlements=IamrealAppDev.entitlements domains= ;;
+  Release) want=tw.iamreal.app build="正式 app" lowest=1 highest=999999 entitlements=IamrealApp.entitlements domains=applinks:$app_domain ;;
+  TestApp) want=tw.iamreal.app.test build="測試 app" lowest=1000000 highest=1999999 entitlements=IamrealApp.entitlements domains=applinks:$app_domain ;;
+  *) want= build= lowest= highest= entitlements= domains= ; problem "the configuration is $CONFIGURATION, not Debug (the development build), Release (the production app) or TestApp (the test app)" ;;
 esac
 identifier=$(plist CFBundleIdentifier)
 if [ -n "$want" ] && [ "$identifier" != "$want" ]; then
@@ -144,6 +154,60 @@ for address in https://iamreal.tw https://data.iamreal.tw; do
   fi
 done
 
+# The entitlements (#532): reading a card's TAG, and the app domain of the
+# site the app talks to (ADR-0040, "app 網域跟著連的網站"), so that a link
+# to any address of it opens the production app or the test app; the
+# development build declares no domain. On launch day the production app
+# is given app.iamreal.tw here and an entitlements file of its own.
+# The file is the configuration's: the one the project file names for it
+# (CODE_SIGN_ENTITLEMENTS) and Xcode signs with, and, for the production
+# app and the test app, the one the upload workflows sign the unsigned
+# archive with ad hoc before the export (.github/workflows/upload-ios.yml).
+# It holds these two and nothing else.
+# What the app carries is checked too where it carries something: a build
+# for the simulator has its entitlements in its executable, and a signed
+# app in its signature; the archive archive.sh makes has neither.
+domains_json() {
+  if [ -n "$1" ]; then printf '["%s"]' "$1"; fi
+}
+# check_entitlements <plist of entitlements> <where they are>
+check_entitlements() {
+  got=$(plutil -extract 'com\.apple\.developer\.nfc\.readersession\.formats' json -o - "$1" 2>/dev/null || true)
+  [ "$got" = '["TAG"]' ] || problem "$2: com.apple.developer.nfc.readersession.formats is ${got:-not there}, not [\"TAG\"]"
+  got=$(plutil -extract 'com\.apple\.developer\.associated-domains' json -o - "$1" 2>/dev/null || true)
+  if [ "$got" != "$(domains_json "$domains")" ]; then
+    problem "$2: the associated domains are ${got:-none}, not ${domains:-none}, the ones of the $build (ADR-0040)"
+  fi
+}
+if [ -n "$entitlements" ]; then
+  if [ -n "${CODE_SIGN_ENTITLEMENTS-}" ] && [ "$CODE_SIGN_ENTITLEMENTS" != "Config/$entitlements" ]; then
+    problem "the build is signed with $CODE_SIGN_ENTITLEMENTS, not Config/$entitlements, the entitlements of the $build"
+  fi
+  file=$config/$entitlements
+  if [ ! -f "$file" ]; then
+    problem "no Config/$entitlements, the entitlements of the $build"
+  else
+    check_entitlements "$file" "Config/$entitlements"
+    # One key a line, as plutil writes the top of a dictionary.
+    keys=$(plutil -convert xml1 -o - "$file" | sed -n 's|^	<key>\(.*\)</key>$|\1|p' | sort | tr '\n' ' ')
+    want_keys=com.apple.developer.nfc.readersession.formats
+    [ -z "$domains" ] || want_keys="com.apple.developer.associated-domains $want_keys"
+    [ "$keys" = "$want_keys " ] || problem "Config/$entitlements has the entitlements [ $keys], not [ $want_keys ]"
+  fi
+  if xcrun segedit "$app/$(plist CFBundleExecutable)" -extract __TEXT __entitlements "$tmp_entitlements" 2>/dev/null && [ -s "$tmp_entitlements" ]; then
+    check_entitlements "$tmp_entitlements" "the entitlements in the executable"
+  elif codesign -d --entitlements - --xml "$app" > "$tmp_entitlements" 2>/dev/null && [ -s "$tmp_entitlements" ]; then
+    check_entitlements "$tmp_entitlements" "the entitlements of the app's signature"
+  fi
+fi
+# The project file names the development build's file once (Debug) and the
+# other once for each of the other two (Release, TestApp), in the app's
+# target; the tests' target and Config/ name none.
+signed_with=$(grep -h -E 'CODE_SIGN_ENTITLEMENTS' "$project" "$config"/*.xcconfig | tr -d '\t' | sort | uniq -c | tr -s ' ' | sed 's/^ //')
+want_signed='2 CODE_SIGN_ENTITLEMENTS = Config/IamrealApp.entitlements;
+1 CODE_SIGN_ENTITLEMENTS = Config/IamrealAppDev.entitlements;'
+[ "$signed_with" = "$want_signed" ] || problem "the project does not sign Debug with Config/IamrealAppDev.entitlements and Release and TestApp with Config/IamrealApp.entitlements: $signed_with"
+
 # The library of the tests, in a Debug build for the simulator only: its
 # function, and the bytes device-core/ marks that library with. Xcode hands
 # the configuration to this script; run by hand, on an app whose
@@ -155,6 +219,12 @@ if [ "$platforms" != '["iPhoneSimulator"]' ] || [ "${CONFIGURATION-Debug}" != De
       problem "an app for $platforms, configuration ${CONFIGURATION-unknown}, is linked with the library of the tests: its executable has $mark"
     fi
   done
+fi
+
+# No scheme of its own (#92): the app is opened only by the https links of
+# its app domain.
+if plutil -extract CFBundleURLTypes json -o - "$app/Info.plist" > /dev/null 2>&1; then
+  problem "Info.plist registers a URL scheme (CFBundleURLTypes): the app is opened only by the links of its app domain (#92)"
 fi
 
 # iPhone only.
@@ -258,6 +328,12 @@ forbidden "a log or standard output (a release build writes none)" "$sources" \
   "$B(print|debugPrint|dump|NSLog|os_log|os_signpost|Logger|printf|puts|fputs|fwrite|fatalError|preconditionFailure|assertionFailure)\\(" \
   "$B(OSLog|stdout|stderr)([^A-Za-z0-9_]|\$)" \
   'FileHandle\.standard'
+# Opened by a link, the app is the app opened from the home screen: it
+# reads nothing of the address (#92, #527), so nobody's link can put an
+# account or anything else into it. These are the ways an app is handed
+# the address it was opened with, or a scheme of its own to be opened by.
+forbidden "the address the app was opened with read (#92)" "$sources" \
+  "$B(onOpenURL|onContinueUserActivity|handlesExternalEvents|NSUserActivity|NSUserActivityTypeBrowsingWeb|webpageURL|userActivity|URLContexts|openURLContexts|launchOptions|connectionOptions|UIApplicationDelegateAdaptor|UIApplicationDelegate|UIWindowSceneDelegate|UISceneDelegate|CFBundleURLTypes)([^A-Za-z0-9_]|\$)"
 forbidden "C reached another way than App/Bridge.h" "$sources" \
   "@_silgen_name|@_cdecl|@_extern|$B(dlsym|dlopen|bbapi)"
 for crate in checks prover; do
