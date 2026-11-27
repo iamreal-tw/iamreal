@@ -414,10 +414,8 @@ its pages read (`worker/`), whose ordinals its tests compare with Go's.
 - A card proof the server rejects under these rules is not appended, so it
   changes nothing, including `last_card_proof`.
 - **The server may decline to append a record these rules would accept.**
-  It can make the later switches of a slot subject to conditions of its own
-  ([`docs/api/card-proof.md`](../docs/api/card-proof.md)). That is a rule of
-  the server, not of the proof log: a record that is in the proof log is judged by
-  these rules only, and the limit that everyone can check is 5.
+  That is a rule of the server, not of the proof log: a record that is in
+  the proof log is judged by these rules only.
   Such a rule of the server is not covered by "Changing these rules": when
   it changes, no record already written changes.
 - Which platforms exist is a table of [`scope.md`](scope.md), not something

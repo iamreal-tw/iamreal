@@ -4,21 +4,25 @@
 //
 // What it is: a guard against slips and against plain changes to what
 // ADR-0029, ADR-0036, ADR-0025 (the daily re-verification holds no key of
-// the back end) and CONTRIBUTING.md ("部署會執行到的東西") require: only
-// the deploy job's upload step has the token, nothing before it in that job
-// runs code of the repository or of a package's install scripts; the keys
-// of the apps' uploads are only in the upload jobs, which build nothing
-// (upload-android.yml: in the env of the two steps that use them;
-// upload-ios.yml: in its last step); every action is one of a short list
-// at a fixed commit, and a pull request's checks can only read. It is a
-// whitelist: the files are read by a reader of a small part of YAML
-// (below) and anything outside that part is a problem, and the deploy
-// workflow's two jobs, the device-core and android jobs of checks.yml, the
-// jobs of cache.yml, the two jobs of upload-android.yml, the two jobs of
-// upload-ios.yml (only its upload job in the environment with the App Store
-// Connect key, and that key in its last step only), the two jobs of
-// reverify.yml, and the one job each of checks-ios.yml and
-// checks-circuits.yml, must be exactly the ones written here.
+// the back end) and CONTRIBUTING.md ("部署會執行到的東西") require: only the deploy
+// job's upload step has the token, nothing before it in that job runs code
+// of the repository or of a package's install scripts; the keys of the
+// apps' uploads are only in the upload jobs, which build nothing
+// (upload-android.yml, upload-android-test.yml: in the env of the two steps
+// that use them; upload-ios.yml, upload-ios-test.yml: the distribution
+// certificate and the profile in the env of the two steps that use them, the
+// App Store Connect key in the last step);
+// every action is one of a short list at a fixed commit, and a pull
+// request's checks can only read. It is a whitelist: the files are read by
+// a reader of a small part of YAML (below) and anything outside that part
+// is a problem, and the deploy workflow's two jobs, the device-core and
+// android jobs of checks.yml, the jobs of cache.yml, the two jobs of
+// upload-android.yml and of upload-android-test.yml, the two jobs of
+// upload-ios.yml and of upload-ios-test.yml (only the upload job in the
+// environment with the App Store Connect key, the distribution certificate
+// and the profile, and the key in its last step only), the two jobs of reverify.yml, and the one job each of
+// checks-ios.yml and checks-circuits.yml, must be exactly the ones written
+// here.
 //
 // What it is not: a replacement for reading every line of a change to
 // these files, which CONTRIBUTING.md requires. It does not see:
@@ -27,7 +31,7 @@
 // - what the commands of cache.yml leave in the caches it saves: they run
 //   the code of main (the builds of device-core/ and android/), and every
 //   later check that restores a cache builds on what that run left in it;
-// - what the scripts upload-android.yml runs do (android-version.sh,
+// - what the scripts the two Android uploads run do (android-version.sh,
 //   android-sign.sh, play-upload.sh): test/upload-android.test.ts runs them,
 //   with curl replaced, and Google Play's own answers are seen only on GitHub;
 // - what reverify.yml runs: the repository's Go (the build of
@@ -35,7 +39,7 @@
 //   read and no cache; test/workflows.test.ts runs the script with
 //   iamreal-verify replaced, and what the command itself checks is Go's
 //   to test (cmd/iamreal-verify);
-// - what the build job of upload-ios.yml makes (ios/build-core.sh,
+// - what the build jobs of upload-ios.yml and upload-ios-test.yml make (ios/build-core.sh,
 //   ios/archive.sh, Xcode and cargo on the repository's code): its archive
 //   is what gets signed and uploaded; ios/check-archive.sh looks for the
 //   known ways the wrong build could get in, not for everything;
@@ -590,15 +594,16 @@ export const ANDROID_JOB_STEPS: YamlMap = {
  * device-core/fetch-crs.sh, which check each SHA-256 before use, then runs
  * cargo in device-core/. Xcode links what that step left. The destination is
  * a simulator the runner's image has (.github/README.md gives the source).
- * The last two steps archive the store's build for an iPhone with the
- * script upload-ios.yml runs (#176), so that a pull request that breaks the
- * archive or its check is seen before the upload is started by hand; the
- * version and build are fixed ones, the check's test is given the same.
+ * The last steps archive the production app and the test app for an iPhone
+ * with the script upload-ios.yml and upload-ios-test.yml run (#176, #484),
+ * so that a pull request that breaks an archive or its check is seen before
+ * an upload is started by hand; the version and builds are fixed ones, each
+ * in its app's range, and the check's test is given the same.
  */
 const XCODEBUILD = 'xcodebuild -project IamrealApp.xcodeproj -scheme IamrealApp -destination "platform=iOS Simulator,name=iPhone 17" -derivedDataPath build';
 export const IOS_JOB_STEPS: YamlMap = {
   "runs-on": IOS_RUNNER,
-  "timeout-minutes": "30",
+  "timeout-minutes": "45",
   steps: [
     step("actions/checkout"),
     { name: "Install the Rust of rust-toolchain.toml, with the simulator's target", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-apple-ios-sim" },
@@ -609,9 +614,14 @@ export const IOS_JOB_STEPS: YamlMap = {
     { name: "Add the iPhone's target to the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup target add aarch64-apple-ios" },
     { name: "Build device-core/ for the iPhone", "working-directory": "ios", run: "./build-core.sh device" },
     {
-      name: "Archive the store's build as upload-ios.yml does, and check-archive.sh turns away what it should",
+      name: "Archive the production app as upload-ios.yml does, and check-archive.sh turns away what it should",
       "working-directory": "ios",
       run: "./archive.sh build/IamrealApp.xcarchive 1 2026.1.1 && ./check-archive-test.sh build/IamrealApp.xcarchive 2026.1.1 1",
+    },
+    {
+      name: "Archive the test app as upload-ios-test.yml does, and check-archive.sh turns away what it should",
+      "working-directory": "ios",
+      run: "./archive.sh --test-app build/IamrealApp-test.xcarchive 1000001 2026.1.1 && ./check-archive-test.sh --test-app build/IamrealApp-test.xcarchive 2026.1.1 1000001",
     },
   ],
 };
@@ -691,33 +701,66 @@ export const DEPLOY_JOBS: YamlMap = {
 };
 
 /**
- * The workflow that uploads the iPhone app to App Store Connect (#176,
- * ADR-0036, ADR-0037): started by hand only, one run at a time, none
- * cancelled; the group's name is no other workflow's. Its environment is the
- * one Xcode of checks-ios.yml.
+ * The two workflows that upload the iPhone app to App Store Connect (#176,
+ * #484, ADR-0036, ADR-0040): the production app's and the test app's, each
+ * its own so that their run numbers, which their build numbers come from,
+ * are counted apart. Each is started by hand only, one run at a time, none
+ * cancelled; the group's name is no other workflow's. Their environment is
+ * the one Xcode of checks-ios.yml.
  */
 export const IOS_UPLOAD_WORKFLOW = "upload-ios.yml";
+export const IOS_TEST_UPLOAD_WORKFLOW = "upload-ios-test.yml";
 export const IOS_UPLOAD_ON: Yaml = { workflow_dispatch: null };
 export const IOS_UPLOAD_GROUP = "upload-ios";
-/** The GitHub environment whose keys (App Store Connect's, #161; the Android upload key and Google Play's, #162) only main's runs get (ADR-0037). */
+export const IOS_TEST_UPLOAD_GROUP = "upload-ios-test";
+/** The GitHub environment whose keys (App Store Connect's, #161; the Android upload key and Google Play's, #162) only main's runs get (ADR-0037), the same for the two apps of each store (ADR-0040). */
 export const APP_ENVIRONMENT = "app-test";
 /**
- * Its two jobs, exactly. "build" has no key and runs the repository's code:
- * the core for an iPhone (ios/build-core.sh, which checks Barretenberg's
- * library and the CRS against their SHA-256), then ios/archive.sh, which
- * archives the store's build unsigned and checks it (ios/check-archive.sh).
- * It hands on the archive in a tar file, so that its files keep their modes
- * (an artifact does not keep them), with ios/ExportOptions.plist.
+ * The two jobs of each, exactly, the same but for the step that archives and
+ * the app the signing is for. "build" has no key and runs the repository's
+ * code: the core for an iPhone (ios/build-core.sh, which checks
+ * Barretenberg's library and the CRS against their SHA-256), then
+ * ios/archive.sh, which archives the app unsigned and checks it
+ * (ios/check-archive.sh): the production app with the run number as its
+ * build, or with --test-app the test app with the run number and 1,000,000
+ * (ADR-0040). The identifier is the configuration's. The archive is unsigned
+ * and so carries no entitlements, and the export signs only with what it
+ * finds on the app (#143: the first signed app had no NFC tag reading), so
+ * the app is then signed ad hoc, with no key and no team, with
+ * ios/Config/IamrealApp.entitlements. It hands on the archive in a tar file,
+ * so that its files keep their modes (an artifact does not keep them), with
+ * ios/ExportOptions.plist.
  * "upload" is the only job in the environment app-test. It does not check
  * out the repository and runs no script of it: it unpacks the tar file and
- * runs Xcode's export, which signs and uploads. The archive is unsigned and
- * names no team, so the export options are given the team the environment
- * holds as a variable, APPLE_TEAM_ID (not a secret: every signed app shows
- * it). Only the last step has the key: it writes the key to a file only it
- * reads, and xcodebuild reads it.
+ * runs Xcode's export, which signs and uploads. The App Store Connect key, a
+ * team key with the Developer role, may not sign with a certificate Apple
+ * keeps (#143), so the export signs by hand (ios/ExportOptions.plist,
+ * signingStyle manual) with the Apple Distribution certificate and the App
+ * Store profile the operator made, from the environment (ADR-0036):
+ * - the team, the environment's variable APPLE_TEAM_ID (not a secret: every
+ *   signed app shows it), goes into the export options;
+ * - the certificate and its key go into a keychain of this job's own, with a
+ *   password made for the run, where only codesign may use the key; the
+ *   .p12 is removed once imported. The runner is GitHub's and is destroyed
+ *   after the job, so nothing removes the keychain;
+ * - the profile must be for this app's identifier under the team and allow
+ *   the NFC tag reading the app asks for (ios/Config/IamrealApp.entitlements),
+ *   and the export options name it for the identifier;
+ * - the app is signed once without uploading, and the signed app must carry
+ *   the NFC entitlement, exactly TAG as the app's entitlements file has it,
+ *   no more and no less: what Xcode's signature carries is first seen here
+ *   (ios/README.md);
+ * - only the last step has the App Store Connect key: it writes the key to a
+ *   file only it reads, and xcodebuild signs again and uploads.
+ * Each secret is in the env of the one step that uses it.
  */
 const IOS_UPLOAD_ARTIFACT: YamlMap = { name: "ios-upload", path: "${{ runner.temp }}/ios-upload" };
-export const IOS_UPLOAD_JOBS: YamlMap = {
+const IOS_KEYCHAIN = '"$RUNNER_TEMP/signing.keychain-db"';
+const IOS_PROFILE = '"$RUNNER_TEMP/profile.plist"';
+const IOS_MOBILEPROVISION = '"$RUNNER_TEMP/app.mobileprovision"';
+const IOS_ENTITLEMENTS = '"$RUNNER_TEMP/entitlements.plist"';
+const IOS_ARCHIVE = '-archivePath "$RUNNER_TEMP/IamrealApp.xcarchive"';
+const iosUploadJobs = (app: { archive: { name: string; run: string }; identifier: string; profileSecret: string }): YamlMap => ({
   build: {
     "runs-on": IOS_RUNNER,
     "timeout-minutes": "30",
@@ -725,7 +768,14 @@ export const IOS_UPLOAD_JOBS: YamlMap = {
       step("actions/checkout"),
       { name: "Install the Rust of rust-toolchain.toml, with the iPhone's target", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-apple-ios" },
       { name: "Build device-core/ for the iPhone", "working-directory": "ios", run: "./build-core.sh device" },
-      { name: "Archive the store's build and check it", "working-directory": "ios", run: './archive.sh "$RUNNER_TEMP/IamrealApp.xcarchive" "$GITHUB_RUN_NUMBER"' },
+      { name: app.archive.name, "working-directory": "ios", run: app.archive.run },
+      {
+        name: "Sign the app ad hoc with its entitlements, for the export to read",
+        run: [
+          'codesign --force --sign - --timestamp=none --entitlements ios/Config/IamrealApp.entitlements "$RUNNER_TEMP/IamrealApp.xcarchive/Products/Applications/IamrealApp.app"',
+          'codesign --verify "$RUNNER_TEMP/IamrealApp.xcarchive/Products/Applications/IamrealApp.app"',
+        ].join(" && "),
+      },
       {
         name: "Pack the archive, keeping its files' modes, with the export options",
         run: 'mkdir "$RUNNER_TEMP/ios-upload" && tar -C "$RUNNER_TEMP" -cf "$RUNNER_TEMP/ios-upload/IamrealApp.xcarchive.tar" IamrealApp.xcarchive && cp ios/ExportOptions.plist "$RUNNER_TEMP/ios-upload/"',
@@ -747,6 +797,52 @@ export const IOS_UPLOAD_JOBS: YamlMap = {
         run: 'test -n "$APPLE_TEAM_ID" && plutil -replace teamID -string "$APPLE_TEAM_ID" "$RUNNER_TEMP/ios-upload/ExportOptions.plist"',
       },
       {
+        name: "Put the distribution certificate in a keychain of this job's own",
+        env: { IOS_DIST_P12_BASE64: "${{ secrets.IOS_DIST_P12_BASE64 }}", IOS_DIST_P12_PASSWORD: "${{ secrets.IOS_DIST_P12_PASSWORD }}" },
+        run: [
+          "umask 077",
+          `printf '%s' "$IOS_DIST_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dist.p12"`,
+          'password="$(openssl rand -hex 24)"',
+          `security create-keychain -p "$password" ${IOS_KEYCHAIN}`,
+          `security set-keychain-settings -lut 21600 ${IOS_KEYCHAIN}`,
+          `security unlock-keychain -p "$password" ${IOS_KEYCHAIN}`,
+          `security import "$RUNNER_TEMP/dist.p12" -k ${IOS_KEYCHAIN} -f pkcs12 -P "$IOS_DIST_P12_PASSWORD" -T /usr/bin/codesign`,
+          'rm "$RUNNER_TEMP/dist.p12"',
+          `security set-key-partition-list -S 'apple-tool:,apple:' -s -k "$password" ${IOS_KEYCHAIN} > /dev/null`,
+          `security list-keychains -d user -s ${IOS_KEYCHAIN}`,
+          `security find-identity -v -p codesigning ${IOS_KEYCHAIN} | grep -q 'Apple Distribution'`,
+        ].join(" && "),
+      },
+      {
+        name: `Install the App Store profile of ${app.identifier} and name it in the export options`,
+        env: { [app.profileSecret]: `\${{ secrets.${app.profileSecret} }}`, APPLE_TEAM_ID: "${{ vars.APPLE_TEAM_ID }}" },
+        run: [
+          `printf '%s' "$${app.profileSecret}" | base64 --decode > ${IOS_MOBILEPROVISION}`,
+          `security cms -D -i ${IOS_MOBILEPROVISION} -o ${IOS_PROFILE}`,
+          `test "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' ${IOS_PROFILE})" = "$APPLE_TEAM_ID.${app.identifier}"`,
+          `/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.nfc.readersession.formats' ${IOS_PROFILE} | grep -qw TAG`,
+          `uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' ${IOS_PROFILE})"`,
+          'mkdir -p "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" "$HOME/Library/MobileDevice/Provisioning Profiles"',
+          `cp ${IOS_MOBILEPROVISION} "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$uuid.mobileprovision"`,
+          `cp ${IOS_MOBILEPROVISION} "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision"`,
+          `/usr/libexec/PlistBuddy -c 'Add :provisioningProfiles dict' -c "Add :provisioningProfiles:${app.identifier} string $uuid" "$RUNNER_TEMP/ios-upload/ExportOptions.plist"`,
+        ].join(" && "),
+      },
+      {
+        name: "Sign without uploading, and check that the app has its NFC entitlement",
+        env: { APPLE_TEAM_ID: "${{ vars.APPLE_TEAM_ID }}" },
+        run: [
+          'cp "$RUNNER_TEMP/ios-upload/ExportOptions.plist" "$RUNNER_TEMP/check.plist"',
+          'plutil -replace destination -string export "$RUNNER_TEMP/check.plist"',
+          `xcodebuild -exportArchive ${IOS_ARCHIVE} -exportOptionsPlist "$RUNNER_TEMP/check.plist" -exportPath "$RUNNER_TEMP/check"`,
+          'unzip -q "$RUNNER_TEMP"/check/*.ipa -d "$RUNNER_TEMP/ipa"',
+          `codesign -d --entitlements - --xml "$RUNNER_TEMP/ipa/Payload/IamrealApp.app" > ${IOS_ENTITLEMENTS}`,
+          `test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.nfc.readersession.formats:0' ${IOS_ENTITLEMENTS})" = TAG`,
+          `! /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.nfc.readersession.formats:1' ${IOS_ENTITLEMENTS} > /dev/null 2>&1`,
+          `test "$(/usr/libexec/PlistBuddy -c 'Print :application-identifier' ${IOS_ENTITLEMENTS})" = "$APPLE_TEAM_ID.${app.identifier}"`,
+        ].join(" && "),
+      },
+      {
         name: "Sign and upload to App Store Connect",
         env: {
           APP_STORE_CONNECT_API_KEY_P8: "${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}",
@@ -756,12 +852,22 @@ export const IOS_UPLOAD_JOBS: YamlMap = {
         run: [
           "umask 077",
           `printf '%s\\n' "$APP_STORE_CONNECT_API_KEY_P8" > "$RUNNER_TEMP/key.p8"`,
-          'xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/IamrealApp.xcarchive" -exportOptionsPlist "$RUNNER_TEMP/ios-upload/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" -allowProvisioningUpdates -authenticationKeyPath "$RUNNER_TEMP/key.p8" -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID"',
+          `xcodebuild -exportArchive ${IOS_ARCHIVE} -exportOptionsPlist "$RUNNER_TEMP/ios-upload/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" -allowProvisioningUpdates -authenticationKeyPath "$RUNNER_TEMP/key.p8" -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID"`,
         ].join(" && "),
       },
     ],
   },
-};
+});
+export const IOS_UPLOAD_JOBS: YamlMap = iosUploadJobs({
+  archive: { name: "Archive the production app and check it", run: './archive.sh "$RUNNER_TEMP/IamrealApp.xcarchive" "$GITHUB_RUN_NUMBER"' },
+  identifier: "tw.iamreal.app",
+  profileSecret: "IOS_APPSTORE_PROFILE_BASE64",
+});
+export const IOS_TEST_UPLOAD_JOBS: YamlMap = iosUploadJobs({
+  archive: { name: "Archive the test app and check it", run: './archive.sh --test-app "$RUNNER_TEMP/IamrealApp.xcarchive" "$((GITHUB_RUN_NUMBER + 1000000))"' },
+  identifier: "tw.iamreal.app.test",
+  profileSecret: "IOS_TEST_APPSTORE_PROFILE_BASE64",
+});
 
 /**
  * reverify.yml (#421, ADR-0025, ADR-0028): the operator's daily
@@ -854,87 +960,147 @@ export const CACHE_JOBS: YamlMap = {
 };
 
 /**
- * upload-android.yml (#175, ADR-0036, ADR-0037): builds the store's build of
- * the Android app (tw.iamreal.app) and puts it on Google Play's internal
- * testing track, when the operator starts it by hand (workflow_dispatch) on
- * main. Its two jobs, exactly:
+ * upload-android.yml (#175, ADR-0036, ADR-0040) and upload-android-test.yml
+ * (#483): build an app of Android, the production app (tw.iamreal.app) and
+ * the test app (tw.iamreal.app.test), and put it on its internal testing
+ * track of Google Play, when the operator starts it by hand
+ * (workflow_dispatch) on main. A file for each app, so that their runs are
+ * counted apart (the build number, ADR-0040). The two jobs of each, exactly,
+ * the same but for the app (androidUploadJobs):
  *
  * - build: no secret. It stops first when the run is not on main. Then
  *   the version (.github/workflows/android-version.sh: the date in Taiwan
- *   and the run's number), the steps of the android check up to Gradle, and
- *   `bundleRelease` with that version, which runs the checks of the bundle
- *   (android/app/build.gradle.kts: checkBundle, checkManifest,
- *   checkLibraries); it hands the bundle on as an artifact.
+ *   and the run's number, plus the app's number), the steps of the android
+ *   check up to Gradle, and the app's bundle task with that version, which
+ *   runs the checks of the bundle (android/app/build.gradle.kts:
+ *   checkBundle, checkManifest, checkLibraries); it hands the bundle on as
+ *   an artifact.
  * - upload: `environment: app-test`, whose secrets GitHub gives only to jobs
- *   on main (#162). It runs no build: it signs the bundle the build job
- *   checked with the upload key (android-sign.sh), keeps the signed bundle as
- *   an artifact (a new app's first build goes up by hand, from Play Console:
- *   .github/README.md), then uploads it (play-upload.sh). Each secret is in the
- *   env of the one step that uses it.
+ *   on main (#162), the same for the two apps (ADR-0040). It runs no build:
+ *   it signs the bundle the build job checked with the upload key
+ *   (android-sign.sh), keeps the signed bundle as an artifact (for when the
+ *   API does not take it: .github/README.md), then uploads it to the app's
+ *   package (play-upload.sh). Each secret is in the env of the one step that
+ *   uses it.
  *
  * Its token reads the code only, like every workflow's (`permissions`), and
  * it has no cache (`cache-mode: none`).
  */
 export const UPLOAD_ANDROID_WORKFLOW = "upload-android.yml";
+export const UPLOAD_ANDROID_TEST_WORKFLOW = "upload-android-test.yml";
 export const UPLOAD_ANDROID_ON: Yaml = { workflow_dispatch: null };
 export const UPLOAD_ANDROID_GROUP = "upload-android";
-/** The scripts of .github/workflows/ that upload-android.yml runs. */
+export const UPLOAD_ANDROID_TEST_GROUP = "upload-android-test";
+/** The scripts of .github/workflows/ that the two upload workflows run. */
 export const UPLOAD_ANDROID_SCRIPTS: readonly string[] = ["android-version.sh", "android-sign.sh", "play-upload.sh"];
-/** Where the build job leaves the bundle (AGP's place for it), and where the upload job puts the signed one. */
-const UNSIGNED_BUNDLE: YamlMap = { name: "android-bundle", path: "android/app/build/outputs/bundle/release/app-release.aab" };
-const SIGNED_BUNDLE = "signed/app-release.aab";
-export const UPLOAD_ANDROID_JOBS: YamlMap = {
-  build: {
-    "runs-on": "ubuntu-24.04",
-    "timeout-minutes": "30",
-    steps: [
-      { name: "Only from main", run: 'test "$GITHUB_REF" = refs/heads/main' },
-      step("actions/checkout"),
-      {
-        name: "The version, the date in Taiwan, and the run's number",
-        id: "version",
-        run: 'bash .github/workflows/android-version.sh "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"',
-      },
-      ...ANDROID_SETUP,
-      {
-        name: "gradlew bundleRelease, with the checks of the bundle",
-        "working-directory": "android",
-        env: { VERSION_NAME: "${{ steps.version.outputs.name }}", VERSION_CODE: "${{ steps.version.outputs.code }}" },
-        run: 'JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleRelease -Piamreal.versionName="$VERSION_NAME" -Piamreal.versionCode="$VERSION_CODE"',
-      },
-      { uses: uses("actions/upload-artifact"), with: { ...UNSIGNED_BUNDLE, "if-no-files-found": "error" } },
-    ],
-  },
-  upload: {
-    needs: "build",
-    "runs-on": "ubuntu-24.04",
-    "timeout-minutes": "20",
-    environment: APP_ENVIRONMENT,
-    steps: [
-      step("actions/checkout"),
-      { uses: uses("actions/download-artifact"), with: { name: UNSIGNED_BUNDLE.name!, path: "${{ runner.temp }}/bundle" } },
-      {
-        name: "Sign the bundle with the upload key",
-        env: { ANDROID_UPLOAD_KEYSTORE_BASE64: "${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}", ANDROID_UPLOAD_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}" },
-        run: `JAVA_HOME="$JAVA_HOME_17_X64" bash .github/workflows/android-sign.sh "$RUNNER_TEMP/bundle/app-release.aab" "$RUNNER_TEMP/${SIGNED_BUNDLE}"`,
-      },
-      { uses: uses("actions/upload-artifact"), with: { name: "android-bundle-signed", path: `\${{ runner.temp }}/${SIGNED_BUNDLE}`, "if-no-files-found": "error" } },
-      {
-        name: "Upload to Google Play's internal testing",
-        env: { PLAY_SERVICE_ACCOUNT_JSON: "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" },
-        run: `bash .github/workflows/play-upload.sh "$RUNNER_TEMP/${SIGNED_BUNDLE}"`,
-      },
-    ],
-  },
-};
+
+/** What tells the two apps' uploads apart. */
+interface AndroidApp {
+  /** The build type (android/app/build.gradle.kts), and so the bundle task and where AGP leaves the bundle. */
+  buildType: string;
+  /** The step's name for the version and the build task. */
+  versionStep: string;
+  buildStep: string;
+  /** The build-number offset android-version.sh adds to the run's number (ADR-0040). */
+  offset: string;
+  /** The artifacts. */
+  artifact: string;
+  /** The step's name for the upload, and the package on Google Play. */
+  uploadStep: string;
+  packageName: string;
+}
+
+/** The two jobs of an app's upload workflow. */
+function androidUploadJobs(app: AndroidApp): YamlMap {
+  const task = `bundle${app.buildType[0]!.toUpperCase()}${app.buildType.slice(1)}`;
+  const file = `app-${app.buildType}.aab`;
+  // Where the build job leaves the bundle (AGP's place for it), and where the upload job puts the signed one.
+  const unsigned: YamlMap = { name: app.artifact, path: `android/app/build/outputs/bundle/${app.buildType}/${file}` };
+  const signed = `signed/${file}`;
+  return {
+    build: {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": "30",
+      steps: [
+        { name: "Only from main", run: 'test "$GITHUB_REF" = refs/heads/main' },
+        step("actions/checkout"),
+        {
+          name: app.versionStep,
+          id: "version",
+          run: `bash .github/workflows/android-version.sh "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" ${app.offset} >> "$GITHUB_OUTPUT"`,
+        },
+        ...ANDROID_SETUP,
+        {
+          name: app.buildStep,
+          "working-directory": "android",
+          env: { VERSION_NAME: "${{ steps.version.outputs.name }}", VERSION_CODE: "${{ steps.version.outputs.code }}" },
+          run: `JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon ${task} -Piamreal.versionName="$VERSION_NAME" -Piamreal.versionCode="$VERSION_CODE"`,
+        },
+        { uses: uses("actions/upload-artifact"), with: { ...unsigned, "if-no-files-found": "error" } },
+      ],
+    },
+    upload: {
+      needs: "build",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": "20",
+      environment: APP_ENVIRONMENT,
+      steps: [
+        step("actions/checkout"),
+        { uses: uses("actions/download-artifact"), with: { name: app.artifact, path: "${{ runner.temp }}/bundle" } },
+        {
+          name: "Sign the bundle with the upload key",
+          env: { ANDROID_UPLOAD_KEYSTORE_BASE64: "${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}", ANDROID_UPLOAD_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}" },
+          run: `JAVA_HOME="$JAVA_HOME_17_X64" bash .github/workflows/android-sign.sh "$RUNNER_TEMP/bundle/${file}" "$RUNNER_TEMP/${signed}"`,
+        },
+        { uses: uses("actions/upload-artifact"), with: { name: `${app.artifact}-signed`, path: `\${{ runner.temp }}/${signed}`, "if-no-files-found": "error" } },
+        {
+          name: app.uploadStep,
+          env: { PLAY_SERVICE_ACCOUNT_JSON: "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" },
+          run: `bash .github/workflows/play-upload.sh ${app.packageName} "$RUNNER_TEMP/${signed}"`,
+        },
+      ],
+    },
+  };
+}
+
+export const UPLOAD_ANDROID_JOBS: YamlMap = androidUploadJobs({
+  buildType: "release",
+  versionStep: "The version, the date in Taiwan, and the run's number",
+  buildStep: "gradlew bundleRelease, with the checks of the bundle",
+  offset: "0",
+  artifact: "android-bundle",
+  uploadStep: "Upload to Google Play's internal testing",
+  packageName: "tw.iamreal.app",
+});
+export const UPLOAD_ANDROID_TEST_JOBS: YamlMap = androidUploadJobs({
+  buildType: "trial",
+  versionStep: "The version, the date in Taiwan, and the run's number plus 1,000,000",
+  buildStep: "gradlew bundleTrial, the test app, with the checks of the bundle",
+  offset: "1000000",
+  artifact: "android-test-bundle",
+  uploadStep: "Upload to Google Play's internal testing of the test app",
+  packageName: "tw.iamreal.app.test",
+});
 
 /** The only lines of all the workflows with the word "secrets" in them, comments included. */
 export const SECRET_LINES: readonly string[] = [
   "deploy-test.yml:          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_TEST }}",
   "deploy-test.yml:          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+  "upload-android-test.yml:          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}",
+  "upload-android-test.yml:          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}",
+  "upload-android-test.yml:          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}",
   "upload-android.yml:          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}",
   "upload-android.yml:          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}",
   "upload-android.yml:          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}",
+  "upload-ios-test.yml:          IOS_DIST_P12_BASE64: ${{ secrets.IOS_DIST_P12_BASE64 }}",
+  "upload-ios-test.yml:          IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}",
+  "upload-ios-test.yml:          IOS_TEST_APPSTORE_PROFILE_BASE64: ${{ secrets.IOS_TEST_APPSTORE_PROFILE_BASE64 }}",
+  "upload-ios-test.yml:          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}",
+  "upload-ios-test.yml:          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}",
+  "upload-ios-test.yml:          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}",
+  "upload-ios.yml:          IOS_DIST_P12_BASE64: ${{ secrets.IOS_DIST_P12_BASE64 }}",
+  "upload-ios.yml:          IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}",
+  "upload-ios.yml:          IOS_APPSTORE_PROFILE_BASE64: ${{ secrets.IOS_APPSTORE_PROFILE_BASE64 }}",
   "upload-ios.yml:          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}",
   "upload-ios.yml:          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}",
   "upload-ios.yml:          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}",
@@ -1375,7 +1541,9 @@ export const WORKFLOW_FILES: readonly string[] = [
   "checks.yml",
   "deploy-test.yml",
   REVERIFY_WORKFLOW,
+  UPLOAD_ANDROID_TEST_WORKFLOW,
   UPLOAD_ANDROID_WORKFLOW,
+  IOS_TEST_UPLOAD_WORKFLOW,
   IOS_UPLOAD_WORKFLOW,
   WATCH_WORKFLOW,
 ];
@@ -1445,20 +1613,22 @@ export function workflowProblems(files: Readonly<Record<string, string>>, checkP
       if (!same(doc.jobs, REVERIFY_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
-    if (f === UPLOAD_ANDROID_WORKFLOW) {
+    if (f === UPLOAD_ANDROID_WORKFLOW || f === UPLOAD_ANDROID_TEST_WORKFLOW) {
+      const [group, jobs] = f === UPLOAD_ANDROID_WORKFLOW ? [UPLOAD_ANDROID_GROUP, UPLOAD_ANDROID_JOBS] : [UPLOAD_ANDROID_TEST_GROUP, UPLOAD_ANDROID_TEST_JOBS];
       // By hand only: no push, pull request or other workflow starts an upload.
       if (!same(doc.on, UPLOAD_ANDROID_ON)) p(`not triggered by hand (workflow_dispatch) only: ${JSON.stringify(doc.on)}`);
-      if (!same(doc.concurrency, { group: UPLOAD_ANDROID_GROUP, "cancel-in-progress": "false" })) p(`concurrency is not group ${UPLOAD_ANDROID_GROUP}, one run at a time and none cancelled`);
+      if (!same(doc.concurrency, { group, "cancel-in-progress": "false" })) p(`concurrency is not group ${group}, one run at a time and none cancelled`);
       if (doc.env !== undefined) p("an env at the top");
-      if (!same(doc.jobs, UPLOAD_ANDROID_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
+      if (!same(doc.jobs, jobs)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
-    if (f === IOS_UPLOAD_WORKFLOW) {
+    if (f === IOS_UPLOAD_WORKFLOW || f === IOS_TEST_UPLOAD_WORKFLOW) {
+      const [group, jobs] = f === IOS_UPLOAD_WORKFLOW ? [IOS_UPLOAD_GROUP, IOS_UPLOAD_JOBS] : [IOS_TEST_UPLOAD_GROUP, IOS_TEST_UPLOAD_JOBS];
       // Started by hand only: not on a push, a pull request or any event a change can bring about.
       if (!same(doc.on, IOS_UPLOAD_ON)) p(`not triggered by hand only: ${JSON.stringify(doc.on)}`);
       if (!same(doc.env, { DEVELOPER_DIR: IOS_DEVELOPER_DIR })) p("the env at the top is not the one in test/workflows.ts");
-      if (!same(doc.concurrency, { group: IOS_UPLOAD_GROUP, "cancel-in-progress": "false" })) p(`concurrency is not group ${IOS_UPLOAD_GROUP}, one run at a time and none cancelled`);
-      if (!same(doc.jobs, IOS_UPLOAD_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
+      if (!same(doc.concurrency, { group, "cancel-in-progress": "false" })) p(`concurrency is not group ${group}, one run at a time and none cancelled`);
+      if (!same(doc.jobs, jobs)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
     if (f === WATCH_WORKFLOW) {

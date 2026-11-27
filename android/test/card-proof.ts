@@ -1349,11 +1349,12 @@ const STORE_PAGE = "dat=https://play.google.com/store/apps/details?id=tw.iamreal
 
 /**
  * The minimum app version and a phone without NFC (issue #171; ADR-0035; design/copy/card-proof.md, "1. 開始之前", app). The fake
- * build is build 1; the test writes the `min_app` the app is given.
+ * build is build 2,000,000, as the development build (app/build.gradle.kts, buildNumbers); the test writes the `min_app` the app
+ * is given, one above it.
  */
 async function oldVersionAndNoNfc(): Promise<void> {
   console.log("\nthe minimum app version, a config that cannot be read or does not come, a phone without NFC");
-  const bound = (from: string): { value: unknown } => ({ value: { android: { build: 2, from }, ios: { build: 1, from: today } } });
+  const bound = (from: string): { value: unknown } => ({ value: { android: { build: 2_000_001, from }, ios: { build: 1, from: today } } });
   const soon = say("app_before.update_soon", { min_app_from: tomorrow, store: STORE });
   const update = say("app_before.update", { store: STORE });
   const domain = `127.0.0.1:${DEVICE_PORT}`;

@@ -44,20 +44,55 @@ else
   failed=1
 fi
 
-# The app as built is a Debug build: the development build (ADR-0037).
+# The app as built is a Debug build: the development build (ADR-0040).
 copy
 plutil -replace CFBundleIdentifier -string tw.iamreal.app "$tmp/app/IamrealApp.app/Info.plist"
-expect "the store's identifier in a Debug build" "the identifier is tw.iamreal.app, not tw.iamreal.app.dev"
+expect "the production app's identifier in a Debug build" "the identifier is tw.iamreal.app, not tw.iamreal.app.dev"
 
 copy
-expect "the development build's identifier in a Release build" "the identifier is tw.iamreal.app.dev, not tw.iamreal.app" CONFIGURATION=Release
+plutil -replace CFBundleIdentifier -string tw.iamreal.app.test "$tmp/app/IamrealApp.app/Info.plist"
+expect "the test app's identifier in a Debug build" "the identifier is tw.iamreal.app.test, not tw.iamreal.app.dev"
+
+copy
+expect "the development build's identifier in a Release build" "the identifier is tw.iamreal.app.dev, not tw.iamreal.app:" CONFIGURATION=Release
+
+copy
+expect "the development build's identifier in a TestApp build" "the identifier is tw.iamreal.app.dev, not tw.iamreal.app.test" CONFIGURATION=TestApp
 
 copy
 plutil -replace CFBundleIdentifier -string tw.iamreal.app.other "$tmp/app/IamrealApp.app/Info.plist"
-expect "an identifier of neither build" "the identifier is tw.iamreal.app.other"
+expect "an identifier of no app" "the identifier is tw.iamreal.app.other"
 
 copy
-expect "a configuration that is neither build" "the configuration is Profile" CONFIGURATION=Profile
+expect "a configuration of no app" "the configuration is Profile" CONFIGURATION=Profile
+
+# The test app with its own identifier and name: the other app's name, and a build number out of its range.
+as_test_app() {
+  copy
+  plutil -replace CFBundleIdentifier -string tw.iamreal.app.test "$tmp/app/IamrealApp.app/Info.plist"
+  plutil -replace CFBundleDisplayName -string "島民證明 測試" "$tmp/app/IamrealApp.app/Info.plist"
+  plutil -replace CFBundleVersion -string "$1" "$tmp/app/IamrealApp.app/Info.plist"
+}
+as_test_app 1000001
+plutil -replace CFBundleDisplayName -string "島民證明 封測" "$tmp/app/IamrealApp.app/Info.plist"
+expect "the production app's name in a TestApp build" "the name under the icon is 島民證明 封測, not \"島民證明 測試\"" CONFIGURATION=TestApp
+as_test_app 999999
+expect "a test app's build below 1,000,000" "the build is 999999, not from 1000000 to 1999999" CONFIGURATION=TestApp
+as_test_app 2000000
+expect "a test app's build of 2,000,000" "the build is 2000000, not from 1000000 to 1999999" CONFIGURATION=TestApp
+as_test_app 1000001
+printf 'https://iamreal.tw\0' >> "$tmp/app/IamrealApp.app/IamrealApp"
+expect "the production site in a TestApp build" "the executable has the address of the production site, https://iamreal.tw" CONFIGURATION=TestApp
+
+# The production app's build below 1,000,000, the development build's 2,000,000.
+copy
+plutil -replace CFBundleIdentifier -string tw.iamreal.app "$tmp/app/IamrealApp.app/Info.plist"
+plutil -replace CFBundleDisplayName -string "島民證明 封測" "$tmp/app/IamrealApp.app/Info.plist"
+plutil -replace CFBundleVersion -string 1000000 "$tmp/app/IamrealApp.app/Info.plist"
+expect "a production app's build of 1,000,000" "the build is 1000000, not from 1 to 999999" CONFIGURATION=Release
+copy
+plutil -replace CFBundleVersion -string 1 "$tmp/app/IamrealApp.app/Info.plist"
+expect "a development build's build of 1" "the build is 1, not 2000000,"
 
 copy
 plutil -replace CFBundleDisplayName -string "島民證明" "$tmp/app/IamrealApp.app/Info.plist"

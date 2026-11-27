@@ -12,7 +12,7 @@
 - **送 PIN 時掉線**：卡片從來沒有接受過這個 PIN 時，app 不重送，清掉 PIN，請持卡人再輸入。卡片回了 app 不認得的答覆時也一樣。卡片接受過（之後才掉線）的，PIN 是對的，留著重送：`card/Card.kt` 的 `pinAccepted`，`flow/CardProof.kt` 的 `sign`
 - **PIN 不正確**：清掉 PIN，第 3 步重新輸入；發生在第三次感應時回到開頭
 - **PIN 在手機上滿 5 分鐘**：從 PIN 的第一個字進到欄位算起（還在欄位裡的也算），清掉 PIN 和做到一半的過卡，回到第 1 步，最上面寫原因。app 切到背景再回來時、按「確認卡片」和最後一次感應之前各看一次時間；已經在等卡片的那一次感應會做完。手機的時鐘往回調不會延長
-- **最低版本**（`config` 的 `min_app`，ADR-0035、`spec/min-app.md`）：怎麼判斷在核心（`idc_min_app`），拿 app 自己的 `versionCode` 和手機的時鐘去問。打開 app、每次回到第 1 步都看：比最低版本舊、還沒到起算日，第 1 步最上面提醒，照常過卡；起算日當天起整個第 1 步換掉，只剩開 Google Play 的按鈕。三次感應之前各再看一次（`flow/CardProof.kt` 的 `checkMinApp`）：過卡做到一半到了起算日，也在等卡片之前停下。這一欄讀不懂時不往下，和平台表讀不懂相同
+- **最低版本**（`config` 的 `min_app`，ADR-0035、`spec/min-app.md`）：怎麼判斷在核心（`idc_min_app`），拿 app 自己的 `versionCode` 和手機的時鐘去問。打開 app、每次回到第 1 步都看：比最低版本舊、還沒到起算日，第 1 步最上面提醒，照常過卡；起算日當天起整個第 1 步換掉，只剩開 Google Play 的按鈕（開這個 app 自己的商店頁；開發用 build 沒有這個按鈕，「三種 app」）。三次感應之前各再看一次（`flow/CardProof.kt` 的 `checkMinApp`）：過卡做到一半到了起算日，也在等卡片之前停下。這一欄讀不懂時不往下，和平台表讀不懂相同
 - **沒有 NFC 的手機**：整個第 1 步換掉。NFC 只是關著的，在按了「感應卡片」之後說，給開系統設定的按鈕
 
 還沒有的：
@@ -94,29 +94,33 @@ app 的圖示是記號（紅色的自然人憑證和墨色的台灣，`web/src/u
 - **兩顆按鈕左右並排**，在示範上面，和示範的第一個畫面相同：「複製證明連結」和「打開 Threads」。第二顆寫短的字才排得進一行，它照舊打開這個帳號的個人檔案；對報讀器唸完整的「打開 @alice 的 Threads 個人檔案」。並排時每一顆只有一半寬，字在半寬裡放不下一行的時候（系統字級放大），改成上下排（`ui/Widgets.kt` 的 `SideBySide`；一步最下面的按鈕也用它，那裡往下走的那一顆在右，`Actions`）
 - 模擬器上的過卡測試檢查：示範給報讀器的那一句、右下角小字的兩個字樣和 `design/copy/` 逐字相同，按「停止播放」後變成「再看一次」，兩顆按鈕左右並排而且在示範上面，「打開 Threads」給報讀器的是帶帳號的那一句；短版的「重新掛上連結」在「下一步」左邊，完整的那一頁按「上一步」回到短版。加上 `IAMREAL_RECORD=<檔名>.webm` 時，另外把示範從頭播一次、用模擬器主機這一側的錄影存下來（模擬器裡的 `screenrecord` 讀不到畫面）
 
-## 兩種 build
+## 三種 app
 
-同一個 app 有兩種 build（ADR-0037），識別碼不同，可以同時裝在一支手機上：
+Android 有三種 app（ADR-0040），識別碼不同，三個可以同時裝在一支手機上：
 
-| | 正式 app | 開發用 build |
-|---|---|---|
-| build type | `release` | `debug` |
-| 識別碼 | `tw.iamreal.app` | `tw.iamreal.app.dev`（`applicationIdSuffix = ".dev"`） |
-| 圖示下面的名稱（`design/copy/app.md`） | 島民證明 封測（`src/main/res/`） | 島民證明 dev（`src/debug/res/`） |
-| 連哪裡 | 上線前：`https://test.iamreal.tw`、`https://test-data.iamreal.tw` | 同左，上線後也是 |
-| 簽的場合字串 | 上線前：`iamreal-test:public:0` | 同左，上線後也是 |
-| 怎麼裝 | Google Play 的內部測試（營運者手動觸發 [`upload-android.yml`](../.github/workflows/upload-android.yml) 上傳，ADR-0036、ADR-0037；「上傳到 Google Play」） | 用線裝（「怎麼用線裝到手機」） |
-| 版本 | 上傳時給：台灣的日期（`2026.11.5`，同一天相同）；`versionCode` 是工作流程執行的編號 | `1`、`dev` |
+| | 正式 app | 測試 app | 開發用 build |
+|---|---|---|---|
+| build type | `release` | `trial`（AGP 不收 `test` 開頭的 build type 名稱） | `debug` |
+| 識別碼 | `tw.iamreal.app` | `tw.iamreal.app.test`（`applicationIdSuffix = ".test"`） | `tw.iamreal.app.dev`（`applicationIdSuffix = ".dev"`） |
+| 圖示下面的名稱（`design/copy/app.md`） | 島民證明 封測（`src/main/res/`） | 島民證明 測試（`src/trial/res/`） | 島民證明 dev（`src/debug/res/`） |
+| 連哪裡 | 上線前：`https://test.iamreal.tw`、`https://test-data.iamreal.tw` | 測試網站，上線後也是 | 測試網站，上線後也是 |
+| 簽的場合字串 | 上線前：`iamreal-test:public:0` | `iamreal-test:public:0`，上線後也是 | `iamreal-test:public:0`，上線後也是 |
+| 「到 Google Play 更新」開的頁 | `tw.iamreal.app` 的商店頁 | `tw.iamreal.app.test` 的商店頁：從內部測試裝的人在那一頁更新 | 沒有這個按鈕（不在 Google Play 上，和 iOS 的開發用 build 相同），句子照舊 |
+| 怎麼裝 | Google Play 的內部測試（營運者手動觸發 [`upload-android.yml`](../.github/workflows/upload-android.yml)；「上傳到 Google Play」） | Google Play 的內部測試（營運者手動觸發 [`upload-android-test.yml`](../.github/workflows/upload-android-test.yml)） | 用線裝（「怎麼用線裝到手機」） |
+| 顯示的版本 | 上傳時給：台灣的日期（`2026.11.5`，同一天相同） | 同左 | `dev` |
+| build 號碼（`versionCode`） | 上傳工作流程的執行編號，不到 1,000,000 | 它自己的上傳工作流程的執行編號加 1,000,000，1,000,000 以上、不到 2,000,000 | 固定 2,000,000 |
 
-環境寫死在 `app/src/main/kotlin/tw/iamreal/app/Environment.kt` 一個地方，兩種 build 共用；app 裡沒有切換的設定，後台也不能叫它換。Kotlin 呼叫核心時指定的證明紀錄永遠是這一份（`core/DeviceCore.kt`），所以 app 的程式拿不到正式的證明紀錄的場合字串。上線那天用一個 PR 讓商店的 build 改連正式網站；正式網站的設定現在還沒有。
+環境寫在每個 build type 自己的 `app/src/<build type>/kotlin/tw/iamreal/app/Environment.kt`：連哪個網站、簽哪一份證明紀錄、商店頁是哪一頁。測試網站的網址和證明紀錄的編號只寫在 `app/src/main/kotlin/tw/iamreal/app/TestSite.kt` 一個地方，各個 `Environment.kt` 引用它。app 裡沒有切換的設定，後台也不能叫它換。Kotlin 呼叫核心時指定的證明紀錄永遠是這一份（`core/DeviceCore.kt`），所以 app 的程式拿不到正式的證明紀錄的場合字串。上線那天用一個 PR 讓正式 app 改連正式網站：改 `app/src/release/` 的那一個，並把 `release` 從 `app/build.gradle.kts` 的 `onTestSite` 拿掉（`checkApk` 只對這一組的 build type 要求連測試網站、不准出現正式網站，`BuildTest` 照它核對網站和場合字串）。測試 app 和開發用 build 的檔、它們在 `onTestSite` 裡的位置都不動；正式網站的設定現在還沒有。
 
-第三種 build type `fake` 只給模擬器的測試（「模擬器上過一次卡」）：它是開發用 build 換上假卡片和本機的後台，識別碼 `tw.iamreal.app.dev.fake`、名稱和開發用 build 相同，不會上傳到任何地方。
+**build 號碼為什麼這樣編**（ADR-0040「測試網站的最低版本」）：上線那天，測試網站的最低版本（ADR-0035，比的是 `versionCode`）調到 1,000,000，擋住正式 app 上線前每一個還連著測試網站的 build；測試 app 和開發用 build 一律在 1,000,000 以上，擋不到。正式 app 的號碼是它的上傳工作流程的執行編號，到 1,000,000 還要上傳一百萬次。測試 app 的號碼是另一個工作流程自己數的執行編號加 1,000,000，兩個 app 的號碼不會交錯。開發用 build 固定 2,000,000，比正式 app 和測試 app 都大，所以裝了它的手機不會被最低版本擋。`app/build.gradle.kts` 的 `buildNumbers` 寫了每個 build type 的範圍，`checkManifest` 擋住範圍以外的（「建置時的檢查」）。
+
+第四種 build type `fake` 只給模擬器的測試（「模擬器上過一次卡」）：它是開發用 build 換上假卡片和本機的後台，識別碼 `tw.iamreal.app.dev.fake`、名稱和 build 號碼和開發用 build 相同，不會上傳到任何地方。它的「到 Google Play 更新」開正式 app 的商店頁（`app/src/fake/` 的 `Environment.kt`），模擬器的測試照正式 app 和測試 app 的樣子走過這個按鈕。
 
 ## 上傳到 Google Play
 
-商店的 build 只從 GitHub Actions 上傳（ADR-0036）：營運者在 `main` 上手動觸發 [`.github/workflows/upload-android.yml`](../.github/workflows/upload-android.yml)，它建置 `bundleRelease`（連 `build.gradle.kts` 的 bundle 檢查，「建置時的檢查」），用上傳金鑰簽章，傳到內部測試。簽章、上傳、版本號怎麼算，見 [`.github/README.md`「上傳 Android 的 app」](../.github/README.md#上傳-android-的-app175)。
+正式 app 和測試 app 只從 GitHub Actions 上傳（ADR-0036、ADR-0040）：營運者在 `main` 上手動觸發 [`.github/workflows/upload-android.yml`](../.github/workflows/upload-android.yml)（正式 app，建置 `bundleRelease`）或 [`.github/workflows/upload-android-test.yml`](../.github/workflows/upload-android-test.yml)（測試 app，建置 `bundleTrial`），連 `build.gradle.kts` 的 bundle 檢查（「建置時的檢查」），用上傳金鑰簽章，傳到那個 app 的內部測試。簽章、上傳、版本號怎麼算，見 [`.github/README.md`「上傳 Android 的 app」](../.github/README.md#上傳-android-的-app175)。
 
-版本由兩個 Gradle 屬性給：`-Piamreal.versionName=2026.11.21 -Piamreal.versionCode=42`（`app/build.gradle.kts`）。沒給的時候是 `1`、`dev`，所以這台電腦上的建置和拉取請求的檢查都是這兩個值。
+版本由兩個 Gradle 屬性給：`-Piamreal.versionName=2026.11.21 -Piamreal.versionCode=42`（`app/build.gradle.kts`）。沒給的時候顯示的版本是 `dev`，build 號碼是那個 build type 範圍裡的第一個：正式 app `1`、測試 app `1000000`；開發用 build 不收這個屬性，固定 `2000000`。
 
 ## 商店頁的圖片
 
@@ -173,15 +177,17 @@ IAMREAL_STORE_SCREENS=$PWD/../android/test-output/store IAMREAL_BB=<bb 6.0.0 的
 | `app/src/main/kotlin/tw/iamreal/app/backend/` | 送給後台和清冊鏡像的請求 |
 | `app/src/main/kotlin/tw/iamreal/app/reminder/` | 過卡提醒：下次提醒的日子怎麼算、存什麼（`Reminders.kt`），日子和時刻的寫法（`When.kt`），系統的鬧鐘、通知和接收器（`Phone.kt`） |
 | `app/src/main/kotlin/tw/iamreal/app/ui/` | 啟動畫面和八步的畫面（Compose）、感應的面板、哪個情況顯示 `design/copy/` 的哪一句、主題的數值（`Theme.kt`）；提醒的畫面和設定頁（`Reminder.kt`） |
-| `app/src/real/` | 發出去的安裝檔和用線裝的建置接到什麼（`Target.kt`）：測試網站、NFC 讀的卡片、核心自己的 session |
-| `app/src/fake/` | 只給模擬器測試的建置（build type `fake`）：假卡片、本機的後台、認測試金鑰的 session |
+| `app/src/main/kotlin/tw/iamreal/app/TestSite.kt` | 測試網站的網址和測試的證明紀錄的編號，只寫在這裡 |
+| `app/src/release/`、`app/src/trial/`、`app/src/debug/` | 正式 app、測試 app、開發用 build 各自的 `Environment.kt`（連哪個網站、簽哪一份證明紀錄、商店頁），測試 app 和開發用 build 各自的名稱（`res/`；正式 app 的在 `src/main/res/`）。「三種 app」 |
+| `app/src/real/` | 發出去的安裝檔和用線裝的建置接到什麼（`Target.kt`）：`Environment.kt` 的網站、NFC 讀的卡片、核心自己的 session |
+| `app/src/fake/` | 只給模擬器測試的建置（build type `fake`）：假卡片、本機的後台、認測試金鑰的 session，和它自己的 `Environment.kt` |
 | `app/src/testing/` | `TestingCore`：測試用的函式庫才有的那一個函式。只編進 `fake` 和單元測試 |
 | `test/` | 模擬器上過卡的測試（Node），見「模擬器上過一次卡」；它也拍商店頁的截圖（「商店頁的圖片」）。畫 app 的圖示、商店頁的圖示和主題圖片的 `AppIcon.java`（「圖示」） |
 | `jni/` | JNI 那一層（C）：把 `idc_` 的 C 函式包成 Kotlin 呼叫得到的函式。照 `device-core/README.md`「C 函式的慣例」釋放和清除；只呼叫 `idc_` 開頭的函式 |
 | `build-native.sh` | 編 `device-core/` 的靜態函式庫，和 JNI 那一層連結成 `libiamreal_device_core_jni.so` |
 | `fetch-zig.sh`、`zig.sha256` | 下載 Zig 0.15.1，核對 SHA-256 |
 | `bundled.sha256` | 包進安裝檔的電路檔和驗證金鑰的 SHA-256。參數檔的在 `device-core/crs.sha256`，由 `device-core/fetch-crs.sh` 下載（和 iOS 共用） |
-| `app/build.gradle.kts` | 識別碼、`minSdk`、函式庫和內建的檔案怎麼進安裝檔、建置時的檢查 |
+| `app/build.gradle.kts` | 識別碼、build 號碼、`minSdk`、函式庫和內建的檔案怎麼進安裝檔、建置時的檢查 |
 | `gradle/verification-metadata.xml` | Gradle 下載的每個外掛和程式庫的 SHA-256 |
 
 ## 原生的函式庫
@@ -247,11 +253,11 @@ $NDK/llvm-readelf -lW app/build/intermediates/merged_native_libs/release/mergeRe
 
 `./gradlew build` 會跑；只做安裝檔時也會跑，不管做的是 APK（`assemble*`、`package*`）還是上傳到 Google Play 用的 bundle（`bundle*`，由 `checkBundle` 看 `.aab` 裡的 manifest、函式庫、內建的檔案和 dex，項目相同）。任何一項不過就失敗（`app/build.gradle.kts`）：
 
-- **合併後的 manifest**（`checkManifest`）：識別碼不是這個 build type 該有的就失敗（`release` 是 `tw.iamreal.app`、`debug` 是 `tw.iamreal.app.dev`、`fake` 是 `tw.iamreal.app.dev.fake`，逐字寫在 `app/build.gradle.kts` 的 `ids`）；任何地方出現 `AD_ID` 就失敗；要的權限只能是 `app/build.gradle.kts` 裡 `allowedPermissions` 列的：網路（`INTERNET`）、讀卡（`NFC`；沒有 NFC 的手機也裝得上，`uses-feature` 寫 `required="false"`）、提醒的通知（`POST_NOTIFICATIONS`）、手機重開時被告知（`RECEIVE_BOOT_COMPLETED`，「過卡提醒」），加上 `androidx.core` 替 app 自己宣告、只有這個 app 拿得到的那一個（`<識別碼>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`）；別的 app 叫得到的元件只能是 app 的那一個畫面。`AndroidManifest.xml` 另外寫了移除 `AD_ID`，之後有程式庫帶進來也會被拿掉；畫面的程式庫帶進來、app 一打開就會自己做的兩件事也在那裡拿掉：找 emoji 字型（手機上有 Google Play services 時會去問它）、安裝啟動用的 profile 和讓開發工具觸發它的接收器
+- **合併後的 manifest**（`checkManifest`）：識別碼不是這個 build type 該有的就失敗（`release` 是 `tw.iamreal.app`、`trial` 是 `tw.iamreal.app.test`、`debug` 是 `tw.iamreal.app.dev`、`fake` 是 `tw.iamreal.app.dev.fake`，逐字寫在 `app/build.gradle.kts` 的 `ids`）；build 號碼（`versionCode`）不在這個 build type 的範圍裡就失敗（`release` 1 到 999,999、`trial` 1,000,000 到 1,999,999、`debug` 和 `fake` 2,000,000，寫在 `buildNumbers`；「三種 app」）；任何地方出現 `AD_ID` 就失敗；要的權限只能是 `app/build.gradle.kts` 裡 `allowedPermissions` 列的：網路（`INTERNET`）、讀卡（`NFC`；沒有 NFC 的手機也裝得上，`uses-feature` 寫 `required="false"`）、提醒的通知（`POST_NOTIFICATIONS`）、手機重開時被告知（`RECEIVE_BOOT_COMPLETED`，「過卡提醒」），加上 `androidx.core` 替 app 自己宣告、只有這個 app 拿得到的那一個（`<識別碼>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`）；別的 app 叫得到的元件只能是 app 的那一個畫面。`AndroidManifest.xml` 另外寫了移除 `AD_ID`，之後有程式庫帶進來也會被拿掉；畫面的程式庫帶進來、app 一打開就會自己做的兩件事也在那裡拿掉：找 emoji 字型（手機上有 Google Play services 時會去問它）、安裝啟動用的 profile 和讓開發工具觸發它的接收器
 - **安裝檔**（`checkApk`）：原生的函式庫只有我們的那一個，release 只有 `arm64-v8a`；`assets/` 裡的檔案和兩份清單完全相同，不多不少；`.so` 沒有連結 `liblog`。Compose 帶進來的 `androidx.graphics:graphics-path` 有自己的一個原生函式庫（Android 13 以前走訪路徑的線段用的），打包時排除掉；畫面畫的路徑（記號、打勾）只交給系統去畫，不走訪它的線段，模擬器的測試走過每一個畫面。程式庫帶的啟動用 profile 也不放進去
-- **沒有假卡片、不認測試的發證金鑰**（`checkApk`）：debug 和 release 的 dex 裡出現 `tw/iamreal/app/fake/` 或 `TestingCore`，或 `.so` 裡有測試用函式庫的記號（`device-core/prover/src/lib.rs` 的 `IDC_TESTING_MARK`），就失敗。這兩樣只在 build type `fake` 裡
-- **上線前只連測試網站**（`checkApk`）：`debug` 和 `release` 的 dex 裡沒有測試網站的網址（`https://test.iamreal.tw`）就失敗；任何一種 build 的 dex 裡出現正式網站的網址（`//iamreal.tw`、`//data.iamreal.tw`）或正式的證明紀錄的場合字串（`iamreal:public:`）就失敗。場合字串本身不在 Kotlin 裡，由核心照代表哪一份證明紀錄的數字給；單元測試核對核心給這個 app 的是 `spec/vectors/scope.json` 裡測試的證明紀錄的那一條。`.so` 裡兩份證明紀錄的場合字串都有（核心是同一份），Kotlin 只傳得出測試的證明紀錄的數字
-- **release build 不輸出 log**：R8 拿掉對 `android.util.Log`、`PrintStream` 的 `print`／`println`、`java.util.logging.Logger` 的 `log` 的呼叫（`app/proguard-rules.pro`；後兩種是 Compose 和 `androidx.concurrent` 裡的幾處警告）。之後 `checkApk` 讀 release 的 dex 裡每一個被呼叫的方法：還提到 `android.util.Log`，或還有呼叫 `java.io.PrintStream` 的任何方法、`java.util.logging.Logger` 除了 `getLogger` 以外的方法、任何 `printStackTrace`，就失敗。留下來的是讀了沒用的 `System.out` 和做了沒用的 `Logger`：R8 拿不掉，但沒有東西寫得出去
+- **沒有假卡片、不認測試的發證金鑰**（`checkApk`）：`debug`、`release`、`trial` 的 dex 裡出現 `tw/iamreal/app/fake/` 或 `TestingCore`，或 `.so` 裡有測試用函式庫的記號（`device-core/prover/src/lib.rs` 的 `IDC_TESTING_MARK`），就失敗。這兩樣只在 build type `fake` 裡
+- **上線前只連測試網站**（`checkApk`）：`app/build.gradle.kts` 的 `onTestSite` 裡的 build type（現在是 `release`、`trial`、`debug`、`fake`）只連測試網站。`debug`、`release`、`trial` 的 dex 裡沒有測試網站的網址（`https://test.iamreal.tw`）就失敗；這幾種 build 的 dex 裡出現正式網站的網址（`//iamreal.tw`、`//data.iamreal.tw`）或正式的證明紀錄的場合字串（`iamreal:public:`）就失敗。場合字串本身不在 Kotlin 裡，由核心照代表哪一份證明紀錄的數字給；單元測試核對核心給這個 app 的是 `spec/vectors/scope.json` 裡測試的證明紀錄的那一條，三種 app 各自核對（`BuildTest`，「測試」）。這一項的「上線前」：測試 app 和開發用 build 永遠如此，只有正式 app 上線那天離開（`onTestSite`，「三種 app」）。`.so` 裡兩份證明紀錄的場合字串都有（核心是同一份），Kotlin 只傳得出測試的證明紀錄的數字
+- **release build 不輸出 log**（`release` 和 `trial`）：R8 拿掉對 `android.util.Log`、`PrintStream` 的 `print`／`println`、`java.util.logging.Logger` 的 `log` 的呼叫（`app/proguard-rules.pro`；後兩種是 Compose 和 `androidx.concurrent` 裡的幾處警告）。之後 `checkApk` 讀 release 的 dex 裡每一個被呼叫的方法：還提到 `android.util.Log`，或還有呼叫 `java.io.PrintStream` 的任何方法、`java.util.logging.Logger` 除了 `getLogger` 以外的方法、任何 `printStackTrace`，就失敗。留下來的是讀了沒用的 `System.out` 和做了沒用的 `Logger`：R8 拿不掉，但沒有東西寫得出去
 - **沒有第三方 SDK**（`checkLibraries`）：app 帶的程式庫只能是 `app/build.gradle.kts` 裡 `allowedLibraries` 逐一列名的：Kotlin 的標準函式庫和它引用的標註，畫面用的 Jetpack Compose（`ui`、`foundation`）和 `androidx.activity`，以及這三個帶進來的（都是 Google 的 AndroidX 和 JetBrains 的 kotlinx，見「工具和套件」）。清單以外的一律不過，以檔案加進來的 jar、aar 也算。沒有 Google Play services，沒有 Material 元件
 
 這些檢查看的是寫錯和不小心加進來的東西。它們看不到的：Android 系統自己寫的 log（app 當掉時系統會記下例外的堆疊；核心的例外只有代碼）、C 函式庫的 `syslog`（Barretenberg 連結到它，在 libc 裡，拿不掉）、`.so` 裡的程式用系統呼叫直接做的事。`.so` 向 libc 要的函式裡有 `syslog`、`fprintf`、`socket`、`connect`（Barretenberg 和 libc++ 帶進來的），app 沒有網路的權限時 `socket` 連不出去。
@@ -299,14 +305,14 @@ cd device-core && rustup target add aarch64-linux-android x86_64-linux-android &
 `build` 做的事：
 
 1. `build-native.sh` 編 `device-core/`（它會叫 `device-core/fetch-barretenberg.sh` 和 `fetch-zig.sh`，各自核對 SHA-256），連結 `.so`
-2. 做出三個安裝檔：`app/build/outputs/apk/debug/app-debug.apk`、`app/build/outputs/apk/release/app-release-unsigned.apk`（沒有簽章；簽章和上傳在 GitHub Actions，ADR-0036），和只給模擬器測試的 `app/build/outputs/apk/fake/app-fake.apk`（識別碼 `tw.iamreal.app.dev.fake`，不會上傳到任何地方）
+2. 做出四個安裝檔：`app/build/outputs/apk/debug/app-debug.apk`、`app/build/outputs/apk/release/app-release-unsigned.apk`、`app/build/outputs/apk/trial/app-trial-unsigned.apk`（後兩個沒有簽章；簽章和上傳在 GitHub Actions，ADR-0036），和只給模擬器測試的 `app/build/outputs/apk/fake/app-fake.apk`（識別碼 `tw.iamreal.app.dev.fake`，不會上傳到任何地方）
 3. 跑單元測試、lint、上面的檢查
 
 拉取請求的檢查（`.github/workflows/checks.yml` 的 `android`）在 Linux 上跑的就是這幾行。
 
 ### 測試
 
-`./gradlew test`。測試在這台機器的 JVM 上跑，不需要模擬器：`build-native.sh host` 把同一份 Rust 和同一份 JNI 的程式編成這台機器的函式庫，Kotlin 的 `DeviceCore` 載入它。測試讀 `spec/vectors/` 的標準答案，不複製。`SubmitAnswerTest` 對著本機只答一次的假後台送出：201 的內文中途斷線或超過 1 MiB 時，`Backend.submit` 給沒有位元組、不是 `network`，交給核心讀是「什麼都沒說」（完成畫面只說記下了，#264）。`PausedTest`、`PausedViewTest` 測停止收過卡（#394）：`config` 說 `paused` 時第 2 步在讀卡之前停下；`challenges`、`records` 對著本機的假後台回 `503` `paused` 時，畫面是 `stops.paused`，只給重新開始。第 1 步每次打開（和回到 app 時）都再問一次 `config`，用來在讀卡之前說停止收過卡。`BusyTest`、`BusyViewTest` 測人太多（ADR-0026，#419），對著本機的假後台，被擋的請求照後台的樣子回 `429` `rate_limited` 或 `503` `busy`：按第 1 步的「下一步」時問一次帶開始記號的 `config?start`，被擋時過卡停在這裡，不感應卡片。接著讀卡時再問一次不帶記號的 `config`（「再感應一次卡片」開始的過卡不經過第 1 步，也是問這一次），被擋時用按「下一步」時拿到的那一份，和網頁相同；那一份讀不懂時沒有可以用的，停在讀卡之前。卡片現況、題目、送出被擋時過卡不結束：`BusyTest` 用 `spec/vectors/` 的一張卡片（測試的發證金鑰）和測試用的核心走完一次過卡，三個請求各被擋一次、各再送一次，卡片總共感應三次、交出 PIN 兩次，再送的卡片現況和紀錄和第一次逐位元組相同。`BusyViewTest` 檢查這三處的句子是 `stops.too_many`、按鈕是「再試一次」，送出被擋時不是「送出失敗」那一句。`AppNameTest` 讀 `design/copy/app.md`，核對正式 app 和開發用 build 圖示下面的名稱各自和它寫的相同、`app.json` 的名稱是三種 app 各一個（測試 app 的是給 #483 的建置用的），三個名稱都不同。`AppCopyTest` 核對 `design/copy/app.md` 和 `app.json` 雙向逐字相同：JSON 的每一個值是 Markdown 某個程式碼區塊的一行，那些區塊的每一行也都是 JSON 的一個值。`SecureChannelTest` 跑 `spec/vectors/card-channel.json` 的每一案（假的金鑰素材）。`GpkiCardTest` 對一張在測試裡模擬的卡片送指令：卡片那一端照 `spec/card-channel.md` 核對每一道加密指令的 MAC、用它自己數的計數器解密，所以計數器少算一道指令，下一道就被拒絕；測的是通道建立不起來時不回送認證、不送 PIN，第一代的卡片停下來，PIN 被拒絕或卡片在送 PIN 時離開都不重送，「取消」在下一道指令之前停下。app 寫在程式裡的金鑰素材是不是真卡片的，只有真卡片測得出來（「真卡片的測試清單」）。`CountsTest` 測計數（`flow/Counts.kt`）：過卡裝置編號照 `spec/vectors/counts.json` 的 `device_ids` 換（規則在核心，`idc_count_device_id`）、一筆計數帶什麼不帶什麼、版本和型號不合格式的拿掉、每一步只送一次、停下來之後不再送、伺服器的代碼表上沒有的送 `server_other`、送不出去時過卡照常；`CardProof` 停下來的每一種都有表上的原因（核心組得出內文才算），第 2 步感應的每一種失敗送的是 stop、retry 還是感應中途掉線的動作，`config` 停止收過卡、沒有回應、版本太舊各送什麼。`RecordedCounts` 是測試記下計數的那一份。`ThemeTest` 讀 `design/tokens.json`，核對 `ui/Theme.kt` 和 `res/values/colors.xml`（視窗和 Android 12 起系統的啟動畫面用的顏色）寫的每一個數值和同名的那一個相同，並核對 app 的圖示（「圖示」）。
+`./gradlew test`。測試在這台機器的 JVM 上跑，不需要模擬器。全部的測試跑在開發用 build（`testDebugUnitTest`）；正式 app 和測試 app 另外各跑一次 `BuildTest`（`testReleaseUnitTest`、`testTrialUnitTest`）：每個 build type 的 `Environment.kt` 不同，連哪個網站、簽哪一份證明紀錄要在它自己的 build 裡看。`BuildTest` 核對 `onTestSite` 裡的 build type 連測試網站、核心給它的場合字串是 `spec/vectors/scope.json` 裡測試的證明紀錄的那一條，測試 app 和開發用 build 一直在 `onTestSite` 裡（正式 app 到上線為止）；「到 Google Play 更新」開它自己的商店頁，開發用 build 沒有。`build-native.sh host` 把同一份 Rust 和同一份 JNI 的程式編成這台機器的函式庫，Kotlin 的 `DeviceCore` 載入它。測試讀 `spec/vectors/` 的標準答案，不複製。`SubmitAnswerTest` 對著本機只答一次的假後台送出：201 的內文中途斷線或超過 1 MiB 時，`Backend.submit` 給沒有位元組、不是 `network`，交給核心讀是「什麼都沒說」（完成畫面只說記下了，#264）。`PausedTest`、`PausedViewTest` 測停止收過卡（#394）：`config` 說 `paused` 時第 2 步在讀卡之前停下；`challenges`、`records` 對著本機的假後台回 `503` `paused` 時，畫面是 `stops.paused`，只給重新開始。第 1 步每次打開（和回到 app 時）都再問一次 `config`，用來在讀卡之前說停止收過卡。`BusyTest`、`BusyViewTest` 測人太多（ADR-0026，#419），對著本機的假後台，被擋的請求照後台的樣子回 `429` `rate_limited` 或 `503` `busy`：按第 1 步的「下一步」時問一次帶開始記號的 `config?start`，被擋時過卡停在這裡，不感應卡片。接著讀卡時再問一次不帶記號的 `config`（「再感應一次卡片」開始的過卡不經過第 1 步，也是問這一次），被擋時用按「下一步」時拿到的那一份，和網頁相同；那一份讀不懂時沒有可以用的，停在讀卡之前。卡片現況、題目、送出被擋時過卡不結束：`BusyTest` 用 `spec/vectors/` 的一張卡片（測試的發證金鑰）和測試用的核心走完一次過卡，三個請求各被擋一次、各再送一次，卡片總共感應三次、交出 PIN 兩次，再送的卡片現況和紀錄和第一次逐位元組相同。`BusyViewTest` 檢查這三處的句子是 `stops.too_many`、按鈕是「再試一次」，送出被擋時不是「送出失敗」那一句。`AppNameTest` 讀 `design/copy/app.md`，核對三種 app 圖示下面的名稱各自和它寫的相同、`app.json` 的名稱是三種 app 各一個，三個名稱都不同。`AppCopyTest` 核對 `design/copy/app.md` 和 `app.json` 雙向逐字相同：JSON 的每一個值是 Markdown 某個程式碼區塊的一行，那些區塊的每一行也都是 JSON 的一個值。`SecureChannelTest` 跑 `spec/vectors/card-channel.json` 的每一案（假的金鑰素材）。`GpkiCardTest` 對一張在測試裡模擬的卡片送指令：卡片那一端照 `spec/card-channel.md` 核對每一道加密指令的 MAC、用它自己數的計數器解密，所以計數器少算一道指令，下一道就被拒絕；測的是通道建立不起來時不回送認證、不送 PIN，第一代的卡片停下來，PIN 被拒絕或卡片在送 PIN 時離開都不重送，「取消」在下一道指令之前停下。app 寫在程式裡的金鑰素材是不是真卡片的，只有真卡片測得出來（「真卡片的測試清單」）。`CountsTest` 測計數（`flow/Counts.kt`）：過卡裝置編號照 `spec/vectors/counts.json` 的 `device_ids` 換（規則在核心，`idc_count_device_id`）、一筆計數帶什麼不帶什麼、版本和型號不合格式的拿掉、每一步只送一次、停下來之後不再送、伺服器的代碼表上沒有的送 `server_other`、送不出去時過卡照常；`CardProof` 停下來的每一種都有表上的原因（核心組得出內文才算），第 2 步感應的每一種失敗送的是 stop、retry 還是感應中途掉線的動作，`config` 停止收過卡、沒有回應、版本太舊各送什麼。`RecordedCounts` 是測試記下計數的那一份。`ThemeTest` 讀 `design/tokens.json`，核對 `ui/Theme.kt` 和 `res/values/colors.xml`（視窗和 Android 12 起系統的啟動畫面用的顏色）寫的每一個數值和同名的那一個相同，並核對 app 的圖示（「圖示」）。
 
 這台機器的函式庫是測試用的那一種（`build-native.sh` 的 `test-issuers`：`device-core/` 開 cargo feature `test-issuers`，多一個收測試發證金鑰開 session 的函式 `idc_testing_session_open`，其餘和 app 連結的相同）：標準答案裡的憑證是測試金鑰簽的，不是內政部簽的。`SessionTest` 用它拿 `circuit-inputs.json` 的一張卡片從 Kotlin 走完一次過卡在核心裡的每一步：檢查憑證、選清冊和檢查清冊、建樹、核對內建的檔案、查現況的請求和短編號、算證明和送出的請求，並跑 `list-consequence.json`、`card-status.json` 的每一案。`AnswerTest` 跑 `records-response.json` 的每一案：送出後後台的回應由核心讀（`idc_records_response`），app 拿到的 `seq`、雜湊、每個平台記成什麼、和確認畫面不同的平台，和標準答案相同。`DoneViewTest` 檢查完成畫面說哪幾句（`design/copy/card-proof.json` 的哪幾個鍵）：小卡、掛到個人檔案、還可以做的那幾句，第一筆紀錄、全部收回、超過一個平台時各不同的地方；以及對後台的回應：和確認時相同、讀不出每個平台記成什麼（標題「證明紀錄已經記下這次過卡」、日期和說明原因的那一句；那一句 `design/copy/card-proof.md` 寫了 app 的寫法還沒有定，先用網頁的，和 iOS 相同）、別的卡片也宣告了同一個帳號、和確認時不同的每一種。後台是誠實的時候模擬器上遇不到最後一種，所以在這裡測。
 
@@ -351,7 +357,7 @@ IAMREAL_BB=<bb 6.0.0 的路徑> node --experimental-strip-types test/app-backend
 
 ## 怎麼用線裝到手機
 
-裝的是開發用 build（`debug`，識別碼 `tw.iamreal.app.dev`），簽的是這台電腦上 Android 開發用的金鑰，不是商店的那一把。它和從 Google Play 裝的商店 build 識別碼不同，兩個可以同時留在手機上。ADR-0037 的「少數測試者拿開發用 build 的安裝檔」還沒有做：那要一把固定的簽章金鑰（和商店的無關），不是每台電腦各自的開發用金鑰。
+裝的是開發用 build（`debug`，識別碼 `tw.iamreal.app.dev`），簽的是這台電腦上 Android 開發用的金鑰，不是 Google Play 的。它和從 Google Play 裝的正式 app、測試 app 識別碼不同，三個可以同時留在手機上（ADR-0040）。
 
 1. 手機：設定裡打開「開發人員選項」和「USB 偵錯」，接上線，在手機上允許這台電腦
 2. `$ANDROID_HOME/platform-tools/adb devices` 看得到手機

@@ -902,7 +902,6 @@ struct Screens {
             case "paused": sentence = copy("stops.paused")
             case "switch_limit": sentence = copy("stops.switch_limit")
             case "empty": sentence = copy("stops.empty")
-            case "switch_restricted": sentence = copy("stops.switch_restricted")
             case "scope", "platform", "malformed", "challenge_used", "challenge_attempts", "proof", "root", "date_order":
                 sentence = copy("stops.rejected", ["code": failure.code])
             default: sentence = copy("stops.server_unreadable", ["code": failure.code])
