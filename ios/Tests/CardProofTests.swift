@@ -392,8 +392,7 @@ final class CardProofTests: XCTestCase {
             "島民證明", "@alice", "島民編號 \(shortID) 開頭",
             "這是第 \(ordinal) 張島民證明。", "愈多人成為島民，知道彼此都是台灣人，我們能讓台灣的網路討論變得更貼近真實、更有意義。",
             "謝謝你加入島民，誠摯的邀請你分享島民證明。",
-            "分享到 Threads",
-            "上一步", "完成",
+            "上一步", "完成", "分享到 Threads",
         ])
         await Snapshot.save(model, as: "8-done")
         // The share sheet, with the sentence and the card's page.
@@ -463,6 +462,12 @@ final class CardProofTests: XCTestCase {
         XCTAssertTrue(model.screen.texts.contains("把證明掛上你的 Threads 個人檔案"))
         XCTAssertTrue(model.screen.texts.contains("複製證明連結"))
         XCTAssertFalse(model.screen.texts.contains { $0.hasPrefix("如果你換了新的自然人憑證") })
+        // Its 上一步: the short one again, and 重新掛上連結 the whole one again.
+        try await press("上一步", in: model)
+        XCTAssertEqual(model.screen.step, 6)
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["重新掛上連結", "下一步"])
+        try await press("重新掛上連結", in: model)
+        XCTAssertTrue(model.screen.texts.contains("複製證明連結"))
 
         // Step 7: the reminder is on, set again from today as last chosen; no way to say no here.
         try await press("下一步", in: model)
@@ -1230,7 +1235,7 @@ final class CardProofTests: XCTestCase {
             default: return []
             }
         }
-        let inline = model.screen.blocks.flatMap(within)
+        let inline = (model.screen.blocks + model.screen.under).flatMap(within)
         let buttons = model.screen.buttons + model.screen.links + (model.screen.cancel.map { [$0] } ?? []) + inline
         let button = try XCTUnwrap(buttons.first { $0.label == label }, "no button \(label) among \(buttons.map(\.label))", file: file, line: line)
         XCTAssertTrue(button.enabled, "\(label) cannot be pressed", file: file, line: line)

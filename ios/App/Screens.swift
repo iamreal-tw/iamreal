@@ -148,18 +148,21 @@ struct Screens {
             blocks.append(.senseDemo(SenseDemo(
                 description: copy("app_demo.sense_iphone"), control: control, playing: playing, played: playing || demoPlayed || running)))
         }
-        blocks.append(.items(items(labels, reached: reached, running: running, why: stop.map { message($0, tap: 1) })))
-        var buttons: [Button]
-        if done {
-            buttons = [Button(label: copy("common.next"), action: .toPIN)]
-        } else if let stop {
+        let list = Block.items(items(labels, reached: reached, running: running, why: stop.map { message($0, tap: 1) }))
+        // Once the list has something to say (all done, where it stopped and why), it is read before the button.
+        if done { return Screen(step: 2, blocks: blocks + [list], buttons: [Button(label: copy("common.next"), action: .toPIN)]) }
+        if let stop {
             // No card came, or it left: the same tap again. Anything else: the card is read again from the start.
             let again = Self.tapsAgain(stop)
-            buttons = [again ? Button(label: copy("app_read.tap_again"), action: .readCard) : Button(label: copy("app_read.restart"), action: .readAgain)]
-        } else {
-            buttons = [Button(label: copy("common.back"), action: .back, enabled: !running), Button(label: copy("app_read.tap_card"), action: .readCard, enabled: !running)]
+            let button = again ? Button(label: copy("app_read.tap_again"), action: .readCard) : Button(label: copy("app_read.restart"), action: .readAgain)
+            return Screen(step: 2, blocks: blocks + [list], buttons: [button])
         }
-        return Screen(step: 2, blocks: blocks, buttons: buttons)
+        // Before, "感應卡片" right under the demonstration, where it is seen without scrolling, and the list, all still
+        // to do, under it (card-proof.md, "2. 讀取卡片", app).
+        return Screen(
+            step: 2, blocks: blocks,
+            buttons: [Button(label: copy("common.back"), action: .back, enabled: !running), Button(label: copy("app_read.tap_card"), action: .readCard, enabled: !running)],
+            under: [list])
     }
 
     // Step 3: the PIN ------------------------------------------------------------------
@@ -632,7 +635,7 @@ struct Screens {
     /// (card-proof.md, step 6 and its "app"). `single`: the one platform's
     /// name, as step 5 decided it. `copied`: the link was copied. `whole`:
     /// the whole step also where the short one would do ("重新掛上連結"
-    /// was pressed). The same parts as the web page's, but for
+    /// was pressed), with 上一步 back to the short one. The same parts as the web page's, but for
     /// what only the page has: the QR code, and "現在可以拔出卡片。" (the
     /// panel said the card can be taken away when it signed). In the
     /// order of the page a phone opens to hang it: the link, the two
@@ -686,8 +689,10 @@ struct Screens {
         }
         blocks += [openingTheProof("done.hung"), .text(copy("done.hung_done"))]
         blocks += record(done, single: single)
+        // Reached from the short one by "重新掛上連結": back to it, beside the way on (card-proof.md, step 6, the short one).
+        let back = whole && hangIsShort(done, single: single) ? [Button(label: copy("common.back"), action: .back)] : []
         // One main button a screen (design/DESIGN.md): copying the link, here.
-        return Screen(step: 6, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toRemind)], mainButton: false)
+        return Screen(step: 6, blocks: blocks, buttons: back + [Button(label: copy("common.next"), action: .toRemind)], mainButton: false)
     }
 
     /// The demonstration of hanging the link, for the card's account on
@@ -813,15 +818,13 @@ struct Screens {
             .sentences(ordinal + [copy("finish.invite")]),
             .text(copy("finish.thanks")),
         ]
-        // One share sheet, whichever platform: the button names the one the app knows.
-        if let platform = Platform.known.first {
-            blocks.append(.button(Button(label: copy("done.share", ["platform": platform.name]), action: .share), main: true))
-        }
-        // One main button a screen (design/DESIGN.md): sharing, here.
+        // One share sheet, whichever platform: the button names the one the app knows. The main button, on top of
+        // the three, one under the other (design/DESIGN.md, the components: buttons).
+        let share = Platform.known.first.map { Button(label: copy("done.share", ["platform": $0.name]), action: .share) }
         return Screen(
             step: 8, blocks: blocks,
-            buttons: [Button(label: copy("common.back"), action: .back), end],
-            mainButton: false, settings: settingsButton)
+            buttons: [Button(label: copy("common.back"), action: .back), end] + (share.map { [$0] } ?? []),
+            mainButton: share != nil, settings: settingsButton)
     }
 
     /// The tap ended in a way that leaves it to be made again as it is:

@@ -555,6 +555,41 @@ final class ScreensTests: XCTestCase {
         document.check(screens.read(reached: 0, running: false, stop: nil, demoPlaying: true))
     }
 
+    /// Before the card is read, "感應卡片" right under the demonstration and the list, all still to do, under the
+    /// buttons; once the list has something to say (where it stopped and why, all done), the list and then the
+    /// buttons (card-proof.md, "2. 讀取卡片", app).
+    func testTheReadingStepHasItsButtonsUnderTheDemonstrationUntilTheListHasSomethingToSay() {
+        func isList(_ block: Block) -> Bool { if case .items = block { return true } else { return false } }
+        func isDemo(_ block: Block) -> Bool { if case .senseDemo = block { return true } else { return false } }
+        for screen in [screens.read(reached: 0, running: false, stop: nil), screens.read(reached: 1, running: true, stop: nil)] {
+            XCTAssertTrue(screen.blocks.last.map(isDemo) ?? false, "the demonstration right above the buttons: \(screen.blocks)")
+            XCTAssertEqual(screen.under.count, 1)
+            XCTAssertTrue(isList(screen.under[0]), "the list under the buttons")
+            XCTAssertEqual(screen.buttons.map(\.label), ["上一步", "感應卡片"])
+            document.check(screen)
+        }
+        for screen in [screens.read(reached: 1, running: false, stop: .card(.noTap)), screens.read(reached: 4, running: false, stop: nil)] {
+            XCTAssertTrue(screen.blocks.last.map(isList) ?? false, "the list above the buttons: \(screen.blocks)")
+            XCTAssertEqual(screen.under, [])
+        }
+        // In the order it is drawn: the list's words after the buttons'.
+        let before = screens.read(reached: 0, running: false, stop: nil)
+        XCTAssertEqual(Array(before.texts.suffix(6)), ["上一步", "感應卡片", "連上島民證明的伺服器", "感應卡片，讀取卡片上的憑證", "檢查憑證", "下載內政部的廢止清冊，確認憑證沒有被廢止"])
+    }
+
+    /// Two buttons side by side where each one's words fit on one line in half the width (less the space between),
+    /// the way on on the right; one under the other where either's do not, and for one or three buttons
+    /// (design/DESIGN.md, the components: buttons). Step 6's pair keeps its first on the left.
+    func testTwoButtonsSideBySideWhereTheirWordsFitInHalfTheWidth() {
+        // 342 points: a phone 390 wide less the margins; half is 165.
+        XCTAssertEqual(SideBySide.places(ideal: [96, 120], width: 342, firstOnRight: true), SideBySide.Places(left: 1, right: 0))
+        XCTAssertEqual(SideBySide.places(ideal: [165, 165], width: 342, firstOnRight: true), SideBySide.Places(left: 1, right: 0))
+        XCTAssertEqual(SideBySide.places(ideal: [96, 120], width: 342, firstOnRight: false), SideBySide.Places(left: 0, right: 1))
+        XCTAssertNil(SideBySide.places(ideal: [96, 166], width: 342, firstOnRight: true), "one does not fit: one under the other")
+        XCTAssertNil(SideBySide.places(ideal: [96], width: 342, firstOnRight: true))
+        XCTAssertNil(SideBySide.places(ideal: [60, 60, 60], width: 342, firstOnRight: true))
+    }
+
     /// The card left during the first tap: step 2 says so, and the same tap is done again.
     func testACardThatLeftTheFirstTapIsTappedAgain() {
         let screen = screens.read(reached: 1, running: false, stop: .card(.dropped(.notSent)))
@@ -609,6 +644,12 @@ final class ScreensTests: XCTestCase {
             let drawn = await Self.draw(ScreenView(screen: screen, copy: copy, pinText: .constant(""), perform: { _ in }, type: { _, _ in }, unscrolled: true), height: nil)
             try Self.save(try XCTUnwrap(drawn), as: name)
         }
+        // The phone's text made the largest: step 2's two buttons do not fit side by side, one under the other, the
+        // way on on top (design/DESIGN.md, the components: buttons). Only in the output directory.
+        let large = ScreenView(screen: screens.read(reached: 0, running: false, stop: nil), copy: copy, pinText: .constant(""), perform: { _ in }, type: { _, _ in }, unscrolled: true)
+            .environment(\.sizeCategory, .accessibilityExtraExtraExtraLarge)
+        let drawnLarge = await Self.draw(large, height: nil)
+        try Self.save(try XCTUnwrap(drawnLarge), as: "card-proof-app-2-read-iphone-large-text-phone")
         let (reminders, pages) = reminderPages()
         pages.openSchedule()
         let schedule = await Self.draw(ScheduleView(pages: pages, unscrolled: true), height: nil)

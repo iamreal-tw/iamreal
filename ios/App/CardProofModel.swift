@@ -606,6 +606,11 @@ final class CardProofModel: ObservableObject {
             consequence = nil
             // The screen the button was pressed on, its field as it was typed.
             screen = accounts(status)
+        // The whole step 6 reached from the short one: the short one again. Nothing goes back past step 6.
+        case 6:
+            guard rehanging else { return }
+            rehanging = false
+            redraw()
         // After the record was sent nothing touches the card: back one step.
         case 7: show(.hang)
         case 8:
