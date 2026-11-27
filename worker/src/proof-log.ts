@@ -784,8 +784,10 @@ export class ProofLog extends DurableObject<Env> {
     if (newest.length === 0 || taiwanDay(now().getTime()) > newest[0]!.date + CRL_MAX_AGE_DAYS) return refused("crl_stale");
     const switched = this.#firstTold(record.issuer, known[0]!) + CRL_SWITCH_GRACE_MS;
     const accepted = challenge.issuedMs <= switched ? newest : newest.slice(0, 1);
-    const crlDates = accepted.filter((crl) => crl.root === record.smtRoot).map((crl) => crl.date);
-    if (crlDates.length === 0) return refused("root");
+    if (!accepted.some((crl) => crl.root === record.smtRoot)) return refused("root");
+    // The record rules get the date of each of the two with that root, as anyone re-verifying finds them in the
+    // archive: two CRLs with one root list the same cards, so the second's date lets nothing more through.
+    const crlDates = newest.filter((crl) => crl.root === record.smtRoot).map((crl) => crl.date);
 
     // The record rules, on the state this object keeps.
     const { card: before, proofsOnLastDate, latestValidDate } = this.ruleState(record.scopeString, record.scopedId);
