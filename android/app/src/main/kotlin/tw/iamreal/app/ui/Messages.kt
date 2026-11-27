@@ -152,7 +152,7 @@ internal class Messages(private val c: Copy) {
         val intro: String,
         /** accounts.switch above the field; null without a field. */
         val heading: String?,
-        /** The field, empty; null when no switch is left (and the account was not put there today). */
+        /** The field, empty; null when no switch is left. */
         val row: AccountRow?,
         /** Below the field: what changing it does and what it uses up; or that no switch is left. */
         val cost: String,

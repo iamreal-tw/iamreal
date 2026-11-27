@@ -412,8 +412,6 @@ export class CardProofFlow {
   private state: CardStateResponse | null = null;
   private status: CardStatus | null = null;
   private chosen: Consequence | null = null;
-  /** The entries the consequence was computed from, to compute it again before the card signs. */
-  private choice: Choice | null = null;
   private scopedIdValue: bigint | null = null;
   private submission: Submission | null = null;
   /** When the first signature was made (deps.clock), and the timer that ends the wait for the second. */
@@ -535,7 +533,6 @@ export class CardProofFlow {
     this.status = null;
     this.state = null;
     this.chosen = null;
-    this.choice = null;
     this.submission = null;
   }
 
@@ -927,7 +924,6 @@ export class CardProofFlow {
       throw e;
     }
     this.chosen = consequence;
-    this.choice = { ...entries };
     this.phaseValue = "chosen";
     this.reached("chosen");
     return consequence;
@@ -938,7 +934,6 @@ export class CardProofFlow {
     this.expect("status_known", "chosen");
     this.checkIdle();
     this.chosen = null;
-    this.choice = null;
     this.phaseValue = "status_known";
     return this.status!;
   }

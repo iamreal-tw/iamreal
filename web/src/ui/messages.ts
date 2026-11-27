@@ -385,7 +385,7 @@ export interface SwitchView {
   title: Sentence;
   /** accounts.declared_inline */
   intro: Sentence;
-  /** The field, empty; null when no switch is left (and the account was not put there today). */
+  /** The field, empty; null when no switch is left. */
   row: AccountRowView | null;
   /** Below the field: what changing it does and the switches left after it; or that no switch is left. */
   lines: Sentence[];
