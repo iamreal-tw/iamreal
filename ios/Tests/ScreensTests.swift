@@ -271,12 +271,12 @@ final class ScreensTests: XCTestCase {
     func testStepFourOnADayWithThreeRecordsAndNothingToHang() {
         let withdrawn = Flow.CardStatus(
             shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-16", daysSince: 0, dailyLimit: true, knownPlatforms: ["threads"],
-            rows: [Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: "alice", switchCount: 0, switchesLeft: 5, correctionToday: false)])
+            rows: [Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: "alice", switchCount: 0, switchesLeft: 5)])
         let unknown = Flow.CardStatus(
             shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-16", daysSince: 0, dailyLimit: true, knownPlatforms: ["threads"],
             rows: [
-                Flow.StatusRow(platform: "test-example", known: false, current: "alice-b", lastDeclared: "alice-b", switchCount: 0, switchesLeft: 5, correctionToday: false),
-                Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: nil, switchCount: 0, switchesLeft: 5, correctionToday: false),
+                Flow.StatusRow(platform: "test-example", known: false, current: "alice-b", lastDeclared: "alice-b", switchCount: 0, switchesLeft: 5),
+                Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: nil, switchCount: 0, switchesLeft: 5),
             ])
         for status in [withdrawn, unknown] {
             let screen = screens.accounts(status, typed: [:], errors: [:], message: nil)

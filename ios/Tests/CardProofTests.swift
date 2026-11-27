@@ -693,8 +693,6 @@ final class CardProofTests: XCTestCase {
             var threads = try XCTUnwrap(platforms["threads"] as? [String: Any])
             threads["current"] = "alice"
             threads["last_declared"] = "alice"
-            // Set with it by the first record (spec/list-consequence.md): the day of the first of the three.
-            threads["correction_date"] = today
             platforms["threads"] = threads
             state["platforms"] = platforms
             state["last_card_proof"] = today
