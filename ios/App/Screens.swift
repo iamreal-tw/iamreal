@@ -92,8 +92,8 @@ struct Screens {
         if Platform.known.count != 1 {
             blocks += [.text(copy("before.one_proof")), .strong(copy("before.listed_together"))]
         }
-        let questions = blocks.count
-        blocks += [
+        // Under common.next, as on the web and Android (card-proof.md, step 1): they can be skipped.
+        let questions: [Block] = [
             .question(copy("before.why_physical"), [.text(copy("before.why_physical_card")), .text(copy("before.why_physical_mobile"))]),
             // The two ways out of the card proof's screens: a person without a card cannot go on (card-proof.md, step 1).
             .question(copy("before.how_to_get"), [
@@ -102,9 +102,9 @@ struct Screens {
                 .action(Button(label: copy("before.how_to_get_moica"), action: .howToApply)),
             ]),
         ]
-        if paused { return Screen(step: 1, blocks: Array(blocks[..<questions]) + [.message(copy("before.paused"))] + blocks[questions...], warnings: warnings, notice: notice, settings: settingsButton) }
+        if paused { return Screen(step: 1, blocks: blocks + [.message(copy("before.paused"))] + questions, warnings: warnings, notice: notice, settings: settingsButton) }
         if busy { blocks.append(.message(copy("before.busy"))) }
-        return Screen(step: 1, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .start, enabled: !starting)], warnings: warnings, notice: notice, settings: settingsButton)
+        return Screen(step: 1, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .start, enabled: !starting)], under: questions, warnings: warnings, notice: notice, settings: settingsButton)
     }
 
     private var settingsButton: Button { Button(label: appCopy("settings.open"), action: .openSettings) }

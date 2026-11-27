@@ -125,6 +125,7 @@ final class ScreensTests: XCTestCase {
             "開始之前",
             "請準備好你的實體自然人憑證卡片。",
             "非本國國民持有的自然人憑證無法用於島民證明。",
+            "下一步",
             "為什麼一定要實體的卡片？",
             "實體卡片簽章在卡片裡完成，卡片效期約 5 ~ 8 年。",
             "行動自然人憑證簽章依賴內政部伺服器，而且每年會更換金鑰，不適合作為島民證明使用。",
@@ -132,9 +133,10 @@ final class ScreensTests: XCTestCase {
             "滿 18 歲，未受監護宣告，本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
             "找附近的戶政事務所",
             "內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）",
-            "下一步",
         ])
-        guard case .question(_, let answer)? = screen.blocks.last else { return XCTFail("no question at the end: \(screen.blocks)") }
+        // The way on above the two questions, which can be skipped (card-proof.md, step 1).
+        XCTAssertEqual(screen.buttons.map(\.label), ["下一步"])
+        guard case .question(_, let answer)? = screen.under.last else { return XCTFail("no question at the end: \(screen.under)") }
         XCTAssertEqual(Array(answer.dropFirst()), [
             .button(Button(label: "找附近的戶政事務所", action: .findOffice), main: false),
             .action(Button(label: "內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）", action: .howToApply)),

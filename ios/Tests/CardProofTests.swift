@@ -133,6 +133,7 @@ final class CardProofTests: XCTestCase {
             "開始之前",
             "請準備好你的實體自然人憑證卡片。",
             "非本國國民持有的自然人憑證無法用於島民證明。",
+            "下一步",
             "為什麼一定要實體的卡片？",
             "實體卡片簽章在卡片裡完成，卡片效期約 5 ~ 8 年。",
             "行動自然人憑證簽章依賴內政部伺服器，而且每年會更換金鑰，不適合作為島民證明使用。",
@@ -140,7 +141,6 @@ final class CardProofTests: XCTestCase {
             "滿 18 歲，未受監護宣告，本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
             "找附近的戶政事務所",
             "內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）",
-            "下一步",
         ])
         // The two ways to a card: the phone's map, and MOICA's page on applying. Nothing of the app goes with them.
         try await press("找附近的戶政事務所", in: model)
@@ -1392,7 +1392,8 @@ final class CardProofTests: XCTestCase {
             let (starts, taps) = (asked.startRequests, card.taps.count)
             try await press("下一步", in: model)
             XCTAssertEqual(model.screen.step, 1, failure.code)
-            XCTAssertEqual(Array(model.screen.texts.suffix(2)), [say("before.busy"), "下一步"], "\(failure.code): the sentence right above 下一步")
+            XCTAssertEqual(model.screen.blocks.last, .message(say("before.busy")), "\(failure.code): the sentence right above 下一步")
+            XCTAssertEqual(model.screen.buttons.map(\.label), ["下一步"], failure.code)
             XCTAssertEqual(asked.startRequests, starts + 1, "\(failure.code): 下一步 asked config with the mark, once")
             XCTAssertEqual(card.taps.count, taps, "\(failure.code): no card tapped")
             if failure == CountingBackend.busy { await Snapshot.save(model, as: "1-busy") }
