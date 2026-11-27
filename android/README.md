@@ -125,7 +125,7 @@ IAMREAL_STORE_SCREENS=$PWD/../android/test-output/store IAMREAL_BB=<bb 6.0.0 的
 ```
 
 - 準備和「模擬器上過一次卡」相同（模擬器、`-skin 1080x2280`）；整個測試照樣跑完，截圖在途中拍。測試沒有全過時，圖照樣留著，但先看哪裡沒過再用
-- 每一張是模擬器整個螢幕，和測試相同的大小：1080×2280、密度 420。Google Play 收的手機截圖是 PNG 或 JPEG、每邊 320 到 3,840 像素、長邊不超過短邊 2.3 倍（[Add preview assets](https://support.google.com/googleplay/android-developer/answer/9866151)），測試拍完逐張核對，不合就算沒過
+- 每一張是模擬器整個螢幕，和測試相同的大小：1080×2280、密度 420。Google Play 收的手機截圖是 JPEG 或 24 位元、沒有透明度的 PNG，每邊 320 到 3,840 像素、長邊不超過短邊 2.3 倍（[Add preview assets](https://support.google.com/googleplay/android-developer/answer/9866151)）。`screencap -p` 給的 PNG 有透明度，所以測試讀 `screencap` 的原始像素，自己寫成 RGB 的 PNG（`test/emulator.ts` 的 `screenshotRgb`），拍完逐張核對，不合就算沒過
 - 拍的那一刻，系統的狀態列換成示範模式（Android 的 SystemUI demo mode）：時間固定 09:00、電池和訊號滿格、網路連上（測試關掉了模擬器的網路）、沒有通知的圖示。拍完換回來
 - 畫面上的都是假資料：假卡片（姓名「測試用戶」）、帳號 `@alice`、本機後台給的島民編號。沒有真的姓名
 - 測試的 build（`fake`）和發出去的 app 畫面是同一份程式；它連的是本機的後台，畫面上不出現網址

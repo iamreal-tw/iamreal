@@ -363,44 +363,52 @@ function designCapture(file: string, height: number, top = STATUS_BAR): void {
  * the moment: a set time, a full battery and signal, no notification.
  */
 const STORE_SCREENS = process.env.IAMREAL_STORE_SCREENS;
-/** The demo mode of Android's system bar (SystemUI's "demo mode"), by broadcasts to it. */
-const DEMO = "am broadcast -a com.android.systemui.demo -e command";
+/** The start of a broadcast to the demo mode of Android's system bar (SystemUI's "demo mode"). */
+const DEMO_BROADCAST = "am broadcast -a com.android.systemui.demo -e command";
+/** The emulator's setting that allows the demo mode, before the test changed it. */
+let demoAllowedBefore = "";
 
-/** Puts the system's bar in its demo mode for the store's screenshots, or takes it out. */
-function storeBar(on: boolean): void {
+/** Puts the system's bar in its demo mode for the store's screenshots, or takes it out and puts the setting back as it was. */
+function demoStatusBar(on: boolean): void {
   if (STORE_SCREENS === undefined) return;
   if (!on) {
-    emulator.shell(`${DEMO} exit; settings put global sysui_demo_allowed 0`);
+    emulator.shell(`${DEMO_BROADCAST} exit`);
+    // Not set ("null") is off, as 0 is.
+    emulator.shell(`settings put global sysui_demo_allowed ${demoAllowedBefore === "1" ? 1 : 0}`);
     return;
   }
+  if (demoAllowedBefore === "") demoAllowedBefore = emulator.shell("settings get global sysui_demo_allowed").trim();
   emulator.shell(
     [
       "settings put global sysui_demo_allowed 1",
-      `${DEMO} enter`,
-      `${DEMO} clock -e hhmm 0900`,
-      `${DEMO} battery -e level 100 -e plugged false`,
-      `${DEMO} network -e wifi show -e level 4 -e fully true`,
-      `${DEMO} network -e mobile show -e datatype none -e level 4 -e fully true`,
-      `${DEMO} notifications -e visible false`,
+      `${DEMO_BROADCAST} enter`,
+      `${DEMO_BROADCAST} clock -e hhmm 0900`,
+      `${DEMO_BROADCAST} battery -e level 100 -e plugged false`,
+      `${DEMO_BROADCAST} network -e wifi show -e level 4 -e fully true`,
+      `${DEMO_BROADCAST} network -e mobile show -e datatype none -e level 4 -e fully true`,
+      `${DEMO_BROADCAST} notifications -e visible false`,
     ].join("; "),
   );
 }
 
 /**
  * The screen as `file` of STORE_SCREENS, if it is set, from the top of the step (`fromTop`) or as it is (a panel over the step).
- * Checks it is one Google Play takes for a phone: PNG, each side 320 to 3,840 pixels, the long side at most 2.3 times the short.
+ * Checks it is one Google Play takes for a phone: a PNG of 24-bit colour with no alpha, each side 320 to 3,840 pixels, the long side
+ * at most 2.3 times the short (https://support.google.com/googleplay/android-developer/answer/9866151).
  */
 async function storeShot(file: string, fromTop = true): Promise<void> {
   if (STORE_SCREENS === undefined) return;
   if (fromTop) toTop();
-  storeBar(true);
+  demoStatusBar(true);
   await sleep(1_000);
-  const png = emulator.screenshot();
-  storeBar(false);
+  const png = emulator.screenshotRgb();
+  demoStatusBar(false);
   mkdirSync(STORE_SCREENS, { recursive: true });
   writeFileSync(join(STORE_SCREENS, file), png);
-  // The width and the height in the PNG's header (IHDR, after its 8-byte signature and the chunk's length and type).
-  const [width, height] = [png.readUInt32BE(16), png.readUInt32BE(20)];
+  // The PNG's signature, then its header (IHDR): the width, the height, the bits of a sample and the colour type (2: RGB, no alpha).
+  const signed = png.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) && png.toString("latin1", 12, 16) === "IHDR";
+  const [width, height] = signed ? [png.readUInt32BE(16), png.readUInt32BE(20)] : [0, 0];
+  check(signed && png[24] === 8 && png[25] === 2, `the store's screenshot ${file} is a PNG of 24-bit colour with no alpha`);
   const [short, long] = [Math.min(width, height), Math.max(width, height)];
   check(short >= 320 && long <= 3_840 && long <= 2.3 * short, `the store's screenshot ${file} is ${width}x${height}: each side 320 to 3,840 pixels, the long side at most 2.3 times the short`);
 }
@@ -659,12 +667,9 @@ async function cardProof(p: Proof): Promise<string> {
   }
   emulator.tap(field("pin"));
   emulator.type(PIN);
-  if (p.thorough && DESIGN_SCREENS !== undefined) {
+  if (p.thorough && (DESIGN_SCREENS !== undefined || STORE_SCREENS !== undefined)) {
     hideKeyboard();
     await designShot("card-proof-app-3-pin-phone.png");
-  }
-  if (p.thorough && STORE_SCREENS !== undefined) {
-    hideKeyboard();
     await storeShot("phone-2-pin.png");
   }
   {
@@ -1864,7 +1869,7 @@ try {
   try {
     emulator.shell(`date @${Math.floor(Date.now() / 1000)}; settings put global auto_time 1; svc wifi enable; svc data enable`);
     emulator.shell(`wm size reset; wm density reset; am force-stop ${APP}`);
-    storeBar(false);
+    demoStatusBar(false);
     if (/^[01]$/.test(imeBefore)) emulator.shell(`settings put secure show_ime_with_hard_keyboard ${imeBefore}`);
     emulator.adb("reverse", "--remove", `tcp:${DEVICE_PORT}`);
     emulator.adb("unroot");

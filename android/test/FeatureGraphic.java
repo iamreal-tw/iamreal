@@ -26,16 +26,16 @@ public class FeatureGraphic {
     static final int WIDTH = 1024;
     static final int HEIGHT = 500;
     /** The name's size, in pixels: four characters a little over half the width. */
-    static final float SIZE = 140f;
+    static final float NAME_PIXELS = 140f;
 
     public static void main(String[] args) throws Exception {
         if (args.length != 1) throw new IllegalArgumentException("usage: java android/test/FeatureGraphic.java <path of the PNG to make>");
         String tokens = Files.readString(Path.of("design/tokens.json"));
         // The app's name, as the splash writes it (design/copy/app.json, splash.name).
-        Matcher named = Pattern.compile("\"splash\":\\s*\\{[^}]*\"name\":\\s*\"([^\"]+)\"").matcher(Files.readString(Path.of("design/copy/app.json")));
-        if (!named.find()) throw new IllegalStateException("design/copy/app.json has no splash.name");
-        String name = named.group(1);
-        Font font = Font.createFont(Font.TRUETYPE_FONT, new File("design/fonts/GenRyuMin2TW-B.otf")).deriveFont(SIZE);
+        Matcher splash = Pattern.compile("\"splash\":\\s*\\{[^}]*\"name\":\\s*\"([^\"]+)\"").matcher(Files.readString(Path.of("design/copy/app.json")));
+        if (!splash.find()) throw new IllegalStateException("design/copy/app.json has no splash.name");
+        String name = splash.group(1);
+        Font font = Font.createFont(Font.TRUETYPE_FONT, new File("design/fonts/GenRyuMin2TW-B.otf")).deriveFont(NAME_PIXELS);
         if (font.canDisplayUpTo(name) != -1) throw new IllegalStateException("design/fonts/GenRyuMin2TW-B.otf has no glyph for the name");
 
         BufferedImage image = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
@@ -54,7 +54,9 @@ public class FeatureGraphic {
         g.setColor(color(tokens, "--ink"));
         layout.draw(g, x, y);
         g.dispose();
-        if (!ImageIO.write(image, "png", new File(args[0]))) throw new IllegalStateException("no PNG writer");
+        Path out = Path.of(args[0]).toAbsolutePath();
+        Files.createDirectories(out.getParent());
+        if (!ImageIO.write(image, "png", out.toFile())) throw new IllegalStateException("no PNG writer");
     }
 
     /** A colour of design/tokens.json, which writes each as #RRGGBB. */
