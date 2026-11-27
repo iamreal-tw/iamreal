@@ -375,7 +375,7 @@ gh workflow run upload-ios-test.yml --repo iamreal-tw/iamreal --ref main   # 測
   描述檔要包含 NFC Tag Reading：`upload` 檢查描述檔是這個 app、這個團隊，而且允許 NFC 的 `TAG`，不是就停。App ID 的能力改了，描述檔就失效要重做（[Enable app capabilities](https://developer.apple.com/help/account/identifiers/enable-app-capabilities/)：「Provisioning profiles that contain a modified App ID become invalid.」）。
 - **憑證和描述檔有到期日，到期前要換。** 到期日在 Apple Developer 網站的 Certificates、Profiles 頁上看得到；換的時候營運者重做、換掉上面的 secret。`.p12` 用「鑰匙圈存取」匯出：OpenSSL 3 預設的加密方式做的 `.p12`，`security import` 可能讀不了。撤銷憑證時，App Store 上的 app 不受影響，但已經上傳、還沒送審的 build 可能變成無效（[Certificates overview](https://developer.apple.com/help/account/certificates/certificates-overview/)）。
 - **先簽一次、不上傳，檢查 NFC 的 entitlement。** Xcode 簽出來的 entitlement 要到這裡才看得到；`upload` 先用 `destination` `export` 簽一次，從簽好的 app 讀出 entitlement：`com.apple.developer.nfc.readersession.formats` 要剛好是 `TAG` 一個，和 `Config/IamrealApp.entitlements` 相同，不多不少；識別碼要對，才往下簽章上傳。
-- **團隊代號**是 environment `app-test` 的 variable `APPLE_TEAM_ID`（不是 secret：每個簽過的 app 裡都看得到它）。archive 沒有簽章、沒有團隊，匯出要知道用哪個團隊（`xcodebuild -help`：`teamID`「Defaults to the team used to build the archive」）。沒有設這個 variable，`upload` 在拿到金鑰之前就失敗。團隊代號不寫進程式庫（「怎麼用線裝到手機」）。
+- **團隊代號**是 environment `app-test` 的 variable `APPLE_TEAM_ID`（不是 secret：每個簽過的 app 裡都看得到它）。archive 只有 ad hoc 的章、沒有團隊，匯出要知道用哪個團隊（`xcodebuild -help`：`teamID`「Defaults to the team used to build the archive」）。沒有設這個 variable，`upload` 在拿到金鑰之前就失敗。團隊代號不寫進程式庫（「怎麼用線裝到手機」）。
 - **`manageAppVersionAndBuildNumber` 是 `false`**：版本和 build 用 `archive.sh` 給的，Xcode 不另外改。`uploadSymbols` 是 `true`：Apple 收到當機報告時能還原成函式名稱（[#94](https://github.com/iamreal-tw/iamreal/issues/94)：當機只看商店自己的報告）。
 
 ### 版本和 build

@@ -96,7 +96,7 @@ jobs:
           path: ${{ runner.temp }}/ios-upload
       - name: Unpack the archive
         run: tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/ios-upload/IamrealApp.xcarchive.tar"
-      # The archive is unsigned and names no team: the export is told which, from the
+      # The archive has only an ad hoc signature and names no team: the export is told which, from the
       # environment's variable APPLE_TEAM_ID (not a key; every signed app shows it).
       - name: Name the team in the export options
         env:
@@ -117,8 +117,8 @@ jobs:
           IOS_TEST_APPSTORE_PROFILE_BASE64: ${{ secrets.IOS_TEST_APPSTORE_PROFILE_BASE64 }}
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
         run: printf '%s' "$IOS_TEST_APPSTORE_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/app.mobileprovision" && security cms -D -i "$RUNNER_TEMP/app.mobileprovision" -o "$RUNNER_TEMP/profile.plist" && test "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/profile.plist")" = "$APPLE_TEAM_ID.tw.iamreal.app.test" && /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.nfc.readersession.formats' "$RUNNER_TEMP/profile.plist" | grep -qw TAG && uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/profile.plist")" && mkdir -p "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" "$HOME/Library/MobileDevice/Provisioning Profiles" && cp "$RUNNER_TEMP/app.mobileprovision" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$uuid.mobileprovision" && cp "$RUNNER_TEMP/app.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision" && /usr/libexec/PlistBuddy -c 'Add :provisioningProfiles dict' -c "Add :provisioningProfiles:tw.iamreal.app.test string $uuid" "$RUNNER_TEMP/ios-upload/ExportOptions.plist"
-      # The archive is unsigned, so the signed app is the first place its entitlements can be
-      # seen: signed once without uploading, it must carry the NFC tag reading, exactly TAG as
+      # What Xcode's signature carries is first seen in the signed app: signed once without
+      # uploading, it must carry the NFC tag reading, exactly TAG as
       # ios/Config/IamrealApp.entitlements has it, no more and no less, and the identifier.
       - name: Sign without uploading, and check that the app has its NFC entitlement
         env:
