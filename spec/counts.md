@@ -255,7 +255,6 @@ reader, a browser or the server said in words is never sent.
 | `server_empty` | web, android, ios | The server answered `empty` |
 | `server_switch_limit` | web, android, ios | The server answered `switch_limit` |
 | `server_daily_limit` | web, android, ios | The server answered `daily_limit` |
-| `server_switch_restricted` | web, android, ios | The server answered `switch_restricted` |
 | `server_malformed` | web, android, ios | The server answered `malformed` |
 | `server_scope` | web, android, ios | The server answered `scope` |
 | `server_platform` | web, android, ios | The server answered `platform` |

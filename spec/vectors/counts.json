@@ -407,11 +407,6 @@
         "android",
         "ios"
       ],
-      "server_switch_restricted": [
-        "web",
-        "android",
-        "ios"
-      ],
       "server_malformed": [
         "web",
         "android",

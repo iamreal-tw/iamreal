@@ -136,8 +136,6 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
       if (stop.server === "daily_limit") return { ...say(s.daily_limit), ...id };
       if (stop.server === "switch_limit") return { ...say(s.switch_limit), ...id };
       if (stop.server === "empty") return { ...say(s.empty), ...id };
-      // The server's operating policy refused a switch the rules allow (none by default).
-      if (stop.server === "switch_restricted") return { ...say(s.switch_restricted), ...id };
       if (REJECTED.has(stop.server)) return { ...say(s.rejected, { code: stop.server }), ...id };
       return { ...say(s.server_unreadable, { code: stop.server }), ...id };
     }

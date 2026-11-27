@@ -46,7 +46,7 @@ export function testdataIssuer(): IssuerKey {
 }
 
 /**
- * Where cmd/iamreal-verify/testdata/card-proofs/ is: fourteen card proofs
+ * Where cmd/iamreal-verify/testdata/card-proofs/ is: thirteen card proofs
  * with real proofs, the CRLs they were made against, and the public halves
  * of the two throwaway keys that signed the cards' certificates and those
  * CRLs (its README.md).
