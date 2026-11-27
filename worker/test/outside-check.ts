@@ -82,8 +82,8 @@ export const COUNT_EVENTS_CHECKED = true;
 export const COUNT_EVENTS_FILE = "count-events/oldest.json";
 /**
  * The date of the test site's first day of the counts' totals (#435), or
- * null while it is not checked: count-totals/oldest.json on the test site
- * has said 2026-11-26 since its first day of totals (read 2026-11-27).
+ * null while the line is not checked: on since count-totals/oldest.json on
+ * the test site says 2026-11-26 (read 2026-11-27).
  */
 export const COUNT_TOTALS_FIRST: string | null = "2026-11-26";
 /** The file the back end writes every hour about the counts' totals (#435), on the data domain. */

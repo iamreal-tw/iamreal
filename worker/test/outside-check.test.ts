@@ -37,16 +37,15 @@ after(async () => {
 
 const site: Reader = (path, headers) => worker.fetch(path, { redirect: "manual", headers: { ...headers } });
 /**
- * The three files the hourly schedule writes about the bucket that is not
- * public, looked at 09:00 in Taiwan on the day of AS_RUNNING: the two of
- * what expires as it writes them while that bucket holds nothing under the
- * prefix, and the totals' with the test site's first day of totals.
+ * A file the hourly schedule writes about the bucket that is not public, as
+ * written at 09:00 in Taiwan on the day of AS_RUNNING.
  */
-const LOOKED = '{"checked":"2026-11-21T01:00:05.000Z","oldest":null}\n';
-const TOTALS_LOOKED = `{"checked":"2026-11-21T01:00:05.000Z","oldest":"${COUNT_TOTALS_FIRST}"}\n`;
+const looked = (oldest: string | null): Response =>
+  new Response(`${JSON.stringify({ checked: "2026-11-21T01:00:05.000Z", oldest })}\n`, { headers: { "Content-Type": "application/json" } });
 const data: Reader = async (path) => {
-  if (path === `/${CONNECTION_LOG_FILE}` || path === `/${COUNT_EVENTS_FILE}`) return new Response(LOOKED, { headers: { "Content-Type": "application/json" } });
-  if (path === `/${COUNT_TOTALS_FILE}`) return new Response(TOTALS_LOOKED, { headers: { "Content-Type": "application/json" } });
+  // Nothing under the prefixes that expire; the totals begin on the test site's first day.
+  if (path === `/${CONNECTION_LOG_FILE}` || path === `/${COUNT_EVENTS_FILE}`) return looked(null);
+  if (path === `/${COUNT_TOTALS_FILE}`) return looked(COUNT_TOTALS_FIRST);
   const file = (await worker.files(path.slice(1))).find((f) => `/${f.key}` === path);
   return file === undefined ? new Response(null, { status: 404 }) : new Response(new Blob([new Uint8Array(file.bytes)]));
 };
