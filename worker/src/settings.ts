@@ -44,6 +44,7 @@ export interface ProofLogSettings {
    * proof log. `card-state` sends it to devices.
    */
   readonly dailyLimit: number;
+  /**
    * The operator stopped taking card proofs (`CARD_PROOFS_PAUSED`, ADR-0033;
    * README.md, "停止和恢復收過卡"): `challenges` and `records` answer
    * `paused` and the proof log takes no record; `config` says so, so that a
