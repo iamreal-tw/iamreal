@@ -61,7 +61,12 @@ export const WORKER_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
  *   CLOUDFLARE_API_BASE_URL and have the token sent to another host. With
  *   /dev/null it loads nothing (test/deploy.test.ts).
  */
-const WRANGLER_ARGS: readonly string[] = ["--config", "wrangler.jsonc", "--env", "test", "--experimental-provision=false", "--env-file=/dev/null"];
+const WRANGLER_ARGS: readonly string[] = ["--config", "wrangler.jsonc", "--env", "test", ...wranglerSafeFlags()];
+
+/** The two flags above that keep wrangler from making resources and from reading `.env` files: also the measurement's (measure/deploy.ts). */
+export function wranglerSafeFlags(): string[] {
+  return ["--experimental-provision=false", "--env-file=/dev/null"];
+}
 
 /** The arguments after `wrangler` that bundle the deploy build into `outDir` and upload nothing. */
 export const buildArgs = (outDir: string): string[] => ["deploy", ...WRANGLER_ARGS, "--dry-run", "--outdir", outDir];
@@ -141,16 +146,18 @@ export interface DeployToken {
  * missing or empty.
  */
 export function deployTokenOf(envFileText: string): DeployToken {
-  const valueOf = (name: string): string => {
-    let value: string | undefined;
-    for (const line of envFileText.split(/\r?\n/)) {
-      const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
-      if (m && m[1] === name) value = m[2]!.replace(/^(["'])(.*)\1$/, "$2");
-    }
-    if (value === undefined || value === "") throw new Error(`.env.local has no ${name}`);
-    return value;
-  };
-  return { token: valueOf("CLOUDFLARE_API_TOKEN_TEST"), accountId: valueOf("CLOUDFLARE_ACCOUNT_ID") };
+  return { token: envFileValue(envFileText, "CLOUDFLARE_API_TOKEN_TEST", ".env.local"), accountId: envFileValue(envFileText, "CLOUDFLARE_ACCOUNT_ID", ".env.local") };
+}
+
+/** The value of `name` in the text of an env file, read as `deployTokenOf` says; throws, naming `file` and the variable and never a value, if it is missing or empty. */
+export function envFileValue(text: string, name: string, file: string): string {
+  let value: string | undefined;
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
+    if (m && m[1] === name) value = m[2]!.replace(/^(["'])(.*)\1$/, "$2");
+  }
+  if (value === undefined || value === "") throw new Error(`${file} has no ${name}`);
+  return value;
 }
 
 /**

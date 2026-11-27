@@ -110,8 +110,11 @@ export function bindingsIn(output: string): Record<string, string> {
   return found;
 }
 
-/** What only the test build holds, and the build for a real card on this computer (local-build/, which sends the bucket's files). */
-export const NOT_DEPLOYED: readonly string[] = ["127.0.0.1", "localhost", "__IAMREAL_TEST", "/__test/", "setTestClock", "testClock", "test-build", "crl-paths", "/g2/complete.crl", "local-build"];
+/**
+ * What only the test build holds, the build for a real card on this computer (local-build/, which sends the bucket's
+ * files), and the measurement's build (measure-build/, whose doors write records no one verified: measure/README.md).
+ */
+export const NOT_DEPLOYED: readonly string[] = ["127.0.0.1", "localhost", "__IAMREAL_TEST", "/__test/", "setTestClock", "testClock", "test-build", "crl-paths", "/g2/complete.crl", "local-build", "measure-build", "/__measure/", "MEASURE_KEY"];
 
 /** The proof verifier's files, by the name they are imported by, and their SHA-256. */
 export function engineFiles(): Record<string, string> {

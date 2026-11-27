@@ -121,6 +121,20 @@ test("the build for a real card on this computer (local-build/index.ts, `pnpm lo
   }
 });
 
+test("the measurement's build (measure-build/index.ts) is not a deploy build: the check of the deploy build finds it", () => {
+  mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
+  const out = mkdtempSync(join(WORKER_DIR, "test-output", "bundle-measure-"));
+  try {
+    bundleWorker(out, { entry: "measure-build/index.ts", extraArgs: [] });
+    const measure = readBuild(out);
+    checkKeys(measure);
+    assert.ok(measure.code.includes("/__measure/"), "the measurement's build has its doors");
+    assert.throws(() => checkNothingOfTheTestBuild(measure), /measure-build|__measure|MEASURE_KEY/);
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
+});
+
 test("the proof verifier's files in a build are Barretenberg's module and the two verification keys, each with its SHA-256", () => {
   // The test build calls the verifier (test-build/index.ts), so it holds the files.
   assert.deepEqual(testBuild.files, engineFiles());
