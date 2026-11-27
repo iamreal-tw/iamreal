@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import tw.iamreal.app.Environment
 import tw.iamreal.app.flow.CardProof
 import tw.iamreal.app.flow.MinApp
 import tw.iamreal.app.flow.Platforms
@@ -139,9 +140,8 @@ internal const val FIND_OFFICE_SITE = "https://www.google.com/maps/search/?api=1
 /** before.how_to_get_moica: the certificate authority's site (design/copy/card-proof.md, "1. 開始之前"). */
 private const val MOICA = "https://moica.nat.gov.tw/"
 
-/** The store the app is updated from, as the copy's `{store}` (design/copy/card-proof.md: on Android, Google Play), and the app's page there. */
+/** The store the app is updated from, as the copy's `{store}` (design/copy/card-proof.md: on Android, Google Play). */
 private const val STORE = "Google Play"
-internal const val STORE_PAGE = "https://play.google.com/store/apps/details?id=tw.iamreal.app"
 
 /** The room above a screen that stands in the place of step 1, where the step bar is not (design/screens/app-update-required-phone.png). */
 private val GATE_TOP = 56.dp
@@ -155,7 +155,8 @@ private fun UpdateSoon(m: Model, from: String, outside: Outside) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         BasicText(c.say("app_before.update_soon", "min_app_from" to from, "store" to STORE), style = TextStyle(color = Colours.ink, fontSize = 15.sp, lineHeight = 1.75.em))
-        Button(c.say("app_before.update", "store" to STORE), Modifier.fillMaxWidth(), height = 44.dp) { outside.open(STORE_PAGE) }
+        // The app's own page on Google Play (Environment.kt); the development build has none, and no button.
+        Environment.STORE_PAGE?.let { page -> Button(c.say("app_before.update", "store" to STORE), Modifier.fillMaxWidth(), height = 44.dp) { outside.open(page) } }
     }
 }
 
@@ -167,7 +168,7 @@ private fun TooOld(m: Model, from: String, outside: Outside) {
     Title(c.say("app_before.too_old_title"))
     Body(c.say("app_before.too_old", "min_app_from" to from))
     Body(c.say("app_before.nothing_sent"))
-    Actions { Button(c.say("app_before.update", "store" to STORE), Modifier.fillMaxWidth(), primary = true) { outside.open(STORE_PAGE) } }
+    Environment.STORE_PAGE?.let { page -> Actions { Button(c.say("app_before.update", "store" to STORE), Modifier.fillMaxWidth(), primary = true) { outside.open(page) } } }
     Small(c.say("app_before.or_reader", "domain" to m.domain))
 }
 

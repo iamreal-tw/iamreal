@@ -1,6 +1,6 @@
-// The app, as its two builds (README.md, ADR-0037). What this file decides: the identifiers, the
-// one Android version the app is built for, how the native library and the
-// bundled files get into the installer, and the checks of what was built.
+// The app, as its three apps (README.md, ADR-0040). What this file decides: the identifiers, the build
+// numbers, the one Android version the app is built for, how the native library and the bundled files get
+// into the installer, and the checks of what was built.
 import com.android.build.api.artifact.SingleArtifact
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import java.nio.ByteBuffer
@@ -24,9 +24,26 @@ val bundledLists = files(rootProject.file("bundled.sha256"), rootProject.file(".
 // The build type of the emulator test (README.md, "模擬器上過一次卡"): a fake card, the library of the
 // tests, a server on this machine. It is installed next to the app under its own identifier and goes nowhere.
 val fakeBuild = "fake"
-// The identifier each build type must come out with (ADR-0037): release is the store's build, debug the
-// development build, which a phone can have next to the store's. checkManifest holds each build to it.
-val ids = mapOf("release" to "tw.iamreal.app", "debug" to "tw.iamreal.app.dev", fakeBuild to "tw.iamreal.app.dev.fake")
+// The build type of the test app (ADR-0040, GLOSSARY.md "測試 app"): a release build that always talks to the
+// test site. Not named "test…": AGP takes no build type whose name starts with "test".
+val testAppBuild = "trial"
+// The identifier each build type must come out with (ADR-0040): release is the production app, trial the
+// test app, debug the development build; a phone can have the three side by side. checkManifest holds each
+// build to it.
+val ids = mapOf("release" to "tw.iamreal.app", testAppBuild to "tw.iamreal.app.test", "debug" to "tw.iamreal.app.dev", fakeBuild to "tw.iamreal.app.dev.fake")
+// The build numbers (versionCode) each build type may have (ADR-0040, "測試網站的最低版本"; README.md,
+// "build 號碼"): the production app's are below 1,000,000, the test app's from 1,000,000 to below 2,000,000,
+// the development build's is 2,000,000. On launch day the test site's minimum version goes to 1,000,000 and
+// stops only the production app's builds from before launch. checkManifest holds each build to its range.
+val buildNumbers = mapOf("release" to 1..999_999, testAppBuild to 1_000_000..1_999_999, "debug" to 2_000_000..2_000_000, fakeBuild to 2_000_000..2_000_000)
+// The build number of a build that is not given one: the first of its range. The two uploads give theirs
+// (upload-android.yml, upload-android-test.yml: android-version.sh) as the Gradle property iamreal.versionCode;
+// the development build's is fixed and takes none.
+fun buildNumberOf(buildType: String): Int {
+    val range = buildNumbers.getValue(buildType)
+    if (range.first == range.last) return range.first
+    return providers.gradleProperty("iamreal.versionCode").map { it.toInt() }.getOrElse(range.first)
+}
 // The ABIs of each kind of build: what goes out is for phones only; a debug build is also for the emulator on x86-64.
 val releaseAbis = listOf("arm64-v8a")
 val debugAbis = listOf("arm64-v8a", "x86_64")
@@ -123,27 +140,32 @@ android {
     ndkVersion = "29.0.14206865"
 
     defaultConfig {
-        // The store's build (ADR-0037). The site it talks to and the proof log it signs for are in Environment.kt.
+        // The production app (ADR-0040); each build type adds its suffix. The site each talks to and the proof
+        // log it signs for are in its build type's Environment.kt (src/<build type>/kotlin/).
         applicationId = "tw.iamreal.app"
         minSdk = minApi
         targetSdk = 36
-        // The version (ADR-0036): a build for Google Play gets it from .github/workflows/upload-android.yml
-        // (android-version.sh) as two Gradle properties, the date and the run's number. Any other build is 1, "dev".
-        versionCode = providers.gradleProperty("iamreal.versionCode").map { it.toInt() }.getOrElse(1)
+        // The version shown (ADR-0036): a build for Google Play gets the date from its upload workflow
+        // (android-version.sh) as a Gradle property; any other build is "dev". The build number: buildNumberOf.
         versionName = providers.gradleProperty("iamreal.versionName").getOrElse("dev")
     }
 
     buildTypes {
         debug {
-            // The development build (ADR-0037): for a phone on a cable and for the emulator, next to the store's.
+            // The development build (ADR-0040): for a phone on a cable and for the emulator, next to the other two.
             applicationIdSuffix = ".dev"
             ndk { abiFilters += debugAbis }
         }
         release {
-            // The store's build (ADR-0037): phones only.
+            // The production app (ADR-0040): phones only.
             ndk { abiFilters += releaseAbis }
             isMinifyEnabled = true
             proguardFiles("proguard-rules.pro")
+        }
+        create(testAppBuild) {
+            // The test app (ADR-0040): built as the production app is, under its own identifier.
+            initWith(getByName("release"))
+            applicationIdSuffix = ".test"
         }
         create(fakeBuild) {
             // The emulator test's: a debug build with src/fake/ in place of src/real/ (sourceSets, below).
@@ -161,6 +183,7 @@ android {
         // and of a phone on a cable, or the fake card and this machine's server of the emulator test.
         getByName("debug").kotlin.directories.add("src/real/kotlin")
         getByName("release").kotlin.directories.add("src/real/kotlin")
+        getByName(testAppBuild).kotlin.directories.add("src/real/kotlin")
         // TestingCore, for the library of the tests: in the fake build and the unit tests only.
         getByName(fakeBuild).kotlin.directories.add("src/testing/kotlin")
         // The emulator test's build is a development build: it has that build's name under the icon.
@@ -332,12 +355,15 @@ abstract class CopyDesign : DefaultTask() {
 }
 
 /**
- * Fails when the merged manifest is of another app, asks for a permission that is not allowed, names the
- * advertising ID anywhere, or has a component other apps can call besides the app's one activity.
+ * Fails when the merged manifest is of another app, has a build number outside its build type's range
+ * (buildNumbers), asks for a permission that is not allowed, names the advertising ID anywhere, or has a
+ * component other apps can call besides the app's one activity.
  */
 abstract class CheckManifest : DefaultTask() {
     @get:InputFile abstract val manifest: RegularFileProperty
     @get:Input abstract val id: Property<String>
+    @get:Input abstract val lowestBuild: Property<Int>
+    @get:Input abstract val highestBuild: Property<Int>
     @get:Input abstract val allowed: ListProperty<String>
 
     @TaskAction
@@ -347,6 +373,10 @@ abstract class CheckManifest : DefaultTask() {
         val factory = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
         val root = factory.newDocumentBuilder().parse(file).documentElement
         if (root.getAttribute("package") != id.get()) throw GradleException("the merged manifest is of ${root.getAttribute("package")}, not ${id.get()}")
+        val build = root.getAttributeNS("http://schemas.android.com/apk/res/android", "versionCode")
+        if (build.toIntOrNull() !in lowestBuild.get()..highestBuild.get()) {
+            throw GradleException("the build number (versionCode) of ${id.get()} is $build, not from ${lowestBuild.get()} to ${highestBuild.get()} (app/build.gradle.kts, buildNumbers)")
+        }
         val asked = mutableListOf<String>()
         val open = mutableListOf<String>()
         val android = "http://schemas.android.com/apk/res/android"
@@ -456,14 +486,15 @@ abstract class CheckApk : DefaultTask() {
                 if (!testing.get() && text.contains("iamreal-device-core:testing-issuer-keys")) problems += "$lib is the library of the tests: it trusts issuer keys other than MOICA's"
             }
             // A class, a method or a text the Kotlin code refers to is in the dex file as text.
-            // Until launch both builds talk to the test site (ADR-0037, Environment.kt): its address is in a dex (in a
-            // release build, as the start of the addresses R8 put together). The fake build talks to this machine instead.
+            // Until launch every build talks to the test site (ADR-0040, Environment.kt); the test app and the
+            // development build always do. Its address is in a dex (in a release build, as the start of the
+            // addresses R8 put together). The fake build talks to this machine instead.
             val testSite = "https://test.iamreal.tw"
             var talksToTestSite = false
             for (dex in names.filter { it.endsWith(".dex") }) {
                 val text = String(read(dex), Charsets.ISO_8859_1)
                 if (text.contains(testSite)) talksToTestSite = true
-                // Until launch every build signs for the test log only (ADR-0037).
+                // Until launch every build signs for the test log only (ADR-0040).
                 for (production in listOf("//iamreal.tw", "//data.iamreal.tw", "iamreal:public:")) {
                     if (text.contains(production)) problems += "$dex holds $production: until launch no build names anything of production"
                 }
@@ -525,16 +556,22 @@ val buildNativeHost = tasks.register<BuildNativeHost>("buildNativeHost") {
 }
 
 androidComponents {
-    // The unit tests run against the code of the app that goes out; the fake build has the emulator test.
+    // The unit tests run against the code of the app that goes out: all of them in the development build's,
+    // and in the production app's and the test app's the ones of what each build type has of its own (its
+    // Environment.kt: BuildTest, and the proof log in DeviceCoreTest). AGP makes unit tests for debug alone
+    // unless told. The fake build has the emulator test.
     beforeVariants { variant ->
-        if (variant.buildType == fakeBuild) (variant as com.android.build.api.variant.HasUnitTestBuilder).enableUnitTest = false
+        (variant as com.android.build.api.variant.HasUnitTestBuilder).enableUnitTest = variant.buildType != fakeBuild
     }
     onVariants { variant ->
         val name = variant.name.replaceFirstChar { it.uppercase() }
-        val release = variant.buildType == "release"
+        // The two that go to Google Play: the production app and the test app.
+        val release = variant.buildType == "release" || variant.buildType == testAppBuild
         val fake = variant.buildType == fakeBuild
         val variantAbis = if (release) releaseAbis else debugAbis
         val variantId = ids.getValue(variant.buildType!!)
+        val variantBuilds = buildNumbers.getValue(variant.buildType!!)
+        for (output in variant.outputs) output.versionCode.set(buildNumberOf(variant.buildType!!))
         // The network, and what androidx.core declares for itself: a permission of this app's own, which only this app holds.
         val variantPermissions = allowedPermissions + "$variantId.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
 
@@ -565,6 +602,8 @@ androidComponents {
             manifest = variant.artifacts.get(SingleArtifact.MERGED_MANIFEST)
             allowed = variantPermissions
             id = variantId
+            lowestBuild = variantBuilds.first
+            highestBuild = variantBuilds.last
         }
         val checkApk = tasks.register<CheckApk>("checkApk$name") {
             design.from(designResources.values)
@@ -587,6 +626,12 @@ androidComponents {
             allowed = allowedLibraries
         }
         tasks.named("check") { dependsOn(checkManifest, checkApk, checkLibraries) }
+        // The unit tests of each build type know which app they are testing (BuildTest).
+        tasks.matching { it.name == "test${name}UnitTest" }.configureEach {
+            this as Test
+            systemProperty("iamreal.app", variantId)
+            if (release) filter { includeTestsMatching("tw.iamreal.app.BuildTest"); includeTestsMatching("tw.iamreal.app.core.DeviceCoreTest") }
+        }
         val checkBundle = tasks.register<CheckApk>("checkBundle$name") {
             design.from(designResources.values)
             aab = variant.artifacts.get(SingleArtifact.BUNDLE)
@@ -619,10 +664,11 @@ tasks.withType<Test>().configureEach {
     // The files an installer carries, where bundleFiles takes them from.
     systemProperty("iamreal.bundled", listOf("../web/circuits", "../verifier/vk", "../device-core/vendor/crs").joinToString(File.pathSeparator) { rootProject.file(it).path })
     systemProperty("iamreal.copy", rootProject.file("../design/copy").path)
-    // The name under the icon of each app (ADR-0040): the production app's in main/, the development build's in debug/.
+    // The name under the icon of each app (ADR-0040): the production app's in main/, the test app's in trial/, the development build's in debug/.
     systemProperty("iamreal.strings.production", file("src/main/res/values/strings.xml").path)
+    systemProperty("iamreal.strings.test", file("src/$testAppBuild/res/values/strings.xml").path)
     systemProperty("iamreal.strings.dev", file("src/debug/res/values/strings.xml").path)
-    inputs.files("src/main/res/values/strings.xml", "src/debug/res/values/strings.xml")
+    inputs.files("src/main/res/values/strings.xml", "src/$testAppBuild/res/values/strings.xml", "src/debug/res/values/strings.xml")
     inputs.dir(rootProject.file("../spec/vectors"))
     inputs.files(rootProject.file("../design/copy/app.md"), rootProject.file("../design/copy/app.json"))
     // The timelines the answers of spec/vectors/teaching-animation.json are for (HangMotionTest, SenseMotionTest).
