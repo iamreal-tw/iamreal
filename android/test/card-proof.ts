@@ -600,16 +600,16 @@ async function cardProof(p: Proof): Promise<string> {
   await waitText(step(2), "step 2");
   if (p.thorough) {
     // The demonstration of where the card goes (design/copy/card-proof.md, "示範"): one element to a screen reader; it plays by itself
-    // when the step comes up, three rounds, and 停止 goes straight to its rest: the card in place.
+    // when the step comes up, three rounds, and 停止播放 goes straight to its rest: the card in place.
     {
       const picture = find((n) => n.id === "sense-demo", "the demonstration of step 2");
       check(picture.description === say("app_demo.sense_android"), `step 2's demonstration reads as its one sentence of the copy ("${picture.description.slice(0, 20)}…")`);
       const [stop, replay] = [say("app_demo.stop"), say("app_demo.replay")];
       const says = (label: string): boolean => textsOf(visible()).includes(label);
-      check(says(stop) && !says(replay), "step 2: the demonstration plays by itself, and its button says 停止");
+      check(says(stop) && !says(replay), "step 2: the demonstration plays by itself, and its button says 停止播放");
       press(stop);
       await waitText(replay, "step 2's demonstration stopped", 10_000);
-      check(says(replay) && !says(stop), "step 2: 停止 stops the demonstration, and its button says 再看一次");
+      check(says(replay) && !says(stop), "step 2: 停止播放 stops the demonstration, and its button says 再看一次");
       // Pressing the picture itself does what its words in the corner say.
       emulator.tap(find((n) => n.id === "sense-demo", "the demonstration of step 2"));
       await waitText(stop, "step 2's demonstration played again by pressing it", 10_000);
@@ -885,7 +885,7 @@ const RECORD = process.env.IAMREAL_RECORD;
 
 /**
  * The demonstration of step 6 (design/copy/card-proof.md, "示範"): to a screen reader one element with its one sentence; under it one
- * button, 停止 while it plays and 再看一次 otherwise. It plays by itself once it is on the screen; 停止 goes straight to its last frame.
+ * button, 停止播放 while it plays and 再看一次 otherwise. It plays by itself once it is on the screen; 停止播放 goes straight to its last frame.
  * Leaves it stopped, at its last frame. `record`: with IAMREAL_RECORD set, it is played once more from its start and recorded.
  */
 async function demonstration(record: boolean): Promise<void> {
@@ -899,10 +899,10 @@ async function demonstration(record: boolean): Promise<void> {
     press(replay);
     await waitText(stop, "the demonstration playing again", 10_000);
   }
-  check(says(stop) && !says(replay), "step 6: while the demonstration plays its button says 停止");
+  check(says(stop) && !says(replay), "step 6: while the demonstration plays its button says 停止播放");
   press(stop);
   await waitText(replay, "the demonstration stopped", 10_000);
-  check(says(replay) && !says(stop), "step 6: 停止 stops the demonstration, and its button says 再看一次");
+  check(says(replay) && !says(stop), "step 6: 停止播放 stops the demonstration, and its button says 再看一次");
   if (record && RECORD !== undefined) {
     // The emulator's own recording, from the host: the one inside it cannot read the screen (no hardware encoder).
     emulator.adb("emu", "screenrecord", "start", "--fps", "60", "--bit-rate", "12M", "--time-limit", "40", RECORD);
@@ -917,7 +917,7 @@ async function demonstration(record: boolean): Promise<void> {
 
 /**
  * Step 6 (design/copy/card-proof.md, "6. 掛上去", app). `short`: a card proof again, asked only whether the link is still there, then
- * 沒有看到連結，重新掛上 for the whole of it. `newCard`: the card's first record. `buttons`: presses what opens something outside the app.
+ * 重新掛上連結 for the whole of it. `newCard`: the card's first record. `buttons`: presses what opens something outside the app.
  * Leaves the whole step 6 on the screen.
  */
 async function hangStep(o: { name: string; shortId: string; account: string; date: string; short: boolean; newCard: boolean; buttons?: boolean; design?: string; record?: boolean }): Promise<void> {
@@ -940,7 +940,7 @@ async function hangStep(o: { name: string; shortId: string; account: string; dat
     check(onTop().includes(`dat=http://${link}`), "step 6, the short one: 打開你的島民證明 opens the card's page in the browser");
     await backToApp(6);
     press(say("hang.rehang"));
-    await waitText(say("hang.copy"), "the whole step 6, after 沒有看到連結，重新掛上", 10_000);
+    await waitText(say("hang.copy"), "the whole step 6, after 重新掛上連結", 10_000);
     // 上一步 goes back to the short one, and the way to the whole step is there again.
     press(say("common.back"));
     await waitText(say("hang.rehang"), "the short step 6 again, after 上一步", 10_000);

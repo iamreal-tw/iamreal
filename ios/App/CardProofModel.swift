@@ -103,7 +103,7 @@ final class CardProofModel: ObservableObject {
     private var finished: (done: CardProofFlow.Done, single: String?)?
     /// Which of the steps after the record was sent is up.
     private var after = After.hang
-    /// "沒有看到連結，重新掛上" was pressed: step 6 is the whole one.
+    /// "重新掛上連結" was pressed: step 6 is the whole one.
     private var rehanging = false
     /// The demonstration of step 6 is playing; it has played in this card proof.
     private var demoPlaying = false
@@ -276,8 +276,8 @@ final class CardProofModel: ObservableObject {
     /// The app asks for no location; what is near is the map's to tell.
     /// Nothing of the card proof goes with it (design/copy/card-proof.md, step 1).
     static let findOffice = URL(string: "https://maps.apple.com/?q=%E6%88%B6%E6%94%BF%E4%BA%8B%E5%8B%99%E6%89%80")!
-    /// MOICA's site: its page on applying is not checked yet (card-proof.md, step 1).
-    static let moica = URL(string: "https://moica.nat.gov.tw/")!
+    /// MOICA's page on applying: who can apply, where and when, what to bring (card-proof.md, step 1).
+    static let moica = URL(string: "https://moica.nat.gov.tw/rac.html")!
 
     // The screens that show the reminder ---------------------------------------------
 

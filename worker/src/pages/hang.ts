@@ -181,7 +181,7 @@ ${linksTop}
 </div>
 </div>
 </div>
-<p class="demo-control"><button type="button" class="button quiet" data-demo-button data-stop="停止" data-replay="再看一次">再看一次</button></p>
+<p class="demo-control"><button type="button" class="button quiet" data-demo-button data-stop="停止播放" data-replay="再看一次">再看一次</button></p>
 </div>
 <script type="application/json" id="${TIMELINE_ID}">${new Html(HANG_TIMELINE_JSON.replaceAll("<", "\\u003c"))}</script>`;
 }
