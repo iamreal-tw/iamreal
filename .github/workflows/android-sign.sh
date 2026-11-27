@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Signs the bundle the build job of upload-android.yml made, with the upload
-# key, for Google Play (ADR-0036: the upload key proves to Google Play that
-# we sent it; the app signing key is not here). Android's documentation:
+# Signs the bundle the build job of upload-android.yml or
+# upload-android-test.yml made, with the upload key, for Google Play
+# (ADR-0036: the upload key proves to Google Play that we sent it; the app
+# signing key is not here, ADR-0040). Android's documentation:
 # "you can use jarsigner to sign your app bundle from the command line",
 # "You cannot use apksigner to sign your app bundle" ("Build your app from
 # the command line", https://developer.android.com/build/building-cmdline).

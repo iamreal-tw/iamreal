@@ -4,21 +4,22 @@
 //
 // What it is: a guard against slips and against plain changes to what
 // ADR-0029, ADR-0036, ADR-0025 (the daily re-verification holds no key of
-// the back end) and CONTRIBUTING.md ("部署會執行到的東西") require: only
-// the deploy job's upload step has the token, nothing before it in that job
-// runs code of the repository or of a package's install scripts; the keys
-// of the apps' uploads are only in the upload jobs, which build nothing
-// (upload-android.yml: in the env of the two steps that use them;
-// upload-ios.yml: in its last step); every action is one of a short list
-// at a fixed commit, and a pull request's checks can only read. It is a
-// whitelist: the files are read by a reader of a small part of YAML
-// (below) and anything outside that part is a problem, and the deploy
-// workflow's two jobs, the device-core and android jobs of checks.yml, the
-// jobs of cache.yml, the two jobs of upload-android.yml, the two jobs of
-// upload-ios.yml (only its upload job in the environment with the App Store
-// Connect key, and that key in its last step only), the two jobs of
-// reverify.yml, and the one job each of checks-ios.yml and
-// checks-circuits.yml, must be exactly the ones written here.
+// the back end) and CONTRIBUTING.md ("部署會執行到的東西") require: only the deploy
+// job's upload step has the token, nothing before it in that job runs code
+// of the repository or of a package's install scripts; the keys of the
+// apps' uploads are only in the upload jobs, which build nothing
+// (upload-android.yml, upload-android-test.yml: in the env of the two steps
+// that use them; upload-ios.yml: in its last step); every action is one of
+// a short list at a fixed commit, and a pull request's checks can only
+// read. It is a whitelist: the files are read by a reader of a small part
+// of YAML (below) and anything outside that part is a problem, and the
+// deploy workflow's two jobs, the device-core and android jobs of
+// checks.yml, the jobs of cache.yml, the two jobs of upload-android.yml and
+// of upload-android-test.yml, the two jobs of upload-ios.yml (only its
+// upload job in the environment with the App Store Connect key, and that
+// key in its last step only), the two jobs of reverify.yml, and the one job
+// each of checks-ios.yml and checks-circuits.yml, must be exactly the ones
+// written here.
 //
 // What it is not: a replacement for reading every line of a change to
 // these files, which CONTRIBUTING.md requires. It does not see:
@@ -27,7 +28,7 @@
 // - what the commands of cache.yml leave in the caches it saves: they run
 //   the code of main (the builds of device-core/ and android/), and every
 //   later check that restores a cache builds on what that run left in it;
-// - what the scripts upload-android.yml runs do (android-version.sh,
+// - what the scripts the two Android uploads run do (android-version.sh,
 //   android-sign.sh, play-upload.sh): test/upload-android.test.ts runs them,
 //   with curl replaced, and Google Play's own answers are seen only on GitHub;
 // - what reverify.yml runs: the repository's Go (the build of
@@ -699,7 +700,7 @@ export const DEPLOY_JOBS: YamlMap = {
 export const IOS_UPLOAD_WORKFLOW = "upload-ios.yml";
 export const IOS_UPLOAD_ON: Yaml = { workflow_dispatch: null };
 export const IOS_UPLOAD_GROUP = "upload-ios";
-/** The GitHub environment whose keys (App Store Connect's, #161; the Android upload key and Google Play's, #162) only main's runs get (ADR-0037). */
+/** The GitHub environment whose keys (App Store Connect's, #161; the Android upload key and Google Play's, #162) only main's runs get (ADR-0037), the same for the two apps of each store (ADR-0040). */
 export const APP_ENVIRONMENT = "app-test";
 /**
  * Its two jobs, exactly. "build" has no key and runs the repository's code:
@@ -854,84 +855,135 @@ export const CACHE_JOBS: YamlMap = {
 };
 
 /**
- * upload-android.yml (#175, ADR-0036, ADR-0037): builds the store's build of
- * the Android app (tw.iamreal.app) and puts it on Google Play's internal
- * testing track, when the operator starts it by hand (workflow_dispatch) on
- * main. Its two jobs, exactly:
+ * upload-android.yml (#175, ADR-0036, ADR-0040) and upload-android-test.yml
+ * (#483): build an app of Android, the production app (tw.iamreal.app) and
+ * the test app (tw.iamreal.app.test), and put it on its internal testing
+ * track of Google Play, when the operator starts it by hand
+ * (workflow_dispatch) on main. A file for each app, so that their runs are
+ * counted apart (the build number, ADR-0040). The two jobs of each, exactly,
+ * the same but for the app (androidUploadJobs):
  *
  * - build: no secret. It stops first when the run is not on main. Then
  *   the version (.github/workflows/android-version.sh: the date in Taiwan
- *   and the run's number), the steps of the android check up to Gradle, and
- *   `bundleRelease` with that version, which runs the checks of the bundle
- *   (android/app/build.gradle.kts: checkBundle, checkManifest,
- *   checkLibraries); it hands the bundle on as an artifact.
+ *   and the run's number, plus the app's number), the steps of the android
+ *   check up to Gradle, and the app's bundle task with that version, which
+ *   runs the checks of the bundle (android/app/build.gradle.kts:
+ *   checkBundle, checkManifest, checkLibraries); it hands the bundle on as
+ *   an artifact.
  * - upload: `environment: app-test`, whose secrets GitHub gives only to jobs
- *   on main (#162). It runs no build: it signs the bundle the build job
- *   checked with the upload key (android-sign.sh), keeps the signed bundle as
- *   an artifact (a new app's first build goes up by hand, from Play Console:
- *   .github/README.md), then uploads it (play-upload.sh). Each secret is in the
- *   env of the one step that uses it.
+ *   on main (#162), the same for the two apps (ADR-0040). It runs no build:
+ *   it signs the bundle the build job checked with the upload key
+ *   (android-sign.sh), keeps the signed bundle as an artifact (for when the
+ *   API does not take it: .github/README.md), then uploads it to the app's
+ *   package (play-upload.sh). Each secret is in the env of the one step that
+ *   uses it.
  *
  * Its token reads the code only, like every workflow's (`permissions`), and
  * it has no cache (`cache-mode: none`).
  */
 export const UPLOAD_ANDROID_WORKFLOW = "upload-android.yml";
+export const UPLOAD_ANDROID_TEST_WORKFLOW = "upload-android-test.yml";
 export const UPLOAD_ANDROID_ON: Yaml = { workflow_dispatch: null };
 export const UPLOAD_ANDROID_GROUP = "upload-android";
-/** The scripts of .github/workflows/ that upload-android.yml runs. */
+export const UPLOAD_ANDROID_TEST_GROUP = "upload-android-test";
+/** The scripts of .github/workflows/ that the two upload workflows run. */
 export const UPLOAD_ANDROID_SCRIPTS: readonly string[] = ["android-version.sh", "android-sign.sh", "play-upload.sh"];
-/** Where the build job leaves the bundle (AGP's place for it), and where the upload job puts the signed one. */
-const UNSIGNED_BUNDLE: YamlMap = { name: "android-bundle", path: "android/app/build/outputs/bundle/release/app-release.aab" };
-const SIGNED_BUNDLE = "signed/app-release.aab";
-export const UPLOAD_ANDROID_JOBS: YamlMap = {
-  build: {
-    "runs-on": "ubuntu-24.04",
-    "timeout-minutes": "30",
-    steps: [
-      { name: "Only from main", run: 'test "$GITHUB_REF" = refs/heads/main' },
-      step("actions/checkout"),
-      {
-        name: "The version, the date in Taiwan, and the run's number",
-        id: "version",
-        run: 'bash .github/workflows/android-version.sh "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"',
-      },
-      ...ANDROID_SETUP,
-      {
-        name: "gradlew bundleRelease, with the checks of the bundle",
-        "working-directory": "android",
-        env: { VERSION_NAME: "${{ steps.version.outputs.name }}", VERSION_CODE: "${{ steps.version.outputs.code }}" },
-        run: 'JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleRelease -Piamreal.versionName="$VERSION_NAME" -Piamreal.versionCode="$VERSION_CODE"',
-      },
-      { uses: uses("actions/upload-artifact"), with: { ...UNSIGNED_BUNDLE, "if-no-files-found": "error" } },
-    ],
-  },
-  upload: {
-    needs: "build",
-    "runs-on": "ubuntu-24.04",
-    "timeout-minutes": "20",
-    environment: APP_ENVIRONMENT,
-    steps: [
-      step("actions/checkout"),
-      { uses: uses("actions/download-artifact"), with: { name: UNSIGNED_BUNDLE.name!, path: "${{ runner.temp }}/bundle" } },
-      {
-        name: "Sign the bundle with the upload key",
-        env: { ANDROID_UPLOAD_KEYSTORE_BASE64: "${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}", ANDROID_UPLOAD_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}" },
-        run: `JAVA_HOME="$JAVA_HOME_17_X64" bash .github/workflows/android-sign.sh "$RUNNER_TEMP/bundle/app-release.aab" "$RUNNER_TEMP/${SIGNED_BUNDLE}"`,
-      },
-      { uses: uses("actions/upload-artifact"), with: { name: "android-bundle-signed", path: `\${{ runner.temp }}/${SIGNED_BUNDLE}`, "if-no-files-found": "error" } },
-      {
-        name: "Upload to Google Play's internal testing",
-        env: { PLAY_SERVICE_ACCOUNT_JSON: "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" },
-        run: `bash .github/workflows/play-upload.sh "$RUNNER_TEMP/${SIGNED_BUNDLE}"`,
-      },
-    ],
-  },
-};
+
+/** What tells the two apps' uploads apart. */
+interface AndroidApp {
+  /** The build type (android/app/build.gradle.kts), and so the bundle task and where AGP leaves the bundle. */
+  buildType: string;
+  /** The step's name for the version and the build task. */
+  versionStep: string;
+  buildStep: string;
+  /** The build-number offset android-version.sh adds to the run's number (ADR-0040). */
+  offset: string;
+  /** The artifacts. */
+  artifact: string;
+  /** The step's name for the upload, and the package on Google Play. */
+  uploadStep: string;
+  packageName: string;
+}
+
+/** The two jobs of an app's upload workflow. */
+function androidUploadJobs(app: AndroidApp): YamlMap {
+  const task = `bundle${app.buildType[0]!.toUpperCase()}${app.buildType.slice(1)}`;
+  const file = `app-${app.buildType}.aab`;
+  // Where the build job leaves the bundle (AGP's place for it), and where the upload job puts the signed one.
+  const unsigned: YamlMap = { name: app.artifact, path: `android/app/build/outputs/bundle/${app.buildType}/${file}` };
+  const signed = `signed/${file}`;
+  return {
+    build: {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": "30",
+      steps: [
+        { name: "Only from main", run: 'test "$GITHUB_REF" = refs/heads/main' },
+        step("actions/checkout"),
+        {
+          name: app.versionStep,
+          id: "version",
+          run: `bash .github/workflows/android-version.sh "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" ${app.offset} >> "$GITHUB_OUTPUT"`,
+        },
+        ...ANDROID_SETUP,
+        {
+          name: app.buildStep,
+          "working-directory": "android",
+          env: { VERSION_NAME: "${{ steps.version.outputs.name }}", VERSION_CODE: "${{ steps.version.outputs.code }}" },
+          run: `JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon ${task} -Piamreal.versionName="$VERSION_NAME" -Piamreal.versionCode="$VERSION_CODE"`,
+        },
+        { uses: uses("actions/upload-artifact"), with: { ...unsigned, "if-no-files-found": "error" } },
+      ],
+    },
+    upload: {
+      needs: "build",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": "20",
+      environment: APP_ENVIRONMENT,
+      steps: [
+        step("actions/checkout"),
+        { uses: uses("actions/download-artifact"), with: { name: app.artifact, path: "${{ runner.temp }}/bundle" } },
+        {
+          name: "Sign the bundle with the upload key",
+          env: { ANDROID_UPLOAD_KEYSTORE_BASE64: "${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}", ANDROID_UPLOAD_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}" },
+          run: `JAVA_HOME="$JAVA_HOME_17_X64" bash .github/workflows/android-sign.sh "$RUNNER_TEMP/bundle/${file}" "$RUNNER_TEMP/${signed}"`,
+        },
+        { uses: uses("actions/upload-artifact"), with: { name: `${app.artifact}-signed`, path: `\${{ runner.temp }}/${signed}`, "if-no-files-found": "error" } },
+        {
+          name: app.uploadStep,
+          env: { PLAY_SERVICE_ACCOUNT_JSON: "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" },
+          run: `bash .github/workflows/play-upload.sh ${app.packageName} "$RUNNER_TEMP/${signed}"`,
+        },
+      ],
+    },
+  };
+}
+
+export const UPLOAD_ANDROID_JOBS: YamlMap = androidUploadJobs({
+  buildType: "release",
+  versionStep: "The version, the date in Taiwan, and the run's number",
+  buildStep: "gradlew bundleRelease, with the checks of the bundle",
+  offset: "0",
+  artifact: "android-bundle",
+  uploadStep: "Upload to Google Play's internal testing",
+  packageName: "tw.iamreal.app",
+});
+export const UPLOAD_ANDROID_TEST_JOBS: YamlMap = androidUploadJobs({
+  buildType: "trial",
+  versionStep: "The version, the date in Taiwan, and the run's number plus 1,000,000",
+  buildStep: "gradlew bundleTrial, the test app, with the checks of the bundle",
+  offset: "1000000",
+  artifact: "android-test-bundle",
+  uploadStep: "Upload to Google Play's internal testing of the test app",
+  packageName: "tw.iamreal.app.test",
+});
 
 /** The only lines of all the workflows with the word "secrets" in them, comments included. */
 export const SECRET_LINES: readonly string[] = [
   "deploy-test.yml:          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_TEST }}",
   "deploy-test.yml:          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+  "upload-android-test.yml:          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}",
+  "upload-android-test.yml:          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}",
+  "upload-android-test.yml:          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}",
   "upload-android.yml:          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}",
   "upload-android.yml:          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}",
   "upload-android.yml:          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}",
@@ -1375,6 +1427,7 @@ export const WORKFLOW_FILES: readonly string[] = [
   "checks.yml",
   "deploy-test.yml",
   REVERIFY_WORKFLOW,
+  UPLOAD_ANDROID_TEST_WORKFLOW,
   UPLOAD_ANDROID_WORKFLOW,
   IOS_UPLOAD_WORKFLOW,
   WATCH_WORKFLOW,
@@ -1445,12 +1498,13 @@ export function workflowProblems(files: Readonly<Record<string, string>>, checkP
       if (!same(doc.jobs, REVERIFY_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
-    if (f === UPLOAD_ANDROID_WORKFLOW) {
+    if (f === UPLOAD_ANDROID_WORKFLOW || f === UPLOAD_ANDROID_TEST_WORKFLOW) {
+      const [group, jobs] = f === UPLOAD_ANDROID_WORKFLOW ? [UPLOAD_ANDROID_GROUP, UPLOAD_ANDROID_JOBS] : [UPLOAD_ANDROID_TEST_GROUP, UPLOAD_ANDROID_TEST_JOBS];
       // By hand only: no push, pull request or other workflow starts an upload.
       if (!same(doc.on, UPLOAD_ANDROID_ON)) p(`not triggered by hand (workflow_dispatch) only: ${JSON.stringify(doc.on)}`);
-      if (!same(doc.concurrency, { group: UPLOAD_ANDROID_GROUP, "cancel-in-progress": "false" })) p(`concurrency is not group ${UPLOAD_ANDROID_GROUP}, one run at a time and none cancelled`);
+      if (!same(doc.concurrency, { group, "cancel-in-progress": "false" })) p(`concurrency is not group ${group}, one run at a time and none cancelled`);
       if (doc.env !== undefined) p("an env at the top");
-      if (!same(doc.jobs, UPLOAD_ANDROID_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
+      if (!same(doc.jobs, jobs)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
     if (f === IOS_UPLOAD_WORKFLOW) {
