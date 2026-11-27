@@ -31,7 +31,7 @@
     },
     {
       "name": "two platforms, in ascending order",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -40,7 +40,7 @@
         },
         {
           "platform": "threads",
-          "kind": "correction",
+          "kind": "switch",
           "username": "bob"
         }
       ],
@@ -57,7 +57,7 @@
           },
           {
             "platform": "threads",
-            "kind": "correction",
+            "kind": "switch",
             "username": "bob",
             "account_cards": 1
           }
@@ -67,7 +67,7 @@
     },
     {
       "name": "every kind",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"a\",\"kind\":\"first\",\"username\":\"u1\",\"account_cards\":1},{\"platform\":\"b\",\"kind\":\"refresh\",\"username\":\"u2\",\"account_cards\":1},{\"platform\":\"c\",\"kind\":\"correction\",\"username\":\"u3\",\"account_cards\":1},{\"platform\":\"d\",\"kind\":\"switch\",\"username\":\"u4\",\"account_cards\":1},{\"platform\":\"e\",\"kind\":\"withdraw\",\"username\":\"u5\",\"account_cards\":0}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"a\",\"kind\":\"first\",\"username\":\"u1\",\"account_cards\":1},{\"platform\":\"b\",\"kind\":\"refresh\",\"username\":\"u2\",\"account_cards\":1},{\"platform\":\"d\",\"kind\":\"switch\",\"username\":\"u4\",\"account_cards\":1},{\"platform\":\"e\",\"kind\":\"withdraw\",\"username\":\"u5\",\"account_cards\":0}]}",
       "rows": [
         {
           "platform": "a",
@@ -78,11 +78,6 @@
           "platform": "b",
           "kind": "refresh",
           "username": "u2"
-        },
-        {
-          "platform": "c",
-          "kind": "correction",
-          "username": "u3"
         },
         {
           "platform": "d",
@@ -110,12 +105,6 @@
             "platform": "b",
             "kind": "refresh",
             "username": "u2",
-            "account_cards": 1
-          },
-          {
-            "platform": "c",
-            "kind": "correction",
-            "username": "u3",
             "account_cards": 1
           },
           {
@@ -953,7 +942,7 @@
         },
         {
           "platform": "threads",
-          "kind": "correction",
+          "kind": "switch",
           "username": "bob"
         }
       ],
@@ -1040,6 +1029,24 @@
     {
       "name": "kinds not read: a kind the device does not know",
       "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"declare\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "rows": [
+        {
+          "platform": "threads",
+          "kind": "first",
+          "username": "alice"
+        }
+      ],
+      "result": {
+        "seq": 138,
+        "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
+        "kinds": null,
+        "mismatches": []
+      }
+    },
+    {
+      "name": "kinds not read: correction, a kind of an earlier version of the record rules",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1255,7 +1262,7 @@
     },
     {
       "name": "kinds not read: the platforms in descending order",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\",\"account_cards\":1},{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1},{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -1264,7 +1271,7 @@
         },
         {
           "platform": "threads",
-          "kind": "correction",
+          "kind": "switch",
           "username": "bob"
         }
       ],
@@ -1557,7 +1564,7 @@
     },
     {
       "name": "ordinal not known: what the screen said is still compared",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":-1,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":-1,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"refresh\",\"username\":\"bob\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -1566,7 +1573,7 @@
         },
         {
           "platform": "threads",
-          "kind": "correction",
+          "kind": "switch",
           "username": "bob"
         }
       ],
@@ -1583,7 +1590,7 @@
           },
           {
             "platform": "threads",
-            "kind": "switch",
+            "kind": "refresh",
             "username": "bob",
             "account_cards": 1
           }
@@ -1770,7 +1777,7 @@
     },
     {
       "name": "account_cards not known on one platform: the other's is read",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":2},{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\"}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":2},{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\"}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -1779,7 +1786,7 @@
         },
         {
           "platform": "threads",
-          "kind": "correction",
+          "kind": "switch",
           "username": "bob"
         }
       ],
@@ -1796,7 +1803,7 @@
           },
           {
             "platform": "threads",
-            "kind": "correction",
+            "kind": "switch",
             "username": "bob",
             "account_cards": null
           }
@@ -1805,7 +1812,7 @@
       }
     },
     {
-      "name": "differs: a switch, where the screen said a correction",
+      "name": "differs: a switch, where the screen said a refresh",
       "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1}]}",
       "rows": [
         {
@@ -1815,7 +1822,7 @@
         },
         {
           "platform": "threads",
-          "kind": "correction",
+          "kind": "refresh",
           "username": "bob"
         }
       ],
@@ -1844,7 +1851,7 @@
     },
     {
       "name": "differs: another account",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"carol\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"carol\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -1853,7 +1860,7 @@
         },
         {
           "platform": "threads",
-          "kind": "correction",
+          "kind": "switch",
           "username": "bob"
         }
       ],
@@ -1870,7 +1877,7 @@
           },
           {
             "platform": "threads",
-            "kind": "correction",
+            "kind": "switch",
             "username": "carol",
             "account_cards": 1
           }
@@ -1909,7 +1916,7 @@
     },
     {
       "name": "differs: a platform the screen showed is not in the answer",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -1918,7 +1925,7 @@
         },
         {
           "platform": "threads",
-          "kind": "correction",
+          "kind": "switch",
           "username": "bob"
         }
       ],
@@ -1929,7 +1936,7 @@
         "kinds": [
           {
             "platform": "threads",
-            "kind": "correction",
+            "kind": "switch",
             "username": "bob",
             "account_cards": 1
           }
@@ -1941,7 +1948,7 @@
     },
     {
       "name": "differs: a platform the screen did not show",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\",\"account_cards\":1},{\"platform\":\"x-new\",\"kind\":\"withdraw\",\"username\":\"zed\",\"account_cards\":0}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1},{\"platform\":\"x-new\",\"kind\":\"withdraw\",\"username\":\"zed\",\"account_cards\":0}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -1950,7 +1957,7 @@
         },
         {
           "platform": "threads",
-          "kind": "correction",
+          "kind": "switch",
           "username": "bob"
         }
       ],
@@ -1967,7 +1974,7 @@
           },
           {
             "platform": "threads",
-            "kind": "correction",
+            "kind": "switch",
             "username": "bob",
             "account_cards": 1
           },
@@ -1985,7 +1992,7 @@
     },
     {
       "name": "differs: a withdrawal, where the screen said the account stays",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"withdraw\",\"username\":\"a-b\",\"account_cards\":0},{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"withdraw\",\"username\":\"a-b\",\"account_cards\":0},{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -1994,7 +2001,7 @@
         },
         {
           "platform": "threads",
-          "kind": "correction",
+          "kind": "switch",
           "username": "bob"
         }
       ],
@@ -2011,7 +2018,7 @@
           },
           {
             "platform": "threads",
-            "kind": "correction",
+            "kind": "switch",
             "username": "bob",
             "account_cards": 1
           }
@@ -2023,7 +2030,7 @@
     },
     {
       "name": "differs on two platforms: both, in ascending order",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"first\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"first\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"refresh\",\"username\":\"bob\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -2032,7 +2039,7 @@
         },
         {
           "platform": "threads",
-          "kind": "correction",
+          "kind": "switch",
           "username": "bob"
         }
       ],
@@ -2049,7 +2056,7 @@
           },
           {
             "platform": "threads",
-            "kind": "switch",
+            "kind": "refresh",
             "username": "bob",
             "account_cards": 1
           }

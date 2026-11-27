@@ -23,10 +23,10 @@ class ConfirmViewTest {
     private fun list(vararg rows: Row) =
         Consequence(rows.filter { it.kind != "withdraw" }.map { it.platform to it.username }, rows.toList(), false, "2026-11-16", ByteArray(0))
 
-    private val one = Status("7K2Q9FM4XD", "2026-11-04", 12, listOf(Slot("threads", true, "alice", "alice", 0, 5, false)), listOf("threads"), false, "2026-11-16")
+    private val one = Status("7K2Q9FM4XD", "2026-11-04", 12, listOf(Slot("threads", true, "alice", "alice", 0, 5)), listOf("threads"), false, "2026-11-16")
     private val several = Status(
         "7K2Q9FM4XD", "2026-11-04", 12,
-        listOf(Slot("test-example", false, "alice-b", "alice-b", 0, 5, false), Slot("threads", true, "alice", "alice", 0, 5, false)),
+        listOf(Slot("test-example", false, "alice-b", "alice-b", 0, 5), Slot("threads", true, "alice", "alice", 0, 5)),
         listOf("threads"), false, "2026-11-16",
     )
 

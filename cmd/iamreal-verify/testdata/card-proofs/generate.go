@@ -77,7 +77,7 @@ type proofSpec struct {
 var proofs = []proofSpec{
 	{"2026-11-20T10:00:00+08:00", "G2", []string{"threads:alice"}, 0, 201, "threads first"},
 	{"2026-11-20T10:05:00+08:00", "G3", []string{"test-example:a-b", "threads:alice"}, 1, 201, "test-example first, threads first"},
-	{"2026-11-20T10:20:00+08:00", "G3", []string{"test-example:a-b", "threads:alice_"}, 1, 201, "test-example refresh, threads correction"},
+	{"2026-11-20T10:20:00+08:00", "G3", []string{"test-example:a-b", "threads:alice_"}, 1, 201, "test-example refresh, threads switch"},
 	{"2026-11-21T09:00:00+08:00", "G3", []string{"test-example:a-b", "threads:bob"}, 1, 201, "test-example refresh, threads switch"},
 	{"2026-11-21T09:30:00+08:00", "G3", []string{"test-example:c-d", "threads:bob"}, 1, 201, "test-example switch, threads refresh"},
 	{"2026-11-22T09:00:00+08:00", "G3", []string{"test-example:c-d", "threads:carol"}, 1, 201, "test-example refresh, threads switch"},

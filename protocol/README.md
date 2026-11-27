@@ -10,7 +10,7 @@
 
 | 檔案 | 規格 | 內容 |
 |---|---|---|
-| `record-rules.ts` | `spec/record-rules.md` | 紀錄規則，一個不保管任何東西的函式 `applyRecord`：給它一筆紀錄、這張卡片之前的狀態、證明紀錄裡最晚的有效日期、這個題目有沒有用過、這筆紀錄的樹根對到的清冊日期，它回結果（有效或無效、代碼、每個平台的種類）和這張卡片之後的狀態。它不知道狀態存在哪裡。裝置在簽章之前只算檢查 5、6（`applyList`，`applyRecord` 的後半段）。另有規則的版本號（`RULES_VERSION`）、當天是否已經 3 筆（`dailyLimitReached`）、規則產生不出來的狀態（`possibleSlot`、`possibleCard`）、更換的次數上限 |
+| `record-rules.ts` | `spec/record-rules.md` | 紀錄規則，一個不保管任何東西的函式 `applyRecord`：給它一筆紀錄、這張卡片之前的狀態、證明紀錄裡最晚的有效日期、這個題目有沒有用過、這筆紀錄的樹根對到的清冊日期，它回結果（有效或無效、代碼、每個平台的種類）和這張卡片之後的狀態。它不知道狀態存在哪裡。裝置在簽章之前只算檢查 5（`applyList`，`applyRecord` 的後半段）。另有規則的版本號（`RULES_VERSION`）、規則產生不出來的狀態（`possibleSlot`、`possibleLastCardProof`）、更換的次數上限 |
 | `platforms.ts` | `spec/scope.md`「Platforms」 | 每份證明紀錄的平台表（`platformsOf`）：平台代號、顯示名稱、帳號名稱的格式，和 Go 的 `verifier/scope.go` 的 `Platforms` 相同。紀錄規則收的平台表就是這種列（`PlatformRow`）；後台和從第 1 筆重算的人傳這裡的表，裝置傳後台 `config` 給它的表 |
 | `rules-memory.ts` | `spec/record-rules.md` | `MemoryRules`：把狀態放在記憶體裡、照順序一筆一筆呼叫 `applyRecord`，就是從第 1 筆重算整份證明紀錄的寫法。它只保管每張卡片的狀態、每張卡片的順序號碼（第一筆有效紀錄時給，之後不變；不是卡片的狀態）、證明紀錄裡最晚的有效日期、用過的題目；判斷全部在 `applyRecord` |
 | `scope.ts` | `spec/scope.md` | 每份證明紀錄的場合字串（公開的證明紀錄、測試的證明紀錄），寫死在這裡，不從後台或網址來（ADR-0016） |
@@ -59,10 +59,10 @@ pnpm test
 
 `test/record-rules.test.ts`：
 
-- `record-rules.json`：每個案例的事件照順序餵給 `MemoryRules`，每一筆的結果（有效時每個平台的種類，無效時的代碼）和標準答案相同；無效的紀錄之後，那張卡片的狀態和證明紀錄裡最晚的有效日期都沒變；最後的現況（每張卡片的清單、`last_card_proof`、`proofs_on_last_date`、每個名額的四個項目，和每個帳號底下的卡片）和標準答案的 `state` 完全相同，每張卡片的順序號碼和 `ordinals` 相同；規則產生得出來的每個狀態，裝置都讀得懂
+- `record-rules.json`：每個案例的事件照順序餵給 `MemoryRules`，每一筆的結果（有效時每個平台的種類，無效時的代碼）和標準答案相同；無效的紀錄之後，那張卡片的狀態和證明紀錄裡最晚的有效日期都沒變；最後的現況（每張卡片的清單、`last_card_proof`、每個名額的三個項目，和每個帳號底下的卡片）和標準答案的 `state` 完全相同，每張卡片的順序號碼和 `ordinals` 相同；規則產生得出來的每個狀態，裝置都讀得懂
 - 規則的版本號：`RULES_VERSION` 等於 `spec/record-rules.md` 寫的那一版，也等於 `record-rules.json` 的 `rules_version`。Go 的 `prooflog/version_test.go` 拿 `prooflog.RulesVersion` 比同樣兩個地方
-- `applyRecord` 本身：六個檢查的先後、檢查 3 和檢查 4 的邊界、無效的紀錄原樣交回收到的狀態、同樣的輸入算兩次結果相同而且輸入沒被改、狀態裡沒有的平台當成空的名額；清單裡有平台表以外的平台、同一個平台兩次、沒照平台排序、帳號不合它那個平台的格式，都在檢查 1 之前就是錯誤，不給代碼；一份清單錯了好幾處時，丟的是和 Go 的 `prooflog/` 相同的那一種
-- `applyList`：事件規則在一個名額上的每一種情況和之後的名額、被擋的平台、一天 3 筆
+- `applyRecord` 本身：五個檢查的先後、檢查 3 和檢查 4 的邊界、無效的紀錄原樣交回收到的狀態、同樣的輸入算兩次結果相同而且輸入沒被改、狀態裡沒有的平台當成空的名額；清單裡有平台表以外的平台、同一個平台兩次、沒照平台排序、帳號不合它那個平台的格式，都在檢查 1 之前就是錯誤，不給代碼；一份清單錯了好幾處時，丟的是和 Go 的 `prooflog/` 相同的那一種
+- `applyList`：事件規則在一個名額上的每一種情況和之後的名額、被擋的平台、同一天換帳號也是更換、規則不數一天幾筆
 
 `test/record.test.ts`：
 
@@ -70,7 +70,7 @@ pnpm test
 
 `test/card-state-file.test.ts`：
 
-- `card-state-file.json`：每個合格的檔，從狀態寫出來的位元組和標準答案相同（卡片倒著給、多帶初始狀態的名額也一樣；`cardStateFileWriter` 照檔的順序一次寫一列也一樣，格式錯、順序錯、同一張卡片兩次會丟錯），讀進來的每一列和標準答案相同；92 個不合格的檔都讀不出來，行號和代碼和標準答案相同（讀的是位元組；不是 UTF-8 的檔在標準答案裡寫成 `content_hex`）；前面多一個位元組順序記號的檔讀不出來；`rules_version` 等於 `record-rules.json` 的和 `RULES_VERSION`；接著 `record-rules.json` 某個案例的檔，拿那個案例最後的現況去掉初始狀態的名額、加上每張卡片最後一筆有效紀錄的序號，就是這個檔的卡片。`comparisons`（重驗的人怎麼逐張比）這裡不讀：比對在 Go 的重驗指令
+- `card-state-file.json`：每個合格的檔，從狀態寫出來的位元組和標準答案相同（卡片倒著給、多帶初始狀態的名額也一樣；`cardStateFileWriter` 照檔的順序一次寫一列也一樣，格式錯、順序錯、同一張卡片兩次會丟錯），讀進來的每一列和標準答案相同；84 個不合格的檔都讀不出來，行號和代碼和標準答案相同（讀的是位元組；不是 UTF-8 的檔在標準答案裡寫成 `content_hex`）；前面多一個位元組順序記號的檔讀不出來；`rules_version` 等於 `record-rules.json` 的和 `RULES_VERSION`；接著 `record-rules.json` 某個案例的檔，拿那個案例最後的現況去掉初始狀態的名額、加上每張卡片最後一筆有效紀錄的序號，就是這個檔的卡片。`comparisons`（重驗的人怎麼逐張比）這裡不讀：比對在 Go 的重驗指令
 - 寫不出來的：沒有有效紀錄的卡片、同一張卡片兩次、不是這份證明紀錄的場合字串或平台、不合格式的帳號、序號和次數不是整數、日期不在寫得出來的年份
 
 另外測台灣的日期（`test/spec.test.ts`）和規則產生不出來的狀態（`test/record-rules.test.ts`）。

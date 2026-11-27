@@ -38,11 +38,10 @@ type sequenceInput struct {
 // vectors' `state`, with last_card_proof null for a card with no valid
 // record.
 type cardAfter struct {
-	ScopeString      string             `json:"scope_string"`
-	ScopedID         string             `json:"scoped_id"`
-	LastCardProof    *string            `json:"last_card_proof"`
-	ProofsOnLastDate int                `json:"proofs_on_last_date"`
-	Slots            map[string]slotOut `json:"slots"`
+	ScopeString   string             `json:"scope_string"`
+	ScopedID      string             `json:"scoped_id"`
+	LastCardProof *string            `json:"last_card_proof"`
+	Slots         map[string]slotOut `json:"slots"`
 }
 
 // accountCount is an account and the number of cards whose current account
@@ -104,7 +103,7 @@ func answersOf(t *testing.T, c rulesCase, checkpointEvery int) sequenceAnswers {
 		out.Results = append(out.Results, resultOf(res))
 
 		cs := rules.Card(rec.ScopeString, rec.ScopedID)
-		card := cardAfter{ScopeString: rec.ScopeString, ScopedID: rec.ScopedID, ProofsOnLastDate: cs.ProofsOnLastDate, Slots: slotsOut(cs)}
+		card := cardAfter{ScopeString: rec.ScopeString, ScopedID: rec.ScopedID, Slots: slotsOut(cs)}
 		if cs.LastCardProof != nil {
 			d := cs.LastCardProof.String()
 			card.LastCardProof = &d
@@ -166,7 +165,7 @@ func TestSequenceAnswersOfVectors(t *testing.T) {
 			for _, s := range c.State {
 				for _, card := range s.Cards {
 					got := last[s.ScopeString+" "+card.ScopedID]
-					if got.LastCardProof == nil || *got.LastCardProof != card.LastCardProof || got.ProofsOnLastDate != card.ProofsOnLastDate || !reflect.DeepEqual(got.Slots, card.Slots) {
+					if got.LastCardProof == nil || *got.LastCardProof != card.LastCardProof || !reflect.DeepEqual(got.Slots, card.Slots) {
 						t.Errorf("card %s after its last record: %+v, want %+v", card.ScopedID, got, card)
 					}
 				}

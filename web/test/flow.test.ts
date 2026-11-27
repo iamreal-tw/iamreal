@@ -245,21 +245,23 @@ async function setup(o: {
 }
 
 /** A slot of the card-state answer (docs/api/card-proof.md): empty unless the test says otherwise. */
-type SlotJson = { current?: unknown; last_declared?: unknown; switch_count?: unknown; correction_date?: unknown };
-const slot = (o: SlotJson = {}): Record<string, unknown> => ({ current: null, last_declared: null, switch_count: 0, correction_date: null, ...o });
-/** A slot declared to `u`, put there on 2026-03-02 unless the test says otherwise. */
-const has = (u: string, o: SlotJson = {}): Record<string, unknown> => slot({ current: u, last_declared: u, correction_date: "2026-03-02", ...o });
+type SlotJson = { current?: unknown; last_declared?: unknown; switch_count?: unknown };
+const slot = (o: SlotJson = {}): Record<string, unknown> => ({ current: null, last_declared: null, switch_count: 0, ...o });
+/** A slot declared to `u`. */
+const has = (u: string, o: SlotJson = {}): Record<string, unknown> => slot({ current: u, last_declared: u, ...o });
 
 /**
  * A card-state answer: the test log's two platforms, empty unless
- * `platforms` says otherwise; one record on the last card proof's date unless
- * the test says otherwise. Any other key is added as it is.
+ * `platforms` says otherwise; one record on the last card proof's date and a
+ * daily limit of 3 unless the test says otherwise. Any other key is added as
+ * it is.
  */
-function cardState(o: { last_card_proof?: string | null; proofs_on_last_date?: unknown; platforms?: Record<string, unknown>; [k: string]: unknown } = {}): Record<string, unknown> {
-  const { last_card_proof = null, platforms = {}, proofs_on_last_date: _p, ...rest } = o;
+function cardState(o: { last_card_proof?: string | null; proofs_on_last_date?: unknown; daily_limit?: unknown; platforms?: Record<string, unknown>; [k: string]: unknown } = {}): Record<string, unknown> {
+  const { last_card_proof = null, platforms = {}, proofs_on_last_date: _p, daily_limit: _d, ...rest } = o;
   return {
     last_card_proof,
     proofs_on_last_date: "proofs_on_last_date" in o ? o.proofs_on_last_date : last_card_proof ? 1 : 0,
+    daily_limit: "daily_limit" in o ? o.daily_limit : 3,
     platforms: { "test-example": slot(), threads: slot(), ...platforms },
     count: 137,
     ...rest,
@@ -632,10 +634,10 @@ describe("the card's list: what the device makes of the card's state", () => {
     assert.equal(st.lastCardProof, null);
     assert.deepEqual(st.accounts, []);
     assert.deepEqual(
-      st.slots.map((x) => [x.platform, x.row?.displayName, x.current, x.lastDeclared, x.switchCount, x.correctionDate, x.switchesLeft, x.correctionToday]),
+      st.slots.map((x) => [x.platform, x.row?.displayName, x.current, x.lastDeclared, x.switchCount, x.switchesLeft]),
       [
-        ["test-example", "Example (no real service)", null, null, 0, null, 5, false],
-        ["threads", "Threads", null, null, 0, null, 5, false],
+        ["test-example", "Example (no real service)", null, null, 0, 5],
+        ["threads", "Threads", null, null, 0, 5],
       ],
     );
     assert.equal(st.dailyLimit, false);
@@ -644,16 +646,16 @@ describe("the card's list: what the device makes of the card's state", () => {
     assert.equal(st.shortId, st.scopedId.slice(0, 10));
   });
 
-  test("the counts of each slot: switches left by the rules, a correction today", async () => {
+  test("the counts of each slot: switches left by the rules", async () => {
     const s = await setup({
-      backend: { cardState: cardState({ last_card_proof: "2026-11-16", platforms: { "test-example": has("a-b", { switch_count: 4, correction_date: "2026-11-16" }), threads: has("alice", { switch_count: 2 }) } }) },
+      backend: { cardState: cardState({ last_card_proof: "2026-11-16", platforms: { "test-example": has("a-b", { switch_count: 4 }), threads: has("alice", { switch_count: 2 }) } }) },
     });
     const st = await toStatus(s);
     assert.deepEqual(
-      st.slots.map((x) => [x.platform, x.switchCount, x.switchesLeft, x.correctionDate, x.correctionToday]),
+      st.slots.map((x) => [x.platform, x.switchCount, x.switchesLeft]),
       [
-        ["test-example", 4, 1, "2026-11-16", true],
-        ["threads", 2, 3, "2026-03-02", false],
+        ["test-example", 4, 1],
+        ["threads", 2, 3],
       ],
     );
     assert.deepEqual(st.accounts, [
@@ -763,23 +765,26 @@ describe("the card's list: what the device makes of the card's state", () => {
     ]);
 
     // Withdrawn: the same account again is a refresh; another one a switch from the one withdrawn.
-    const withdrawn = await setup({ backend: { cardState: cardState({ last_card_proof: "2026-11-10", platforms: { threads: slot({ last_declared: "bob", correction_date: "2026-03-02" }) } }) } });
+    const withdrawn = await setup({ backend: { cardState: cardState({ last_card_proof: "2026-11-10", platforms: { threads: slot({ last_declared: "bob" }) } }) } });
     const ws = await toStatus(withdrawn);
     assert.deepEqual(ws.accounts, []);
     assert.deepEqual(rowsOf(pick(withdrawn, { threads: "bob" })), [["threads", "refresh", "bob", null, null, null]]);
     assert.deepEqual(rowsOf(pick(withdrawn, { threads: "carol" })), [["threads", "switch", "carol", null, "bob", 4]]);
   });
 
-  test("a change on the day the account was put there: a correction, not counted, whatever the count", async () => {
-    for (const count of [0, 3, 5]) {
-      const s = await setup({ backend: { cardState: cardState({ last_card_proof: "2026-11-16", platforms: { threads: has("alice", { switch_count: count, correction_date: "2026-11-16" }) } }) } });
+  test("a change on the day the account was put there: a switch like any other (ADR-0018)", async () => {
+    for (const count of [0, 3]) {
+      const s = await setup({ backend: { cardState: cardState({ last_card_proof: "2026-11-16", platforms: { threads: has("alice", { switch_count: count }) } }) } });
       await toStatus(s);
-      assert.deepEqual(rowsOf(pick(s, { threads: "bob" })), [["threads", "correction", "bob", "alice", "alice", null]], `count ${count}`);
+      assert.deepEqual(rowsOf(pick(s, { threads: "bob" })), [["threads", "switch", "bob", "alice", "alice", 4 - count]], `count ${count}`);
     }
-    // Withdrawn on the day of its first: another account is a correction too.
-    const w = await setup({ backend: { cardState: cardState({ last_card_proof: "2026-11-16", proofs_on_last_date: 2, platforms: { threads: slot({ last_declared: "alice", correction_date: "2026-11-16" }) } }) } });
+    const none = await setup({ backend: { cardState: cardState({ last_card_proof: "2026-11-16", platforms: { threads: has("alice", { switch_count: 5 }) } }) } });
+    await toStatus(none);
+    assert.deepEqual(refused(() => pick(none, { threads: "bob" })), { code: "blocked", reason: "switch_limit", platform: "threads" });
+    // Withdrawn on the day it was put there: another account is a switch too.
+    const w = await setup({ backend: { cardState: cardState({ last_card_proof: "2026-11-16", proofs_on_last_date: 2, platforms: { threads: slot({ last_declared: "alice" }) } }) } });
     await toStatus(w);
-    assert.deepEqual(rowsOf(pick(w, { threads: "bob" })), [["threads", "correction", "bob", null, "alice", null]]);
+    assert.deepEqual(rowsOf(pick(w, { threads: "bob" })), [["threads", "switch", "bob", null, "alice", 4]]);
   });
 
   test("the switches: 5 by the rules, on the web too; a blocked platform blocks the list, the cardholder can change it", async () => {
@@ -806,14 +811,14 @@ describe("the card's list: what the device makes of the card's state", () => {
       await assertQuiet(s, stop!, n);
     }
     // The sixth switch after a withdrawal is refused the same way.
-    const w = await setup({ backend: { cardState: cardState({ last_card_proof: "2026-11-04", platforms: { threads: slot({ last_declared: "alice", correction_date: "2026-03-02", switch_count: 5 }) } }) } });
+    const w = await setup({ backend: { cardState: cardState({ last_card_proof: "2026-11-04", platforms: { threads: slot({ last_declared: "alice", switch_count: 5 }) } }) } });
     await toStatus(w);
     assert.deepEqual(refused(() => pick(w, { threads: "bob" })), { code: "blocked", reason: "switch_limit", platform: "threads" });
     assert.deepEqual(rowsOf(pick(w, { threads: "alice" })).map((r) => r[1]), ["refresh"]);
   });
 
   test("an empty list for a card that declares nothing: refused (empty), the cardholder can fill a row", async () => {
-    for (const state of [undefined, cardState({ last_card_proof: "2026-11-10", platforms: { threads: slot({ last_declared: "bob", correction_date: "2026-03-02" }) } })]) {
+    for (const state of [undefined, cardState({ last_card_proof: "2026-11-10", platforms: { threads: slot({ last_declared: "bob" }) } })]) {
       const s = await setup({ backend: { ...(state && { cardState: state }) } });
       await toStatus(s);
       const n = s.backend.log.length;
@@ -841,7 +846,7 @@ describe("the card's list: what the device makes of the card's state", () => {
   });
 
   test("3 records today and the switches used up: the switch is refused for the switch limit first, as the rules order them", async () => {
-    const s = await setup({ backend: { cardState: cardState({ last_card_proof: "2026-11-16", proofs_on_last_date: 3, platforms: { threads: has("bob", { switch_count: 5, correction_date: "2026-11-01" }) } }) } });
+    const s = await setup({ backend: { cardState: cardState({ last_card_proof: "2026-11-16", proofs_on_last_date: 3, platforms: { threads: has("bob", { switch_count: 5 }) } }) } });
     await toStatus(s);
     assert.deepEqual(refused(() => pick(s, { threads: "alice" })), { code: "blocked", reason: "switch_limit", platform: "threads" });
     assert.deepEqual(refused(() => pick(s, {})), { code: "blocked", reason: "daily_limit" });
@@ -849,7 +854,7 @@ describe("the card's list: what the device makes of the card's state", () => {
 
   test("fewer than 3 records today, or 3 on another date: every list as before", async () => {
     for (const [date, n] of [["2026-11-16", 2], ["2026-11-15", 3], ["2026-11-17", 3]] as const) {
-      const s = await setup({ backend: { cardState: cardState({ last_card_proof: date, proofs_on_last_date: n, platforms: { threads: has("alice", { correction_date: "2026-11-01" }) } }) } });
+      const s = await setup({ backend: { cardState: cardState({ last_card_proof: date, proofs_on_last_date: n, platforms: { threads: has("alice") } }) } });
       const status = await toStatus(s);
       assert.equal(status.dailyLimit, false, `${n} on ${date}`);
       assert.equal(pick(s).rows[0]!.kind, "refresh");
@@ -1021,21 +1026,20 @@ describe("the submission and what the server says it recorded", () => {
   }
 
   test("what the server recorded differs from what step 5 said: the platforms where it does", async () => {
-    // The card's state says Threads' account was put there today: changing it is a correction.
-    const state = cardState({ last_card_proof: "2026-11-16", platforms: { "test-example": has("a-b", { correction_date: "2026-11-01" }), threads: has("alice", { correction_date: "2026-11-16" }) } });
+    // The card declares a-b and alice; the cardholder changes Threads' account: a switch.
+    const state = cardState({ last_card_proof: "2026-11-16", platforms: { "test-example": has("a-b"), threads: has("alice") } });
     const cases: [string, unknown[], string[]][] = [
-      ["as shown", [{ platform: "test-example", kind: "refresh", username: "a-b" }, { platform: "threads", kind: "correction", username: "bob" }], []],
-      // M9: a correction_date that made a switch look free.
-      ["a switch, not the correction shown", [{ platform: "test-example", kind: "refresh", username: "a-b" }, { platform: "threads", kind: "switch", username: "bob" }], ["threads"]],
-      ["another account", [{ platform: "test-example", kind: "refresh", username: "a-b" }, { platform: "threads", kind: "correction", username: "carol" }], ["threads"]],
-      ["a platform missing", [{ platform: "threads", kind: "correction", username: "bob" }], ["test-example"]],
-      ["a platform more", [{ platform: "test-example", kind: "refresh", username: "a-b" }, { platform: "threads", kind: "correction", username: "bob" }, { platform: "x-new", kind: "withdraw", username: "zed" }], ["x-new"]],
-      ["a withdrawal, not the refresh shown", [{ platform: "test-example", kind: "withdraw", username: "a-b" }, { platform: "threads", kind: "correction", username: "bob" }], ["test-example"]],
+      ["as shown", [{ platform: "test-example", kind: "refresh", username: "a-b" }, { platform: "threads", kind: "switch", username: "bob" }], []],
+      ["a refresh, not the switch shown", [{ platform: "test-example", kind: "refresh", username: "a-b" }, { platform: "threads", kind: "refresh", username: "bob" }], ["threads"]],
+      ["another account", [{ platform: "test-example", kind: "refresh", username: "a-b" }, { platform: "threads", kind: "switch", username: "carol" }], ["threads"]],
+      ["a platform missing", [{ platform: "threads", kind: "switch", username: "bob" }], ["test-example"]],
+      ["a platform more", [{ platform: "test-example", kind: "refresh", username: "a-b" }, { platform: "threads", kind: "switch", username: "bob" }, { platform: "x-new", kind: "withdraw", username: "zed" }], ["x-new"]],
+      ["a withdrawal, not the refresh shown", [{ platform: "test-example", kind: "withdraw", username: "a-b" }, { platform: "threads", kind: "switch", username: "bob" }], ["test-example"]],
     ];
     for (const [label, kinds, mismatches] of cases) {
       const s = await setup({ echoPublicInputs: true, backend: { cardState: state, submit: () => kindsAnswer(kinds) } });
       const cq = await toChosen(s, { threads: "bob" });
-      assert.deepEqual(cq.rows.map((r) => r.kind), ["refresh", "correction"]);
+      assert.deepEqual(cq.rows.map((r) => r.kind), ["refresh", "switch"]);
       const done = await s.flow.proceed(cq.accounts);
       assert.deepEqual(done.mismatches, mismatches, label);
       assert.equal(s.flow.phase, "done", label);
@@ -1447,40 +1451,8 @@ describe("a card proof that crosses midnight", () => {
     assert.equal(s.card.signed.length, 1, "no second signature");
   });
 
-  test("a correction shown before midnight would be a switch after it: the list is not signed", async () => {
-    const s = await setup({ start: LATE, backend: { cardState: cardState({ last_card_proof: "2026-11-16", platforms: { threads: has("alice", { correction_date: "2026-11-16" }) } }) } });
-    const cq = await toChosen(s, { threads: "bob" });
-    assert.deepEqual(cq.rows.map((r) => r.kind), ["correction"]);
-    const n = s.backend.log.length;
-    s.advance(3 * 60_000); // 2026-11-17 00:01: the same change is a switch now
-    assert.deepEqual(await stopOf(s.flow.proceed(cq.accounts)), { code: "date_changed" });
-    assert.equal(s.backend.log.length, n, "no challenge");
-    assert.equal(s.card.signed.length, 1, "no second signature");
-    assertNothingHeld(s.flow, "stopped");
-  });
-
-  // The list re-checked before midnight, the challenge back after it, dated the next day.
-  test("midnight passes while the challenge is on its way: the list is worked out again on its date, and not signed", async () => {
-    const s = await setup({
-      echoPublicInputs: true,
-      start: Date.UTC(2026, 10, 16, 15, 59, 50), // 2026-11-16 23:59:50 in Taiwan
-      backend: {
-        challenge: () => "2026-11-17.000G40R40M30E209185GR38E1W",
-        cardState: cardState({ last_card_proof: "2026-11-16", platforms: { threads: has("alice", { correction_date: "2026-11-16" }) } }),
-      },
-    });
-    const cq = await toChosen(s, { threads: "bob" });
-    assert.deepEqual(cq.rows.map((r) => r.kind), ["correction"], "the screen says: a correction, not counted");
-    const release = s.hold("/api/v1/challenges");
-    const p = s.flow.proceed(cq.accounts);
-    await untilRequested(s, "/api/v1/challenges");
-    s.advance(20_000); // 2026-11-17 00:00:10, while the server holds the challenge
-    release();
-    assert.deepEqual(await stopOf(p), { code: "date_changed" });
-    assert.equal(s.card.signed.length, 1, "no second signature: on its date the record would be a switch");
-    assert.equal(s.backend.log.filter((r) => r.path === "/api/v1/records").length, 0, "nothing submitted");
-    assertNothingHeld(s.flow, "stopped");
-  });
+  // Since version 3 of the record rules (ADR-0018) no event rule reads a date: a list does the same on any date,
+  // and the check before the challenge (stops.date_changed) has no case left. #510 takes it out of the flow.
 
   test("midnight passes while the challenge is on its way, and the list does the same on the new date: signed", async () => {
     const s = await setup({
@@ -1488,7 +1460,7 @@ describe("a card proof that crosses midnight", () => {
       start: Date.UTC(2026, 10, 16, 15, 59, 50),
       backend: {
         challenge: () => "2026-11-17.000G40R40M30E209185GR38E1W",
-        cardState: cardState({ last_card_proof: "2026-11-16", platforms: { threads: has("alice", { correction_date: "2026-11-01" }) } }),
+        cardState: cardState({ last_card_proof: "2026-11-16", platforms: { threads: has("alice") } }),
       },
     });
     const cq = await toChosen(s, { threads: "alice" });
@@ -1502,7 +1474,7 @@ describe("a card proof that crosses midnight", () => {
   });
 
   test("3 records before midnight: after it, the same list is shown again as it was and can be signed", async () => {
-    const s = await setup({ echoPublicInputs: true, start: LATE, backend: { challenge: () => "2026-11-17.000G40R40M30E209185GR38E1W", cardState: cardState({ last_card_proof: "2026-11-16", proofs_on_last_date: 3, platforms: { threads: has("alice", { correction_date: "2026-11-01" }) } }) } });
+    const s = await setup({ echoPublicInputs: true, start: LATE, backend: { challenge: () => "2026-11-17.000G40R40M30E209185GR38E1W", cardState: cardState({ last_card_proof: "2026-11-16", proofs_on_last_date: 3, platforms: { threads: has("alice") } }) } });
     await toStatus(s);
     assert.deepEqual(refused(() => pick(s)), { code: "blocked", reason: "daily_limit" });
     s.advance(3 * 60_000);
@@ -1518,41 +1490,39 @@ describe("a card-state answer the device cannot read, or the record rules cannot
   const withThreads = (slotJson: Record<string, unknown>, lcp: string | null = D, extra: Record<string, unknown> = {}) => cardState({ last_card_proof: lcp, platforms: { threads: slotJson }, ...extra });
   const cases: [string, Record<string, unknown>][] = [
     // The rules cannot produce these.
-    ["current is not the last declared account", withThreads(slot({ current: "bob", last_declared: "alice", correction_date: "2026-03-02" }))],
-    ["current without a last declared account", withThreads(slot({ current: "bob", correction_date: "2026-03-02" }))],
+    ["current is not the last declared account", withThreads(slot({ current: "bob", last_declared: "alice" }))],
+    ["current without a last declared account", withThreads(slot({ current: "bob" }))],
     ["current without a last card proof", withThreads(has("alice"), null)],
-    ["a last declared account without a last card proof", withThreads(slot({ last_declared: "alice", correction_date: "2026-03-02" }), null)],
-    ["a last declared account without a correction date", withThreads(slot({ current: "alice", last_declared: "alice" }))],
-    ["a correction date without an account ever", withThreads(slot({ correction_date: "2026-03-02" }))],
+    ["a last declared account without a last card proof", withThreads(slot({ last_declared: "alice" }), null)],
     ["switches on a slot that never had an account", withThreads(slot({ switch_count: 2 }))],
     ["switches on a card that has nothing else", withThreads(slot({ switch_count: 1 }), null)],
-    ["a last card proof more than 3 days after today", withThreads(has("alice", { correction_date: "2026-11-20" }), "2026-11-20")],
-    ["dates in 2049", withThreads(has("alice", { correction_date: "2049-12-31" }), "2049-12-31")],
-    ["a correction date after the last card proof", withThreads(has("alice", { correction_date: "2026-11-10" }))],
+    ["a last card proof more than 3 days after today", withThreads(has("alice"), "2026-11-20")],
+    ["dates in 2049", withThreads(has("alice"), "2049-12-31")],
     ["6 switches", withThreads(has("alice", { switch_count: 6 }))],
     ["-1 switches", withThreads(has("alice", { switch_count: -1 }))],
     ["a fraction of a switch", withThreads(has("alice", { switch_count: 1.5 }))],
     ["the switches as a string", withThreads(has("alice", { switch_count: "1" }))],
-    ["no switch count", withThreads({ current: "alice", last_declared: "alice", correction_date: "2026-03-02" })],
+    ["no switch count", withThreads({ current: "alice", last_declared: "alice" })],
     ["records on the last card proof's date without a last card proof", cardState({ proofs_on_last_date: 1 })],
     ["no record on the last card proof's date", withThreads(has("alice"), D, { proofs_on_last_date: 0 })],
-    ["4 records on one date", withThreads(has("alice"), "2026-11-16", { proofs_on_last_date: 4 })],
     ["a fraction of a record", withThreads(has("alice"), D, { proofs_on_last_date: 1.5 })],
     ["the count as a string", withThreads(has("alice"), D, { proofs_on_last_date: "1" })],
     ["no count", withThreads(has("alice"), D, { proofs_on_last_date: undefined })],
     ["a null count", cardState({ proofs_on_last_date: null })],
+    ["no daily limit", withThreads(has("alice"), D, { daily_limit: undefined })],
+    ["a daily limit as a string", withThreads(has("alice"), D, { daily_limit: "3" })],
+    ["a negative daily limit", withThreads(has("alice"), D, { daily_limit: -1 })],
+    ["a fraction of a daily limit", withThreads(has("alice"), D, { daily_limit: 2.5 })],
     // Not in its format.
     ["no platforms", (({ platforms: _p, ...rest }) => rest)(withThreads(has("alice")))],
     ["platforms as a list", { ...cardState({ last_card_proof: D }), platforms: [has("alice")] }],
     ["no last card proof", (({ last_card_proof: _l, ...rest }) => rest)(cardState())],
     ["a last card proof not a date", withThreads(has("alice"), "2026-13-01")],
     ["a known platform's entry not an object", withThreads("alice" as unknown as Record<string, unknown>)],
-    ["a known platform's entry without current", withThreads({ last_declared: "alice", switch_count: 0, correction_date: "2026-03-02" })],
-    ["a known platform's entry without last_declared", withThreads({ current: null, switch_count: 0, correction_date: null })],
-    ["a known platform's entry without correction_date", withThreads({ current: null, last_declared: null, switch_count: 0 })],
+    ["a known platform's entry without current", withThreads({ last_declared: "alice", switch_count: 0 })],
+    ["a known platform's entry without last_declared", withThreads({ current: null, switch_count: 0 })],
     ["an account not in its platform's format", withThreads(has("Alice!"))],
     ["an account in another platform's format", withThreads(has("a-b"))],
-    ["a correction date not a date", withThreads(has("alice", { correction_date: "2026-3-2" }))],
     ["a count of records not a number", cardState({ count: "137" })],
     // A platform the device does not know.
     ["an account on a platform ID not in the platform syntax", cardState({ last_card_proof: D, platforms: { "X_new": { current: "zed" } } })],
@@ -1575,11 +1545,12 @@ describe("a card-state answer the device cannot read, or the record rules cannot
     });
   }
 
-  test("what the rules can produce is read: 3 days ahead, a slot withdrawn with 5 switches, 3 records today, fields it does not know, a platform it does not know with no account", async () => {
+  test("what the rules and the server can produce is read: 3 days ahead, a slot withdrawn with 5 switches, 3 records today, 4 (a daily limit lowered since), fields it does not know, a platform it does not know with no account", async () => {
     for (const state of [
-      withThreads(has("alice", { correction_date: "2026-11-19" }), "2026-11-19"),
-      withThreads(slot({ last_declared: "alice", correction_date: "2026-11-04", switch_count: 5 })),
+      withThreads(has("alice"), "2026-11-19"),
+      withThreads(slot({ last_declared: "alice", switch_count: 5 })),
       withThreads(has("alice"), "2026-11-16", { proofs_on_last_date: 3 }),
+      withThreads(has("alice"), "2026-11-16", { proofs_on_last_date: 4 }),
       withThreads({ ...has("alice"), switch_dates: ["2026-03-02"], note: "x" }, D, { extra: { a: 1 } }),
       cardState({ last_card_proof: D, platforms: { threads: has("alice"), "Not An ID": { current: null }, "x-new": { current: null, whatever: true } } }),
     ]) {
@@ -1893,7 +1864,7 @@ describe("a resubmission answered challenge_used (a fake server)", () => {
   test("a first declaration: the card's list is the one sent, its last card proof today: done, without seq and kinds", async () => {
     const { s, cq } = await lost({});
     await firstFails(s, cq);
-    s.backend.opts.cardState = cardState({ last_card_proof: today, platforms: { threads: has("alice", { correction_date: today }) } });
+    s.backend.opts.cardState = cardState({ last_card_proof: today, platforms: { threads: has("alice") } });
     const done = await s.flow.resubmit();
     assert.deepEqual([done.seq, done.recordHash, done.kinds, done.mismatches, done.date], [null, null, null, [], today]);
     assert.deepEqual(done.accounts, [{ platform: "threads", username: "alice" }]);
@@ -1908,7 +1879,7 @@ describe("a resubmission answered challenge_used (a fake server)", () => {
     const before = cardState({ last_card_proof: "2026-11-04", platforms: { threads: has("alice"), "x-new": { current: "zed" } } });
     const { s, cq } = await lost({ before, changes: { "test-example": "a-b" } });
     await firstFails(s, cq);
-    s.backend.opts.cardState = cardState({ last_card_proof: today, platforms: { "test-example": has("a-b", { correction_date: today }), threads: has("alice"), "x-new": { current: "zed" } } });
+    s.backend.opts.cardState = cardState({ last_card_proof: today, platforms: { "test-example": has("a-b"), threads: has("alice"), "x-new": { current: "zed" } } });
     const done = await s.flow.resubmit();
     assert.deepEqual(done.accounts.map((a) => a.platform), ["test-example", "threads", "x-new"]);
     assert.equal(done.kinds, null);
@@ -1917,18 +1888,18 @@ describe("a resubmission answered challenge_used (a fake server)", () => {
   test("everything withdrawn: no account, last card proof today: done", async () => {
     const { s, cq } = await lost({ before: DECLARED, changes: { threads: "" } });
     await firstFails(s, cq);
-    s.backend.opts.cardState = cardState({ last_card_proof: today, platforms: { threads: slot({ last_declared: "alice", correction_date: "2026-03-02", switch_count: 1 }) } });
+    s.backend.opts.cardState = cardState({ last_card_proof: today, platforms: { threads: slot({ last_declared: "alice", switch_count: 1 }) } });
     const done = await s.flow.resubmit();
     assert.deepEqual([done.seq, done.kinds, done.accounts], [null, null, []]);
   });
 
   const notFound: [string, Record<string, unknown>][] = [
     ["nothing declared", cardState({})],
-    ["another account", cardState({ last_card_proof: today, platforms: { threads: has("bob", { correction_date: today }) } })],
-    ["the account, an earlier day", cardState({ last_card_proof: "2026-11-15", platforms: { threads: has("alice", { correction_date: "2026-11-15" }) } })],
-    ["withdrawn instead", cardState({ last_card_proof: today, platforms: { threads: slot({ last_declared: "alice", correction_date: today }) } })],
-    ["an account more", cardState({ last_card_proof: today, platforms: { "test-example": has("a-b", { correction_date: today }), threads: has("alice", { correction_date: today }) } })],
-    ["an account more on a platform the device does not know", cardState({ last_card_proof: today, platforms: { threads: has("alice", { correction_date: today }), "x-new": { current: "zed" } } })],
+    ["another account", cardState({ last_card_proof: today, platforms: { threads: has("bob") } })],
+    ["the account, an earlier day", cardState({ last_card_proof: "2026-11-15", platforms: { threads: has("alice") } })],
+    ["withdrawn instead", cardState({ last_card_proof: today, platforms: { threads: slot({ last_declared: "alice" }) } })],
+    ["an account more", cardState({ last_card_proof: today, platforms: { "test-example": has("a-b"), threads: has("alice") } })],
+    ["an account more on a platform the device does not know", cardState({ last_card_proof: today, platforms: { threads: has("alice"), "x-new": { current: "zed" } } })],
     ["the platform without an entry", (() => {
       const st = cardState({ last_card_proof: today });
       delete (st.platforms as Record<string, unknown>).threads;

@@ -168,8 +168,6 @@ class DoneViewTest {
         // Declared again after a withdrawal, and a first declaration on a card with records: congratulated like a first one.
         assertEquals("恭喜你完成島民證明", title(done(listOf(row("threads", "refresh", "alice", current = null)), listOf(Recorded("threads", "refresh", "alice", 1)))))
         assertEquals("恭喜你完成島民證明", title(done(listOf(row("threads", "first", "alice")), listOf(Recorded("threads", "first", "alice", 1)))))
-        // An account put there today changed today: named as a switch is.
-        assertEquals("島民證明換成 @bob 了", title(done(listOf(row("threads", "correction", "bob", current = "alice", previous = "alice")), listOf(Recorded("threads", "correction", "bob", 1)))))
         // Several platforms: a list that changed is only said to be updated.
         assertEquals("島民證明已更新", title(done(switched, listOf(Recorded("threads", "switch", "carol.tw", 1))), single = null))
         // The server recorded a switch where the screen said nothing changes: not "unchanged", and the account it is now.
@@ -202,15 +200,16 @@ class DoneViewTest {
     }
 
     @Test
-    fun `a switch recorded where the screen said a correction`() {
-        val shown = row("threads", "correction", "bob", current = "alice", previous = "alice")
+    fun `a switch recorded where the screen said the account stays`() {
+        // A card's state that hid the switch: the screen took bob for the account declared now.
+        val shown = row("threads", "refresh", "bob", current = "bob")
         val view = messages.done(done(listOf(shown), listOf(Recorded("threads", "switch", "bob", 1)), listOf("threads")), "Threads")
         assertEquals(copy.say("done.mismatch"), view.mismatch)
         assertEquals(
             listOf(
                 listOf(
-                    "threads", "bob", copy.say("kinds.switch", "previous" to "@alice"),
-                    copy.say("done.mismatch_expected", "expected" to copy.say("kinds.switch", "previous" to "@alice") + copy.say("confirm.switch_not_counted")),
+                    "threads", "bob", copy.say("kinds.switch", "previous" to "@bob"),
+                    copy.say("done.mismatch_expected", "expected" to copy.say("kinds.unchanged")),
                     copy.say("done.mismatch_switch_used"),
                 ),
             ),

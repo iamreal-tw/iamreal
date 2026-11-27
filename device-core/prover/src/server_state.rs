@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use iamreal_device_checks::date::Date;
 use iamreal_device_checks::list_consequence::ReadState;
 use iamreal_device_checks::record_rules::{
-    Account, Card, MAX_SWITCHES, Platform, Slot, possible_card, possible_slot,
+    Account, Card, MAX_SWITCHES, Platform, Slot, possible_last_card_proof, possible_slot,
 };
 use iamreal_device_checks::username_format::{UsernameFormat, is_any_username, is_platform_id};
 
@@ -71,9 +71,14 @@ pub fn read_card_state(
 ) -> Option<(ReadState, Vec<Platform>)> {
     let body = json.as_object()?;
     let last_card_proof = date(body.get("last_card_proof")?)?;
-    let proofs_on_last_date = u32::try_from(body.get("proofs_on_last_date")?.as_count()?).ok()?;
+    let proofs_on_last_date = body.get("proofs_on_last_date")?.as_count()?;
+    let daily_limit = body.get("daily_limit")?.as_count()?;
     body.get("count")?.as_count()?;
-    if !possible_card(last_card_proof, proofs_on_last_date, today) {
+    if !possible_last_card_proof(last_card_proof, today) {
+        return None;
+    }
+    // A valid record of the card is counted on the date it gives the card.
+    if last_card_proof.is_none() != (proofs_on_last_date == 0) {
         return None;
     }
     let entries = body.get("platforms")?.as_object()?;
@@ -98,7 +103,6 @@ pub fn read_card_state(
             switch_count: u32::try_from(entry.get("switch_count")?.as_count()?)
                 .ok()
                 .filter(|n| *n <= MAX_SWITCHES)?,
-            correction_date: date(entry.get("correction_date")?)?,
         };
         if !possible_slot(&slot, last_card_proof) {
             return None;
@@ -131,8 +135,15 @@ pub fn read_card_state(
     offered.sort_by(|a, b| a.id().cmp(b.id()));
     let card = Card {
         last_card_proof,
-        proofs_on_last_date,
         slots,
     };
-    Some((ReadState { card, kept }, offered))
+    Some((
+        ReadState {
+            card,
+            kept,
+            proofs_on_last_date,
+            daily_limit,
+        },
+        offered,
+    ))
 }

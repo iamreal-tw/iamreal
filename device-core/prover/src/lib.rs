@@ -457,6 +457,7 @@ pub unsafe extern "C" fn idc_list_consequence(
                 json!({"valid": false, "reason": "switch_limit", "platform": platform})
             }
             Consequence::Invalid(reason) => json!({"valid": false, "reason": reason.name()}),
+            Consequence::DailyLimit => json!({"valid": false, "reason": "daily_limit"}),
         };
         serde_json::to_vec(&value).map_err(|_| IDC_ERR_INTERNAL)
     })
@@ -474,19 +475,19 @@ pub unsafe extern "C" fn idc_list_consequence(
 ///  "known_platforms":["threads"],
 ///  "rows":[{"platform":"test-example","known":false,"current":"alice-b"},
 ///          {"platform":"threads","known":true,"current":"alice","last_declared":"alice",
-///           "switch_count":1,"switches_left":4,"correction_today":false}]}
+///           "switch_count":1,"switches_left":4}]}
 /// ```
 ///
 /// - `last_card_proof`: the date of the card's last valid record, or null.
 /// - `days_since`: the days from that date to today; null without one.
-/// - `daily_limit`: the card has 3 valid records dated today, so no list
-///   can be declared today (spec/record-rules.md, check 6).
+/// - `daily_limit`: the server has written its `daily_limit` of records of
+///   the card dated today, so no list can be declared today
+///   (docs/api/card-proof.md, `card-state`).
 /// - `known_platforms`: the platforms of the table the device knows, in
 ///   ascending order, offered or not.
 /// - `rows`, in ascending order of platform: one for every platform
 ///   offered (`known` true: the entry's `current`, `last_declared` and
-///   `switch_count`, the switches left by the rules, and whether
-///   `correction_date` is today, when a change is a correction), and one
+///   `switch_count`, and the switches left by the rules), and one
 ///   for every kept account (`known` false: `current`, shown as it is and
 ///   not changed).
 ///
@@ -536,7 +537,6 @@ pub unsafe extern "C" fn idc_card_status(
                     "last_declared": slot.last_declared,
                     "switch_count": slot.switch_count,
                     "switches_left": record_rules::MAX_SWITCHES - slot.switch_count,
-                    "correction_today": slot.correction_date == Some(today),
                 });
                 (row.id(), value)
             })
@@ -555,8 +555,7 @@ pub unsafe extern "C" fn idc_card_status(
             "days_since": card
                 .last_card_proof
                 .map(|date| today.days_since_1970() - date.days_since_1970()),
-            "daily_limit": card.last_card_proof == Some(today)
-                && card.proofs_on_last_date == record_rules::MAX_PER_DATE,
+            "daily_limit": state.daily_limit_reached(today),
             "known_platforms": table.iter().map(|row| row.id()).collect::<Vec<_>>(),
             "rows": rows.into_iter().map(|(_, row)| row).collect::<Vec<_>>(),
         });

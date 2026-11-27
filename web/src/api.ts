@@ -24,7 +24,7 @@
 import type { Account } from "iamreal-protocol/declaration-code.ts";
 import { type Day, parseDay } from "iamreal-protocol/date.ts";
 import type { PlatformRow } from "iamreal-protocol/platforms.ts";
-import { type CardState, type Kind, MAX_SWITCHES, type SlotState, possibleCard, possibleSlot } from "iamreal-protocol/record-rules.ts";
+import { type CardState, type Kind, MAX_SWITCHES, type SlotState, possibleLastCardProof, possibleSlot } from "iamreal-protocol/record-rules.ts";
 import { isAnyUsername, isPlatformId, parseUsernameFormat } from "iamreal-protocol/username-format.ts";
 
 /** The time limit of a request with a small JSON answer (see above). */
@@ -234,6 +234,14 @@ export interface CardStateResponse extends CardState {
    * one would withdraw it.
    */
   kept: Account[];
+  /**
+   * The server's count of the card's valid records dated `lastCardProof`, 0
+   * without one, and the most records of one card it writes with one date
+   * (docs/api/card-proof.md, `card-state`). Not items of the record rules:
+   * the server's own limit.
+   */
+  proofsOnLastDate: number;
+  dailyLimit: number;
   count: number;
 }
 
@@ -243,20 +251,22 @@ export interface CardStateResponse extends CardState {
  * device does with what it cannot read"); the device shows it and computes
  * what a list would do itself, but cannot check it (README, known limits).
  *
- *   - `last_card_proof` (a date or null), `proofs_on_last_date` (an
- *     integer), `platforms` (an object) and `count` must be read.
+ *   - `last_card_proof` (a date or null), `proofs_on_last_date` and
+ *     `daily_limit` (counts), `platforms` (an object) and `count` must be
+ *     read. `proofs_on_last_date` is 0 exactly when `last_card_proof` is
+ *     null.
  *   - The entry of every platform of `table` that has one must be read:
  *     `current` and `last_declared` null or in the platform's format,
- *     `switch_count` an integer from 0 to 5, `correction_date` a date or
- *     null. A platform of the table without an entry is not offered (it is
- *     not in `slots`).
+ *     `switch_count` an integer from 0 to 5. A platform of the table
+ *     without an entry is not offered (it is not in `slots`).
  *   - An entry of a platform the device does not know: with `current` null,
  *     ignored; with `current` set, kept as it is if the platform ID and the
  *     account pass the checks every platform satisfies
  *     (protocol/src/username-format.ts), otherwise the answer is not read.
  *     An entry that is not an object, or has no `current`, is not read.
- *   - A state the record rules cannot produce (possibleSlot, possibleCard,
- *     with `today`, the device's Taiwan date) is not read either.
+ *   - A state the record rules cannot produce (possibleSlot,
+ *     possibleLastCardProof with `today`, the device's Taiwan date) is not
+ *     read either.
  *
  * Fields the device does not know are ignored.
  */
@@ -273,10 +283,12 @@ export async function requestCardState(fetchFn: Fetch, scopeString: string, scop
   if (!Number.isSafeInteger(b.count) || (b.count as number) < 0) bad();
   if (!("last_card_proof" in b)) bad();
   const lastCardProof = day(b.last_card_proof);
-  // A count: an integer; possibleCard then bounds it.
-  if (typeof b.proofs_on_last_date !== "number" || !Number.isSafeInteger(b.proofs_on_last_date)) bad();
-  const proofsOnLastDate = b.proofs_on_last_date as number;
-  if (!possibleCard({ lastCardProof, proofsOnLastDate }, today)) bad();
+  if (!possibleLastCardProof(lastCardProof, today)) bad();
+  const count = (x: unknown): number => (typeof x === "number" && Number.isSafeInteger(x) && x >= 0 ? x : bad());
+  const proofsOnLastDate = count(b.proofs_on_last_date);
+  // A valid record of the card is counted on the date it gives the card.
+  if ((lastCardProof === null) !== (proofsOnLastDate === 0)) bad();
+  const dailyLimit = count(b.daily_limit);
   if (!isObject(b.platforms)) bad();
   const entries = b.platforms as Record<string, unknown>;
 
@@ -288,10 +300,10 @@ export async function requestCardState(fetchFn: Fetch, scopeString: string, scop
     if (!isObject(e)) bad();
     const entry = e as Record<string, unknown>;
     const user = (x: unknown): string | null => (x === null ? null : typeof x === "string" && row.format.accepts(x) ? x : bad());
-    if (!("current" in entry) || !("last_declared" in entry) || !("correction_date" in entry)) bad();
+    if (!("current" in entry) || !("last_declared" in entry)) bad();
     const switchCount = entry.switch_count;
     if (typeof switchCount !== "number" || !Number.isSafeInteger(switchCount) || switchCount < 0 || switchCount > MAX_SWITCHES) bad();
-    const slot: SlotState = { current: user(entry.current), lastDeclared: user(entry.last_declared), switchCount: switchCount as number, correctionDate: day(entry.correction_date) };
+    const slot: SlotState = { current: user(entry.current), lastDeclared: user(entry.last_declared), switchCount: switchCount as number };
     if (!possibleSlot(slot, lastCardProof)) bad();
     slots.set(row.platform, slot);
   }
@@ -307,7 +319,7 @@ export async function requestCardState(fetchFn: Fetch, scopeString: string, scop
     if (lastCardProof === null) bad();
     kept.push(Object.freeze({ platform: id, username: current as string }));
   }
-  return { lastCardProof, proofsOnLastDate, slots, kept, count: b.count as number };
+  return { lastCardProof, proofsOnLastDate, dailyLimit, slots, kept, count: b.count as number };
 }
 
 /** The fields of a record except `seq` (spec/record.md). */
@@ -368,7 +380,7 @@ export interface Accepted {
 /** An answer of which nothing is told: a 201 all the same (Accepted). */
 export const NOTHING_TOLD: Readonly<Accepted> = Object.freeze({ seq: null, recordHash: null, ordinal: null, kinds: null });
 
-const KINDS: readonly string[] = ["first", "refresh", "correction", "switch", "withdraw"];
+const KINDS: readonly string[] = ["first", "refresh", "switch", "withdraw"];
 
 function readKinds(x: unknown): AcceptedKind[] | null {
   if (!Array.isArray(x) || x.length === 0) return null;

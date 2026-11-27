@@ -8,7 +8,7 @@ use iamreal_device_checks::username_format::{is_any_username, is_platform_id};
 use crate::json::Json;
 
 /// The kinds of spec/record-rules.md, as the answer and a row name them.
-const KINDS: [&str; 5] = ["first", "refresh", "correction", "switch", "withdraw"];
+const KINDS: [&str; 4] = ["first", "refresh", "switch", "withdraw"];
 
 /// What a record is on one platform: an element of the answer's `kinds`,
 /// or a row the confirmation screen showed (which has no `account_cards`).

@@ -84,19 +84,22 @@ describe("thirteen card proofs with real proofs, from the challenge to the proof
     assert.deepEqual((await worker.proofLog.stored()).records.map((r) => r.record_hash), written.map((w) => w.recordHash));
 
     // The state the back end answers.
-    const never = { current: null, last_declared: null, switch_count: 0, correction_date: null };
+    const never = { current: null, last_declared: null, switch_count: 0 };
     assert.deepEqual(await cardState(worker, cardProofs[0]!.body.scoped_id), {
       last_card_proof: "2026-11-23",
       proofs_on_last_date: 1,
-      platforms: { "test-example": never, threads: { current: null, last_declared: "alice", switch_count: 0, correction_date: "2026-11-20" } },
+      daily_limit: 3,
+      platforms: { "test-example": never, threads: { current: null, last_declared: "alice", switch_count: 0 } },
       count: 11,
     });
+    // threads: alice_ on the day of alice (card proof 3) is the first of its four switches.
     assert.deepEqual(await cardState(worker, cardProofs[1]!.body.scoped_id), {
       last_card_proof: "2026-11-24",
       proofs_on_last_date: 3,
+      daily_limit: 3,
       platforms: {
-        "test-example": { current: null, last_declared: "c-d", switch_count: 1, correction_date: "2026-11-21" },
-        threads: { current: null, last_declared: "dave", switch_count: 3, correction_date: "2026-11-23" },
+        "test-example": { current: null, last_declared: "c-d", switch_count: 1 },
+        threads: { current: null, last_declared: "dave", switch_count: 4 },
       },
       count: 11,
     });

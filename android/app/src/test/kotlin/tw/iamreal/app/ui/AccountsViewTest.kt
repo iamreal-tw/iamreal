@@ -16,8 +16,8 @@ class AccountsViewTest {
     private val copy = Copy(File(System.getProperty("iamreal.copy"), "card-proof.json").readText())
     private val messages = Messages(copy)
 
-    private fun slot(platform: String, current: String?, lastDeclared: String? = current, switchCount: Int = 0, correctionToday: Boolean = false, known: Boolean = true) =
-        Slot(platform, known, current, lastDeclared, switchCount, 5 - switchCount, correctionToday)
+    private fun slot(platform: String, current: String?, lastDeclared: String? = current, switchCount: Int = 0, known: Boolean = true) =
+        Slot(platform, known, current, lastDeclared, switchCount, 5 - switchCount)
 
     private fun status(vararg slots: Slot, daysSince: Int? = null, dailyLimit: Boolean = false, table: List<String> = listOf("threads")) =
         Status("7K2Q9FM4XD", daysSince?.let { "2026-11-04" }, daysSince, slots.toList(), table, dailyLimit, "2026-11-16")
@@ -64,7 +64,7 @@ class AccountsViewTest {
 
     @Test
     fun `the last card proof the same day is today, not 0 days ago`() {
-        val view = messages.accountsView(status(slot("threads", "alice", correctionToday = true), daysSince = 0)) as Messages.DeclaredView
+        val view = messages.accountsView(status(slot("threads", "alice"), daysSince = 0)) as Messages.DeclaredView
         assertEquals("上次過卡是今天", view.last)
     }
 
@@ -104,15 +104,6 @@ class AccountsViewTest {
     fun `another account, the last switch`() {
         val view = messages.switchView(status(slot("threads", "alice", switchCount = 4), daysSince = 87))
         assertEquals("改了之後，@alice 不再是這張卡片宣告的帳號。用掉最後一次更換。這次之後，這個平台不能再更換。", view.cost)
-    }
-
-    @Test
-    fun `another account in place of one put there today costs no switch, even with none left`() {
-        for (used in listOf(0, 5)) {
-            val view = messages.switchView(status(slot("threads", "alice", switchCount = used, correctionToday = true), daysSince = 0))
-            assertEquals("改了之後，@alice 不再是這張卡片宣告的帳號。今天才宣告的帳號，今天改掉不另外算一次更換。", view.cost)
-            assertTrue(view.row != null)
-        }
     }
 
     @Test

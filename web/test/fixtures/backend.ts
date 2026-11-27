@@ -6,8 +6,10 @@
 //
 // It keeps a small proof log of its own, for one card: what the default answers
 // to card-state and to a submission say, by the record rules
-// (spec/record-rules.md, applyRecord of protocol/src/record-rules.ts), so
-// that card proofs one after the other see each other. It verifies nothing:
+// (spec/record-rules.md, applyRecord of protocol/src/record-rules.ts) and the
+// server's limit of DAILY_LIMIT records of a card a date
+// (docs/api/card-proof.md), so that card proofs one after the other see
+// each other. It verifies nothing:
 // no proof, no challenge, no root. A test that sets `cardState` answers card-state with it
 // as it is, and the default submission's kinds are then computed against it
 // (and the proof log of its own is left as it was).
@@ -62,8 +64,14 @@ export interface Answer {
   bytes: Uint8Array;
 }
 
+/** The most records of one card this server writes with one date, as the sites have it (`daily_limit`). */
+export const DAILY_LIMIT = 3;
+
+/** The card's state, with the server's count of its records dated `lastCardProof`. */
+type CountedCard = CardState & { proofsOnLastDate: number };
+
 /** A card-state answer, read back into the proof log's terms (loosely: it is the test's own). */
-function cardOf(answer: Record<string, unknown>): CardState {
+function cardOf(answer: Record<string, unknown>): CountedCard {
   const day = (x: unknown): Day | null => (typeof x === "string" ? parseDay(x) : null);
   const slots = new Map<string, SlotState>();
   const platforms = typeof answer.platforms === "object" && answer.platforms !== null ? (answer.platforms as Record<string, Record<string, unknown>>) : {};
@@ -74,7 +82,6 @@ function cardOf(answer: Record<string, unknown>): CardState {
       current,
       lastDeclared: typeof e.last_declared === "string" ? e.last_declared : current,
       switchCount: typeof e.switch_count === "number" ? e.switch_count : 0,
-      correctionDate: day(e.correction_date),
     });
   }
   return { lastCardProof: day(answer.last_card_proof), proofsOnLastDate: typeof answer.proofs_on_last_date === "number" ? answer.proofs_on_last_date : 0, slots };
@@ -85,11 +92,11 @@ export class FakeBackend {
   readonly submissions: Record<string, unknown>[] = [];
   readonly opts: BackendOptions;
   /** The proof log of its own: one card. */
-  card: CardState;
+  card: CountedCard;
 
   constructor(opts: BackendOptions) {
     this.opts = opts;
-    this.card = newCard(this.rows());
+    this.card = { ...newCard(this.rows()), proofsOnLastDate: 0 };
   }
 
   /**
@@ -123,9 +130,8 @@ export class FakeBackend {
     return {
       last_card_proof: c.lastCardProof === null ? null : formatDay(c.lastCardProof),
       proofs_on_last_date: c.proofsOnLastDate,
-      platforms: Object.fromEntries(
-        [...c.slots].map(([p, s]) => [p, { current: s.current, last_declared: s.lastDeclared, switch_count: s.switchCount, correction_date: s.correctionDate === null ? null : formatDay(s.correctionDate) }]),
-      ),
+      daily_limit: DAILY_LIMIT,
+      platforms: Object.fromEntries([...c.slots].map(([p, s]) => [p, { current: s.current, last_declared: s.lastDeclared, switch_count: s.switchCount }])),
       count: this.submissions.length,
     };
   }
@@ -155,13 +161,16 @@ export class FakeBackend {
       crlDates: [d],
     });
     if (!o.result.valid) return this.json(400, { error: o.result.reason });
+    // The server's limit, after the rules (docs/api/card-proof.md).
+    const onDate = card.lastCardProof === d ? card.proofsOnLastDate : 0;
+    if (onDate >= DAILY_LIMIT) return this.json(400, { error: "daily_limit" });
     const kinds = o.result.kinds.map((k) => ({
       platform: k.platform,
       kind: k.kind,
       username: k.kind === "withdraw" ? card.slots.get(k.platform)!.current! : list.get(k.platform)!,
       account_cards: k.kind === "withdraw" ? 0 : 1,
     }));
-    if (own) this.card = o.card;
+    if (own) this.card = { ...o.card, proofsOnLastDate: onDate + 1 };
     return this.json(201, { seq: this.submissions.length, record_hash: await sha256Hex(new TextEncoder().encode(raw)), kinds });
   }
 

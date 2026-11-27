@@ -1,14 +1,19 @@
 // The card state table of the proof log's Durable Object (proof-log.ts): the
-// record rules' state of every card that has a valid record, one row a card.
-// Only the rules' state is here, nothing a page shows: it is read before and
-// written after each call of the rules (protocol/src/record-rules.ts), and a
-// wrong row would accept records that cannot be taken back.
+// record rules' state of every card that has a valid record, one row a card,
+// with the count the back end's daily limit reads. Nothing a page shows: it
+// is read before and written after each call of the rules
+// (protocol/src/record-rules.ts), and a wrong row would accept records that
+// cannot be taken back.
 //
-// The columns are the items of spec/record-rules.md, "State", and one more:
+// The columns are the items of spec/record-rules.md, "State", and two more:
 //
-//   last_card_proof, proofs_on_last_date   the card's own items
-//   slots                                  the items of each slot, by platform
-//   last_seq                               the `seq` of the card's last valid record
+//   last_card_proof       the card's own item
+//   slots                 the items of each slot, by platform
+//   proofs_on_last_date   the number of valid records of the card dated
+//                         last_card_proof: not an item of the rules, but what
+//                         the back end's limit of records a card a date
+//                         reads (settings.ts, `dailyLimit`)
+//   last_seq              the `seq` of the card's last valid record
 //
 // `slots` is JSON, an object keyed by platform ID in ascending order, each
 // value a slot in the back end's one spelling of it (slot-json.ts). A date
@@ -25,7 +30,7 @@ import { byBytes } from "iamreal-protocol/bytes.ts";
 import type { CardRow } from "iamreal-protocol/card-state-file.ts";
 import { type Day, formatDay, parseDay } from "iamreal-protocol/date.ts";
 import type { PlatformRow } from "iamreal-protocol/platforms.ts";
-import { type CardState, MAX_PER_DATE, type SlotState, possibleSlot } from "iamreal-protocol/record-rules.ts";
+import { type CardState, type SlotState, possibleSlot } from "iamreal-protocol/record-rules.ts";
 import { type SlotJson, slotOfJson, slotToJson } from "./slot-json.ts";
 
 /** The columns of the card state table, and of its copy (`copyCards`). */
@@ -51,10 +56,22 @@ export const CARD_TABLE = `CREATE TABLE IF NOT EXISTS cards ${CARD_COLUMNS}`;
  */
 const CARDS_COPY = "cards_copy";
 
-/** A card's row: its state, and the `seq` of its last valid record. */
+/** A card's row: its state, the back end's count of its records dated `lastCardProof`, and the `seq` of its last valid record. */
 export interface StoredCard {
   readonly card: CardState;
+  readonly proofsOnLastDate: number;
   readonly lastSeq: number;
+}
+
+/**
+ * The number of valid records of a card dated `date`, from its
+ * `last_card_proof` and `proofs_on_last_date`, for a `date` the record rules
+ * accept for it (check 4: not before its `last_card_proof`): a card's dates
+ * do not go back, so that is `proofs_on_last_date` when `date` is
+ * `last_card_proof`, and none when it is later.
+ */
+export function recordsOnDate(lastCardProof: Day | null, proofsOnLastDate: number, date: Day): number {
+  return lastCardProof === date ? proofsOnLastDate : 0;
 }
 
 /**
@@ -97,13 +114,11 @@ function stateOf(row: Columns): StoredCard & { card: { lastCardProof: Day } } {
   const slots = new Map<string, SlotState>();
   for (const [platform, s] of Object.entries(parsed as Record<string, Partial<SlotJson> | null>)) {
     if (typeof s !== "object" || s === null) throw corrupt("slots");
-    const { current, last_declared, switch_count, correction_date } = s;
-    if (!stringOrNull(current) || !stringOrNull(last_declared) || !stringOrNull(correction_date) || typeof switch_count !== "number") throw corrupt("slots");
-    const slot = slotOfJson({ current, last_declared, switch_count, correction_date });
-    if (slot === null) throw corrupt("slots");
-    slots.set(platform, slot);
+    const { current, last_declared, switch_count } = s;
+    if (!stringOrNull(current) || !stringOrNull(last_declared) || typeof switch_count !== "number") throw corrupt("slots");
+    slots.set(platform, slotOfJson({ current, last_declared, switch_count }));
   }
-  return { card: { lastCardProof, proofsOnLastDate: proofs_on_last_date, slots }, lastSeq: last_seq };
+  return { card: { lastCardProof, slots }, proofsOnLastDate: proofs_on_last_date, lastSeq: last_seq };
 }
 
 /**
@@ -113,7 +128,10 @@ function stateOf(row: Columns): StoredCard & { card: { lastCardProof: Day } } {
  * card of this proof log (spec/record-rules.md, "State"; `platforms` is the
  * proof log's table):
  *
- *   - `last_card_proof` is a date; `proofs_on_last_date` is 1 to 3; `last_seq` is 1 or more;
+ *   - `last_card_proof` is a date; `proofs_on_last_date` is 1 or more (a card's
+ *     row is written with its valid records, the last of them dated
+ *     `last_card_proof`; how many the back end allows a date is its setting,
+ *     which may have been another when they were written); `last_seq` is 1 or more;
  *   - every slot is on a platform of the table;
  *   - its `switch_count` is 0 to 5, its dates are dates, and its items fit
  *     each other and the card's last card proof (protocol/, possibleSlot);
@@ -125,8 +143,8 @@ export function readCard(sql: SqlStorage, platforms: readonly PlatformRow[], sco
   const row = sql.exec(`SELECT ${COLUMNS} FROM cards WHERE scope_string = ? AND scoped_id = ?`, scopeString, scopedId).toArray()[0];
   if (row === undefined) return null;
   const stored = stateOf(row);
-  const { card, lastSeq } = stored;
-  if (!Number.isSafeInteger(card.proofsOnLastDate) || card.proofsOnLastDate < 1 || card.proofsOnLastDate > MAX_PER_DATE) throw corrupt("proofs_on_last_date");
+  const { card, proofsOnLastDate, lastSeq } = stored;
+  if (!Number.isSafeInteger(proofsOnLastDate) || proofsOnLastDate < 1) throw corrupt("proofs_on_last_date");
   if (!Number.isSafeInteger(lastSeq) || lastSeq < 1) throw corrupt("last_seq");
   for (const [platform, slot] of card.slots) {
     const tableRow = platforms.find((p) => p.platform === platform);
@@ -175,17 +193,19 @@ export function copiedCards(sql: SqlStorage, after: CardRow | null, limit: numbe
   const out: CardRow[] = [];
   for (const row of sql.exec(`SELECT scope_string, scoped_id, ${COLUMNS} FROM ${CARDS_COPY} ${from} ORDER BY scope_string, scoped_id LIMIT ?`, ...keys, limit)) {
     if (typeof row.scope_string !== "string" || typeof row.scoped_id !== "string") throw corrupt("the card");
-    out.push({ scopeString: row.scope_string, scopedId: row.scoped_id, ...stateOf(row) });
+    const { card, lastSeq } = stateOf(row);
+    out.push({ scopeString: row.scope_string, scopedId: row.scoped_id, card, lastSeq });
   }
   return out;
 }
 
 /**
- * Writes the state of a card after a valid record, `seq` being that record's:
- * the card's row is replaced as a whole. A card has a row only once it has a
- * valid record, so `card.lastCardProof` is a date.
+ * Writes the state of a card after a valid record, `seq` being that record's,
+ * and `proofsOnLastDate` the card's valid records dated `card.lastCardProof`
+ * with it: the card's row is replaced as a whole. A card has a row only once
+ * it has a valid record, so `card.lastCardProof` is a date.
  */
-export function writeCard(sql: SqlStorage, scopeString: string, scopedId: string, card: CardState, seq: number): void {
+export function writeCard(sql: SqlStorage, scopeString: string, scopedId: string, card: CardState, proofsOnLastDate: number, seq: number): void {
   if (card.lastCardProof === null) throw new Error("card state table: a card without a valid record has no row");
   const slots: Record<string, SlotJson> = {};
   for (const platform of [...card.slots.keys()].sort(byBytes)) slots[platform] = slotToJson(card.slots.get(platform)!);
@@ -194,7 +214,7 @@ export function writeCard(sql: SqlStorage, scopeString: string, scopedId: string
     scopeString,
     scopedId,
     formatDay(card.lastCardProof),
-    card.proofsOnLastDate,
+    proofsOnLastDate,
     JSON.stringify(slots),
     seq,
   );

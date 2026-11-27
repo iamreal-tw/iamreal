@@ -91,7 +91,7 @@ import { PROOF_BYTES } from "./prover/prover.ts";
 import { checkChallenge, currentTime } from "iamreal-protocol/challenge.ts";
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
 import { type Account, declarationCode } from "iamreal-protocol/declaration-code.ts";
-import { EMPTY_SLOT, type Kind, MAX_SWITCHES, type SlotState, applyList, dailyLimitReached } from "iamreal-protocol/record-rules.ts";
+import { EMPTY_SLOT, type Kind, MAX_SWITCHES, type SlotState, applyList } from "iamreal-protocol/record-rules.ts";
 import { type ProofLog, scopeOf } from "iamreal-protocol/scope.ts";
 import { scopedId, scopedIdText, shortId } from "iamreal-protocol/scoped-id.ts";
 import { byPlatform, isAnyUsername } from "iamreal-protocol/username-format.ts";
@@ -120,10 +120,10 @@ export type Stop =
   /** The challenge is not dated today (Taiwan, by the device's clock). */
   | { code: "challenge_not_today"; challengeDate: string; today: string }
   /**
-   * The list is not possible by the record rules:
+   * The list is not possible by the record rules, or the server would not write it today:
    *   switch_limit      it switches a slot whose 5 switches are used up (`platform`)
    *   empty             the list is empty and the card declares no account
-   *   daily_limit       the card has 3 valid records today
+   *   daily_limit       the server has written its limit of records of the card today
    */
   | { code: "blocked"; reason: "switch_limit" | "empty" | "daily_limit"; platform?: string }
   /** The second signature was not made within IDLE_MS of the first: the PIN, the certificate and the signature were dropped. */
@@ -145,8 +145,8 @@ export type Stop =
   /**
    * The date changed after the list was confirmed (midnight passed before the
    * button was pressed, or while the challenge was on its way), and on the
-   * new date the list would do something other than the screen said (a
-   * correction turned into a switch). The card did not sign it.
+   * new date the list would do something other than the screen said. The
+   * card did not sign it.
    */
   | { code: "date_changed" }
   /** The caller called a step out of order. */
@@ -276,11 +276,8 @@ export interface SlotStatus {
   lastDeclared: string | null;
   /** 0 to 5 (0 for a platform the device does not know). */
   switchCount: number;
-  correctionDate: string | null;
   /** Switches left by the record rules: 5 minus the count. */
   switchesLeft: number;
-  /** `correction_date` is today: changing the account today is a correction, not counted. */
-  correctionToday: boolean;
 }
 
 export interface CardStatus {
@@ -298,9 +295,9 @@ export interface CardStatus {
   /** The card's list now: the `current` of every slot that has one, in ascending order of platform. */
   accounts: Account[];
   /**
-   * The card has 3 valid records dated today (`last_card_proof` is today and
-   * `proofs_on_last_date` is 3): no list can be declared today
-   * (spec/record-rules.md, check 6).
+   * The server writes no more records of the card today: it has written
+   * `daily_limit` of them dated today (docs/api/card-proof.md,
+   * `card-state`). No list can be declared today.
    */
   dailyLimit: boolean;
   today: string;
@@ -319,7 +316,7 @@ export interface ConsequenceRow {
   kind: Kind;
   /** The slot's `current` before this card proof. */
   current: string | null;
-  /** For a `correction` or a `switch`: the account replaced (`current`, or after a withdrawal `last_declared`). */
+  /** For a `switch`: the account replaced (`current`, or after a withdrawal `last_declared`). */
   previous: string | null;
   /** For a `switch`: the switches left after it by the rules; null otherwise. */
   switchesLeftAfter: number | null;
@@ -1030,8 +1027,7 @@ export class CardProofFlow {
     // Midnight may have passed while the challenge was on its way. The record
     // is dated the challenge's date (today, checked above): what the list
     // does is worked out again on it, and a list that would now do something
-    // other than the screen said (a correction that is a switch on the new
-    // date) is not signed.
+    // other than the screen said is not signed.
     this.sameAsShown();
     this.progress("challenge");
     const challengeText = challenge as string;
@@ -1158,7 +1154,8 @@ export class CardProofFlow {
    * signed (Consequence.rows): every difference is a platform in
    * `mismatches`, for the screen to tell the cardholder (docs/api/card-proof.md
    * cannot be checked by the device; a server that reported a wrong state, for
-   * example a `correction_date` that made a switch look free, shows here).
+   * example a `last_declared` that made a switch look like a refresh, shows
+   * here).
    */
   private done(s: Submission, r: Pick<Done, "seq" | "recordHash" | "ordinal" | "kinds">): Done {
     this.phaseValue = "done";
@@ -1253,19 +1250,21 @@ export function consequenceOfChoice(status: CardStatus, state: CardStateResponse
 
   const accounts = [...list].map(([platform, username]) => Object.freeze({ platform, username })).sort(byPlatform);
 
-  // The record rules (checks 5 and 6), on the slots the server reported. A
+  // The record rules (check 5), on the slots the server reported. A
   // platform the device does not know has only its account: kept as it is,
   // it is the account declared there, whatever the rest of its slot says.
   const before = new Map<string, { slot: SlotState; row: PlatformRow | null }>(
-    status.slots.map((s) => [s.platform, { row: s.row, slot: s.row === null ? { current: s.current, lastDeclared: s.current, switchCount: 0, correctionDate: null } : (state.slots.get(s.platform) ?? EMPTY_SLOT) }]),
+    status.slots.map((s) => [s.platform, { row: s.row, slot: s.row === null ? { current: s.current, lastDeclared: s.current, switchCount: 0 } : (state.slots.get(s.platform) ?? EMPTY_SLOT) }]),
   );
-  const card = { lastCardProof: state.lastCardProof, proofsOnLastDate: state.proofsOnLastDate, slots: new Map([...before].map(([p, b]) => [p, b.slot])) };
+  const card = { lastCardProof: state.lastCardProof, slots: new Map([...before].map(([p, b]) => [p, b.slot])) };
   // The table the rules go through: the rows the device read from the
   // server, and for a platform it does not know a row that takes the
   // account as kept (it was checked as any username when it was read).
   const table = status.slots.map((s) => s.row ?? keptRow(s.platform));
   const { result } = applyList(table, card, accounts, today);
   if (!result.valid) throw new FlowStop(result.reason === "switch_limit" ? { code: "blocked", reason: result.reason, platform: result.blockedPlatform } : { code: "blocked", reason: result.reason });
+  // Then the server's limit: a list the rules accept that it would not write today.
+  if (dailyLimitReached(state, today)) throw new FlowStop({ code: "blocked", reason: "daily_limit" });
   const rows: ConsequenceRow[] = result.kinds.map(({ platform, kind }) => {
     const { slot, row } = before.get(platform)!;
     const entry = list.get(platform) ?? null;
@@ -1275,7 +1274,7 @@ export function consequenceOfChoice(status: CardStatus, state: CardStateResponse
       username: kind === "withdraw" ? slot.current! : entry!,
       kind,
       current: slot.current,
-      previous: kind === "switch" || kind === "correction" ? (slot.current ?? slot.lastDeclared) : null,
+      previous: kind === "switch" ? (slot.current ?? slot.lastDeclared) : null,
       switchesLeftAfter: kind === "switch" ? MAX_SWITCHES - slot.switchCount - 1 : null,
     };
   });
@@ -1296,6 +1295,17 @@ function keptRow(platform: string): PlatformRow {
   return { platform, displayName: platform, format: { text: "", min: 1, max: Number.MAX_SAFE_INTEGER, accepts: isAnyUsername } };
 }
 
+/**
+ * True if the server writes no more records of the card on `day`
+ * (docs/api/card-proof.md, `card-state`): its records dated `day` are
+ * `daily_limit` or more. A card's dates do not go back, so those are
+ * `proofs_on_last_date` when `day` is `last_card_proof` and none when it is
+ * later; a `day` before it gives `date_order`, and this counts none.
+ */
+export function dailyLimitReached(state: Pick<CardStateResponse, "lastCardProof" | "proofsOnLastDate" | "dailyLimit">, day: Day): boolean {
+  return (state.lastCardProof === day ? state.proofsOnLastDate : 0) >= state.dailyLimit;
+}
+
 /** The card's state as the screen shows it, with what the device computes from it on `today`. */
 export function statusOf(state: CardStateResponse, table: readonly PlatformRow[], idText: string, today: Day): CardStatus {
   const slots: SlotStatus[] = [];
@@ -1309,13 +1319,11 @@ export function statusOf(state: CardStateResponse, table: readonly PlatformRow[]
       current: slot.current,
       lastDeclared: slot.lastDeclared,
       switchCount: slot.switchCount,
-      correctionDate: slot.correctionDate === null ? null : formatDay(slot.correctionDate),
       switchesLeft: MAX_SWITCHES - slot.switchCount,
-      correctionToday: slot.correctionDate === today,
     });
   }
   for (const k of state.kept) {
-    slots.push({ platform: k.platform, row: null, current: k.username, lastDeclared: k.username, switchCount: 0, correctionDate: null, switchesLeft: MAX_SWITCHES, correctionToday: false });
+    slots.push({ platform: k.platform, row: null, current: k.username, lastDeclared: k.username, switchCount: 0, switchesLeft: MAX_SWITCHES });
   }
   slots.sort(byPlatform);
   return {
