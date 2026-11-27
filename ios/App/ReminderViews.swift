@@ -77,6 +77,8 @@ private enum Parts {
             Text(text)
                 .font(Theme.body(Theme.sizeBody, Theme.weightHeading))
                 .foregroundColor(main ? Theme.bg.color : Theme.ink.color)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 12)
                 .frame(maxWidth: .infinity, minHeight: Theme.buttonHeight.value)
                 .background(main ? Theme.you.color : Theme.bg.color)
                 .overlay(RoundedRectangle(cornerRadius: Theme.radius.value).stroke(main ? Theme.you.color : Theme.ink.color, lineWidth: 1.5))
@@ -195,7 +197,8 @@ struct ScheduleView: View {
                     .clipShape(RoundedRectangle(cornerRadius: Theme.radius.value))
                     .padding(.top, 24)
             }
-            VStack(spacing: 12) {
+            // The way on on the right side by side, on top one under the other.
+            ButtonRow(firstOnRight: true) {
                 Parts.button(screen.confirm, main: true) { Task { await pages.confirm() } }
                 Parts.button(screen.cancel, main: false) { pages.back() }
             }

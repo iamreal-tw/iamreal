@@ -117,20 +117,18 @@ type result struct {
 }
 
 type slotOut struct {
-	Current        *string `json:"current"`
-	LastDeclared   *string `json:"last_declared"`
-	SwitchCount    int     `json:"switch_count"`
-	CorrectionDate *string `json:"correction_date"`
+	Current      *string `json:"current"`
+	LastDeclared *string `json:"last_declared"`
+	SwitchCount  int     `json:"switch_count"`
 }
 
-// cardOut is a card of the output, with proofs_on_last_date and slots from
-// the card's state (the output does not list them; see the vectors' note).
+// cardOut is a card of the output, with slots from the card's state (the
+// output does not list them; see the vectors' note).
 type cardOut struct {
-	ScopedID         string             `json:"scoped_id"`
-	LastCardProof    string             `json:"last_card_proof"`
-	Accounts         []account          `json:"accounts"`
-	ProofsOnLastDate int                `json:"proofs_on_last_date"`
-	Slots            map[string]slotOut `json:"slots"`
+	ScopedID      string             `json:"scoped_id"`
+	LastCardProof string             `json:"last_card_proof"`
+	Accounts      []account          `json:"accounts"`
+	Slots         map[string]slotOut `json:"slots"`
 }
 
 type accountCardOut struct {
@@ -260,8 +258,7 @@ func TestVectorsRecordRules(t *testing.T) {
 				w, _ := json.Marshal(c.Results)
 				t.Errorf("results\n got %s\nwant %s", g, w)
 			}
-			// The output; proofs_on_last_date and the slots are compared one
-			// record at a time (incremental_test.go), from Rules.Card.
+			// The output; the slots are compared one record at a time (incremental_test.go), from Rules.Card.
 			if gotState, want := stateOut(st, nil), withoutCardState(c.State); !reflect.DeepEqual(gotState, want) {
 				g, _ := json.Marshal(gotState)
 				w, _ := json.Marshal(want)
@@ -290,8 +287,7 @@ func ordinalsOut(st *prooflog.State) []ordinalOut {
 }
 
 // stateOut writes the output in the shape of the vectors. x, if not nil,
-// gives each card's proofs_on_last_date and slots; otherwise they are left
-// out (0 and nil).
+// gives each card's slots; otherwise they are left out (nil).
 func stateOut(st *prooflog.State, x *prooflog.Rules) []scopeOut {
 	out := []scopeOut{}
 	for _, s := range st.Scopes {
@@ -303,7 +299,6 @@ func stateOut(st *prooflog.State, x *prooflog.Rules) []scopeOut {
 			}
 			if x != nil {
 				cs := x.Card(s.ScopeString, c.ScopedID)
-				co.ProofsOnLastDate = cs.ProofsOnLastDate
 				co.Slots = slotsOut(cs)
 			}
 			so.Cards = append(so.Cards, co)
@@ -324,24 +319,17 @@ func stateOut(st *prooflog.State, x *prooflog.Rules) []scopeOut {
 func slotsOut(cs prooflog.CardState) map[string]slotOut {
 	out := map[string]slotOut{}
 	for p, slot := range cs.Slots {
-		so := slotOut{Current: slot.Current, LastDeclared: slot.LastDeclared, SwitchCount: slot.SwitchCount}
-		if slot.CorrectionDate != nil {
-			d := slot.CorrectionDate.String()
-			so.CorrectionDate = &d
-		}
-		out[p] = so
+		out[p] = slotOut{Current: slot.Current, LastDeclared: slot.LastDeclared, SwitchCount: slot.SwitchCount}
 	}
 	return out
 }
 
-// withoutCardState is the vector's state without proofs_on_last_date and
-// slots.
+// withoutCardState is the vector's state without slots.
 func withoutCardState(state []scopeOut) []scopeOut {
 	out := []scopeOut{}
 	for _, s := range state {
 		s.Cards = append([]cardOut{}, s.Cards...)
 		for i := range s.Cards {
-			s.Cards[i].ProofsOnLastDate = 0
 			s.Cards[i].Slots = nil
 		}
 		out = append(out, s)

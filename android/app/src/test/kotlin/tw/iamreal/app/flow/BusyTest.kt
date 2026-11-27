@@ -66,7 +66,7 @@ class BusyTest {
     private val config = """{"paused":false,"crl_max_age_days":7,"platforms":[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}],"min_app":{"android":{"build":1,"from":"2026-11-20"}}}"""
 
     /** A card without a record (spec/vectors/card-status.json, "a card without a record"). */
-    private val cardState = """{"last_card_proof":null,"proofs_on_last_date":0,"platforms":{"threads":{"current":null,"last_declared":null,"switch_count":0,"correction_date":null}},"count":137}"""
+    private val cardState = """{"last_card_proof":null,"proofs_on_last_date":0,"daily_limit":3,"platforms":{"threads":{"current":null,"last_declared":null,"switch_count":0}},"count":137}"""
 
     /** An answer of the back end: its status and its body. */
     private class Answer(val status: Int, val body: ByteArray) {

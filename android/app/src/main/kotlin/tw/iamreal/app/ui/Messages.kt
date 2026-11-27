@@ -249,12 +249,11 @@ internal class Messages(private val c: Copy) {
         val title = accountsTitle(single)
         val intro = c.say("accounts.declared_inline", "account" to now)
         val keep = c.say("accounts.keep")
-        // Used up, and not put there today: no other account can be declared.
-        if (!slot.correctionToday && slot.switchesLeft == 0) {
+        // Used up: no other account can be declared.
+        if (slot.switchesLeft == 0) {
             return SwitchView(title, intro, null, null, c.say("accounts.row_used_up", "switches_used" to slot.switchCount), null, keep)
         }
         val cost = when {
-            slot.correctionToday -> c.say("accounts.row_today")
             slot.switchesLeft == 1 -> c.say("confirm.uses_final_switch")
             else -> c.say("accounts.switch_limit", "switches_left" to slot.switchesLeft - 1)
         }
@@ -273,10 +272,7 @@ internal class Messages(private val c: Copy) {
             slot.switchesLeft > 0 -> c.say("accounts.row_switches", "switches_used" to slot.switchCount, "switches_left" to slot.switchesLeft)
             else -> c.say("accounts.row_used_up", "switches_used" to slot.switchCount)
         }
-        // An account put there today can be changed today without a switch, even when none is left.
-        if (slot.correctionToday) {
-            if (slot.current != null) lines += c.say("accounts.row_today")
-        } else if (slot.switchesLeft == 0) {
+        if (slot.switchesLeft == 0) {
             lines += if (slot.current != null) c.say("accounts.row_can_clear") else c.say("accounts.row_only_back", "last_declared" to last)
         }
         return lines
@@ -290,9 +286,8 @@ internal class Messages(private val c: Copy) {
         else -> c.say("kinds.switch", "previous" to Platforms.handle(platform, previous ?: ""))
     }
 
-    /** What step 5 writes under a row: what it does, and for a switch or a correction what it uses up. */
+    /** What step 5 writes under a row: what it does, and for a switch what it uses up. */
     fun rowSentences(row: CardProof.Row): String = kind(row.platform, row.kind, row.username, row.current, row.previous) + when {
-        row.kind == "correction" -> c.say("confirm.switch_not_counted")
         row.kind != "switch" -> ""
         row.switchesLeft == 0 -> c.say("confirm.uses_final_switch")
         else -> c.say("confirm.uses_switch", "switches_left" to row.switchesLeft!!)
@@ -364,7 +359,7 @@ internal class Messages(private val c: Copy) {
         if (k != null) {
             val before = d.expected.firstOrNull { it.platform == k.platform }?.current
             if (k.kind == "first" || (k.kind == "refresh" && before == null)) return c.say("finish.first")
-            if (k.kind == "switch" || k.kind == "correction") return c.say("finish.switched", "account" to Platforms.handle(k.platform, k.username))
+            if (k.kind == "switch") return c.say("finish.switched", "account" to Platforms.handle(k.platform, k.username))
         }
         return c.say("done.changed")
     }
@@ -388,6 +383,45 @@ internal class Messages(private val c: Copy) {
      * "複製證明連結"; a screen reader is [told] the whole of it ("打開 @alice 的 Threads 個人檔案"). [address] is the profile's.
      */
     data class OpensProfile(val label: String, val told: String, val address: String)
+
+    /** The button that opens the profile of an account on a platform the app knows; null for one it does not. */
+    private fun opensProfile(platform: String, username: String, known: Boolean): OpensProfile? {
+        val p = if (known) Platforms.of(platform) else null
+        return p?.let { OpensProfile(c.say("hang.open_threads", "platform" to it.name), c.say("done.open_profile", "account" to Platforms.handle(platform, username), "platform" to it.name), it.profileUrl(username)) }
+    }
+
+    private fun hangTitle(single: String?): String = if (single != null) c.say("hang.title_single", "platform" to single) else c.say("hang.title")
+
+    private fun hangWhy(single: String?): String = if (single != null) c.say("hang.why_single") else c.say("done.anyone")
+
+    /** The four steps of hanging the link, in words. */
+    private fun hangSteps(): List<String> = listOf(c.say("done.step_edit"), c.say("done.step_link"), c.say("done.step_add"), c.say("done.step_paste"))
+
+    /**
+     * The whole of step 6 for the accounts the card declares now, from step 4 where the card has had its 3 card proofs today
+     * (design/copy/card-proof.md, "今天已經過卡 3 次"): no record this time, so no date and no notes of one.
+     */
+    class HangFromLimitView(val title: String, val why: String, val profiles: List<OpensProfile>, val steps: List<String>, val hung: String, val account: String?)
+
+    /**
+     * Whether step 4's 今天已經過卡 3 次 offers 重新掛上連結: the card declares an account on a platform the app knows. Not when
+     * it declares nothing now (everything withdrawn today), nor only accounts on platforms the app does not know: no profile
+     * to open, no demonstration.
+     */
+    fun canHangFromLimit(status: CardProof.Status): Boolean = status.slots.any { it.current != null && it.known && Platforms.of(it.platform) != null }
+
+    fun hangFromLimit(status: CardProof.Status, single: String?): HangFromLimitView {
+        val declared = status.slots.mapNotNull { s -> s.current?.let { Triple(s.platform, it, s.known) } }
+        val openProof = c.say("done.open_proof")
+        return HangFromLimitView(
+            title = hangTitle(single),
+            why = hangWhy(single),
+            profiles = declared.mapNotNull { (platform, username, known) -> opensProfile(platform, username, known) },
+            steps = hangSteps(),
+            hung = c.say("done.hung", "open_proof" to openProof),
+            account = declared.firstOrNull { (platform, _, known) -> known && Platforms.of(platform) != null }?.let { (platform, username) -> Platforms.handle(platform, username) },
+        )
+    }
 
     /**
      * What the steps after the submission say (design/copy/card-proof.md, "6. 掛上去" and "8. 完成和分享", each with its part
@@ -462,7 +496,7 @@ internal class Messages(private val c: Copy) {
                 val e = expected[k.platform]
                 // kinds.switch names the account the screen knew was replaced.
                 val previous = e?.previous ?: e?.current
-                val sentence = if ((k.kind == "switch" || k.kind == "correction") && previous == null) null else kind(k.platform, k.kind, k.username, e?.current, previous)
+                val sentence = if (k.kind == "switch" && previous == null) null else kind(k.platform, k.kind, k.username, e?.current, previous)
                 val mismatch = k.platform in d.answer.mismatches
                 rows += DoneRow(
                     k.platform, knownOf(k.platform), k.username, sentence,
@@ -484,16 +518,13 @@ internal class Messages(private val c: Copy) {
             unlink = if (single != null) c.say("finish.unlink_single", "platform" to single) else c.say("done.withdrawn_link"),
             card = d.accounts.map { (platform, username) -> (if (single != null) null else if (knownOf(platform)) Platforms.of(platform)?.name ?: platform else platform) to account(platform, username) },
             recordedOn = c.say("done.recorded_on", "date" to d.date),
-            hangTitle = if (single != null) c.say("hang.title_single", "platform" to single) else c.say("hang.title"),
-            why = if (single != null) c.say("hang.why_single") else c.say("done.anyone"),
+            hangTitle = hangTitle(single),
+            why = hangWhy(single),
             short = short,
             stillThere = if (short) c.say("hang.still_there_single", "platform" to single!!) else null,
             look = c.say("hang.look", "open_proof" to openProof),
-            profiles = d.accounts.mapNotNull { (platform, username) ->
-                val p = if (knownOf(platform)) Platforms.of(platform) else null
-                p?.let { OpensProfile(c.say("hang.open_threads", "platform" to it.name), c.say("done.open_profile", "account" to account(platform, username), "platform" to it.name), it.profileUrl(username)) }
-            },
-            steps = listOf(c.say("done.step_edit"), c.say("done.step_link"), c.say("done.step_add"), c.say("done.step_paste")),
+            profiles = d.accounts.mapNotNull { (platform, username) -> opensProfile(platform, username, knownOf(platform)) },
+            steps = hangSteps(),
             notes = listOfNotNull(
                 if (d.firstRecord && !withdrawAll) c.say("hang.new_card") else null,
                 if (withdrew && !withdrawAll) c.say("done.withdrawn_link") else null,

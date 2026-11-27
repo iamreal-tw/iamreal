@@ -138,11 +138,20 @@ for all of them (ADR-0017).
 - Response `200`:
 
   ```
-  {"last_card_proof":"2026-11-04","proofs_on_last_date":1,"platforms":{"threads":{"current":"bob","last_declared":"bob","switch_count":1,"correction_date":"2026-03-02"}},"count":137}
+  {"last_card_proof":"2026-11-04","proofs_on_last_date":1,"daily_limit":3,"platforms":{"threads":{"current":"bob","last_declared":"bob","switch_count":1}},"count":137}
   ```
 
-  - `last_card_proof` and `proofs_on_last_date` are the card's. A card with
-    no valid record has `null` and 0; this is not an error.
+  - `last_card_proof` is the card's. A card with no valid record has
+    `null`; this is not an error.
+  - `proofs_on_last_date` is the number of valid records of the card dated
+    `last_card_proof`, 0 for a card with no valid record. It is not an item
+    of the record rules' state: the server counts it for its own limit
+    (`daily_limit`, below), and anyone can count it from the proof log.
+  - `daily_limit` is the most records of one card the server writes with
+    one date: 3 on the production site and on the test site. It is the
+    server's rule, not the record rules' ([`spec/record-rules.md`](../../spec/record-rules.md),
+    "Not part of these rules"; ADR-0018); each site has its own, and it is
+    the same for every card.
   - `platforms` has one entry for every platform this proof log accepts
     ([`spec/scope.md`](../../spec/scope.md)), keyed by the platform ID,
     whether or not the card declares an account there. The order of the
@@ -151,12 +160,8 @@ for all of them (ADR-0017).
     - `current` and `last_declared`: the account, or `null` when the rules
       have none.
     - `switch_count`: the number of switches the slot has used, 0 to 5.
-    - `correction_date`: the date of the slot's last `first` or `switch`,
-      that is, the day the slot last got an account that was new to it, or
-      `null`. It is not the date of a later `refresh`, `correction` or
-      `withdraw`.
 
-    A slot the card never used has `null`, `null`, 0 and `null`.
+    A slot the card never used has `null`, `null` and 0.
   - **The card's list** is the `current` of every entry where it is not
     `null`. It is not sent a second time in another form.
   - The dates of the individual switches are not sent. The rules do not
@@ -172,20 +177,19 @@ them and from today's date in Taiwan by its own clock:
 
 | What the cardholder is told | How the device gets it |
 |---|---|
-| Records of today, out of 3 | `proofs_on_last_date` if `last_card_proof` is today; 0 if it is earlier. If it is later, a card proof dated today is `date_order` (a card's dates do not go back) |
+| Records of today, out of `daily_limit` | `proofs_on_last_date` if `last_card_proof` is today; 0 if it is earlier. If it is later, a card proof dated today is `date_order` (a card's dates do not go back). With `daily_limit` or more, the server writes no card proof of the card today |
 | Switches left on a platform, out of 5 | 5 minus that entry's `switch_count` |
-| Whether changing the account on a platform today uses a switch | No if that entry's `correction_date` is today (a correction); yes otherwise |
-| What a list would do on a platform | Its entry against the slot: `first`, `refresh`, `correction`, `switch`, `withdraw`, or blocked ([`spec/record-rules.md`](../../spec/record-rules.md), "Event rules") |
+| What a list would do on a platform | Its entry against the slot: `first`, `refresh`, `switch`, `withdraw`, or blocked ([`spec/record-rules.md`](../../spec/record-rules.md), "Event rules") |
 
 What the device does with it: shows the card's whole list, and lets the
 cardholder change it. Before the card signs, the device shows the whole list
 that will be signed and what it does on every platform, including the
 accounts it withdraws by leaving them out and the switches it uses up; a
-list that the rules would refuse (`switch_limit`, `empty`, `daily_limit`)
-is not offered. The device cannot check the answer without the whole
+list that the rules would refuse (`switch_limit`, `empty`), or that the
+server would not write today (`daily_limit`), is not offered. The device cannot check the answer without the whole
 proof log. A wrong answer cannot identify the cardholder. It can mislead them:
 a state that hides an account would lead to a list without it, which
-withdraws it; a wrong `correction_date` would present a switch as free. The
+withdraws it; a wrong `switch_count` would hide how many switches are left. The
 cardholder sees the list before signing, and the proof log would show what the
 server answered wrongly.
 [`spec/list-consequence.md`](../../spec/list-consequence.md) defines how the
@@ -211,7 +215,7 @@ not know" is one that has no row it can read in the platform table of
   `null`**: the device ignores it and does not offer the platform.
 - **A platform of the table has no entry**: the device does not offer it.
 - **No response, a response without `platforms`, or one in which it cannot
-  read `last_card_proof`, `proofs_on_last_date`, `count` or the entry of a
+  read `last_card_proof`, `proofs_on_last_date`, `daily_limit`, `count` or the entry of a
   platform it knows**: the device treats the state as unread and does not
   go on to the declaration. Without the state it cannot build the list.
 - **A field it does not know, in the response or inside an entry it can
@@ -274,7 +278,7 @@ Submits one card proof: the card's whole list of accounts.
   `kinds` has one entry for every platform on which the record has a kind
   ([`spec/record-rules.md`](../../spec/record-rules.md)), in ascending order
   of `platform`; there is at least one. `kind` is `first`, `refresh`,
-  `correction`, `switch` or `withdraw`. `username` is the account: the one
+  `switch` or `withdraw`. `username` is the account: the one
   the list has for that platform, or for `withdraw` the one that was
   withdrawn. `account_cards` is the number of cards whose `current` on that
   platform is that `username`, in the record's scope, once the record is
@@ -308,7 +312,8 @@ Submits one card proof: the card's whole list of accounts.
   | `400` | `proof` | The record does not verify |
   | `400` | `root` | `smt_root` is not one of the two newest roots of the issuer |
   | `400` | `date_order` | The record rule of that name (check 4): the challenge's date is more than 4 days before the latest date among the valid records of the proof log, or before the card's `last_card_proof`. The second happens to a card that took two challenges around midnight and submitted the later-dated one first; the earlier one cannot be submitted, and the card proof is made again with a new challenge. The whole list is refused; nothing is recorded for any platform |
-  | `400` | `empty`, `switch_limit`, `daily_limit` | The record rule of that name. The whole list is refused; nothing is recorded for any platform |
+  | `400` | `empty`, `switch_limit` | The record rule of that name. The whole list is refused; nothing is recorded for any platform |
+  | `400` | `daily_limit` | The record rules accept the record, but the server has written `daily_limit` records of the card with the challenge's date (`card-state`). It is the server's rule, not the record rules'. The whole list is refused; the card proof can be made the next day |
   | `503` | `crl_stale` | The newest CRL of the record's issuer key is more than 3 days old, or the server has none; no card proof of that issuer key is accepted |
   | `429` | `rate_limited` | The network sent too many submissions in this minute ("Rules for every endpoint"). The submission was not read and does not count |
   | `503` | `busy` | The proof log is overloaded ("Rules for every endpoint"). The same submission can be sent again |
@@ -359,9 +364,9 @@ Submits one card proof: the card's whole list of accounts.
 
   When several of the later codes apply, the first in this order: `paused`,
   `challenge_unknown`, `challenge_used`, `challenge_attempts`, `proof`,
-  `crl_stale`, `root`, the record rules in their own order. A proof made
-  for one list and submitted with another is `proof`: the declaration code
-  does not match.
+  `crl_stale`, `root`, the record rules in their own order, then
+  `daily_limit`. A proof made for one list and submitted with another is
+  `proof`: the declaration code does not match.
 
   The challenge is looked at twice: before the proof is verified, and again
   at the moment the record is written. A challenge that passed the first

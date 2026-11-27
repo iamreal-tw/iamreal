@@ -24,14 +24,15 @@ const EXAMPLE = { platform: "test-example", display_name: "Example (no real serv
 const PRODUCTION = [THREADS];
 const TEST = [EXAMPLE, THREADS];
 
-type Slot = { current: string | null; last_declared: string | null; switch_count: number; correction_date: string | null };
-const EMPTY: Slot = { current: null, last_declared: null, switch_count: 0, correction_date: null };
-/** bob on threads, one switch used, the last on 2026-03-02: the example of docs/api/card-proof.md. */
-const BOB: Slot = { current: "bob", last_declared: "bob", switch_count: 1, correction_date: "2026-03-02" };
+type Slot = { current: string | null; last_declared: string | null; switch_count: number };
+const EMPTY: Slot = { current: null, last_declared: null, switch_count: 0 };
+/** bob on threads, one switch used: the example of docs/api/card-proof.md. */
+const BOB: Slot = { current: "bob", last_declared: "bob", switch_count: 1 };
 
 const state = (platforms: Record<string, unknown>, lastCardProof: string | null = "2026-11-04", proofsOnLastDate = lastCardProof === null ? 0 : 1, more: Record<string, unknown> = {}) => ({
   last_card_proof: lastCardProof,
   proofs_on_last_date: proofsOnLastDate,
+  daily_limit: 3,
   platforms,
   count: 137,
   ...more,
@@ -82,12 +83,12 @@ const cases: Case[] = [
     result: valid([], [row("threads", "withdraw", "bob", "bob")]),
   },
   {
-    name: "another account on the date of the slot's last first or switch is a correction",
+    name: "another account on the date of the card's last card proof is a switch too",
     platforms: PRODUCTION,
-    card_state: state({ threads: BOB }, "2026-03-02"),
-    today: "2026-03-02",
+    card_state: state({ threads: BOB }, TODAY),
+    today: TODAY,
     accounts: [acc("threads", "carol")],
-    result: valid([acc("threads", "carol")], [row("threads", "correction", "carol", "bob", "bob")]),
+    result: valid([acc("threads", "carol")], [row("threads", "switch", "carol", "bob", "bob", 3)]),
   },
   {
     name: "after a withdrawal, another account is a switch from the last one declared",
@@ -138,12 +139,12 @@ const cases: Case[] = [
     result: valid([acc("threads", "bob")], [row("threads", "refresh", "bob", "bob")]),
   },
   {
-    name: "no switch left: a correction on the date of the fifth switch",
+    name: "no switch left: another account on the date of the fifth switch is switch_limit too",
     platforms: PRODUCTION,
-    card_state: state({ threads: { ...BOB, switch_count: 5, correction_date: TODAY } }, TODAY),
+    card_state: state({ threads: { ...BOB, switch_count: 5 } }, TODAY),
     today: TODAY,
     accounts: [acc("threads", "carol")],
-    result: valid([acc("threads", "carol")], [row("threads", "correction", "carol", "bob", "bob")]),
+    result: { valid: false, reason: "switch_limit", platform: "threads" },
   },
   {
     name: "the empty list for a card without a record is empty",
@@ -162,12 +163,44 @@ const cases: Case[] = [
     result: { valid: false, reason: "empty" },
   },
   {
-    name: "3 valid records today: daily_limit, whatever the list",
+    name: "the server's daily_limit of records today: daily_limit, whatever the list",
     platforms: PRODUCTION,
     card_state: state({ threads: BOB }, TODAY, 3),
     today: TODAY,
     accounts: [acc("threads", "bob")],
     result: { valid: false, reason: "daily_limit" },
+  },
+  {
+    name: "the limit is the answer's daily_limit: 2 records today and a daily_limit of 2",
+    platforms: PRODUCTION,
+    card_state: state({ threads: BOB }, TODAY, 2, { daily_limit: 2 }),
+    today: TODAY,
+    accounts: [acc("threads", "bob")],
+    result: { valid: false, reason: "daily_limit" },
+  },
+  {
+    name: "the limit is the answer's daily_limit: 4 records today and a daily_limit of 5, allowed",
+    platforms: PRODUCTION,
+    card_state: state({ threads: BOB }, TODAY, 4, { daily_limit: 5 }),
+    today: TODAY,
+    accounts: [acc("threads", "bob")],
+    result: valid([acc("threads", "bob")], [row("threads", "refresh", "bob", "bob")]),
+  },
+  {
+    name: "a daily_limit of 0: no list today, also for a card without a record",
+    platforms: PRODUCTION,
+    card_state: state({ threads: EMPTY }, null, 0, { daily_limit: 0 }),
+    today: TODAY,
+    accounts: [acc("threads", "alice")],
+    result: { valid: false, reason: "daily_limit" },
+  },
+  {
+    name: "the record rules come first: switch_limit, not daily_limit",
+    platforms: PRODUCTION,
+    card_state: state({ threads: { ...BOB, switch_count: 5 } }, TODAY, 3),
+    today: TODAY,
+    accounts: [acc("threads", "carol")],
+    result: { valid: false, reason: "switch_limit", platform: "threads" },
   },
   {
     name: "3 valid records on the last date, and today is later: allowed",
@@ -239,7 +272,7 @@ const cases: Case[] = [
     name: "a row of the table the device has no definition of is a platform it does not know",
     platforms: TEST,
     known_platforms: ["threads"],
-    card_state: state({ "test-example": { current: "carol", last_declared: "carol", switch_count: 0, correction_date: "2026-03-02" }, threads: BOB }),
+    card_state: state({ "test-example": { current: "carol", last_declared: "carol", switch_count: 0 }, threads: BOB }),
     today: TODAY,
     accounts: [acc("threads", "bob")],
     result: valid([acc("test-example", "carol"), acc("threads", "bob")], [row("test-example", "refresh", "carol", "carol", null, null, false), row("threads", "refresh", "bob", "bob")]),
@@ -257,7 +290,7 @@ const cases: Case[] = [
     name: "a kept account is checked only as any username, not against its row's format",
     platforms: TEST,
     known_platforms: ["threads"],
-    card_state: state({ "test-example": { current: "Bob Example", last_declared: "Bob Example", switch_count: 0, correction_date: "2026-03-02" }, threads: BOB }),
+    card_state: state({ "test-example": { current: "Bob Example", last_declared: "Bob Example", switch_count: 0 }, threads: BOB }),
     today: TODAY,
     accounts: [acc("threads", "bob")],
     result: valid([acc("test-example", "Bob Example"), acc("threads", "bob")], [row("test-example", "refresh", "Bob Example", "Bob Example", null, null, false), row("threads", "refresh", "bob", "bob")]),
@@ -426,26 +459,29 @@ cases.push(
   readsState("a count of 2^53 - 1", { ...base, count: 2 ** 53 - 1 }, true),
   readsState("a count of 2^53", { ...base, count: 2 ** 53 }, false),
   readsState("proofs_on_last_date 1 without a last card proof", state({ threads: EMPTY }, null, 1), false),
-  readsState("a date that does not exist", state({ threads: bob({ correction_date: "2026-02-30" }) }), false),
+  readsState("a date that does not exist", state({ threads: BOB }, "2026-02-30"), false),
   readsState("a count with a fraction", { ...base, count: 1.5 }, false),
   readsState("proofs_on_last_date with a fraction", { ...base, proofs_on_last_date: 1.5 }, false),
   readsState("proofs_on_last_date a string", { ...base, proofs_on_last_date: "1" }, false),
   readsState("proofs_on_last_date 0 with a last card proof", { ...base, proofs_on_last_date: 0 }, false),
-  readsState("proofs_on_last_date 4", { ...base, proofs_on_last_date: 4 }, false),
+  readsState("proofs_on_last_date 4, more than daily_limit: the server's count is read as it is", { ...base, proofs_on_last_date: 4 }, true),
+  readsState("without daily_limit", without(base, "daily_limit"), false),
+  readsState("daily_limit a string", { ...base, daily_limit: "3" }, false),
+  readsState("daily_limit -1", { ...base, daily_limit: -1 }, false),
+  readsState("daily_limit with a fraction", { ...base, daily_limit: 2.5 }, false),
+  readsState("daily_limit null", { ...base, daily_limit: null }, false),
   readsState("a last card proof 4 days after today", state({ threads: BOB }, "2026-11-20"), false),
   readsState("a date not in its one spelling", state({ threads: BOB }, "2026-11-4"), false),
-  readsState("a date before 2000", state({ threads: bob({ correction_date: "1999-12-31" }) }), false),
+  readsState("a date before 2000", state({ threads: BOB }, "1999-12-31"), false),
   readsState("an account but no last card proof", state({ threads: BOB }, null, 1), false),
   readsState("switch_count 6", state({ threads: bob({ switch_count: 6 }) }), false),
   readsState("switch_count -1", state({ threads: bob({ switch_count: -1 }) }), false),
   readsState("switch_count missing", state({ threads: without(BOB, "switch_count") }), false),
   readsState("current missing", state({ threads: without(BOB, "current") }), false),
   readsState("last_declared missing", state({ threads: without(BOB, "last_declared") }), false),
-  readsState("correction_date missing", state({ threads: without(BOB, "correction_date") }), false),
+  readsState("a correction_date, a field of an earlier version, is ignored", state({ threads: { ...BOB, correction_date: "2026-03-02" } }), true),
   readsState("current outside the platform's format", state({ threads: bob({ current: "Bob", last_declared: "Bob" }) }), false),
   readsState("current not last_declared", state({ threads: bob({ current: "carol" }) }), false),
-  readsState("last_declared without correction_date", state({ threads: bob({ correction_date: null }) }), false),
-  readsState("correction_date after the last card proof", state({ threads: bob({ correction_date: "2026-11-05" }) }), false),
   readsState("switches without an account ever declared", state({ threads: { ...EMPTY, switch_count: 1 } }, null), false),
   readsState("an entry that is not an object", state({ threads: [] }), false),
   readsState("platforms not an object", { ...base, platforms: [] }, false),
@@ -471,7 +507,7 @@ for (const c of cases) {
 const file = {
   spec: "list-consequence",
   status: "draft",
-  note: "Each case: `platforms` is the `platforms` of GET /api/v1/config and `card_state` the answer of POST /api/v1/card-state, as the server sent them; `known_platforms` the platforms the device has its own definition of; `today` the device's date in Taiwan; `accounts` the cardholder's list for the platforms offered. `result` is one of: `unread` (which answer the device cannot read); `not_offered` (the list names a platform that is not offered: a mistake of the program, not of the cardholder); `valid: false` with `reason` (`empty`, `switch_limit` with `platform`, `daily_limit`, or `username` with `platform`); `valid: true` with the list the card signs, a row per platform the list does something on, and `first_record`. null means none.",
+  note: "Each case: `platforms` is the `platforms` of GET /api/v1/config and `card_state` the answer of POST /api/v1/card-state, as the server sent them; `known_platforms` the platforms the device has its own definition of; `today` the device's date in Taiwan; `accounts` the cardholder's list for the platforms offered. `result` is one of: `unread` (which answer the device cannot read); `not_offered` (the list names a platform that is not offered: a mistake of the program, not of the cardholder); `valid: false` with `reason` (`empty`, `switch_limit` with `platform`, `daily_limit` when the server writes no more records of the card today, or `username` with `platform`); `valid: true` with the list the card signs, a row per platform the list does something on, and `first_record`. null means none.",
   generated_by: "web/test/generate/list-consequence.ts",
   cases: cases.map(({ name, platforms, card_state, known_platforms, today, accounts, result }) => ({ name, platforms, card_state, known_platforms, today, accounts, result })),
 };

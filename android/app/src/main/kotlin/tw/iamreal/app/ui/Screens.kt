@@ -74,7 +74,8 @@ internal class Outside(
  * Every sentence is the copy's; which one is [Messages]'s and [Model]'s to
  * say. No screen links to a page of the site but steps 6 and 8, whose links
  * are the card's own page and the platform's; step 1's two links are for someone
- * without a card yet, who gets no further (docs/design/principles.md, 1).
+ * without a card yet, who gets no further, and step 4's link to the card's page
+ * for a card that cannot go on today (docs/design/principles.md, 1).
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -85,8 +86,8 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
             // The settings from the first and the last step (design/copy/app.md, "設定"): not while a card proof is under way.
             val settings = m.step == Step.BEFORE || m.step == Step.DONE
             Header(m.copy.say("common.service_name"), if (settings) r.app.say("settings.open") else null) { r.openSettings() }
-            // Each step starts at its top.
-            key(m.step) {
+            // Each step starts at its top, and so does the whole step 6 shown from step 4.
+            key(m.step, m.hangFromLimit) {
                 Column(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Type.gutter).padding(top = 28.dp, bottom = 48.dp).testTag("step-${m.step.name.lowercase()}"),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -101,7 +102,8 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
                         // Opened from the reminder's notification (design/screens/app-reminder-4-from-notification-phone.png).
                         FromReminder(r)
                     }
-                    if (gate == null) {
+                    // Out of the 8 steps: the whole of step 6 from step 4's daily limit.
+                    if (gate == null && !m.hangFromLimit) {
                         StepBar(m.copy, m.step.number)
                         Spacer(Modifier.height(6.dp))
                     }
@@ -113,7 +115,7 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
                         }
                         Step.READ -> Read(m, outside)
                         Step.PIN -> Pin(m)
-                        Step.ACCOUNTS -> Accounts(m, outside)
+                        Step.ACCOUNTS -> if (m.hangFromLimit) HangFromLimit(m, outside) else Accounts(m, outside)
                         Step.CONFIRM -> Confirm(m)
                         Step.PROGRESS -> Progress(m)
                         Step.HANG -> Hang(m, outside)
@@ -224,16 +226,17 @@ private fun Read(m: Model, outside: Outside) {
         // Where the card goes differs from one Android phone to another: the words and the demonstration say to look for it.
         Body(c.say("app_read.how_android"))
         m.senseDemo?.let { demo ->
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SenseDemo(demo, c.say("app_demo.sense_android"))
-                // Not while the card is being read: the demonstration rests then.
-                Button(if (demo.playing) c.say("app_demo.stop") else c.say("app_demo.replay"), Modifier.testTag("sense-demo-button"), enabled = !m.readBusy, height = 46.dp) {
-                    if (demo.playing) demo.stop() else demo.play()
-                }
+            // Not while the card is being read: the demonstration rests then.
+            DemoFrame(demo, c, "sense-demo-button", enabled = !m.readBusy) {
+                SenseDemo(demo, c.say("app_demo.sense_android"), it)
             }
         }
     }
-    TaskList(c, listOf(c.say("read.server"), c.say("app_read.certificate"), c.say("read.check"), c.say("read.crl")), m.readItems, m.readMessage, "read-list")
+    val list = @Composable { TaskList(c, listOf(c.say("read.server"), c.say("app_read.certificate"), c.say("read.check"), c.say("read.crl")), m.readItems, m.readMessage, "read-list") }
+    // Before the card is read, "感應卡片" right under the demonstration, where it is seen without scrolling, and the list, all
+    // still to do, under it. Once the list has something to say (where it stopped, why; all done), the list and then the buttons.
+    val tapFirst = m.readButton == ReadButton.TAP
+    if (!tapFirst) list()
     Actions {
         val wide = Modifier.fillMaxWidth()
         when (m.readButton) {
@@ -253,6 +256,7 @@ private fun Read(m: Model, outside: Outside) {
             }
         }
     }
+    if (tapFirst) list()
 }
 
 @Composable
@@ -304,21 +308,51 @@ private fun Accounts(m: Model, outside: Outside) {
         AccountsMode.EDIT -> FillAccounts(m, m.messages.editListView(status), outside)
         AccountsMode.OPEN -> when (val view = m.messages.accountsView(status)) {
             is Messages.FillView -> FillAccounts(m, view, outside)
-            is Messages.DeclaredView -> DeclaredAccounts(m, view)
+            is Messages.DeclaredView -> DeclaredAccounts(m, view, outside)
         }
     }
 }
 
-/** 3 records of the card today: the sentence, and "回到開頭", which drops the PIN as "取消" does. */
+/**
+ * 3 records of the card today (the PIN already dropped, [Model]): the sentence, a link to the card's page, 重新掛上連結 where the
+ * card declares an account the app can hang, and 回到開頭.
+ */
 @Composable
-private fun DailyLimit(m: Model, sentence: String) {
+private fun DailyLimit(m: Model, sentence: String, outside: Outside) {
+    val c = m.copy
+    val shortId = m.status?.shortId ?: return
+    val openProof = c.say("done.open_proof")
+    val wide = Modifier.fillMaxWidth()
     Body(sentence, strong = true)
-    Actions { Button(m.copy.say("accounts.restart"), Modifier.fillMaxWidth(), primary = true) { m.cancel() } }
+    // Nothing more to do in this card proof today: to the card's page, and how to hang its link, out of the flow
+    // (design/copy/card-proof.md, "今天已經過卡 3 次").
+    OpensProof(c.say("hang.look", "open_proof" to openProof), openProof) { outside.open(m.proofUrl(shortId)) }
+    Actions {
+        Button(c.say("accounts.restart"), wide) { m.cancel() }
+        if (m.status?.let { m.messages.canHangFromLimit(it) } == true) Button(c.say("hang.rehang"), wide) { m.showHangFromLimit() }
+    }
+}
+
+/**
+ * The whole of step 6 for the accounts the card declares now, from step 4's 今天已經過卡 3 次 by 重新掛上連結: no new record,
+ * so no date and no step of the 8; 上一步 back to step 4, 回到開頭 to step 1 (design/copy/card-proof.md, "今天已經過卡 3 次").
+ */
+@Composable
+private fun HangFromLimit(m: Model, outside: Outside) {
+    val c = m.copy
+    val status = m.status ?: return
+    val view = m.messages.hangFromLimit(status, m.single)
+    val wide = Modifier.fillMaxWidth()
+    HangWhole(m, outside, view.title, view.why, view.profiles, view.steps, view.hung, view.account, emptyList(), status.shortId)
+    Actions {
+        Button(c.say("accounts.restart"), wide) { m.cancel() }
+        Button(c.say("common.back"), wide) { m.backFromHangFromLimit() }
+    }
 }
 
 /** The card declares accounts: what it declares and when it last did, "更新島民證明", and the other things to do. */
 @Composable
-private fun DeclaredAccounts(m: Model, view: Messages.DeclaredView) {
+private fun DeclaredAccounts(m: Model, view: Messages.DeclaredView, outside: Outside) {
     val c = m.copy
     Title(view.title)
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -331,7 +365,7 @@ private fun DeclaredAccounts(m: Model, view: Messages.DeclaredView) {
         }
         view.last?.let { Small(it) }
     }
-    view.dailyLimit?.let { return DailyLimit(m, it) }
+    view.dailyLimit?.let { return DailyLimit(m, it, outside) }
     // Why the list cannot be signed as it is: there is no row here to write it under.
     for (message in m.rowMessages.values + listOfNotNull(m.listMessage)) Problem(message)
     // The main button: the list as it is, nothing to type.
@@ -378,7 +412,7 @@ private fun FillAccounts(m: Model, view: Messages.FillView, outside: Outside) {
             Rule()
         }
     }
-    view.dailyLimit?.let { return DailyLimit(m, it) }
+    view.dailyLimit?.let { return DailyLimit(m, it, outside) }
     for (note in view.notes) Small(note, colour = Colours.text)
     m.listMessage?.let { Problem(it) }
     Actions { Button(c.say("common.next"), Modifier.fillMaxWidth(), primary = true) { m.toConfirm() } }
@@ -574,7 +608,8 @@ private fun Recorded(c: Copy, d: CardProof.Done, view: Messages.DoneView) {
 
 /**
  * Step 6: hang the link on the profile, and nothing else (design/copy/card-proof.md, "6. 掛上去", app). Someone back for a card proof
- * again is asked only whether the link is still there, until "重新掛上連結". No way back: step 5 has submitted.
+ * again is asked only whether the link is still there, until "重新掛上連結", and the whole step then has 上一步 back to the short
+ * one. No way back to step 5: it has submitted.
  */
 @Composable
 private fun Hang(m: Model, outside: Outside) {
@@ -597,21 +632,42 @@ private fun Hang(m: Model, outside: Outside) {
         ProofLink(link)
         OpensProof(view.look, openProof) { outside.open(url) }
         Body(view.why)
-        // In the copy's order: the way to the whole step first, the way on under it.
+        // The way on on the right, the way to the whole step on the left (Actions).
         Actions {
-            Button(c.say("hang.rehang"), wide) { m.hangAgain() }
             Button(c.say("common.next"), wide, primary = true) { m.toRemind() }
+            Button(c.say("hang.rehang"), wide) { m.hangAgain() }
         }
         return
     }
 
+    val account = d.accounts.firstOrNull { (platform, _) -> Platforms.of(platform) != null }?.let { Platforms.handle(it.first, it.second) }
+    HangWhole(m, outside, view.hangTitle, view.why, view.profiles, view.steps, view.hung, account, view.notes, d.shortId)
+    Recorded(c, d, view)
+    Actions {
+        Button(c.say("common.next"), wide) { m.toRemind() }
+        // Reached from the short one by "重新掛上連結": back to it (design/copy/card-proof.md, step 6, "回來更新的人：短版").
+        if (stillThere != null) Button(c.say("common.back"), wide) { m.hangShort() }
+    }
+}
+
+/**
+ * The whole of step 6 under its date (design/copy/card-proof.md, "6. 掛上去", app): the link, 複製證明連結 and the profile's button,
+ * the demonstration and its four steps, the notes, and how to look. `account`: the account the demonstration draws.
+ */
+@Composable
+private fun HangWhole(m: Model, outside: Outside, title: String, why: String, profiles: List<Messages.OpensProfile>, steps: List<String>, hung: String, account: String?, notes: List<String>, shortId: String) {
+    val c = m.copy
+    val url = m.proofUrl(shortId)
+    val link = "${m.domain}/p/$shortId"
+    val openProof = c.say("done.open_proof")
+    val wide = Modifier.fillMaxWidth()
     var copied by remember { mutableStateOf(false) }
-    Title(view.hangTitle)
-    Body(view.why)
+    Title(title)
+    Body(why)
     ProofLink(link)
     // One main button a screen (design/DESIGN.md): copying the link is what this step is for. The two side by side, above the
     // demonstration, as its first screen draws them; one over the other where they do not fit so (card-proof.md, "示範").
-    val profile = view.profiles.firstOrNull()
+    val profile = profiles.firstOrNull()
     SideBySide(Modifier.fillMaxWidth().padding(top = 20.dp)) {
         Button(if (copied) c.say("done.copied") else c.say("hang.copy"), primary = true) {
             outside.copy(url)
@@ -619,20 +675,19 @@ private fun Hang(m: Model, outside: Outside) {
         }
         if (profile != null) Button(profile.label, told = profile.told) { outside.open(profile.address) }
     }
-    for (other in view.profiles.drop(1)) Button(other.label, wide.padding(top = 12.dp), told = other.told) { outside.open(other.address) }
+    for (other in profiles.drop(1)) Button(other.label, wide.padding(top = 12.dp), told = other.told) { outside.open(other.address) }
     // The demonstration, with the account and the link of this card proof; then its four steps in words, the one it is showing marked.
     val demo = m.hangDemo
     if (demo != null && profile != null) {
         Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            val account = d.accounts.firstOrNull { (platform, _) -> Platforms.of(platform) != null }
-            val words = HangDemoWords(view.hangTitle, account?.let { Platforms.handle(it.first, it.second) } ?: "", link, url, profile.label)
-            HangDemo(demo, c, words, c.say("app_demo.hang")) { label, onClick -> Button(label, Modifier.testTag("hang-demo-button"), height = 46.dp, onClick = onClick) }
+            val words = HangDemoWords(title, account ?: "", link, url, profile.label)
+            DemoFrame(demo, c, "hang-demo-button") { HangDemo(demo, c, words, c.say("app_demo.hang"), it) }
         }
     }
     val shown = demo?.step ?: 0
     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Rule(colour = Colours.ink)
-        for ((n, step) in view.steps.withIndex()) {
+        for ((n, step) in steps.withIndex()) {
             // The step the demonstration is at: on the light grey, a bar of the red of what you do at its left (hang.md, "示範").
             val now = demo != null && demo.playing && shown == n + 1
             Row(
@@ -648,14 +703,12 @@ private fun Hang(m: Model, outside: Outside) {
             Rule()
         }
     }
-    for (note in view.notes) Small(note)
+    for (note in notes) Small(note)
     Rule(Modifier.padding(top = 12.dp))
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        OpensProof(view.hung, openProof) { outside.open(url) }
+        OpensProof(hung, openProof) { outside.open(url) }
         Small(c.say("done.hung_done"), colour = Colours.text)
     }
-    Recorded(c, d, view)
-    Actions { Button(c.say("common.next"), wide) { m.toRemind() } }
 }
 
 /**

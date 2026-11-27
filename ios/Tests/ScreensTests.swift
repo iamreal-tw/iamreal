@@ -43,14 +43,14 @@ final class ScreensTests: XCTestCase {
     /// A card that has declared nothing, on the one platform the app knows.
     private let newCard = Flow.CardStatus(
         shortID: "7K2Q9FM4XD", lastCardProof: nil, daysSince: nil, dailyLimit: false, knownPlatforms: ["threads"],
-        rows: [Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: nil, switchCount: 0, switchesLeft: 5, correctionToday: false)])
+        rows: [Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: nil, switchCount: 0, switchesLeft: 5)])
 
     /// A card that declares @alice, `days` days after its last card proof,
     /// with `used` of its 5 switches used.
-    private func card(days: Int = 12, used: Int = 1, today: Bool = false, dailyLimit: Bool = false) -> Flow.CardStatus {
+    private func card(days: Int = 12, used: Int = 1, dailyLimit: Bool = false) -> Flow.CardStatus {
         Flow.CardStatus(
             shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-04", daysSince: days, dailyLimit: dailyLimit, knownPlatforms: ["threads"],
-            rows: [Flow.StatusRow(platform: "threads", known: true, current: "alice", lastDeclared: "alice", switchCount: used, switchesLeft: 5 - used, correctionToday: today)])
+            rows: [Flow.StatusRow(platform: "threads", known: true, current: "alice", lastDeclared: "alice", switchCount: used, switchesLeft: 5 - used)])
     }
 
     private func consequence(_ kind: String, _ username: String, switchesLeft: Int? = nil) -> Flow.Consequence {
@@ -173,7 +173,7 @@ final class ScreensTests: XCTestCase {
     func testStepFourOfACardThatWithdrewEverything() {
         let withdrawn = Flow.CardStatus(
             shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-04", daysSince: 12, dailyLimit: false, knownPlatforms: ["threads"],
-            rows: [Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: "bob", switchCount: 1, switchesLeft: 4, correctionToday: false)])
+            rows: [Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: "bob", switchCount: 1, switchesLeft: 4)])
         let screen = screens.accounts(withdrawn, typed: ["threads": ""], errors: [:], message: nil)
         XCTAssertEqual(screen.texts, [
             "你的 Threads 帳號",
@@ -235,11 +235,10 @@ final class ScreensTests: XCTestCase {
             return nil
         }
         XCTAssertEqual(cost(card(used: 4)), "用掉最後一次更換。這次之後，這個平台不能再更換。")
-        XCTAssertEqual(cost(card(used: 5, today: true)), "今天才宣告的帳號，今天改掉不另外算一次更換。")
-        // None left, and the account was not put there today: no field, and the only ways are back.
+        // None left: no field, and the only ways are back.
         let usedUp = screens.accounts(card(used: 5), mode: .switching, typed: [:], errors: [:], message: nil)
         XCTAssertEqual(usedUp.texts, ["你的 Threads 帳號", "這張卡片目前宣告 @alice。", "已經更換 5 次，這個平台不能再更換。", "不改了", "取消"])
-        for status in [card(used: 4), card(used: 5, today: true), card(used: 5)] {
+        for status in [card(used: 4), card(used: 5)] {
             document.check(screens.accounts(status, mode: .switching, typed: [:], errors: [:], message: nil))
         }
     }
@@ -254,19 +253,73 @@ final class ScreensTests: XCTestCase {
                 "@alice",
                 "上次過卡是今天",
                 "這張卡片今天已經過卡 3 次，明天才能再過卡。",
-                "回到開頭",
+                "打開你的島民證明看看。",
+                "重新掛上連結", "回到開頭",
             ])
+            // The card's page, and the two ways out of the card proof, neither the main button: there is no way on
+            // (card-proof.md, 今天已經過卡 3 次).
+            XCTAssertEqual(screen.blocks.last, .linked("", Button(label: "打開你的島民證明", action: .openProof), "看看。"))
+            XCTAssertEqual(screen.buttons, [Button(label: "重新掛上連結", action: .hangFromLimit), Button(label: "回到開頭", action: .restart)])
+            XCTAssertFalse(screen.mainButton)
             XCTAssertNil(screen.cancel)
             document.check(screen)
         }
+    }
+
+    /// 3 records today and nothing the app can hang (everything withdrawn today, or only an account on a platform the
+    /// app does not know): the card's page, and 回到開頭 alone.
+    func testStepFourOnADayWithThreeRecordsAndNothingToHang() {
+        let withdrawn = Flow.CardStatus(
+            shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-16", daysSince: 0, dailyLimit: true, knownPlatforms: ["threads"],
+            rows: [Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: "alice", switchCount: 0, switchesLeft: 5)])
+        let unknown = Flow.CardStatus(
+            shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-16", daysSince: 0, dailyLimit: true, knownPlatforms: ["threads"],
+            rows: [
+                Flow.StatusRow(platform: "test-example", known: false, current: "alice-b", lastDeclared: "alice-b", switchCount: 0, switchesLeft: 5),
+                Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: nil, switchCount: 0, switchesLeft: 5),
+            ])
+        for status in [withdrawn, unknown] {
+            let screen = screens.accounts(status, typed: [:], errors: [:], message: nil)
+            XCTAssertTrue(screen.texts.contains("打開你的島民證明看看。"))
+            XCTAssertEqual(screen.buttons, [Button(label: "回到開頭", action: .restart)])
+            document.check(screen)
+        }
+    }
+
+    /// 重新掛上連結 of 3 records today: the whole of step 6 for the account the card declares now, out of the eight steps,
+    /// with no record of today (no date, no sentence of a new card), 上一步 back and 回到開頭 (card-proof.md, 今天已經過卡 3 次, app).
+    func testTheWholeStepSixFromThreeRecordsToday() throws {
+        let screen = screens.hangFromLimit(card(days: 0, dailyLimit: true), copied: false)
+        XCTAssertEqual(screen.step, 4)
+        XCTAssertFalse(screen.inSteps, "no 第 N 步，共 8 步")
+        XCTAssertEqual(screen.texts, [
+            "把證明掛上你的 Threads 個人檔案",
+            "在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。",
+            "iamreal.tw/p/7K2Q9FM4XD",
+            "複製證明連結",
+            "打開 Threads",
+            "示範：按「複製證明連結」，到 Threads 的個人檔案按「編輯個人檔案」、「連結」、「新增連結」，貼上網址後按「完成」，個人檔案上多了一行連結。",
+            "再看一次",
+            "按「編輯個人檔案」", "按「連結」", "按「新增連結」", "在「網址」貼上剛才複製的連結，按右上角的「完成」",
+            "掛好了嗎？打開你的島民證明看看。",
+            "頁面上的個人檔案裡看得到這個連結，就成功了。",
+            "上一步", "回到開頭",
+        ])
+        XCTAssertEqual(screen.buttons, [Button(label: "上一步", action: .back), Button(label: "回到開頭", action: .restart)])
+        XCTAssertFalse(screen.mainButton)
+        guard case .demo(let demo) = try XCTUnwrap(screen.blocks.first { if case .demo = $0 { return true } else { return false } }) else { return }
+        XCTAssertEqual(demo.account, "@alice")
+        XCTAssertEqual(demo.address, "https://iamreal.tw/p/7K2Q9FM4XD")
+        XCTAssertEqual(screens.hangFromLimit(card(days: 0, dailyLimit: true), copied: true).texts[3], "已複製")
+        document.check(screen)
     }
 
     /// The card keeps an account on a platform the app does not know: the
     /// screens speak of more than one platform, and the list is changed row by row.
     func testStepFourWithAPlatformTheAppDoesNotKnow() {
         let rows = [
-            Flow.StatusRow(platform: "test-example", known: false, current: "alice-b", lastDeclared: "alice-b", switchCount: 0, switchesLeft: 5, correctionToday: false),
-            Flow.StatusRow(platform: "threads", known: true, current: "alice", lastDeclared: "alice", switchCount: 1, switchesLeft: 4, correctionToday: false),
+            Flow.StatusRow(platform: "test-example", known: false, current: "alice-b", lastDeclared: "alice-b", switchCount: 0, switchesLeft: 5),
+            Flow.StatusRow(platform: "threads", known: true, current: "alice", lastDeclared: "alice", switchCount: 1, switchesLeft: 4),
         ]
         let status = Flow.CardStatus(shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-04", daysSince: 12, dailyLimit: false, knownPlatforms: ["threads"], rows: rows)
         let declared = screens.accounts(status, typed: [:], errors: [:], message: nil)
@@ -553,6 +606,41 @@ final class ScreensTests: XCTestCase {
         XCTAssertEqual(tapping.control, Button(label: "再看一次", action: .playDemo, enabled: false))
         XCTAssertTrue(!tapping.playing && tapping.played, "at rest under the system's panel")
         document.check(screens.read(reached: 0, running: false, stop: nil, demoPlaying: true))
+    }
+
+    /// Before the card is read, "感應卡片" right under the demonstration and the list, all still to do, under the
+    /// buttons; once the list has something to say (where it stopped and why, all done), the list and then the
+    /// buttons (card-proof.md, "2. 讀取卡片", app).
+    func testTheReadingStepHasItsButtonsUnderTheDemonstrationUntilTheListHasSomethingToSay() {
+        func isList(_ block: Block) -> Bool { if case .items = block { return true } else { return false } }
+        func isDemo(_ block: Block) -> Bool { if case .senseDemo = block { return true } else { return false } }
+        for screen in [screens.read(reached: 0, running: false, stop: nil), screens.read(reached: 1, running: true, stop: nil)] {
+            XCTAssertTrue(screen.blocks.last.map(isDemo) ?? false, "the demonstration right above the buttons: \(screen.blocks)")
+            XCTAssertEqual(screen.under.count, 1)
+            XCTAssertTrue(isList(screen.under[0]), "the list under the buttons")
+            XCTAssertEqual(screen.buttons.map(\.label), ["上一步", "感應卡片"])
+            document.check(screen)
+        }
+        for screen in [screens.read(reached: 1, running: false, stop: .card(.noTap)), screens.read(reached: 4, running: false, stop: nil)] {
+            XCTAssertTrue(screen.blocks.last.map(isList) ?? false, "the list above the buttons: \(screen.blocks)")
+            XCTAssertEqual(screen.under, [])
+        }
+        // In the order it is drawn: the list's words after the buttons'.
+        let before = screens.read(reached: 0, running: false, stop: nil)
+        XCTAssertEqual(Array(before.texts.suffix(6)), ["上一步", "感應卡片", "連上島民證明的伺服器", "感應卡片，讀取卡片上的憑證", "檢查憑證", "下載內政部的廢止清冊，確認憑證沒有被廢止"])
+    }
+
+    /// Two buttons side by side where each one's words fit on one line in half the width (less the space between),
+    /// the way on on the right; one under the other where either's do not, and for one or three buttons
+    /// (design/DESIGN.md, the components: buttons). Step 6's pair keeps its first on the left.
+    func testTwoButtonsSideBySideWhereTheirWordsFitInHalfTheWidth() {
+        // 342 points: a phone 390 wide less the margins; half is 165.
+        XCTAssertEqual(SideBySide.places(ideal: [96, 120], width: 342, firstOnRight: true), SideBySide.Places(left: 1, right: 0))
+        XCTAssertEqual(SideBySide.places(ideal: [165, 165], width: 342, firstOnRight: true), SideBySide.Places(left: 1, right: 0))
+        XCTAssertEqual(SideBySide.places(ideal: [96, 120], width: 342, firstOnRight: false), SideBySide.Places(left: 0, right: 1))
+        XCTAssertNil(SideBySide.places(ideal: [96, 166], width: 342, firstOnRight: true), "one does not fit: one under the other")
+        XCTAssertNil(SideBySide.places(ideal: [96], width: 342, firstOnRight: true))
+        XCTAssertNil(SideBySide.places(ideal: [60, 60, 60], width: 342, firstOnRight: true))
     }
 
     /// The card left during the first tap: step 2 says so, and the same tap is done again.

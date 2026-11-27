@@ -58,7 +58,8 @@ function recordRow(kind: string, date: string, ...accounts: string[]): string {
     const cells = line.split("|");
     if (cells.length === 4 && !cells[1]!.startsWith("---") && cells[1]!.trim() !== "這一筆紀錄") table.set(cells[1]!.trim(), cells[2]!.trim());
   }
-  assert.equal(table.size, 7, "the table of section 3 has its 7 kinds of rows");
+  // 更正 is a row no record has had since version 3 of the record rules (ADR-0018); the copy loses it in #510.
+  assert.equal(table.size, 7, "the table of section 3 has its 6 kinds of rows, and 更正");
   const words = table.get(kind);
   assert.ok(words !== undefined, `proof-page.md section 3 has a row ${kind}`);
   let i = 0;
@@ -126,27 +127,27 @@ describe("the page of a card", () => {
       r("2026-10-01", e, "threads:bob"),
       r("2026-10-02", e, "threads:bob"),
       r("2026-10-03", e, "threads:alice"),
-      r("2026-10-03", e, "threads:dave"), // a correction
+      r("2026-10-03", e, "threads:dave"), // another on the day of a switch: a switch too
       r("2026-10-04", e), // a withdrawal
       r("2026-10-05", e, "threads:dave"), // declared again
       r("2026-10-06", e),
       r("2026-10-07", e, "threads:carol.tw"), // another, after a withdrawal: a switch
       r("2026-10-08", e, "threads:erin"),
       r("2026-10-08", e),
-      r("2026-10-08", e, "threads:frank"), // another, after a withdrawal, the day of a switch: a correction
+      r("2026-10-08", e, "threads:frank"), // another, after a withdrawal, the day of a switch: a switch too
     ]);
     const { page } = await getPage(worker, "/p/E000000000");
     wantLines(page, [
       ...copyLines(recordBlock().slice(0, 1), "12 天前", "41 天前", "2026-11-06", "2026-10-08"),
       recordBlock()[2]!,
-      recordRow("更正", "2026-10-08", "erin", "frank"),
+      recordRow("收回之後宣告別的帳號", "2026-10-08", "erin", "frank"),
       recordRow("收回", "2026-10-08", "erin"),
       recordRow("更換", "2026-10-08", "carol.tw", "erin"),
       recordRow("收回之後宣告別的帳號", "2026-10-07", "dave", "carol.tw"),
       recordRow("收回", "2026-10-06", "dave"),
       recordRow("收回之後宣告回同一個帳號", "2026-10-05", "dave"),
       recordRow("收回", "2026-10-04", "dave"),
-      recordRow("更正", "2026-10-03", "alice", "dave"),
+      recordRow("更換", "2026-10-03", "alice", "dave"),
       recordRow("更換", "2026-10-03", "bob", "alice"),
       recordRow("再次過卡", "2026-10-02"),
       recordRow("新宣告", "2026-10-01", "bob"),
@@ -276,13 +277,13 @@ describe("the page of a card", () => {
     let { status, page } = await getPage(worker, `/p/${CARD_A}`);
     assert.equal(status, 200);
     wantLines(page, ["@alice", "上次過卡：今天（2026-11-20）", "2026-11-20　新宣告：@alice"]);
-    await mustSubmit(worker, await sub(worker, card, root, "threads:bob"), "threads correction");
+    await mustSubmit(worker, await sub(worker, card, root, "threads:bob"), "threads switch");
     ({ status, page } = await getPage(worker, `/p/${CARD_A}`));
-    wantLines(page, ["@bob", "2026-11-20　更正：@alice 改成 @bob", "2026-11-20　新宣告：@alice"]);
+    wantLines(page, ["@bob", "2026-11-20　更換：@alice 改成 @bob", "2026-11-20　新宣告：@alice"]);
     // An account on another platform of the test log is not shown: the pages list Threads only.
     await mustSubmit(worker, await sub(worker, card, root, "test-example:a-b", "threads:bob"), "test-example first, threads refresh");
     ({ page } = await getPage(worker, `/p/${CARD_A}`));
-    wantLines(page, ["2026-11-20　再次過卡", "2026-11-20　更正：@alice 改成 @bob", "2026-11-20　新宣告：@alice"]);
+    wantLines(page, ["2026-11-20　再次過卡", "2026-11-20　更換：@alice 改成 @bob", "2026-11-20　新宣告：@alice"]);
     notOnPage(page, "a-b");
   });
 });

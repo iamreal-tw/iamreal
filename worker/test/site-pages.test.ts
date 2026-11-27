@@ -287,10 +287,10 @@ describe("hanging a proof on a profile", () => {
     assert.ok(picture !== null, "the picture is one image with a label, its screens hidden from a screen reader");
     assert.equal(unescapeHtml(picture[1]!), told);
     // The words of the five screens, in order, with the card's account and the site's own address.
-    const words = demoWords("島民證明的畫面");
+    const words = demoWords("把島民證明掛到");
     assert.equal(squash(visibleText(picture[2]!)), squash(copyLines(words, "@alice", "@carol.tw", "iamreal.tw/p/", "test.iamreal.tw/p/").join("")));
-    // The four screens of Threads say they are illustrations.
-    assert.deepEqual([...picture[2]!.matchAll(/<p class="kick">([^<]*)<\/p>/g)].map((m) => m[1]!.endsWith("（示意）")), [false, true, true, true, true]);
+    // No small titles over the screens, no labels beside what is pressed: only the line a visitor looks for has one.
+    assert.ok(!picture[2]!.includes('class="kick"') && !picture[2]!.includes("mark-tag"), "the demonstration has no titles over its screens and no labels on what is pressed");
     // Every box the timeline names is in the page once, both platforms' way back among them.
     const timeline = JSON.parse(demo[2]!) as { boxes: Record<string, string> };
     const boxes = [...picture[2]!.matchAll(/data-box="([^"]*)"/g)].map((m) => m[1]!);
@@ -324,9 +324,7 @@ describe("hanging a proof on a profile", () => {
     // The demonstration: the example account and address, in the site's own domain; no card's.
     const row = /<div class="demo-row" aria-hidden="true">([\s\S]*)<\/div>\s*<\/div>\s*<p class="demo-control">/.exec(whole)?.[1];
     assert.ok(row !== undefined, "the demonstration is in the page");
-    const said = /第一個畫面是這一頁自己[^\n]*從首頁點進來時是「([^」]*)」/.exec(copySection("hang.md", "示範"))?.[1];
-    assert.ok(said !== undefined, "hang.md says what is above the first screen on this page");
-    const words = [said, ...demoWords("島民證明的畫面").slice(1)];
+    const words = demoWords("把島民證明掛到");
     assert.equal(squash(visibleText(row)), squash(copyLines(words, "iamreal.tw/p/", "test.iamreal.tw/p/").join("")));
     // The player and nothing else: no copy button, so not its script.
     assert.deepEqual(whole.match(/<script src="[^"]*"/g), ['<script src="/count.js"', '<script src="/demo.js"']);

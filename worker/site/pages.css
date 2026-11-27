@@ -2658,15 +2658,6 @@ body.hang .shot.s4 {
   left: 1760px;
 }
 
-body.hang .shot .kick {
-  position: absolute;
-  left: 4px;
-  top: -30px;
-  color: var(--mute);
-  font-size: 13px;
-  white-space: nowrap;
-}
-
 /* An account of 30 characters and a long address stay on their line, cut at the end. */
 body.hang .shot .clip {
   min-width: 0;
@@ -2682,7 +2673,7 @@ body.hang .shot .blank {
   border-radius: 6px;
 }
 
-/* What to press: the frame and its label, the ink that darkens it, the ring. */
+/* What to press: the frame, the ink that darkens it, the ring. */
 body.hang .shot [data-box] {
   position: relative;
 }
@@ -2697,7 +2688,6 @@ body.hang .shot .found {
   pointer-events: none;
 }
 
-body.hang .shot .mark-tag,
 body.hang .shot .found-tag {
   position: absolute;
   left: 50%;
@@ -2713,18 +2703,6 @@ body.hang .shot .found-tag {
   line-height: 1;
   white-space: nowrap;
   opacity: 0;
-}
-
-body.hang .shot .mark-tag.right {
-  left: auto;
-  right: -6px;
-  transform: none;
-}
-
-body.hang .shot .mark-tag.beside {
-  left: calc(100% + 14px);
-  top: 50%;
-  transform: translateY(-50%);
 }
 
 /* The line a visitor looks for is framed in ink, as on the picture of the result. */

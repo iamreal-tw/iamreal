@@ -17,12 +17,11 @@ import (
 // rowOut is a row in the shape of the vectors' `cards`: `slots` has only the
 // slots the row lists.
 type rowOut struct {
-	ScopeString      string             `json:"scope_string"`
-	ScopedID         string             `json:"scoped_id"`
-	LastSeq          uint64             `json:"last_seq"`
-	LastCardProof    string             `json:"last_card_proof"`
-	ProofsOnLastDate int                `json:"proofs_on_last_date"`
-	Slots            map[string]slotOut `json:"slots"`
+	ScopeString   string             `json:"scope_string"`
+	ScopedID      string             `json:"scoped_id"`
+	LastSeq       uint64             `json:"last_seq"`
+	LastCardProof string             `json:"last_card_proof"`
+	Slots         map[string]slotOut `json:"slots"`
 }
 
 type cardStateFileCase struct {
@@ -97,12 +96,12 @@ func (f cardStateFileCase) bytes(t *testing.T) []byte {
 func rowsOut(rows []prooflog.CardRow) []rowOut {
 	out := []rowOut{}
 	for _, row := range rows {
-		ro := rowOut{ScopeString: row.ScopeString, ScopedID: row.ScopedID, LastSeq: row.LastSeq, ProofsOnLastDate: row.State.ProofsOnLastDate, Slots: map[string]slotOut{}}
+		ro := rowOut{ScopeString: row.ScopeString, ScopedID: row.ScopedID, LastSeq: row.LastSeq, Slots: map[string]slotOut{}}
 		if row.State.LastCardProof != nil {
 			ro.LastCardProof = row.State.LastCardProof.String()
 		}
 		for p, so := range slotsOut(row.State) {
-			if so.Current != nil || so.LastDeclared != nil || so.SwitchCount != 0 || so.CorrectionDate != nil {
+			if so.Current != nil || so.LastDeclared != nil || so.SwitchCount != 0 {
 				ro.Slots[p] = so
 			}
 		}
@@ -157,17 +156,12 @@ func rowsIn(t *testing.T, cards []rowOut, r verifier.ProofLog) []prooflog.CardRo
 	for _, c := range cards {
 		d := date(t, c.LastCardProof)
 		row := prooflog.CardRow{ScopeString: c.ScopeString, ScopedID: c.ScopedID, LastSeq: c.LastSeq,
-			State: prooflog.CardState{LastCardProof: &d, ProofsOnLastDate: c.ProofsOnLastDate, Slots: map[string]prooflog.Slot{}}}
+			State: prooflog.CardState{LastCardProof: &d, Slots: map[string]prooflog.Slot{}}}
 		for _, p := range verifier.Platforms(r) {
 			row.State.Slots[p.ID] = prooflog.Slot{}
 		}
 		for p, s := range c.Slots {
-			slot := prooflog.Slot{Current: s.Current, LastDeclared: s.LastDeclared, SwitchCount: s.SwitchCount}
-			if s.CorrectionDate != nil {
-				cd := date(t, *s.CorrectionDate)
-				slot.CorrectionDate = &cd
-			}
-			row.State.Slots[p] = slot
+			row.State.Slots[p] = prooflog.Slot{Current: s.Current, LastDeclared: s.LastDeclared, SwitchCount: s.SwitchCount}
 		}
 		rows = append(rows, row)
 	}

@@ -154,6 +154,9 @@ final class DoneScreenTests: XCTestCase {
         XCTAssertEqual(title(of: whole), "把證明掛上你的 Threads 個人檔案")
         XCTAssertTrue(whole.texts.contains("複製證明連結"))
         XCTAssertFalse(whole.texts.contains(copy("hang.new_card")))
+        // Reached from the short one: 上一步 back to it, left of 下一步 (card-proof.md, step 6, the short one).
+        XCTAssertEqual(whole.buttons, [Button(label: "上一步", action: .back), Button(label: "下一步", action: .toRemind)])
+        XCTAssertFalse(whole.mainButton)
         try CopyDocument.load().check(whole)
     }
 
@@ -203,12 +206,10 @@ final class DoneScreenTests: XCTestCase {
         XCTAssertEqual(demo.link, "iamreal.tw/p/7K2Q9FM4XD")
         XCTAssertEqual(demo.address, "https://iamreal.tw/p/7K2Q9FM4XD")
         XCTAssertEqual(demo.words.all, [
-            "島民證明的畫面", "把證明掛上你的 Threads 個人檔案", "複製證明連結", "已複製", "打開 Threads",
-            "Threads 的個人檔案（示意）", "編輯個人檔案", "訪客找的就是這一行",
-            "按了「編輯個人檔案」之後（示意）", "名稱", "用戶名稱", "個人簡介", "興趣", "連結", "精選",
-            "按了「連結」之後（示意）", "新增連結",
-            "按了「新增連結」之後（示意）", "完成", "網址", "貼上", "標題（選填）",
-            "按這裡", "再按一次", "再按這裡", "貼在這裡",
+            "把證明掛上你的 Threads 個人檔案", "複製證明連結", "已複製", "打開 Threads",
+            "編輯個人檔案", "訪客找的就是這一行",
+            "名稱", "用戶名稱", "個人簡介", "興趣", "連結", "精選",
+            "新增連結", "完成", "網址", "貼上", "標題（選填）",
         ])
         let document = try CopyDocument.load()
         for sentence in demo.words.all { XCTAssertTrue(document.contains(sentence), "not in design/copy/card-proof.md: \(sentence)") }
@@ -253,8 +254,9 @@ final class DoneScreenTests: XCTestCase {
         }
     }
 
-    func testASwitchRecordedWhereTheScreenSaidACorrection() throws {
-        let shown = row("threads", "correction", "bob", current: "alice", previous: "alice")
+    func testASwitchRecordedWhereTheScreenSaidTheAccountStays() throws {
+        // A card's state that hid the switch: the screen took bob for the account declared now.
+        let shown = row("threads", "refresh", "bob", current: "bob")
         let screen = screens.hang(done([shown], [recorded("threads", "switch", "bob")], mismatches: ["threads"]), single: "Threads", copied: false)
         // First of all, above the date.
         XCTAssertEqual(Array(screen.blocks.prefix(2)), [.message(copy("done.mismatch")), .text(copy("done.recorded_on", ["date": "2026-11-16"]))])
@@ -262,8 +264,8 @@ final class DoneScreenTests: XCTestCase {
             ["2026-11-16"],
             [copy("done.record_single")],
             [
-                "Threads", "@bob", copy("kinds.switch", ["previous": "@alice"]),
-                copy("done.mismatch_expected", ["expected": copy("kinds.switch", ["previous": "@alice"]) + copy("confirm.switch_not_counted")]),
+                "Threads", "@bob", copy("kinds.switch", ["previous": "@bob"]),
+                copy("done.mismatch_expected", ["expected": copy("kinds.unchanged")]),
                 copy("done.mismatch_switch_used"),
             ],
             [copy("done.short_id", ["short_id": "7K2Q9FM4XD"])],
@@ -367,14 +369,13 @@ final class DoneScreenTests: XCTestCase {
             "島民證明", "@alice", "島民編號 7K2Q9FM4XD 開頭",
             "這是第 128 張島民證明。", "愈多人成為島民，知道彼此都是台灣人，我們能讓台灣的網路討論變得更貼近真實、更有意義。",
             "謝謝你加入島民，誠摯的邀請你分享島民證明。",
-            "分享到 Threads",
-            "上一步", "完成",
+            "上一步", "完成", "分享到 Threads",
         ])
-        // One main button: sharing. Back to step 7, or done: to step 1.
-        XCTAssertEqual(inline(screen).map(\.action), [.share])
-        XCTAssertEqual(inline(screen).map(\.main), [true])
-        XCTAssertFalse(screen.mainButton)
-        XCTAssertEqual(screen.buttons.map(\.action), [.back, .restart])
+        // Three buttons, one under the other, the main one on top: sharing; then done (to step 1), and back to step 7
+        // (card-proof.md, step 8, app).
+        XCTAssertTrue(inline(screen).isEmpty)
+        XCTAssertTrue(screen.mainButton)
+        XCTAssertEqual(screen.buttons.map(\.action), [.back, .restart, .share])
         XCTAssertEqual(screen.settings, Button(label: "設定", action: .openSettings))
         try CopyDocument.load().check(screen)
     }
@@ -408,9 +409,8 @@ final class DoneScreenTests: XCTestCase {
         XCTAssertEqual(title(done(unchanged, [recorded("threads", "refresh", "alice")])), "島民證明已更新")
         XCTAssertEqual(title(done([row("threads", "switch", "carol.tw", current: "alice", previous: "alice")], [recorded("threads", "switch", "carol.tw")])), "島民證明換成 @carol.tw 了")
         XCTAssertEqual(title(done([row("threads", "withdraw", "alice", current: "alice")], [recorded("threads", "withdraw", "alice", 0)])), "已全部收回")
-        // Declared again after everything was withdrawn, and a correction on the day of the declaration.
+        // Declared again after everything was withdrawn.
         XCTAssertEqual(title(done([row("threads", "refresh", "alice")], [recorded("threads", "refresh", "alice")])), "恭喜你完成島民證明")
-        XCTAssertEqual(title(done([row("threads", "correction", "carol.tw", current: "alice", previous: "alice")], [recorded("threads", "correction", "carol.tw")])), "島民證明換成 @carol.tw 了")
         // More than one platform: the general title for anything but a first record and a card proof again.
         XCTAssertEqual(title(done([row("threads", "switch", "carol.tw", current: "alice", previous: "alice")], [recorded("threads", "switch", "carol.tw")]), single: nil), copy("done.changed"))
         // The server recorded a switch where the screen said nothing changes: not "unchanged".

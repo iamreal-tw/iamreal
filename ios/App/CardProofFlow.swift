@@ -142,7 +142,6 @@ final class CardProofFlow {
         let lastDeclared: String?
         let switchCount: Int
         let switchesLeft: Int
-        let correctionToday: Bool
     }
 
     struct CardStatus: Equatable {
@@ -704,8 +703,7 @@ final class CardProofFlow {
                 current: row["current"] as? String,
                 lastDeclared: row["last_declared"] as? String,
                 switchCount: row["switch_count"] as? Int ?? 0,
-                switchesLeft: row["switches_left"] as? Int ?? 0,
-                correctionToday: row["correction_today"] as? Bool ?? false)
+                switchesLeft: row["switches_left"] as? Int ?? 0)
         }
         return CardStatus(
             shortID: shortID,

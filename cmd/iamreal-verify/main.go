@@ -410,7 +410,7 @@ func (p *printer) f(format string, args ...any) {
 // The JSON output has the shape of spec/vectors/record.json ("files") and
 // spec/vectors/record-rules.json ("results", "state", "ordinals"), without
 // the items of a card's state that the output does not list
-// (proofs_on_last_date, slots).
+// (slots).
 type jsonReport struct {
 	Valid       bool           `json:"valid"`
 	Line        int            `json:"line,omitempty"`

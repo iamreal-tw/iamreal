@@ -724,6 +724,13 @@ internal class Model(
     // Step 4 ---------------------------------------------------------------------------
 
     private fun showAccounts(status: CardProof.Status) {
+        // The card has had its 3 card proofs today: it will not sign again in this one, so the PIN the flow keeps for
+        // the last tap goes now, not when 回到開頭 is pressed (design/copy/card-proof.md, "今天已經過卡 3 次").
+        if (status.dailyLimit) {
+            flow?.cancel()
+            flow = null
+            keptPinSince = null
+        }
         this.status = status
         single = messages.onePlatform(status)
         openAccounts(AccountsMode.OPEN)
@@ -906,6 +913,28 @@ internal class Model(
         hangWhole = true
     }
 
+    /** Step 4's 今天已經過卡 3 次 showed the whole of step 6 (重新掛上連結); 上一步 goes back to it. */
+    var hangFromLimit by mutableStateOf(false)
+        private set
+
+    /** 重新掛上連結 of step 4's 今天已經過卡 3 次: the whole of step 6 for the accounts the card declares now. */
+    fun showHangFromLimit() {
+        if (status == null) return
+        hangDemo = HangDemoPlayer(hangTimeline)
+        hangFromLimit = true
+    }
+
+    /** 上一步 of the whole step 6 shown from step 4: step 4's 今天已經過卡 3 次 again. */
+    fun backFromHangFromLimit() {
+        hangFromLimit = false
+        hangDemo = null
+    }
+
+    /** "上一步" of the whole step 6, reached from the short one: the short one again. */
+    fun hangShort() {
+        hangWhole = false
+    }
+
     /** "下一步" of step 6. */
     fun toRemind() {
         if (done != null) step = Step.REMIND
@@ -993,6 +1022,7 @@ internal class Model(
         starting = false
         name = ""
         status = null
+        hangFromLimit = false
         accountsMode = AccountsMode.OPEN
         fields.clear()
         rowMessages.clear()

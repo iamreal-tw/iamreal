@@ -227,11 +227,12 @@ async function postRecord(request: Request, env: Env, parts: ApiParts, notes: No
 
 /**
  * `POST /api/v1/card-state`: the state of one card on every platform of the
- * proof log's table, as the rules left it. Facts, not conclusions. The keys are
+ * proof log's table, as the rules left it, and the back end's count and
+ * limit of its records of a date. Facts, not conclusions. The keys are
  * in the order of docs/api/card-proof.md.
  */
 async function postCardState(request: Request, env: Env): Promise<Reply> {
-  const { kind, platforms: table } = settings(env);
+  const { kind, platforms: table, dailyLimit } = settings(env);
   const text = await readBody(request);
   if (text === null) return MALFORMED;
   const fields = readStrings(text, ["scope_string", "scoped_id"]);
@@ -240,13 +241,14 @@ async function postCardState(request: Request, env: Env): Promise<Reply> {
   if (!lookupScope(kind, fields.scope_string)) return MALFORMED;
   if (parseScopedId(fields.scoped_id) === null) return MALFORMED;
 
-  const { card, count } = await askProofLog(() => proofLogOf(env).cardState(fields.scope_string, fields.scoped_id));
+  const { card, proofsOnLastDate, count } = await askProofLog(() => proofLogOf(env).cardState(fields.scope_string, fields.scoped_id));
   const platforms: Record<string, SlotJson> = {};
   // A platform the stored state has no slot for is a slot never used.
   for (const { platform } of table) platforms[platform] = slotToJson(card?.slots.get(platform) ?? EMPTY_SLOT);
   return ok({
     last_card_proof: card === null || card.lastCardProof === null ? null : formatDay(card.lastCardProof),
-    proofs_on_last_date: card?.proofsOnLastDate ?? 0,
+    proofs_on_last_date: proofsOnLastDate,
+    daily_limit: dailyLimit,
     platforms,
     count,
   });

@@ -142,7 +142,6 @@ class CardProof(
         val lastDeclared: String?,
         val switchCount: Int,
         val switchesLeft: Int,
-        val correctionToday: Boolean,
     )
 
     class Status(
@@ -154,7 +153,7 @@ class CardProof(
         val slots: List<Slot>,
         /** The platforms of the server's table the app knows. */
         val tablePlatforms: List<String>,
-        /** The card has 3 valid records today. */
+        /** The server writes no more records of the card today (`card-state`'s `daily_limit`). */
         val dailyLimit: Boolean,
         val today: String,
     )
@@ -680,11 +679,11 @@ class CardProof(
                 Slot(
                     row.getString("platform"), true, current,
                     if (row.isNull("last_declared")) null else row.getString("last_declared"),
-                    row.getInt("switch_count"), row.getInt("switches_left"), row.getBoolean("correction_today"),
+                    row.getInt("switch_count"), row.getInt("switches_left"),
                 )
             } else {
                 // An account on a platform the app does not know: kept as it is.
-                Slot(row.getString("platform"), false, current, current, 0, 0, false)
+                Slot(row.getString("platform"), false, current, current, 0, 0)
             }
         }
         return Status(
