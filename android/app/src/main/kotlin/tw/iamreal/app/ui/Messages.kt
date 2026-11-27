@@ -249,12 +249,11 @@ internal class Messages(private val c: Copy) {
         val title = accountsTitle(single)
         val intro = c.say("accounts.declared_inline", "account" to now)
         val keep = c.say("accounts.keep")
-        // Used up, and not put there today: no other account can be declared.
-        if (!slot.correctionToday && slot.switchesLeft == 0) {
+        // Used up: no other account can be declared.
+        if (slot.switchesLeft == 0) {
             return SwitchView(title, intro, null, null, c.say("accounts.row_used_up", "switches_used" to slot.switchCount), null, keep)
         }
         val cost = when {
-            slot.correctionToday -> c.say("accounts.row_today")
             slot.switchesLeft == 1 -> c.say("confirm.uses_final_switch")
             else -> c.say("accounts.switch_limit", "switches_left" to slot.switchesLeft - 1)
         }
@@ -273,10 +272,7 @@ internal class Messages(private val c: Copy) {
             slot.switchesLeft > 0 -> c.say("accounts.row_switches", "switches_used" to slot.switchCount, "switches_left" to slot.switchesLeft)
             else -> c.say("accounts.row_used_up", "switches_used" to slot.switchCount)
         }
-        // An account put there today can be changed today without a switch, even when none is left.
-        if (slot.correctionToday) {
-            if (slot.current != null) lines += c.say("accounts.row_today")
-        } else if (slot.switchesLeft == 0) {
+        if (slot.switchesLeft == 0) {
             lines += if (slot.current != null) c.say("accounts.row_can_clear") else c.say("accounts.row_only_back", "last_declared" to last)
         }
         return lines
@@ -290,9 +286,8 @@ internal class Messages(private val c: Copy) {
         else -> c.say("kinds.switch", "previous" to Platforms.handle(platform, previous ?: ""))
     }
 
-    /** What step 5 writes under a row: what it does, and for a switch or a correction what it uses up. */
+    /** What step 5 writes under a row: what it does, and for a switch what it uses up. */
     fun rowSentences(row: CardProof.Row): String = kind(row.platform, row.kind, row.username, row.current, row.previous) + when {
-        row.kind == "correction" -> c.say("confirm.switch_not_counted")
         row.kind != "switch" -> ""
         row.switchesLeft == 0 -> c.say("confirm.uses_final_switch")
         else -> c.say("confirm.uses_switch", "switches_left" to row.switchesLeft!!)
@@ -364,7 +359,7 @@ internal class Messages(private val c: Copy) {
         if (k != null) {
             val before = d.expected.firstOrNull { it.platform == k.platform }?.current
             if (k.kind == "first" || (k.kind == "refresh" && before == null)) return c.say("finish.first")
-            if (k.kind == "switch" || k.kind == "correction") return c.say("finish.switched", "account" to Platforms.handle(k.platform, k.username))
+            if (k.kind == "switch") return c.say("finish.switched", "account" to Platforms.handle(k.platform, k.username))
         }
         return c.say("done.changed")
     }
@@ -501,7 +496,7 @@ internal class Messages(private val c: Copy) {
                 val e = expected[k.platform]
                 // kinds.switch names the account the screen knew was replaced.
                 val previous = e?.previous ?: e?.current
-                val sentence = if ((k.kind == "switch" || k.kind == "correction") && previous == null) null else kind(k.platform, k.kind, k.username, e?.current, previous)
+                val sentence = if (k.kind == "switch" && previous == null) null else kind(k.platform, k.kind, k.username, e?.current, previous)
                 val mismatch = k.platform in d.answer.mismatches
                 rows += DoneRow(
                     k.platform, knownOf(k.platform), k.username, sentence,

@@ -139,15 +139,15 @@ int32_t idc_list_consequence(const uint8_t *platforms_json, size_t platforms_jso
  *    "known_platforms":["threads"],
  *    "rows":[{"platform":"test-example","known":false,"current":"alice-b"},
  *            {"platform":"threads","known":true,"current":"alice","last_declared":"alice",
- *             "switch_count":1,"switches_left":4,"correction_today":false}]}
+ *             "switch_count":1,"switches_left":4}]}
  * last_card_proof is the date of the card's last valid record, or null;
- * days_since the days from it to today, or null; daily_limit that the card
- * has 3 valid records dated today, so no list can be declared today;
+ * days_since the days from it to today, or null; daily_limit that the
+ * server has written its daily_limit of records of the card dated today,
+ * so no list can be declared today;
  * known_platforms the platforms of the table the device knows, in
  * ascending order, offered or not. rows, in ascending order of platform:
- * one for every platform offered (known true: the entry of the state, the
- * switches left by the rules, and whether a change today is a correction)
- * and one for every kept account (known false: shown as it is, not
+ * one for every platform offered (known true: the entry of the state and
+ * the switches left by the rules) and one for every kept account (known false: shown as it is, not
  * changed).
  *
  * IDC_ERR_INPUT when the table or the state cannot be read, when the known

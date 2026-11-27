@@ -54,7 +54,7 @@ func (a CardRow) before(b CardRow) bool {
 // initial reports whether every item of s has its initial value: such a
 // slot is not listed in a row.
 func (s Slot) initial() bool {
-	return s.Current == nil && s.LastDeclared == nil && s.SwitchCount == 0 && s.CorrectionDate == nil
+	return s.Current == nil && s.LastDeclared == nil && s.SwitchCount == 0
 }
 
 // line writes the row from the template, followed by LF: its slots that are
@@ -66,8 +66,6 @@ func (row CardRow) line() []byte {
 	b.WriteString(strconv.FormatUint(row.LastSeq, 10))
 	b.WriteString(`,"last_card_proof":`)
 	b.WriteString(dateText(row.State.LastCardProof))
-	b.WriteString(`,"proofs_on_last_date":`)
-	b.WriteString(strconv.Itoa(row.State.ProofsOnLastDate))
 	b.WriteString(`,"slots":{`)
 	for i, p := range listedPlatforms(row.State) {
 		s := row.State.Slots[p]
@@ -75,7 +73,7 @@ func (row CardRow) line() []byte {
 			b.WriteByte(',')
 		}
 		b.WriteString(`"` + p + `":{"current":` + usernameText(s.Current) + `,"last_declared":` + usernameText(s.LastDeclared))
-		b.WriteString(`,"switch_count":` + strconv.Itoa(s.SwitchCount) + `,"correction_date":` + dateText(s.CorrectionDate) + `}`)
+		b.WriteString(`,"switch_count":` + strconv.Itoa(s.SwitchCount) + `}`)
 	}
 	b.WriteString("}}\n")
 	return b.Bytes()
@@ -152,19 +150,17 @@ func ReadCardStateFile(data []byte, r verifier.ProofLog) ([]CardRow, *Broken) {
 // where a number goes); writing the row again and comparing bytes rejects
 // all of it.
 type rowJSON struct {
-	ScopeString      string               `json:"scope_string"`
-	ScopedID         string               `json:"scoped_id"`
-	LastSeq          json.Number          `json:"last_seq"`
-	LastCardProof    *string              `json:"last_card_proof"`
-	ProofsOnLastDate json.Number          `json:"proofs_on_last_date"`
-	Slots            map[string]*slotJSON `json:"slots"`
+	ScopeString   string               `json:"scope_string"`
+	ScopedID      string               `json:"scoped_id"`
+	LastSeq       json.Number          `json:"last_seq"`
+	LastCardProof *string              `json:"last_card_proof"`
+	Slots         map[string]*slotJSON `json:"slots"`
 }
 
 type slotJSON struct {
-	Current        *string     `json:"current"`
-	LastDeclared   *string     `json:"last_declared"`
-	SwitchCount    json.Number `json:"switch_count"`
-	CorrectionDate *string     `json:"correction_date"`
+	Current      *string     `json:"current"`
+	LastDeclared *string     `json:"last_declared"`
+	SwitchCount  json.Number `json:"switch_count"`
 }
 
 // readCardRow checks one line of a card state file: line is its bytes up
@@ -197,12 +193,8 @@ func readCardRow(line []byte, r verifier.ProofLog) (CardRow, error) {
 	if err != nil {
 		return row, fmt.Errorf("last_card_proof: %v", err)
 	}
-	proofs, err := boundedInt(v.ProofsOnLastDate, 0)
-	if err != nil {
-		return row, fmt.Errorf("proofs_on_last_date: %v", err)
-	}
 	row = CardRow{ScopeString: v.ScopeString, ScopedID: v.ScopedID, LastSeq: lastSeq,
-		State: CardState{LastCardProof: &lastCardProof, ProofsOnLastDate: int(proofs), Slots: map[string]Slot{}}}
+		State: CardState{LastCardProof: &lastCardProof, Slots: map[string]Slot{}}}
 	for _, p := range verifier.Platforms(r) {
 		row.State.Slots[p.ID] = Slot{}
 	}
@@ -225,13 +217,6 @@ func readCardRow(line []byte, r verifier.ProofLog) (CardRow, error) {
 			return row, fmt.Errorf("slots: %s: switch_count: %v", id, err)
 		}
 		slot.SwitchCount = int(n)
-		if s.CorrectionDate != nil {
-			d, err := verifier.ParseDate(*s.CorrectionDate)
-			if err != nil {
-				return row, fmt.Errorf("slots: %s: correction_date: %v", id, err)
-			}
-			slot.CorrectionDate = &d
-		}
 		row.State.Slots[id] = slot
 	}
 	if !bytes.Equal(row.line(), line) {
@@ -353,7 +338,6 @@ func rowDifferences(file, computed CardRow) []string {
 	}
 	diff("last_seq", strconv.FormatUint(file.LastSeq, 10), strconv.FormatUint(computed.LastSeq, 10))
 	diff("last_card_proof", dateText(file.State.LastCardProof), dateText(computed.State.LastCardProof))
-	diff("proofs_on_last_date", strconv.Itoa(file.State.ProofsOnLastDate), strconv.Itoa(computed.State.ProofsOnLastDate))
 	platforms := map[string]bool{}
 	for p := range file.State.Slots {
 		platforms[p] = true
@@ -371,7 +355,6 @@ func rowDifferences(file, computed CardRow) []string {
 		diff(p+" current", usernameText(f.Current), usernameText(c.Current))
 		diff(p+" last_declared", usernameText(f.LastDeclared), usernameText(c.LastDeclared))
 		diff(p+" switch_count", strconv.Itoa(f.SwitchCount), strconv.Itoa(c.SwitchCount))
-		diff(p+" correction_date", dateText(f.CorrectionDate), dateText(c.CorrectionDate))
 	}
 	return out
 }

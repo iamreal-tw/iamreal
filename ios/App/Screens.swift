@@ -230,10 +230,7 @@ struct Screens {
         var lines: [String] = []
         if row.current == nil { lines.append(copy("accounts.row_withdrawn", ["last_declared": last])) }
         lines.append(count)
-        // An account put there today can be changed today without a switch, even when none is left.
-        if row.correctionToday {
-            if row.current != nil { lines.append(copy("accounts.row_today")) }
-        } else if row.switchesLeft == 0 {
+        if row.switchesLeft == 0 {
             lines.append(row.current != nil ? copy("accounts.row_can_clear") : copy("accounts.row_only_back", ["last_declared": last]))
         }
         return lines
@@ -415,17 +412,15 @@ struct Screens {
         }
         let now = Platform.handle(row.platform, row.current ?? "")
         var blocks: [Block] = [accountsTitle(single), .text(copy("accounts.declared_inline", ["account": now]))]
-        // Used up, and not put there today: no other account can be declared.
-        if !row.correctionToday, row.switchesLeft == 0 {
+        // Used up: no other account can be declared.
+        if row.switchesLeft == 0 {
             blocks.append(.text(copy("accounts.row_used_up", ["switches_used": String(row.switchCount)])))
             if let whole = message ?? errors[row.platform] { blocks.append(.message(whole)) }
             return Screen(step: 4, blocks: blocks, links: [keep], cancel: cancel)
         }
-        let cost = row.correctionToday
-            ? copy("accounts.row_today")
-            : row.switchesLeft == 1
-                ? copy("confirm.uses_final_switch")
-                : copy("accounts.switch_limit", ["switches_left": String(row.switchesLeft - 1)])
+        let cost = row.switchesLeft == 1
+            ? copy("confirm.uses_final_switch")
+            : copy("accounts.switch_limit", ["switches_left": String(row.switchesLeft - 1)])
         blocks += [
             .subheading(copy("accounts.switch")),
             field(row, platform, typed: typed, errors: errors, lines: []),
@@ -450,7 +445,7 @@ struct Screens {
     // Step 5: confirming ----------------------------------------------------------------------
 
     /// What a row does (step 5, the table of what each row does), and for a
-    /// switch or a correction what it uses up.
+    /// switch what it uses up.
     func rowSentences(_ row: Flow.ConsequenceRow) -> [String] {
         var lines: [String]
         switch row.kind {
@@ -459,9 +454,7 @@ struct Screens {
         case "withdraw": lines = [copy("kinds.withdraw")]
         default: lines = [copy("kinds.switch", ["previous": Platform.handle(row.platform, row.previous ?? "")])]
         }
-        if row.kind == "correction" {
-            lines.append(copy("confirm.switch_not_counted"))
-        } else if row.kind == "switch" {
+        if row.kind == "switch" {
             lines.append(row.switchesLeft == 0 ? copy("confirm.uses_final_switch") : copy("confirm.uses_switch", ["switches_left": String(row.switchesLeft ?? 0)]))
         }
         return lines
@@ -582,7 +575,7 @@ struct Screens {
         if single != nil, kinds.count == 1, let kind = kinds.first {
             let before = done.expected.first { $0.platform == kind.platform }?.current
             if kind.kind == "first" || (kind.kind == "refresh" && before == nil) { return copy("finish.first") }
-            if kind.kind == "switch" || kind.kind == "correction" {
+            if kind.kind == "switch" {
                 return copy("finish.switched", ["account": Platform.handle(kind.platform, kind.username)])
             }
         }
@@ -609,7 +602,7 @@ struct Screens {
             // kinds.switch names the account the screen knew was replaced.
             let previous = shown?.previous ?? shown?.current
             var lines: [String] = []
-            if !((kind.kind == "switch" || kind.kind == "correction") && previous == nil) {
+            if !(kind.kind == "switch" && previous == nil) {
                 let recorded = Flow.ConsequenceRow(
                     platform: kind.platform, known: known(kind.platform), kind: kind.kind, username: kind.username,
                     current: shown?.current, previous: previous, switchesLeft: nil)

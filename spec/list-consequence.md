@@ -63,20 +63,19 @@ ignored.
 The answer **cannot be read** unless all of the following hold:
 
 - It is an object with `last_card_proof` (a date `YYYY-MM-DD` that exists,
-  from 2000 to 2049, or null), `proofs_on_last_date` (a count), `platforms`
-  (an object) and `count` (a count).
-- The card's items are possible ([`record-rules.md`](record-rules.md),
-  "State"): `proofs_on_last_date` is 0 when `last_card_proof` is null, and
-  1 to 3 otherwise; and `last_card_proof` is at most 3 days after today
-  (the bound of check 3).
+  from 2000 to 2049, or null), `proofs_on_last_date` (a count),
+  `daily_limit` (a count), `platforms` (an object) and `count` (a count).
+- The card's items are possible: `last_card_proof` is at most 3 days after
+  today (the bound of check 3, [`record-rules.md`](record-rules.md)); and
+  `proofs_on_last_date` is 0 when `last_card_proof` is null, and 1 or more
+  otherwise.
 - **Every platform the device knows that has an entry in `platforms`**:
   the entry is an object with `current` and `last_declared` (null, or a
-  `username` in the row's format), `switch_count` (a count from 0 to 5) and
-  `correction_date` (a date or null), and the slot is possible: `current`,
-  when not null, equals `last_declared`; `last_declared` and
-  `correction_date` are both null or both not; `switch_count` is 0 when
-  `last_declared` is null; nothing is set when `last_card_proof` is null;
-  and `correction_date` is not after `last_card_proof`.
+  `username` in the row's format) and `switch_count` (a count from 0 to 5),
+  and the slot is possible ([`record-rules.md`](record-rules.md), "State"):
+  `current`, when not null, equals `last_declared`; `switch_count` is 0
+  when `last_declared` is null; and nothing is set when `last_card_proof`
+  is null.
 - **Every other entry of `platforms`** (a platform the device does not
   know) is an object with `current`. When `current` is null, the entry is
   passed over. Otherwise the entry's key is a platform ID, `current` is 1 or
@@ -101,16 +100,17 @@ without an entry is not offered.
    ascending order.
 3. **The list the card signs** is the cardholder's list with every kept
    account added, in ascending order of platform.
-4. The record rules' checks 5 and 6 ([`record-rules.md`](record-rules.md),
-   "Event rules", and check 6) are applied to that list on today's date,
-   against a card whose `last_card_proof` and `proofs_on_last_date` are the
-   answer's, with one slot for each platform offered (the answer's entry)
-   and one for each kept account (`current` and `last_declared` that
-   account, `switch_count` 0, `correction_date` null). Checks 1 to 4 are
+4. The record rules' check 5 ([`record-rules.md`](record-rules.md),
+   "Event rules") is applied to that list on today's date, against a card
+   whose `last_card_proof` is the answer's, with one slot for each platform
+   offered (the answer's entry) and one for each kept account (`current`
+   and `last_declared` that account, `switch_count` 0). Checks 1 to 4 are
    the server's; the device does not compute them.
 5. If the rules refuse the list, the result is the reason code: `empty`,
-   `switch_limit` with the first platform blocked, or `daily_limit`. The
-   list is not offered for signing.
+   or `switch_limit` with the first platform blocked. Otherwise, if the
+   server writes no more records of the card today ("The card's state, as
+   shown", `daily_limit`), the result is `daily_limit`. The list is not
+   offered for signing.
 6. Otherwise the result is the list the card signs, one **row** for every
    (`platform`, kind) of the record, in the same order, and whether this
    would be the card's first record (`last_card_proof` is null).
@@ -121,10 +121,10 @@ A row has:
 |---|---|
 | `platform` | The platform |
 | `known` | False for a platform whose account is kept, true otherwise |
-| `kind` | `first`, `refresh`, `correction`, `switch` or `withdraw` |
+| `kind` | `first`, `refresh`, `switch` or `withdraw` |
 | `username` | The account the list has there; for `withdraw`, the account withdrawn |
 | `current` | The slot's `current` before the record |
-| `previous` | For `switch` and `correction`: the account replaced, `current` or, after a withdrawal, `last_declared`. Otherwise null |
+| `previous` | For `switch`: the account replaced, `current` or, after a withdrawal, `last_declared`. Otherwise null |
 | `switches_left` | For `switch`: 5 minus the slot's `switch_count` after it. Otherwise null |
 
 A kept account is always a `refresh` with `known` false: the list keeps
@@ -140,16 +140,14 @@ today's date; every client shows the same for the same answers and date.
 |---|---|
 | `last_card_proof` | The answer's `last_card_proof`: a date, or null |
 | `days_since` | The days from `last_card_proof` to today; null without one. Negative when the date is after today (at most 3 days, by the reading above); what the screen says then is the client's, not defined here |
-| `daily_limit` | True when `last_card_proof` is today and `proofs_on_last_date` is 3: the rules' check 6 refuses every list today |
+| `daily_limit` | True when the card's records of today are `daily_limit` or more: the server writes no list of the card today. The records of today are `proofs_on_last_date` when `last_card_proof` is today, and 0 otherwise |
 | `known_platforms` | The platforms the device knows, in ascending order, offered or not |
 | `rows` | One row for every platform offered and one for every kept account, in ascending order of platform |
 
 A row of a platform offered has `platform`, `known` true, and of the
 platform's entry `current`, `last_declared` and `switch_count`; then
 `switches_left`, 5 minus `switch_count` (the switches the rules still
-allow), and `correction_today`, true when `correction_date` is today:
-declaring another account there today is then a `correction`, which uses
-no switch.
+allow).
 
 A row of a kept account has `platform`, `known` false and `current`, the
 account as the server sent it. The screen shows it and does not offer to

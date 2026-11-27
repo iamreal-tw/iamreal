@@ -73,7 +73,7 @@ const SHAPE = {
   slide: 64,
   /** Each platform's accounts: few, so that cards go back to an account and share one. The same names on both platforms are two accounts. */
   usernames: ["alice", "bob", "carol", "dave"],
-  /** The chance that the day moves on before a record: 18 records a day, a little over 2 of each card, so that a card's fourth of a date is common. */
+  /** The chance that the day moves on before a record: 18 records a day, a little over 2 of each card, so that a card often changes an account on the date of its last card proof. */
   nextDay: 1 / 18,
   /** For each platform of a record, the chance that the card wants another account, and that it wants none there. */
   changeAccount: 0.2,
@@ -177,7 +177,6 @@ export function generateSequence({ seed, length, checkpointEvery = 100 }: { seed
 /** A card's state after a record: last_card_proof null for a card without a valid record. */
 export interface CardJson {
   last_card_proof: string | null;
-  proofs_on_last_date: number;
   slots: Record<string, SlotJson>;
 }
 
@@ -185,7 +184,6 @@ export interface CardJson {
 export function cardJsonOf(card: CardState): CardJson {
   return {
     last_card_proof: card.lastCardProof === null ? null : formatDay(card.lastCardProof),
-    proofs_on_last_date: card.proofsOnLastDate,
     slots: Object.fromEntries([...card.slots].map(([p, s]) => [p, slotToJson(s)])),
   };
 }
@@ -238,8 +236,8 @@ export interface GoAnswers {
  * "Event rules": every one of protocol/'s types, and no other (a code added
  * there and not here fails the type check).
  */
-export const REASONS = Object.keys({ proof: 0, challenge_reused: 0, root: 0, date_order: 0, empty: 0, switch_limit: 0, daily_limit: 0 } satisfies Record<Reason, 0>) as Reason[];
-export const KINDS = Object.keys({ first: 0, refresh: 0, correction: 0, switch: 0, withdraw: 0 } satisfies Record<Kind, 0>) as Kind[];
+export const REASONS = Object.keys({ proof: 0, challenge_reused: 0, root: 0, date_order: 0, empty: 0, switch_limit: 0 } satisfies Record<Reason, 0>) as Reason[];
+export const KINDS = Object.keys({ first: 0, refresh: 0, switch: 0, withdraw: 0 } satisfies Record<Kind, 0>) as Kind[];
 
 /** How many records have each reason code, and how many (platform, kind) pairs each kind, in all and on each platform (`platform kind`). */
 export function statistics(results: readonly ResultJson[]): { valid: number; reasons: Record<string, number>; kinds: Record<string, number>; byPlatform: Record<string, number> } {
@@ -268,7 +266,7 @@ export type Scenario =
   | "exactly_4_days_back_valid"
   | "fifth_switch"
   | "sixth_switch_blocked"
-  | "correction"
+  | "switch_on_the_same_date"
   | "declared_again_after_withdrawing_all"
   | "account_of_several_cards";
 
@@ -282,7 +280,8 @@ export type Scenario =
  * - `exactly_4_days_back_valid`: a valid record dated exactly 4 days before it
  * - `fifth_switch`: a switch that makes the slot's `switch_count` 5
  * - `sixth_switch_blocked`: a `switch_limit` record
- * - `correction`: a correction, on any platform
+ * - `switch_on_the_same_date`: a switch, on any platform, dated the card's last card proof before it: a card that
+ *   changes an account on the date it had a valid record is counted a switch too
  * - `declared_again_after_withdrawing_all`: a valid record that declares an account, of a card that had valid records and declared nothing
  * - `account_of_several_cards`: a valid record after which an account of its list is declared by 2 cards or more
  */
@@ -293,7 +292,7 @@ export function scenarios(events: readonly SequenceEvent[], answers: Pick<GoAnsw
     exactly_4_days_back_valid: 0,
     fifth_switch: 0,
     sixth_switch_blocked: 0,
-    correction: 0,
+    switch_on_the_same_date: 0,
     declared_again_after_withdrawing_all: 0,
     account_of_several_cards: 0,
   };
@@ -316,7 +315,7 @@ export function scenarios(events: readonly SequenceEvent[], answers: Pick<GoAnsw
     if (back === 4) count.exactly_4_days_back_valid++;
     for (const k of result.kinds ?? []) {
       if (k.kind === "switch" && after.slots[k.platform]!.switch_count === 5) count.fifth_switch++;
-      if (k.kind === "correction") count.correction++;
+      if (k.kind === "switch" && cardBefore?.last_card_proof === e.date) count.switch_on_the_same_date++;
     }
     const declaredNothing = cardBefore !== undefined && cardBefore.last_card_proof !== null && Object.values(cardBefore.slots).every((s) => s.current === null);
     if (declaredNothing && e.accounts.length > 0) count.declared_again_after_withdrawing_all++;

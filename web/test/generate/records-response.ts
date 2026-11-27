@@ -36,10 +36,10 @@ const noOrdinal = (kinds: Kind[] | null = FIRST): RecordsResponseResult => read(
 /** Nothing of the answer is told. */
 const NOTHING: RecordsResponseResult = { seq: null, record_hash: null, ordinal: null, kinds: null, mismatches: [] };
 
-// The card's state said threads' account was put there today (a change is a
-// correction) and test-example's was not touched.
-const SHOWN_TWO = [shown("test-example", "refresh", "a-b"), shown("threads", "correction", "bob")];
-const TWO = [kind("test-example", "refresh", "a-b"), kind("threads", "correction", "bob")];
+// The screen said threads' account is switched to bob and test-example's is
+// not touched.
+const SHOWN_TWO = [shown("test-example", "refresh", "a-b"), shown("threads", "switch", "bob")];
+const TWO = [kind("test-example", "refresh", "a-b"), kind("threads", "switch", "bob")];
 
 const CASES: Case[] = [
   // --- An answer that is read, the same as the screen said ----------------
@@ -47,9 +47,9 @@ const CASES: Case[] = [
   { name: "two platforms, in ascending order", body: answer(TWO), rows: SHOWN_TWO, result: read(TWO) },
   {
     name: "every kind",
-    body: answer([kind("a", "first", "u1"), kind("b", "refresh", "u2"), kind("c", "correction", "u3"), kind("d", "switch", "u4"), kind("e", "withdraw", "u5", 0)]),
-    rows: [shown("a", "first", "u1"), shown("b", "refresh", "u2"), shown("c", "correction", "u3"), shown("d", "switch", "u4"), shown("e", "withdraw", "u5")],
-    result: read([kind("a", "first", "u1"), kind("b", "refresh", "u2"), kind("c", "correction", "u3"), kind("d", "switch", "u4"), kind("e", "withdraw", "u5", 0)]),
+    body: answer([kind("a", "first", "u1"), kind("b", "refresh", "u2"), kind("d", "switch", "u4"), kind("e", "withdraw", "u5", 0)]),
+    rows: [shown("a", "first", "u1"), shown("b", "refresh", "u2"), shown("d", "switch", "u4"), shown("e", "withdraw", "u5")],
+    result: read([kind("a", "first", "u1"), kind("b", "refresh", "u2"), kind("d", "switch", "u4"), kind("e", "withdraw", "u5", 0)]),
   },
   {
     name: "a withdrawal: the account withdrawn, which no card declares after it",
@@ -125,6 +125,7 @@ const CASES: Case[] = [
   { name: "kinds not read: a platform of 22 characters", body: answer([kind("a".repeat(22), "first", "alice")]), result: read(null) },
   { name: "kinds not read: an empty platform", body: answer([kind("", "first", "alice")]), result: read(null) },
   { name: "kinds not read: a kind the device does not know", body: answer([kind("threads", "declare", "alice")]), result: read(null) },
+  { name: "kinds not read: correction, a kind of an earlier version of the record rules", body: answer([kind("threads", "correction", "alice")]), result: read(null) },
   { name: "kinds not read: a kind in capitals", body: answer([kind("threads", "First", "alice")]), result: read(null) },
   { name: "kinds not read: a kind that is not a string", body: answer([{ platform: "threads", kind: 1, username: "alice", account_cards: 1 }]), result: read(null) },
   { name: "kinds not read: no kind", body: answer([{ platform: "threads", username: "alice", account_cards: 1 }]), result: read(null) },
@@ -153,9 +154,9 @@ const CASES: Case[] = [
   { name: "ordinal not known, and the kinds not read: seq and record_hash still told", body: answer([], { ordinal: "42" }), result: noOrdinal(null) },
   {
     name: "ordinal not known: what the screen said is still compared",
-    body: answer([TWO[0], kind("threads", "switch", "bob")], { ordinal: -1 }),
+    body: answer([TWO[0], kind("threads", "refresh", "bob")], { ordinal: -1 }),
     rows: SHOWN_TWO,
-    result: { ...read([TWO[0]!, kind("threads", "switch", "bob")], ["threads"]), ordinal: null },
+    result: { ...read([TWO[0]!, kind("threads", "refresh", "bob")], ["threads"]), ordinal: null },
   },
 
   // --- account_cards that is not a count: that number alone is not known ---
@@ -168,23 +169,23 @@ const CASES: Case[] = [
   { name: "account_cards not known: 2^53", body: `{"seq":138,"record_hash":"${HASH}","ordinal":42,"kinds":[{"platform":"threads","kind":"first","username":"alice","account_cards":9007199254740992}]}`, result: read([kind("threads", "first", "alice", null)]) },
   {
     name: "account_cards not known on one platform: the other's is read",
-    body: answer([kind("test-example", "refresh", "a-b", 2), { platform: "threads", kind: "correction", username: "bob" }]),
+    body: answer([kind("test-example", "refresh", "a-b", 2), { platform: "threads", kind: "switch", username: "bob" }]),
     rows: SHOWN_TWO,
-    result: read([kind("test-example", "refresh", "a-b", 2), kind("threads", "correction", "bob", null)]),
+    result: read([kind("test-example", "refresh", "a-b", 2), kind("threads", "switch", "bob", null)]),
   },
 
   // --- Where the answer differs from what the screen said -----------------
   {
-    name: "differs: a switch, where the screen said a correction",
+    name: "differs: a switch, where the screen said a refresh",
     body: answer([TWO[0], kind("threads", "switch", "bob")]),
-    rows: SHOWN_TWO,
+    rows: [SHOWN_TWO[0]!, shown("threads", "refresh", "bob")],
     result: read([TWO[0]!, kind("threads", "switch", "bob")], ["threads"]),
   },
   {
     name: "differs: another account",
-    body: answer([TWO[0], kind("threads", "correction", "carol")]),
+    body: answer([TWO[0], kind("threads", "switch", "carol")]),
     rows: SHOWN_TWO,
-    result: read([TWO[0]!, kind("threads", "correction", "carol")], ["threads"]),
+    result: read([TWO[0]!, kind("threads", "switch", "carol")], ["threads"]),
   },
   {
     name: "differs: the account in another case",
@@ -207,9 +208,9 @@ const CASES: Case[] = [
   },
   {
     name: "differs on two platforms: both, in ascending order",
-    body: answer([kind("test-example", "first", "a-b"), kind("threads", "switch", "bob")]),
+    body: answer([kind("test-example", "first", "a-b"), kind("threads", "refresh", "bob")]),
     rows: SHOWN_TWO,
-    result: read([kind("test-example", "first", "a-b"), kind("threads", "switch", "bob")], ["test-example", "threads"]),
+    result: read([kind("test-example", "first", "a-b"), kind("threads", "refresh", "bob")], ["test-example", "threads"]),
   },
   {
     name: "differs: another platform altogether, each on one side only",

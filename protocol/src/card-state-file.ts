@@ -6,7 +6,7 @@
 // it again and comparing bytes.
 //
 // The format checks each value by itself. Whether a row is a state the
-// record rules can leave (possibleSlot, possibleCard of record-rules.ts) is
+// record rules can leave (possibleSlot of record-rules.ts) is
 // not checked here, on purpose: the file is there to show a wrong stored
 // state to whoever compares, not to hide it.
 import { byBytes } from "./bytes.ts";
@@ -44,7 +44,7 @@ const isDate = (d: Day): boolean => Number.isInteger(d) && parseDay(formatDay(d)
 
 /** True if every item of the slot has its initial value: such a slot is not listed. */
 function isInitial(s: SlotState): boolean {
-  return s.current === null && s.lastDeclared === null && s.switchCount === 0 && s.correctionDate === null;
+  return s.current === null && s.lastDeclared === null && s.switchCount === 0;
 }
 
 /** The slots of a row: those not in the initial state, in ascending order of platform. */
@@ -63,14 +63,12 @@ function rowProblem(proofLog: ProofLog, row: CardRow): string | null {
   if (parseScopedId(row.scopedId) === null) return "scoped_id";
   if (!isCount(row.lastSeq, 1)) return "last_seq";
   if (card.lastCardProof === null || !isDate(card.lastCardProof)) return "last_card_proof";
-  if (!isCount(card.proofsOnLastDate, 0)) return "proofs_on_last_date";
   const table = platformsOf(proofLog);
   for (const [platform, s] of listedSlots(card)) {
     const tableRow = table.find((p) => p.platform === platform);
     if (tableRow === undefined) return "slots";
     for (const username of [s.current, s.lastDeclared]) if (username !== null && !tableRow.format.accepts(username)) return "slots";
     if (!isCount(s.switchCount, 0)) return "slots";
-    if (s.correctionDate !== null && !isDate(s.correctionDate)) return "slots";
   }
   return null;
 }
@@ -82,9 +80,9 @@ function rowLine(row: CardRow): string {
   const { card } = row;
   const slots = listedSlots(card).map(
     ([platform, s]) =>
-      `"${platform}":{"current":${quoted(s.current)},"last_declared":${quoted(s.lastDeclared)},"switch_count":${s.switchCount},"correction_date":${quoted(s.correctionDate === null ? null : formatDay(s.correctionDate))}}`,
+      `"${platform}":{"current":${quoted(s.current)},"last_declared":${quoted(s.lastDeclared)},"switch_count":${s.switchCount}}`,
   );
-  return `{"scope_string":"${row.scopeString}","scoped_id":"${row.scopedId}","last_seq":${row.lastSeq},"last_card_proof":"${formatDay(card.lastCardProof!)}","proofs_on_last_date":${card.proofsOnLastDate},"slots":{${slots.join(",")}}}\n`;
+  return `{"scope_string":"${row.scopeString}","scoped_id":"${row.scopedId}","last_seq":${row.lastSeq},"last_card_proof":"${formatDay(card.lastCardProof!)}","slots":{${slots.join(",")}}}\n`;
 }
 
 /** The order of the rows: by scope string, then by scoped ID, by byte values. */
@@ -159,22 +157,20 @@ function readRow(proofLog: ProofLog, line: string): CardRow | null {
     return null;
   }
   if (!isObject(v)) return null;
-  const { scope_string, scoped_id, last_seq, last_card_proof, proofs_on_last_date, slots } = v;
+  const { scope_string, scoped_id, last_seq, last_card_proof, slots } = v;
   if (typeof scope_string !== "string" || typeof scoped_id !== "string" || typeof last_card_proof !== "string") return null;
-  if (typeof last_seq !== "number" || typeof proofs_on_last_date !== "number" || !isObject(slots)) return null;
+  if (typeof last_seq !== "number" || !isObject(slots)) return null;
   const read = new Map<string, SlotState>();
   for (const platform of Object.keys(slots).sort(byBytes)) {
     const s = slots[platform];
     if (!isObject(s)) return null;
-    const { current, last_declared, switch_count, correction_date } = s;
-    if (!stringOrNull(current) || !stringOrNull(last_declared) || !stringOrNull(correction_date) || typeof switch_count !== "number") return null;
-    const correctionDate = correction_date === null ? null : parseDay(correction_date);
-    if (correction_date !== null && correctionDate === null) return null;
-    read.set(platform, { current, lastDeclared: last_declared, switchCount: switch_count, correctionDate });
+    const { current, last_declared, switch_count } = s;
+    if (!stringOrNull(current) || !stringOrNull(last_declared) || typeof switch_count !== "number") return null;
+    read.set(platform, { current, lastDeclared: last_declared, switchCount: switch_count });
   }
   const lastCardProof = parseDay(last_card_proof);
   if (lastCardProof === null) return null;
-  const row: CardRow = { scopeString: scope_string, scopedId: scoped_id, lastSeq: last_seq, card: { lastCardProof, proofsOnLastDate: proofs_on_last_date, slots: read } };
+  const row: CardRow = { scopeString: scope_string, scopedId: scoped_id, lastSeq: last_seq, card: { lastCardProof, slots: read } };
   if (rowProblem(proofLog, row) !== null) return null;
   return rowLine(row) === line ? row : null;
 }

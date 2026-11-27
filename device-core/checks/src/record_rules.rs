@@ -4,7 +4,7 @@
 //! [`apply_record`] takes a record, the state of its card before it and the
 //! three facts about the rest of the proof log the checks read, and gives the
 //! record's result and the state of the card after it. It keeps nothing.
-//! [`apply_list`] is its second half, checks 5 and 6: what the device
+//! [`apply_list`] is its second half, check 5: what the device
 //! computes for a list before the card signs it. [`MemoryRules`] keeps the
 //! state of every card in memory, to compute a proof log from its first
 //! record.
@@ -22,14 +22,12 @@ use crate::username_format::{UsernameFormat, is_any_username};
 /// The version number of these rules (spec/record-rules.md, "The version
 /// number"). Go's `prooflog.RulesVersion` and TypeScript's `RULES_VERSION`
 /// are the same number.
-pub const RULES_VERSION: u32 = 2;
+pub const RULES_VERSION: u32 = 3;
 
-/// At most 3 valid records of a card have the same date (check 6, `daily_limit`).
-pub const MAX_PER_DATE: u32 = 3;
 /// A record's date is no earlier than this many days before the latest date
 /// among the earlier valid records, of any card (check 4, `date_order`).
 pub const DATE_ORDER_DAYS: i64 = 4;
-/// A card has 5 switches on each platform, for good ("Switches and corrections").
+/// A card has 5 switches on each platform, for good ("Switches").
 pub const MAX_SWITCHES: u32 = 5;
 /// A record's date is at most 3 days after the date of the CRL behind its
 /// root ("How far dates are trusted"); no date in the proof log is later than
@@ -44,7 +42,6 @@ pub const ROOT_DAYS_BEFORE: i64 = 1;
 pub enum Kind {
     First,
     Refresh,
-    Correction,
     Switch,
     Withdraw,
 }
@@ -55,7 +52,6 @@ impl Kind {
         match self {
             Kind::First => "first",
             Kind::Refresh => "refresh",
-            Kind::Correction => "correction",
             Kind::Switch => "switch",
             Kind::Withdraw => "withdraw",
         }
@@ -75,7 +71,6 @@ pub enum Reason {
     SwitchLimit {
         platform: String,
     },
-    DailyLimit,
 }
 
 impl Reason {
@@ -88,7 +83,6 @@ impl Reason {
             Reason::DateOrder => "date_order",
             Reason::Empty => "empty",
             Reason::SwitchLimit { .. } => "switch_limit",
-            Reason::DailyLimit => "daily_limit",
         }
     }
 }
@@ -123,17 +117,13 @@ pub struct Slot {
     pub last_declared: Option<String>,
     /// Valid switches of the slot, 0 to 5; it never decreases.
     pub switch_count: u32,
-    /// The date of the slot's last valid `first` or `switch`.
-    pub correction_date: Option<Date>,
 }
 
-/// The state of one card: its own items, and its slots by platform ID.
-/// A card without a valid record has no date, 0 and empty slots.
+/// The state of one card: its own item, and its slots by platform ID.
+/// A card without a valid record has no date and empty slots.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Card {
     pub last_card_proof: Option<Date>,
-    /// The number of valid records of the card dated `last_card_proof`.
-    pub proofs_on_last_date: u32,
     /// A platform of the table without a slot here has the empty slot.
     pub slots: BTreeMap<String, Slot>,
 }
@@ -247,15 +237,15 @@ pub struct RecordOutcome {
 enum SlotOutcome {
     /// No kind: no entry, and no account to withdraw.
     Nothing,
-    /// Another account, with no switch left and no correction open.
+    /// Another account, with no switch left.
     Blocked,
     Kind(Kind, Slot),
 }
 
 /// The event rules for one slot ("Event rules"): `entry` is the account the
 /// list has for the slot's platform. The first row that applies gives the
-/// kind and the slot after it.
-fn apply_entry(slot: &Slot, entry: Option<&str>, date: Date) -> SlotOutcome {
+/// kind and the slot after it. No row reads a date.
+fn apply_entry(slot: &Slot, entry: Option<&str>) -> SlotOutcome {
     let Some(entry) = entry else {
         return match slot.current {
             None => SlotOutcome::Nothing,
@@ -268,14 +258,13 @@ fn apply_entry(slot: &Slot, entry: Option<&str>, date: Date) -> SlotOutcome {
             ),
         };
     };
-    let declared = |switch_count, correction_date| Slot {
+    let declared = |switch_count| Slot {
         current: Some(entry.to_owned()),
         last_declared: Some(entry.to_owned()),
         switch_count,
-        correction_date,
     };
     let applied = match slot.last_declared.as_deref() {
-        None => (Kind::First, declared(slot.switch_count, Some(date))),
+        None => (Kind::First, declared(slot.switch_count)),
         Some(last) if last == entry => (
             Kind::Refresh,
             Slot {
@@ -283,12 +272,8 @@ fn apply_entry(slot: &Slot, entry: Option<&str>, date: Date) -> SlotOutcome {
                 ..slot.clone()
             },
         ),
-        Some(_) if slot.correction_date == Some(date) => (
-            Kind::Correction,
-            declared(slot.switch_count, slot.correction_date),
-        ),
         Some(_) if slot.switch_count < MAX_SWITCHES => {
-            (Kind::Switch, declared(slot.switch_count + 1, Some(date)))
+            (Kind::Switch, declared(slot.switch_count + 1))
         }
         Some(_) => return SlotOutcome::Blocked,
     };
@@ -328,8 +313,8 @@ fn read_list<'a>(
     Ok((rows.keys().map(|p| (*p).to_owned()).collect(), list))
 }
 
-/// Checks 5 and 6 and the effects of a valid record, for a list
-/// [`read_list`] accepted.
+/// Check 5 and the effects of a valid record, for a list [`read_list`]
+/// accepted.
 fn check_list(
     table: &[String],
     card: &Card,
@@ -346,7 +331,7 @@ fn check_list(
     let mut kinds = Vec::new();
     for platform in table {
         let before = card.slots.get(platform).unwrap_or(&empty);
-        match apply_entry(before, list.get(platform).copied(), date) {
+        match apply_entry(before, list.get(platform).copied()) {
             SlotOutcome::Blocked => {
                 return invalid(Reason::SwitchLimit {
                     platform: platform.clone(),
@@ -367,29 +352,18 @@ fn check_list(
     if kinds.is_empty() {
         return invalid(Reason::Empty);
     }
-    // 6. Fewer than 3 earlier valid records of its card have its date.
-    let on_date = if card.last_card_proof == Some(date) {
-        card.proofs_on_last_date
-    } else {
-        0
-    };
-    if on_date >= MAX_PER_DATE {
-        return invalid(Reason::DailyLimit);
-    }
     ListOutcome {
         result: RecordResult::Valid(kinds),
         card: Card {
             last_card_proof: Some(date),
-            proofs_on_last_date: on_date + 1,
             slots,
         },
     }
 }
 
-/// Checks 5 and 6 and the effects of a valid record: the event rules on
-/// every platform of the table, whether the list has an entry for it or
-/// not, then the card's 3 records a date. The second half of
-/// [`apply_record`], for a record that passed checks 1 to 4.
+/// Check 5 and the effects of a valid record: the event rules on every
+/// platform of the table, whether the list has an entry for it or not. The
+/// second half of [`apply_record`], for a record that passed checks 1 to 4.
 ///
 /// The device calls it by itself for what a list would do today. Of checks
 /// 1 to 4 it could compute only the card's own half of check 4, and it
@@ -404,7 +378,7 @@ pub fn apply_list(
     Ok(check_list(&table, card, &list, date))
 }
 
-/// The record rules for one record ("Per record"): the six checks in order,
+/// The record rules for one record ("Per record"): the five checks in order,
 /// the first that fails giving the reason code. It keeps nothing.
 ///
 /// What the caller keeps between records: the card's state, the proof log's
@@ -454,7 +428,7 @@ pub fn apply_record(input: &RecordInput<'_>) -> Result<RecordOutcome, NotARecord
     {
         return invalid(Reason::DateOrder);
     }
-    // 5 and 6.
+    // 5.
     let ListOutcome { result, card } = check_list(&table, card, &list, date);
     let latest_valid_date = match result {
         RecordResult::Valid(_) => latest_valid_date.max(Some(date)),
@@ -471,17 +445,14 @@ pub fn apply_record(input: &RecordInput<'_>) -> Result<RecordOutcome, NotARecord
 ///
 /// - `current`, when set, is `last_declared` (it is set only together with
 ///   it, and a withdrawal clears `current` only);
-/// - `last_declared` and `correction_date` are set together (a `first`
-///   sets both; nothing clears either);
 /// - `switch_count` is 0 to 5, and 0 without `last_declared`;
 /// - every item comes from a valid record of the card, so none is set
-///   without `last_card_proof`, and `correction_date` is no later than it.
+///   without `last_card_proof`.
 pub fn possible_slot(slot: &Slot, last_card_proof: Option<Date>) -> bool {
     let Slot {
         current,
         last_declared,
         switch_count,
-        correction_date,
     } = slot;
     if *switch_count > MAX_SWITCHES {
         return false;
@@ -489,29 +460,17 @@ pub fn possible_slot(slot: &Slot, last_card_proof: Option<Date>) -> bool {
     if current.is_some() && current != last_declared {
         return false;
     }
-    if last_declared.is_none() != correction_date.is_none() {
-        return false;
-    }
     if last_declared.is_none() && *switch_count > 0 {
         return false;
     }
-    if last_declared.is_some() && last_card_proof.is_none() {
-        return false;
-    }
-    !matches!((correction_date, last_card_proof), (Some(c), Some(l)) if c > &l)
+    !(last_declared.is_some() && last_card_proof.is_none())
 }
 
-/// False if no proof log can give a card these items: `proofs_on_last_date`
-/// is 0 without `last_card_proof` and 1 to 3 with it (check 6), and no date
-/// is more than [`MAX_DAYS_AHEAD`] days after `today`.
-pub fn possible_card(last_card_proof: Option<Date>, proofs_on_last_date: u32, today: Date) -> bool {
-    match last_card_proof {
-        None => proofs_on_last_date == 0,
-        Some(last) => {
-            (1..=MAX_PER_DATE).contains(&proofs_on_last_date)
-                && last.days_since_1970() <= today.days_since_1970() + MAX_DAYS_AHEAD
-        }
-    }
+/// False if no proof log can give a card this `last_card_proof`: no date is
+/// more than [`MAX_DAYS_AHEAD`] days after `today`.
+pub fn possible_last_card_proof(last_card_proof: Option<Date>, today: Date) -> bool {
+    last_card_proof
+        .is_none_or(|last| last.days_since_1970() <= today.days_since_1970() + MAX_DAYS_AHEAD)
 }
 
 /// A well-formed record, with the two answers the rules take from outside

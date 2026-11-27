@@ -19,11 +19,10 @@ const rowOf = (c: Json): CardRow => ({
   lastSeq: c.last_seq,
   card: {
     lastCardProof: parseDay(c.last_card_proof),
-    proofsOnLastDate: c.proofs_on_last_date,
     slots: new Map(
       Object.entries(c.slots as Record<string, Json>).map(([p, s]): [string, SlotState] => [
         p,
-        { current: s.current, lastDeclared: s.last_declared, switchCount: s.switch_count, correctionDate: s.correction_date === null ? null : parseDay(s.correction_date) },
+        { current: s.current, lastDeclared: s.last_declared, switchCount: s.switch_count },
       ]),
     ),
   },
@@ -142,14 +141,13 @@ describe("card-state-file.json: the files that are the final state of a case of 
       c.events.forEach((e: Json, i: number) => {
         if (c.results[i].valid) lastSeq.set(`${e.scope_string} ${e.scoped_id}`, c.results[i].seq);
       });
-      const initial = (s: Json): boolean => s.current === null && s.last_declared === null && s.switch_count === 0 && s.correction_date === null;
+      const initial = (s: Json): boolean => s.current === null && s.last_declared === null && s.switch_count === 0;
       const cards = c.state.flatMap((scope: Json) =>
         scope.cards.map((k: Json) => ({
           scope_string: scope.scope_string,
           scoped_id: k.scoped_id,
           last_seq: lastSeq.get(`${scope.scope_string} ${k.scoped_id}`),
           last_card_proof: k.last_card_proof,
-          proofs_on_last_date: k.proofs_on_last_date,
           slots: Object.fromEntries(Object.entries(k.slots as Record<string, Json>).filter(([, s]) => !initial(s))),
         })),
       );
@@ -184,7 +182,6 @@ describe("what is not written as a card state file", () => {
     refused((c) => (c.last_seq = 0));
     refused((c) => (c.last_seq = 1.5));
     refused((c) => (c.last_seq = Number.MAX_SAFE_INTEGER + 1));
-    refused((c) => (c.proofs_on_last_date = -1));
     refused((c) => (c.slots.threads.switch_count = -1));
     refused((c) => (c.slots.threads.switch_count = 0.5));
     refused((c) => (c.slots.threads.current = 'a"b'));
@@ -194,10 +191,8 @@ describe("what is not written as a card state file", () => {
   });
   test("a date outside the years a date is written with", () => {
     const row = rowOf(alice());
-    const slot = row.card.slots.get("threads")!;
     for (const d of [parseDay("2000-01-01")! - 1, parseDay("2049-12-31")! + 1, 0.5, Number.NaN]) {
       assert.throws(() => cardStateFile("production", [{ ...row, card: { ...row.card, lastCardProof: d } }]), /last_card_proof/);
-      assert.throws(() => cardStateFile("production", [{ ...row, card: { ...row.card, slots: new Map([["threads", { ...slot, correctionDate: d }]]) } }]), /slots/);
     }
   });
 });

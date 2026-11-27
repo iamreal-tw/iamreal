@@ -19,7 +19,7 @@ export interface CardStatusCase {
 }
 
 export type StatusRow =
-  | { platform: string; known: true; current: string | null; last_declared: string | null; switch_count: number; switches_left: number; correction_today: boolean }
+  | { platform: string; known: true; current: string | null; last_declared: string | null; switch_count: number; switches_left: number }
   | { platform: string; known: false; current: string };
 
 /** The result of a case, in the vectors' spelling. */
@@ -59,7 +59,7 @@ export async function cardStatusResult(c: CardStatusCase): Promise<CardStatusRes
     rows: status.slots.map((s) =>
       s.row === null
         ? { platform: s.platform, known: false as const, current: s.current! }
-        : { platform: s.platform, known: true as const, current: s.current, last_declared: s.lastDeclared, switch_count: s.switchCount, switches_left: s.switchesLeft, correction_today: s.correctionToday },
+        : { platform: s.platform, known: true as const, current: s.current, last_declared: s.lastDeclared, switch_count: s.switchCount, switches_left: s.switchesLeft },
     ),
   };
 }

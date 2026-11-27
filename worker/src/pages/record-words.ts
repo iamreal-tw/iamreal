@@ -26,8 +26,8 @@ export function onTheProofLog(platformName: string): RowStyle {
 
 /**
  * One row. After a withdrawal, declaring the account withdrawn is 再次宣告,
- * and declaring another one is written as a switch or a correction from
- * the account withdrawn. A row there are no words for stops the page,
+ * and declaring another one is written as a switch from the account
+ * withdrawn. A row there are no words for stops the page,
  * rather than leave the row blank.
  */
 export function recordWords(row: HistoryRow, a: RowStyle): Html {
@@ -39,7 +39,6 @@ export function recordWords(row: HistoryRow, a: RowStyle): Html {
   }
   if (kind === "refresh" && row.afterWithdrawal && after !== null) return html`再次宣告：${a.account(after)}`;
   if (kind === "switch" && before !== null && after !== null) return html`更換：${a.account(before)} 改成 ${a.changedTo(after)}`;
-  if (kind === "correction" && before !== null && after !== null) return html`更正：${a.account(before)} 改成 ${a.changedTo(after)}`;
   if (kind === "withdraw" && before !== null) return html`收回：${a.account(before)}`;
   throw new Error("pages: no words for a row of the history");
 }

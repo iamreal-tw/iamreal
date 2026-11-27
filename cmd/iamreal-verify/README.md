@@ -62,7 +62,7 @@ iamreal-verify -bb <bb 的路徑> -crs <通用參數目錄> -proof-log test -dat
 - 證明紀錄成立時，再下載指紋檔最後一行那天的卡片狀態檔 `proof-log/card-state/<日期>.jsonl`（見「卡片狀態檔」）。
 - 再下載 `crl/index.jsonl` 和它列出的每一份清冊（`<SHA-256>.crl`），完整重算（見「清冊存檔：完整重算或只信索引」）；加 `-crl-trust-index` 時只下載索引。清冊存檔裡的清冊只會變多，一份 G2 的清冊約 17 MB。每一份清冊下載後核對內容的 SHA-256 等於檔名，不同時在標準錯誤印一行、不放進清冊存檔（重算時就成了「索引列了但目錄裡沒有」），結束碼是 1。
 - 不跟轉址：回 `3xx` 和 `200`、`404` 以外的狀態都是錯誤，結束碼 2（和過卡頁面一樣，`web/src/api.ts`）。
-- 每種檔有大小上限，超過是錯誤（結束碼 2），不會只讀一部分：紀錄檔是 1,000 行、每行不超過證明的 19,544 個字加 4 KiB；雜湊清單是 1,001 行；指紋檔 8 MiB（一天一行，夠 170 年以上）；卡片狀態檔 4 GiB（正式的證明紀錄裡用過 Threads 的卡片，一列最長 363 位元組，數字寫到格式的上限時 393；夠 1,090 萬張卡片以上）；清冊存檔的索引 16 MiB；一份清冊 64 MiB（最大的 G2 約 17 MB）。卡片狀態檔的上限寫在 `cardstate.go`，其他的寫在 `source.go`。
+- 每種檔有大小上限，超過是錯誤（結束碼 2），不會只讀一部分：紀錄檔是 1,000 行、每行不超過證明的 19,544 個字加 4 KiB；雜湊清單是 1,001 行；指紋檔 8 MiB（一天一行，夠 170 年以上）；卡片狀態檔 4 GiB（正式的證明紀錄裡用過 Threads 的卡片，一列最長 308 位元組，數字寫到格式的上限時 323；夠 1,320 萬張卡片以上）；清冊存檔的索引 16 MiB；一份清冊 64 MiB（最大的 G2 約 17 MB）。卡片狀態檔的上限寫在 `cardstate.go`，其他的寫在 `source.go`。
 - 證明紀錄放在記憶體裡。清冊一份一份處理：下載一份、核對 SHA-256、算出它在索引裡的那一行，就放掉，再下載下一份（[#439](https://github.com/iamreal-tw/iamreal/issues/439)）。記憶體裡同時只有一份清冊，磁碟上沒有清冊檔：一年的清冊存檔約 37 GB，不先整份抓下來。暫存目錄裡只有索引 `index.jsonl`，跑完刪掉，中途出錯或被中斷（`Ctrl-C`、`SIGTERM`）時也刪掉。
 - 所以標準錯誤上「downloading …」和「CRL …」是一份接一份交錯的。`bb` 或通用參數檔有問題時，在下載任何一份清冊之前就報（下載索引之後）。
 - 2026-11-26 在一台 M1 Max 上對 `https://test-data.iamreal.tw/` 整份重驗（1 筆紀錄、58 份清冊共 746 MB）：74.7 秒，其中下載 40.1 秒、重建索引 32.6 秒，記憶體最高 370 MB。改成一份一份處理、重用雜湊（`crl/README.md`「重用雜湊」）之前同一份是 573.7 秒（下載 41.7 秒、重建索引 531 秒）、221 MB。
@@ -123,7 +123,7 @@ iamreal-verify -bb <bb 的路徑> -crs <通用參數目錄> -crl-archive <清冊
   3. 重驗算出來那張卡片最後一筆有效紀錄的序號超過 `count`：跳過。卡片在檔案寫好之後才變，下一份檔再比。只在 N 大於 `count` 時發生。
   4. 檔裡有列、證明紀錄在 N 筆以內沒有這張卡片的有效紀錄：不同。
   5. 證明紀錄有這張卡片、檔裡沒有列：不同。
-  6. 每一項（`last_seq`、`last_card_proof`、`proofs_on_last_date`，和平台表上每個平台名額的四項；沒列的名額當成初始狀態）都相同：相同；否則不同。
+  6. 每一項（`last_seq`、`last_card_proof`，和平台表上每個平台名額的三項；沒列的名額當成初始狀態）都相同：相同；否則不同。
 
   預設的讀法（指紋檔最後一行那天的檔，證明紀錄重驗到那一行的筆數）N 等於 `count`，所以沒有卡片會被跳過，每一張都是相同或不同。
 - **輸出**：每一張不同的卡片在標準錯誤印一行，指出是哪一張（場合字串、匿名編號）和哪幾項不同，例如 `card-state/2026-11-20.jsonl: card iamreal:public:0_______________ <匿名編號> is different: threads switch_count: file 1, proof log 0`；最後印一行筆數和幾張相同、幾張跳過、幾張不同。有一張不同時結束碼是 1。跳過的卡片不算不通過。
@@ -159,13 +159,13 @@ scope iamreal-test:public:0__________
       SA5G3V8XXE61EHNEJ8MACZF729GEJPPM2BMJV26N687TB9WPT000  last card proof 2026-11-24
 ```
 
-- 每一筆有效的紀錄列出它在每個平台的種類（`first`、`refresh`、`correction`、`switch`、`withdraw`），照平台代號排；無效的列出代碼，有說明時加在括號裡（例如 `switch_limit (platform threads)`、`daily_limit (3 valid records dated 2026-11-16)`；說明不是規則的輸出）。
+- 每一筆有效的紀錄列出它在每個平台的種類（`first`、`refresh`、`switch`、`withdraw`），照平台代號排；無效的列出代碼，有說明時加在括號裡（例如 `switch_limit (platform threads)`、`date_order (last card proof 2026-11-16)`；說明不是規則的輸出）。
 - 每張卡片列出上次過卡日、順序號碼（`ordinal`：這張卡片第一筆有效的紀錄，在證明紀錄裡是第幾張卡片的第一筆有效紀錄，`spec/record-rules.md`「The ordinal」；島民證明的頁面上「第 N 張島民證明」就是這個數字）和現在的清單（每個平台一行，照平台排）；收回了全部帳號的卡片仍然列出，寫 `no account`。
 - 每個帳號是（平台、帳號名稱），照平台再照帳號名稱排，底下是現在在那個平台宣告它的卡片。同一個帳號名稱在兩個平台是兩個帳號。
 
 壞掉的檔案只印一行：`log file: broken at line 3: line (…)`，不算現況。
 
-`-json` 的形狀和 `spec/vectors/` 相同：有效的檔案是 `{"valid": true, "fingerprint": …, "results": [...], "state": [...], "ordinals": [...]}`，`results`、`state` 和 `ordinals` 同 `record-rules.json`（有效的結果是 `kinds`，每一項 `platform`、`kind`；每張卡片是 `scoped_id`、`last_card_proof`、`accounts`；每個帳號是 `platform`、`username`、`cards`；`ordinals` 每一項是 `scope_string`、`scoped_id`、`ordinal`，照順序號碼排），只是卡片沒有 `proofs_on_last_date` 和 `slots`：那兩項是卡片的狀態，不是規則的輸出；壞掉的是 `{"valid": false, "line": 3, "code": "line"}`，同 `record.json` 的 `files`。
+`-json` 的形狀和 `spec/vectors/` 相同：有效的檔案是 `{"valid": true, "fingerprint": …, "results": [...], "state": [...], "ordinals": [...]}`，`results`、`state` 和 `ordinals` 同 `record-rules.json`（有效的結果是 `kinds`，每一項 `platform`、`kind`；每張卡片是 `scoped_id`、`last_card_proof`、`accounts`；每個帳號是 `platform`、`username`、`cards`；`ordinals` 每一項是 `scope_string`、`scoped_id`、`ordinal`，照順序號碼排），只是卡片沒有 `slots`：那一項是卡片的狀態，不是規則的輸出；壞掉的是 `{"valid": false, "line": 3, "code": "line"}`，同 `record.json` 的 `files`。
 
 ## 結束碼
 
@@ -182,7 +182,7 @@ go test ./cmd/iamreal-verify
 IAMREAL_BB=/path/to/bb go test -tags iamrealtest ./cmd/iamreal-verify   # 加上真證明的端到端測試
 ```
 
-- `main_test.go`：假的驗證器和假的清冊存檔，跑 `spec/vectors/record.json` 的「three records」（一個帳號、空的清冊、一個帳號），檢查文字和 JSON 的輸出、壞掉的檔案、空的證明紀錄、結束碼；同一張卡片同一天第 4 筆在兩種輸出都是 `daily_limit`；同一天換帳號在兩種輸出都是 `correction`、隔天是 `switch`。
+- `main_test.go`：假的驗證器和假的清冊存檔，跑 `spec/vectors/record.json` 的「three records」（一個帳號、空的清冊、一個帳號），檢查文字和 JSON 的輸出、壞掉的檔案、空的證明紀錄、結束碼；同一張卡片同一天第 4 筆在兩種輸出都是有效的（規則不數一天幾筆）；同一天換帳號和隔天換帳號在兩種輸出都是 `switch`。
 - `archive_test.go`：`testdata/` 的測試的證明紀錄和清冊存檔（見 `testdata/README.md`），用真的清冊存檔和假的驗證器：完整重算和只信索引都是全部有效；拿掉一份清冊（連同索引那一行），用它的紀錄變成 `root`；索引沒跟著改、多一個檔案、索引的樹根改過時，完整重算印出每一個不同、照重建的索引算出結果（結束碼 1），只信索引時照索引回答；沒有索引、索引寫法不對、索引最後沒有 LF 時，完整重算同樣報出不同、算出結果（結束碼 1），只信索引時結束碼 2。
 - `directory_test.go`：2,001 筆的假證明紀錄切成目錄：三個檔、一個檔 1 筆或 1,000 筆、沒有紀錄時都成立，輸出和同一份證明紀錄當成一個檔案時相同；指紋檔說全部都公布了時，少了中間的檔、第一個檔不滿 1,000 行、最後一個超過 1,000 行、空檔、檔名照舊寫第一筆的 `seq`（第一個檔或第二個檔）時是 `directory`；檔案最後少了 LF、檔案長度對但紀錄排錯時，照紀錄檔案的規則報 `line`、`seq`。雜湊清單：少了一份、全部沒有、多一份沒有紀錄檔的、改了一個雜湊、第一行不是這一檔之前的指紋、少了第一行、換成只有一筆的證明紀錄的清單，每一種都報出來。`fingerprints.jsonl`：沒有、別份證明紀錄的指紋、最後一筆的紀錄雜湊（ADR-0021 之前的鏈尾）、鍵是 `head`、筆數超過、日期重複或倒退、筆數減少、別的寫法、日期不存在、最後沒有 LF，每一種都報出來並附行號，好幾行有問題時每一行都報。
 - `vectors_test.go`：`spec/vectors/record.json` 的 `generated_proof_log`：照標準答案給的檔名、第一筆的 `seq` 和行數寫出 0、1、1,000、1,001、2,001 筆的紀錄目錄（每個紀錄檔和雜湊清單先比對 SHA-256），指令讀出來是有效的、指紋和標準答案相同，指紋檔照標準答案的檔名和內容寫；`fingerprint_files`：每一份指紋檔配上它那份證明紀錄，有效的沒有問題，無效的第一個報出的行號和標準答案相同。

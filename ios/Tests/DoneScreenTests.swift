@@ -254,8 +254,9 @@ final class DoneScreenTests: XCTestCase {
         }
     }
 
-    func testASwitchRecordedWhereTheScreenSaidACorrection() throws {
-        let shown = row("threads", "correction", "bob", current: "alice", previous: "alice")
+    func testASwitchRecordedWhereTheScreenSaidTheAccountStays() throws {
+        // A card's state that hid the switch: the screen took bob for the account declared now.
+        let shown = row("threads", "refresh", "bob", current: "bob")
         let screen = screens.hang(done([shown], [recorded("threads", "switch", "bob")], mismatches: ["threads"]), single: "Threads", copied: false)
         // First of all, above the date.
         XCTAssertEqual(Array(screen.blocks.prefix(2)), [.message(copy("done.mismatch")), .text(copy("done.recorded_on", ["date": "2026-11-16"]))])
@@ -263,8 +264,8 @@ final class DoneScreenTests: XCTestCase {
             ["2026-11-16"],
             [copy("done.record_single")],
             [
-                "Threads", "@bob", copy("kinds.switch", ["previous": "@alice"]),
-                copy("done.mismatch_expected", ["expected": copy("kinds.switch", ["previous": "@alice"]) + copy("confirm.switch_not_counted")]),
+                "Threads", "@bob", copy("kinds.switch", ["previous": "@bob"]),
+                copy("done.mismatch_expected", ["expected": copy("kinds.unchanged")]),
                 copy("done.mismatch_switch_used"),
             ],
             [copy("done.short_id", ["short_id": "7K2Q9FM4XD"])],
@@ -408,9 +409,8 @@ final class DoneScreenTests: XCTestCase {
         XCTAssertEqual(title(done(unchanged, [recorded("threads", "refresh", "alice")])), "島民證明已更新")
         XCTAssertEqual(title(done([row("threads", "switch", "carol.tw", current: "alice", previous: "alice")], [recorded("threads", "switch", "carol.tw")])), "島民證明換成 @carol.tw 了")
         XCTAssertEqual(title(done([row("threads", "withdraw", "alice", current: "alice")], [recorded("threads", "withdraw", "alice", 0)])), "已全部收回")
-        // Declared again after everything was withdrawn, and a correction on the day of the declaration.
+        // Declared again after everything was withdrawn.
         XCTAssertEqual(title(done([row("threads", "refresh", "alice")], [recorded("threads", "refresh", "alice")])), "恭喜你完成島民證明")
-        XCTAssertEqual(title(done([row("threads", "correction", "carol.tw", current: "alice", previous: "alice")], [recorded("threads", "correction", "carol.tw")])), "島民證明換成 @carol.tw 了")
         // More than one platform: the general title for anything but a first record and a card proof again.
         XCTAssertEqual(title(done([row("threads", "switch", "carol.tw", current: "alice", previous: "alice")], [recorded("threads", "switch", "carol.tw")]), single: nil), copy("done.changed"))
         // The server recorded a switch where the screen said nothing changes: not "unchanged".
