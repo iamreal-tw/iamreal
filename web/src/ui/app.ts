@@ -927,7 +927,7 @@ export function startApp(o: AppOptions): void {
    * Step 6: hang the link on the profile (hang.md, part 1). `short`: only
    * whether the link is still there; hang.rehang shows the whole step.
    * `fromShort`: the whole step, reached by hang.rehang: common.back goes
-   * back to the short one (card-proof.md, step 6, "回來更新的人：短版").
+   * back to the short one (card-proof.md, step 6, its short version).
    */
   function hangScreen(view: DoneView, short: boolean, fromShort = false): void {
     const t = COPY.done;
