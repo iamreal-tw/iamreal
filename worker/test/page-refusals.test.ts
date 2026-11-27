@@ -32,10 +32,8 @@ interface HistoryRow {
 }
 interface PageCard {
   readonly scopedId: string;
-  readonly firstCardProof: number;
   readonly lastCardProof: number;
-  readonly cardProofs: number;
-  readonly slots: readonly { readonly platform: string; readonly current: string | null; readonly switchCount: number }[];
+  readonly slots: readonly { readonly platform: string; readonly current: string | null }[];
   readonly history: readonly HistoryRow[];
 }
 interface Site {
@@ -65,10 +63,8 @@ const NOT_NAMES = ["Alice", `a"/><script>`, ""];
 function cardOf(account: string, history?: readonly HistoryRow[]): PageCard {
   return {
     scopedId: SCOPED_ID,
-    firstCardProof: today,
     lastCardProof: today,
-    cardProofs: 1,
-    slots: [{ platform: "threads", current: account, switchCount: 0 }],
+    slots: [{ platform: "threads", current: account }],
     history: history ?? [{ date: today, platform: "threads", kind: "first", afterWithdrawal: false, before: null, after: account }],
   };
 }

@@ -2,7 +2,7 @@
 
 網站上沒有的網址，狀態碼 `404`。正式網站和測試網站都用這一頁；測試網站上，最上面照樣有測試的證明紀錄的標示（`test-site.md`）。原則在 `docs/design/principles.md`。
 
-短編號對不到島民證明、帳號名稱不可能是 Threads 的帳號時，各有自己的頁面（`proof-page.md` 第 9 段、`account-page.md`），不是這一頁。
+短編號對不到島民證明、帳號名稱不可能是 Threads 的帳號時，各有自己的頁面（`proof-page.md` 第 8 段、`account-page.md`），不是這一頁。
 
 ## 頁面
 

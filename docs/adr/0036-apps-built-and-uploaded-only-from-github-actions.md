@@ -20,7 +20,7 @@ status: accepted（部分由 ADR-0040 取代）
 | 發到哪裡 | TestFlight、Google Play 的測試軌道；永遠不發到正式軌道 | App Store、Google Play 的正式軌道 |
 
 - **環境在建置時寫死。** app 裡沒有切換環境的設定，後台也不能叫 app 換環境（ADR-0035）。
-- **兩個 app 能同時裝在一支手機上**，各自只認自己那個環境的連結主機。Android 的文件寫明不同的 application ID 是不同的 app（[Configure the app module](https://developer.android.com/build/configure-app-module)）；iOS 沒有明講，要實機測。
+- **兩個 app 能同時裝在一支手機上**，各自只認自己那個環境的 app 網域。Android 的文件寫明不同的 application ID 是不同的 app（[Configure the app module](https://developer.android.com/build/configure-app-module)）；iOS 沒有明講，要實機測。
 - **識別碼不帶服務的名稱。** 上架之後識別碼改不了，名稱可以改。
 
 ## 誰建置、誰上傳
@@ -109,7 +109,7 @@ Google Play 新的個人帳號要先跑封閉測試，至少 12 位測試者連�
 ## Consequences
 
 - **程式庫公開之前，GitHub 的 environment 還不能用**（ADR-0029 的 Consequences）。公開之前只有測試 app，它的金鑰先放在程式庫的 secrets。
-- **正式 app 的識別碼有一段時間裝的是連測試網站的 build。** 那個 build 掃測試網站的 QR code 不會開 app，因為正式 app 的識別碼認的是正式的連結主機。
+- **正式 app 的識別碼有一段時間裝的是連測試網站的 build。** app 網域跟著 build 連的網站（ADR-0040），所以那段時間掃測試網站的 QR code 打開的是正式 app；上線那天和網址一起換成正式的 app 網域。
 - **每次發正式 app 之前要先觸發一次測試 app 的上傳。**
 - **iOS 的測試 app 和正式 app 沒有金鑰上的隔離。**
 - **還沒驗證的**：兩個識別碼在 iPhone 上並存；Developer 角色的金鑰能不能用 Apple 代管的憑證；封閉測試照 app 算（推論）；TestFlight 的 build 有沒有加 DRM。
