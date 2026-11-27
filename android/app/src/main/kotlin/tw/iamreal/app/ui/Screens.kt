@@ -598,10 +598,10 @@ private fun Hang(m: Model, outside: Outside) {
         ProofLink(link)
         OpensProof(view.look, openProof) { outside.open(url) }
         Body(view.why)
-        // In the copy's order: the way to the whole step first, the way on under it.
+        // The way on on the right, the way to the whole step on the left (Actions).
         Actions {
-            Button(c.say("hang.rehang"), wide) { m.hangAgain() }
             Button(c.say("common.next"), wide, primary = true) { m.toRemind() }
+            Button(c.say("hang.rehang"), wide) { m.hangAgain() }
         }
         return
     }
@@ -656,7 +656,11 @@ private fun Hang(m: Model, outside: Outside) {
         Small(c.say("done.hung_done"), colour = Colours.text)
     }
     Recorded(c, d, view)
-    Actions { Button(c.say("common.next"), wide) { m.toRemind() } }
+    Actions {
+        Button(c.say("common.next"), wide) { m.toRemind() }
+        // Reached from the short one by "重新掛上連結": back to it (design/copy/card-proof.md, step 6, "回來更新的人：短版").
+        if (stillThere != null) Button(c.say("common.back"), wide) { m.hangShort() }
+    }
 }
 
 /**

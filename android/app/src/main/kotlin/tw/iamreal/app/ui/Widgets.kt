@@ -222,8 +222,6 @@ internal fun Demo(playing: Boolean, copy: Copy, tag: String, enabled: Boolean = 
                 .align(Alignment.BottomEnd)
                 .padding(8.dp)
                 .alpha(if (enabled) 1f else 0.4f)
-                .clip(RoundedCornerShape(Type.radius))
-                .background(Colours.soft)
                 .clickable(enabled = enabled, role = Role.Button, onClick = toggle)
                 .defaultMinSize(minHeight = Type.minTarget)
                 .padding(horizontal = 12.dp)
@@ -237,9 +235,36 @@ internal fun Demo(playing: Boolean, copy: Copy, tag: String, enabled: Boolean = 
         }
     }
 
-/** The buttons of a step, one under another, as wide as the screen: the primary one first. */
+/**
+ * The buttons of a step (design/DESIGN.md, "元件", 按鈕). Written the primary one first. Two of them side by side, each half the
+ * width: the first on the right, the other (上一步, or what is not the step's way on) on the left. One under the other, as wide
+ * as the screen and the first on top, where either one's words would not fit on one line in half the width (the system's
+ * font made large), and where there are three. One alone is as wide as the screen.
+ */
 @Composable
-internal fun Actions(content: @Composable () -> Unit) = Column(Modifier.fillMaxWidth().padding(top = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { content() }
+internal fun Actions(content: @Composable () -> Unit) = Layout(content, Modifier.fillMaxWidth().padding(top = 20.dp)) { measurables, constraints ->
+    val gap = 12.dp.roundToPx()
+    val width = constraints.maxWidth
+    val half = (width - gap) / 2
+    val tall = Type.buttonHeight.roundToPx()
+    // Its words on one line: as wide as a button needs to be when nothing makes it wrap.
+    val beside = measurables.size == 2 && measurables.all { it.maxIntrinsicWidth(tall) <= half }
+    val placed = measurables.map { it.measure(Constraints.fixedWidth(if (beside) half else width)) }
+    if (beside) {
+        layout(width, placed.maxOf { it.height }) {
+            placed[1].place(0, 0)
+            placed[0].place(half + gap, 0)
+        }
+    } else {
+        layout(width, placed.sumOf { it.height } + gap * (placed.size - 1).coerceAtLeast(0)) {
+            var y = 0
+            for (p in placed) {
+                p.place(0, y)
+                y += p.height + gap
+            }
+        }
+    }
+}
 
 /** One of the points under a screen's main part: a dot in ink before it. `strong`: the words of it in bold ink (not red: design/DESIGN.md keeps red for what you do). */
 @Composable
