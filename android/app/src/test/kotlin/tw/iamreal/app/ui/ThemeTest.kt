@@ -35,7 +35,7 @@ class ThemeTest {
     @Test
     fun `the colours of the window and the system's splash are the tokens of the same name`() {
         // res/values/colors.xml, next to the strings the build hands the tests.
-        val colours = File(File(System.getProperty("iamreal.strings.store")).parentFile, "colors.xml").readText()
+        val colours = File(File(System.getProperty("iamreal.strings.production")).parentFile, "colors.xml").readText()
         val tokenColours = Regex("""<color name="token_([a-z_]+)">([^<]*)</color>""").findAll(colours).map { it.groupValues[1] to it.groupValues[2] }.toList()
         // Every colour named after a token is read, whatever it is written as.
         assertEquals(Regex("""name="token_""").findAll(colours).count(), tokenColours.size)
@@ -45,7 +45,7 @@ class ThemeTest {
 
     @Test
     fun `the system's splash draws the island of the app's mark`() {
-        val drawable = File(File(System.getProperty("iamreal.strings.store")).parentFile.parentFile, "drawable/splash_mark.xml").readText()
+        val drawable = File(File(System.getProperty("iamreal.strings.production")).parentFile.parentFile, "drawable/splash_mark.xml").readText()
         // Twice: its outline in the colour of the ground, then the island in ink.
         assertEquals(2, drawable.split("android:pathData=\"$TAIWAN_OUTLINE\"").size - 1)
     }
