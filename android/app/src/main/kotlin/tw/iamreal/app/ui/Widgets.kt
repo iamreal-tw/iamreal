@@ -176,7 +176,9 @@ internal fun ShareSymbol(description: String, modifier: Modifier = Modifier, onC
             .background(Colours.bg)
             .border(1.5.dp, Colours.ink, shape)
             .clickable(role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = description },
+            // A test finds it by its tag: a node with neither words nor an ID is not read off the screen (test/emulator.ts).
+            .semantics { contentDescription = description }
+            .testTag("share-other"),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(22.dp)) {
