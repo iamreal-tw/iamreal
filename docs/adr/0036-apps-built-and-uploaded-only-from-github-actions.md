@@ -4,7 +4,7 @@ status: accepted（部分由 ADR-0040 取代）
 
 # app 只從 GitHub Actions 建置和上傳；Android 的簽章金鑰自己產生，不放在 GitHub
 
-> app 有正式 app `tw.iamreal.app`、測試 app `tw.iamreal.app.test`，加上不上傳商店的開發用 build `tw.iamreal.app.dev`（ADR-0040）。這一份的「兩個 app」「誰建置、誰上傳」「例外：Google Play 的封閉測試」三段，開頭一段的「正式 app 要營運者推標籤、核准才上傳」，金鑰表上 Google Play 的 API 金鑰「只給一個 app」和 Android 簽章金鑰的「離線保管」，金鑰分層裡「測試 app 和正式 app 各一個 environment」那一條，理由裡「正式 app 的標籤要先有測試 app 的 build」那一條，和 Consequences 裡「每次發正式 app 之前要先觸發一次測試 app 的上傳」，由 ADR-0040 取代（先前由 ADR-0037 取代）。其餘有效。
+> app 有正式 app `tw.iamreal.app`、測試 app `tw.iamreal.app.test`，加上不上傳商店的開發用 build `tw.iamreal.app.dev`（ADR-0040）。這一份的「兩個 app」「誰建置、誰上傳」「例外：Google Play 的封閉測試」三段，開頭一段的「正式 app 要營運者推標籤、核准才上傳」，標題和金鑰分層裡的「Android 的簽章金鑰自己產生」（改由 Google 產生），金鑰表上 Android 簽章金鑰那一列和 Google Play 的 API 金鑰「只給一個 app」，金鑰分層裡「測試 app 和正式 app 各一個 environment」那一條，理由裡「Android 的簽章金鑰是唯一丟了補不回來的」和「正式 app 的標籤要先有測試 app 的 build」兩條，和 Consequences 裡「每次發正式 app 之前要先觸發一次測試 app 的上傳」，由 ADR-0040 取代（先前由 ADR-0037 取代）。其餘有效。
 
 手機 app（Android、iOS）傳到商店的每一個 build 都由 GitHub Actions 建置和上傳。正式 app 要營運者推標籤、核准才上傳，送審和對一般人發布由營運者在商店的後台手動做。這一份把 ADR-0029 對網站的做法接到 app 上，另外定：兩個 app 識別碼、金鑰分層、版本號、可重現的建置在兩個平台各做到哪裡。
 
