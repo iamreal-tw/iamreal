@@ -42,7 +42,7 @@
 
 - 每一筆紀錄只有一種寫法，照樣板重寫後逐位元組比對；寫法錯整份不成立，證明或規則不過只是那一筆無效。[ADR-0014](0014-one-spelling-per-record.md)
 - 紀錄不串成鏈；每天公布一次指紋，另外公開雜湊清單。[ADR-0021](0021-proof-log-fingerprint-published-daily.md)
-- 紀錄目錄、雜湊清單、指紋檔、卡片狀態檔、清冊存檔放在 `data.iamreal.tw`；指紋檔另外由 `iamreal-tw/fingerprints` 每天抄一份。[ADR-0027](0027-public-files-on-data-subdomain.md)
+- 紀錄目錄、雜湊清單、指紋檔、卡片狀態檔、清冊存檔和清冊差異檔放在 `data.iamreal.tw`；指紋檔另外由 `iamreal-tw/fingerprints` 每天抄一份。[ADR-0027](0027-public-files-on-data-subdomain.md)
 
 ## 重驗
 
