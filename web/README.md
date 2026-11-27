@@ -213,7 +213,8 @@ PIN 錯（元件回 `ret_code` `0x76100006`、`last_error` `0xA0`）時，畫面
 | `current_time` | 裝置的時鐘，絕對時間換成 UTC+8 的日期（`protocol/src/date.ts`），不用裝置設定的時區 | 證明的公開輸入 |
 | 失敗的原因 | 裝置自己的檢查 | 回給呼叫的程式（`FlowStop`）顯示。送給後台的只有一個代碼：`src/counts.ts` 的 `reasonOf` 照原因的種類從 `spec/counts.md` 的表選一個，放在一筆計數裡（`POST /api/v1/counts`，ADR-0032）。原因裡其他的東西都不送：讀卡元件或瀏覽器給的代碼和訊息、檔案的路徑、日期、平台、請求編號。帶著原因的請求只有計數（`test/flow.test.ts` 每一個失敗的測試都檢查） |
 | 過卡裝置編號、嘗試編號 | 裝置自己用 `crypto.getRandomValues` 產生，各 16 個位元組（ADR-0039） | 每一筆計數；過卡裝置編號另外隨送出一筆的請求送出（`device_id`，後台記在連線紀錄的那一筆，不寫進證明紀錄）。不從裝置、瀏覽器或卡片的任何資料算出來 |
-| 瀏覽器和作業系統 | `navigator.userAgent`，在裝置上分成寫死的幾類（`src/counts.ts` 的 `familiesOf`） | 每一筆計數帶兩個類別的名稱（例如 `chrome`、`windows`），不帶版本，不帶那串字本身。瀏覽器自己在每個請求的標頭送出的 `User-Agent` 不是這裡送的，後台收計數時不存它 |
+| 訪客頁面的造訪編號 | 訪客頁面存在分頁的 `sessionStorage`（`iamreal.visit_id`，`worker/README.md`「訪客頁面送計數」） | 這一頁不讀、不送。頁面打開時把它刪掉（`src/counts.ts` 的 `endVisit`），之後再打開的訪客頁面換一個新的（ADR-0039「過卡之後換造訪編號」） |
+| 瀏覽器和作業系統 | `navigator.userAgent`，在裝置上分成寫死的幾類（`protocol/src/families.ts` 的 `familiesOf`，訪客頁面用同一份） | 每一筆計數帶兩個類別的名稱（例如 `chrome`、`windows`），不帶版本，不帶那串字本身。瀏覽器自己在每個請求的標頭送出的 `User-Agent` 不是這裡送的，後台收計數時不存它 |
 
 ## 從伺服器拿到的值，裝置怎麼檢查（ADR-0016 落到程式上）
 
@@ -300,14 +301,20 @@ PIN 錯（元件回 `ret_code` `0x76100006`、`last_error` `0xA0`）時，畫面
 過卡的頁面把「走到哪一步、為什麼停下來」回報給後台（ADR-0032、ADR-0039；[#54](https://github.com/iamreal-tw/iamreal/issues/54)）。程式在 `src/counts.ts`，表在 [`spec/counts.md`](../spec/counts.md)（`protocol/src/counts.ts`），後台怎麼收在 `worker/README.md`「計數」。
 
 - **送什麼**：一件事一個請求（`POST /api/v1/counts`）。頁面打開（`open`）、按了讀取卡片（`read`）、兩張清單的每一項完成、輸入了 PIN、卡片簽了場合字串、查到現況、選好清單、確認、完成，各一筆 `step`，同一次過卡每一步只送一次。流程停下來是 `stop`；可以在同一步再試的（PIN 錯、視窗被擋、清單不能送、帳號格式不對、送出暫時失敗）是 `retry`，其中視窗被擋、帳號格式不對、要更換的那一列空著是畫面自己擋下的（`src/ui/app.ts`），也照送；按「再試一次」重送紀錄是 `action` 的 `resubmit`。持卡人自己離開（上一步、回到開頭、關掉分頁）不送
-- **每一筆帶的**：`client`（`web`）、過卡裝置編號、嘗試編號、瀏覽器和作業系統的類別。沒有時刻、帳號、匿名編號、卡片上的任何內容。停下來的原因只有照種類選的代碼（`reasonOf`）：讀卡元件回的錯誤碼、瀏覽器的例外訊息、檔案路徑、日期、請求編號都不看、不送
+- **每一筆帶的**：`client`（`web`）、過卡裝置編號、嘗試編號、瀏覽器和作業系統的類別，和下面的版本、讀卡機名稱。沒有時刻、帳號、匿名編號、卡片上的任何內容。停下來的原因只有照種類選的代碼（`reasonOf`）：讀卡元件回的錯誤碼、瀏覽器的例外訊息、檔案路徑、日期、請求編號都不看、不送
 - **過卡裝置編號**存在 `localStorage`（「存進瀏覽器的東西」），產生 31 天後換新的，從產生那天（台灣的日期）起算，換掉時不留舊的。送出一筆的請求也帶著它（`device_id`）。瀏覽器不讓用 `localStorage` 時，用一個只活到這一頁關掉的編號
 - **嘗試編號**只在記憶體裡：頁面打開時的那一次和第一次讀卡是同一個；流程停下或完成就丟，下一次讀卡是新的。沒有停下就再讀一次卡（按了上一步再來）也是新的；視窗被擋之後在同一步再按一次是同一個
 - **不擋流程**：送計數的請求沒有人等它的回應，失敗了不重送、不顯示。`test/flow.test.ts` 讓計數的請求全部失敗、全部不回應，過卡照樣走完
 - 設了 Do Not Track 或 Global Privacy Control 的瀏覽器照樣送（ADR-0032、ADR-0039 寫了理由）
-- **還沒有的**：瀏覽器和系統的版本、讀卡機的名稱、下載清冊、建樹、算證明各花了多久（[#432](https://github.com/iamreal-tw/iamreal/issues/432)）
+- **版本**（[#432](https://github.com/iamreal-tw/iamreal/issues/432)，`versionsOf`）：只從 `User-Agent` 讀，不另外問瀏覽器（不用 `navigator.userAgentData`）。瀏覽器只送主版本（`131`）。作業系統只在 `User-Agent` 寫的是真的版本時送：Windows 的 NT 版本（`10.0` 是 Windows 10 或 11）、iOS（18.6 除外）、不是 Chromium 系的瀏覽器裡的 Android。凍結的值不送：
+  - Chromium 縮減過的 `User-Agent` 裡，macOS（10_15_7）、ChromeOS、Android（`Android 10; K`）都是寫死的值（[Chromium 的說明](https://www.chromium.org/updates/ua-reduction/)），Chrome、Edge、Samsung Internet 都照這個
+  - Firefox 的 macOS 最多寫 10.15（[Mozilla bug 1679929](https://bugzilla.mozilla.org/show_bug.cgi?id=1679929)），Safari 也是，所以哪個瀏覽器的 macOS 版本都不送
+  - iOS 26 的 Safari 不再寫真的系統版本，寫 18_6（[WebKit 的 Safari 26.0 說明](https://webkit.org/blog/17333/webkit-features-in-safari-26-0/)）；真的 18.6 分不出來，也不送
+  - 不合版本號格式的不送，不截短
+- **讀卡機名稱**（`reader`）：讀卡元件 `GetUserCert` 的回覆裡，有卡片的那一個 slot 的 `slotDescription`（`src/card/hipki.ts` 的 `readerOfReply`）；有兩張卡、沒寫、不是字串就沒有。讀到卡之後，同一次嘗試的每一筆都帶；只有英數字和空白、最多 64 個字的才送，其他的整個不送，不截短、不改寫
+- **花了多久**（`duration`）：下載清冊（`crl`）、建樹（`tree`）、算證明（`proved`）做完時各送一筆，只送 `spec/counts.md`「Durations」的分級（`tookOf`），不送毫秒數。用流程的時鐘量；沒做完的不送，過卡停下或離開之後才在背景做完的也不送（不然會算進下一次過卡）
 
-測試：`test/counts.test.ts`（每一種停止原因對到的代碼都在 `spec/vectors/counts.json` 的表裡而且是給網頁版的；原因裡的訊息、路徑不在送出的東西裡；31 天；`User-Agent` 的分類）和 `test/flow.test.ts`「the counts the page sends」（整次過卡每一步各一筆、順序、同一個嘗試編號；停下來之後換嘗試編號；送出的請求帶過卡裝置編號，其他請求不帶）。每一個失敗的測試都檢查：送出的每一筆計數 `readCount` 都收，帶著原因的請求只有計數。
+測試：`test/counts.test.ts`（每一種停止原因對到的代碼都在 `spec/vectors/counts.json` 的表裡而且是給網頁版的；原因裡的訊息、路徑不在送出的東西裡；31 天；`User-Agent` 的分類和版本；花了多久；讀卡機名稱）、`test/hipki.test.ts`（讀卡機名稱從哪個欄位來）和 `test/flow.test.ts`「the counts the page sends」（整次過卡每一步各一筆、順序、同一個嘗試編號；停下來之後換嘗試編號；送出的請求帶過卡裝置編號，其他請求不帶；用假時鐘測到每一級的花了多久，過卡停下或離開之後才做完的不送；讀卡之後的計數帶讀卡機名稱）。每一個失敗的測試都檢查：送出的每一筆計數 `readCount` 都收，帶著原因的請求只有計數。
 
 ## 存進瀏覽器的東西
 

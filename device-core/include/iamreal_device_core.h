@@ -167,6 +167,35 @@ int32_t idc_card_status(const uint8_t *platforms_json, size_t platforms_json_len
  * anything else. */
 int32_t idc_short_id(const uint8_t *scoped_id, size_t scoped_id_len, idc_buf *out);
 
+/* The count an app sends (spec/counts.md), as the body of
+ * POST /api/v1/counts: JSON in *out, its members in the order of the table.
+ *
+ * count: a JSON object whose every value is a string, the count's members as
+ * the app has them. A version or a phone's model that is not in its format
+ * is left out, not shortened or rewritten; the rest must be a count the
+ * server takes, or IDC_ERR_INPUT: a fault of the app's program, and nothing
+ * to send. A key written twice is IDC_ERR_INPUT. */
+int32_t idc_count(const uint8_t *count, size_t count_len, idc_buf *out);
+
+/* The card proof device ID at now (spec/counts.md, "The card proof device
+ * ID"): JSON in *out, {"device_id":"...","store":"..."}, or with
+ * "store":null when the value the app keeps stays as it is.
+ *
+ * stored: the value the app keeps, as it was written; (NULL, 0) for none.
+ * now: the phone's clock, in seconds since 1970; the day is the one in
+ * Taiwan. random: 16 bytes from the phone's random source, the new ID when
+ * the one kept is replaced.
+ *
+ * When store is not null the app writes it in place of what it kept, so that
+ * the old ID is kept nowhere. IDC_ERR_ARGUMENT when random is not 16 bytes;
+ * IDC_ERR_INPUT when now is outside the years 2000 to 2049 in Taiwan. */
+int32_t idc_count_device_id(const uint8_t *stored, size_t stored_len, int64_t now, const uint8_t *random,
+                            size_t random_len, idc_buf *out);
+
+/* The code a timed step that took ms milliseconds is sent as (spec/counts.md,
+ * "Durations"): ASCII in *out, such as 10s_30s. */
+int32_t idc_count_took(uint64_t ms, idc_buf *out);
+
 /* Whether this build of the app may do a card proof, from the minimum app
  * version of the server's config (spec/min-app.md): JSON in *out.
  *

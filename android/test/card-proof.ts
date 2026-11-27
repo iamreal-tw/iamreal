@@ -41,7 +41,7 @@
 //    the third): it gets none. Twice a card the secure channel cannot be
 //    made with is held there: no PIN goes, the PIN typed is dropped, and
 //    the tap is not offered again. At the end the app's storage holds
-//    nothing of a card proof.
+//    nothing of a card proof but the card proof device ID.
 //    After the submission each step does one thing: step 6 hangs the link
 //    (the whole of it, or for a card proof again only whether the link is
 //    still there), step 7 is the reminder, step 8 is done and the
@@ -69,6 +69,23 @@
 //    stopped after step 1, so that challenges answers paused, then records
 //    does (stops.paused, and only 回到開頭); taken again, the first
 //    declaration goes through.
+// 8. Too many people (ADR-0026, #419), in the card proof again: the server
+//    here answers a request as the Worker does when it turns one away
+//    (429 rate_limited or 503 busy, Retry-After). The config of step 1 that
+//    has no mark turned away: step 1 goes on as it was. The start
+//    (config?start) turned away, busy then rate limited: step 1 stays and
+//    says so above 下一步, and the app does not wait for a card. The config
+//    the reading asks again, without the mark, turned away: the card is
+//    read all the same. Then the card's state (step 3), the challenge and the submission (step 5)
+//    turned away: 再試一次 sends the same request again, and the card is
+//    held to the phone no more than in any card proof.
+// 9. The counts (spec/counts.md, #433), as the server in between saw them:
+//    every count is the app's and carries nothing of a card, an account or
+//    a scoped ID; each card proof that was done sent every step of the
+//    table once, and how long the CRL, the tree and the proof took; the
+//    interruptions above were sent as their reasons, and a card that left
+//    as an action with its tap; every submission carried the card proof
+//    device ID the counts carry.
 import { execFileSync } from "node:child_process";
 import { createPrivateKey } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -202,8 +219,21 @@ let phoneHasNfc = true;
  * come. Undefined: the back end's own.
  */
 let minApp: { value: unknown } | "unanswered" | undefined;
+/**
+ * The requests the server here turns away as too many, by `METHOD /path?query`: the next ones that come are answered as the
+ * Worker answers one it turns away (docs/api/card-proof.md, "Rules for every endpoint"), not handed on. Each is taken once.
+ */
+const turnAway = new Map<string, { status: 429 | 503; code: "rate_limited" | "busy" }[]>();
+/** How many requests came, by `METHOD /path?query`. */
+const asked = new Map<string, number>();
+/** The next request `line` that comes is turned away as too many. */
+const away = (line: string, status: 429 | 503, code: "rate_limited" | "busy"): void => void turnAway.set(line, [...(turnAway.get(line) ?? []), { status, code }]);
 /** What the app's requests called themselves (User-Agent), each once. */
 const userAgents = new Set<string>();
+/** The counts the app sent (`POST /api/v1/counts`), read, in the order they came. */
+const countsSent: Record<string, unknown>[] = [];
+/** The `device_id` of each submission (`POST /api/v1/records`), or null for one without it. */
+const submittedDeviceIds: (string | null)[] = [];
 /** Holds a card to the phone: answers the tap the app is waiting with. */
 const hold = async (held: string): Promise<void> => {
   for (let i = 0; i < 100 && waitingTaps.length === 0; i++) await sleep(100);
@@ -243,8 +273,25 @@ const front = createServer(async (req, res) => {
     }
     // What the app itself asks: the API and the CRL archive.
     if (path.startsWith("/api/") || path.startsWith("/crl/")) userAgents.add(req.headers["user-agent"] ?? "");
+    const line = `${req.method} ${req.url}`;
+    asked.set(line, (asked.get(line) ?? 0) + 1);
+    const turned = turnAway.get(line)?.shift();
+    if (turned !== undefined) {
+      for await (const _ of req) void _;
+      return void res.writeHead(turned.status, { "Content-Type": "application/json", "Cache-Control": "no-store", "Retry-After": "60" }).end(JSON.stringify({ error: turned.code }));
+    }
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(c as Buffer);
+    if (req.method === "POST" && (path === "/api/v1/counts" || path === "/api/v1/records")) {
+      let said: Record<string, unknown> = {};
+      try {
+        said = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+      } catch {
+        // Not JSON: checked below as a count with nothing.
+      }
+      if (path === "/api/v1/counts") countsSent.push(said);
+      else submittedDeviceIds.push(typeof said.device_id === "string" ? said.device_id : null);
+    }
     const headers: Record<string, string> = {};
     for (const [k, v] of Object.entries(req.headers)) if (typeof v === "string" && !["host", "connection", "content-length"].includes(k)) headers[k] = v;
     const answer = await fetch(backend.origin + (req.url ?? "/"), { method: req.method, headers, redirect: "manual", ...(chunks.length > 0 && { body: Buffer.concat(chunks) }) });
@@ -443,6 +490,8 @@ interface Proof {
   accounts: { shows: string[]; absent: string[]; act: { do: "fill"; type: string } | { do: "refresh" } | { do: "switch"; type: string; after: string[] } | { do: "withdraw" } };
   /** At the last tap, another card is held to the phone first. */
   otherCardAtLastTap?: boolean;
+  /** The server turns requests away as too many people (section 8): step 1's config, the start, the card's state, the challenge, the submission. */
+  turnedAway?: boolean;
   /** The account the card declares before: "" for none. */
   current: string;
   confirm: { intro: string; account: string; under: string; button: string; shows: string[]; absent: string[] };
@@ -482,6 +531,7 @@ async function cardProof(p: Proof): Promise<string> {
     emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
     find((n) => n.text === step(1) || n.text === say("before.find_office"), "the app again, still at step 1");
   }
+  if (p.turnedAway) await turnedAwayAtStart();
   press(say("common.next"));
 
   // Step 2
@@ -564,9 +614,11 @@ async function cardProof(p: Proof): Promise<string> {
     check(!s.some((t) => t.includes(PIN)), "step 3: the PIN typed is not on the screen");
     check(!s.includes(say("app_pin.need_pin")) && !s.includes(say("app_pin.pin_format")), "step 3: with a PIN typed, no 請輸入 PIN。 and no sentence of the PIN's form");
   }
+  if (p.turnedAway) away("POST /api/v1/card-state", 503, "busy");
   press(say("pin.confirm_card"));
   if (p.thorough) await tapWithPanel({ signs: true });
   else await tap();
+  if (p.turnedAway) await turnedAwayAtCardState();
 
   // Step 4
   await waitText(step(4), "step 4", 120_000);
@@ -664,8 +716,13 @@ async function cardProof(p: Proof): Promise<string> {
     press(act.do === "refresh" ? say("accounts.refresh") : say("accounts.withdraw", { account: `@${p.current}` }));
     await waitText(say("confirm.title"), "step 5 again");
   }
+  if (p.turnedAway) {
+    away("POST /api/v1/challenges", 429, "rate_limited");
+    away("POST /api/v1/records", 503, "busy");
+  }
   press(p.confirm.button);
   await waitText(say("progress.title"), "step 5, in progress");
+  if (p.turnedAway) await turnedAwayAtStepFive(say("progress.server"), "the challenge");
   if (p.otherCardAtLastTap) {
     // Not the card that was read: it gets no PIN, and the same tap is offered again.
     const handed = pinsHanded;
@@ -685,6 +742,7 @@ async function cardProof(p: Proof): Promise<string> {
     await designShot("card-proof-app-5-progress-phone.png");
     const s = textsOf(visible());
   } else await tap();
+  if (p.turnedAway) await turnedAwayAtStepFive(say("progress.submit"), "the submission");
 
   // Recorded: the step after the submission.
   await waitText(step(p.after), `step ${p.after}`, 300_000);
@@ -1299,6 +1357,8 @@ async function oldVersionAndNoNfc(): Promise<void> {
   press(say("app_read.tap_card"));
   await hold(nfc("none"));
   await waitText(say("app_before.no_nfc_title"), "the screen in place of step 1, from step 2", 20_000);
+  // The app sends its counts one after the other, off the card proof's way: its stop is let arrive before the app is ended below.
+  for (let i = 0; i < 100 && !countsSent.some((c) => c.event === "stop" && c.reason === "no_nfc"); i++) await sleep(100);
   // A phone without NFC, as the app opens.
   phoneHasNfc = false;
   emulator.shell(`am force-stop ${APP}`);
@@ -1321,6 +1381,50 @@ async function oldVersionAndNoNfc(): Promise<void> {
 
 /** Where the app keeps the reminder (src/main/…/reminder/Phone.kt), and what is in it. */
 const REMINDER_FILE = `/data/data/${APP}/shared_prefs/reminder.xml`;
+
+/** The members a count of the app may have (spec/counts.md, "A count"). */
+const APP_COUNT_MEMBERS = new Set(["client", "event", "step", "reason", "action", "tap", "took", "device_id", "attempt_id", "os_version", "app_version", "model"]);
+/** The steps every card proof that is done reaches, each once (spec/counts.md, "Steps": the app's). */
+const APP_STEPS = ["open", "read", "config", "certificates", "certificate", "crl", "tree", "circuit", "engine", "pin", "checked", "scope_signed", "state", "chosen", "confirmed", "challenge", "code_signed", "proved", "done"];
+
+/** What the counts the app sent say (8.): what is in them, every step of each card proof that was done, and the interruptions. */
+function countsChecked(shortId: string): void {
+  check(countsSent.length > 0, `the app sent counts: ${countsSent.length}`);
+  const text = (c: Record<string, unknown>): string => JSON.stringify(c);
+  for (const c of countsSent) {
+    const extra = Object.keys(c).filter((k) => !APP_COUNT_MEMBERS.has(k));
+    if (!check(c.client === "android" && extra.length === 0 && Object.values(c).every((v) => typeof v === "string"), `a count is the Android app's, with the members of the table only: ${text(c)}`)) return;
+  }
+  // Nothing of the card, the accounts, the scoped ID or the PIN.
+  const all = JSON.stringify(countsSent);
+  for (const never of ["alice", "bob", shortId, PIN, NAME, ...backend.certificates.map((c) => c.slice(0, 16))]) check(!all.includes(never), `no count holds "${never}"`);
+  // The phone's system as it gives it: the emulator's Android 10; the fake build's version, `dev`, is no version and is left out.
+  check(countsSent.every((c) => c.os_version === "10" && c.app_version === undefined && typeof c.model === "string" && /^[A-Za-z0-9 \-_.,()+]{1,32}$/.test(c.model)), `every count carries Android's version, 10, and the emulator's model, and no app version: ${text(countsSent[0]!)}`);
+  // Each attempt's counts: one device ID for all of them.
+  const attempts = new Map<string, Record<string, unknown>[]>();
+  for (const c of countsSent) attempts.set(c.attempt_id as string, [...(attempts.get(c.attempt_id as string) ?? []), c]);
+  for (const [id, cs] of attempts) check(new Set(cs.map((c) => c.device_id)).size === 1 && /^[0-9a-f]{32}$/.test(id), `an attempt's counts carry one device ID (${id})`);
+  // Each card proof that was done: every step once, and the three timed steps.
+  const done = [...attempts.values()].filter((cs) => cs.some((c) => c.event === "step" && c.step === "done"));
+  check(done.length === 4, `the card proofs that were done sent their step done: ${done.length}`);
+  for (const cs of done) {
+    const steps = cs.filter((c) => c.event === "step").map((c) => c.step as string);
+    // `open` is step 1's: a card proof begun again while step 1 stayed (turned away at its start, 8.) has none of its own.
+    const expected = steps[0] === "open" ? APP_STEPS : APP_STEPS.filter((s) => s !== "open");
+    check(JSON.stringify([...steps].sort()) === JSON.stringify([...expected].sort()) && steps.at(-1) === "done", `a card proof that was done sent each step once, from open or read to done: ${steps.join(",")}`);
+    const timed = cs.filter((c) => c.event === "duration").map((c) => c.step as string).sort();
+    check(JSON.stringify(timed) === JSON.stringify(["crl", "proved", "tree"]), `and how long the CRL, the tree and the proof took: ${timed.join(",")}`);
+    check(!cs.some((c) => c.event === "stop"), "and no stop");
+  }
+  // The interruptions of 6. and the stops of 7., by their codes; a card that left as an action, with its tap.
+  const said = new Set(countsSent.map((c) => (c.event === "action" ? `action:${c.action}:${c.tap}` : c.event === "stop" || c.event === "retry" ? `${c.event}:${c.reason}` : "")));
+  for (const expected of ["retry:other_card", "retry:pin_incorrect", "retry:channel", "stop:channel", "stop:idle", "stop:app_too_old", "stop:no_nfc", "stop:server_paused", "action:tap_dropped:1", "action:tap_dropped:2", "action:tap_dropped:3"]) {
+    check(said.has(expected), `the counts say ${expected}`);
+  }
+  // Every submission carried the card proof device ID of the counts.
+  const ids = new Set(countsSent.map((c) => c.device_id));
+  check(submittedDeviceIds.length >= 4 && submittedDeviceIds.every((id) => id !== null && ids.has(id)), `every submission carried the card proof device ID the counts carry: ${JSON.stringify(submittedDeviceIds)}`);
+}
 const reminderStored = (): string => emulator.shell(`cat ${REMINDER_FILE} 2>/dev/null; true`);
 const storedDay = (): string | undefined => /<string name="day">([0-9-]+)<\/string>/.exec(reminderStored())?.[1];
 
@@ -1587,10 +1691,11 @@ try {
 
   // A card proof again, the same day: 更新島民證明, nothing typed.
   const again = await cardProof({
-    what: "a card proof again: 更新島民證明; another card at the last tap first",
+    what: "a card proof again: 更新島民證明; another card at the last tap first; too many people on the way",
     name: "again",
     thorough: false,
     otherCardAtLastTap: true,
+    turnedAway: true,
     accounts: { shows: [say("accounts.last_proof_today")], absent: [say("accounts.none_yet")], act: { do: "refresh" } },
     current: "alice",
     confirm: { intro: say("confirm.intro_public"), account: HANDLE.alice, under: say("kinds.unchanged"), button: say("confirm.button_refresh"), shows: [holder], absent: WITHDRAWN },
@@ -1681,9 +1786,15 @@ try {
   // What the app's requests say of the phone: nothing. Not Android's own User-Agent, which names the model and the version.
   check(JSON.stringify([...userAgents]) === JSON.stringify(["iamreal"]), `every request of the app to the API and the CRL archive calls itself "iamreal" and nothing more: ${JSON.stringify([...userAgents])}`);
 
-  // What the app left on the emulator: the highest CRL number it used, and nothing else; the reminder's file, turned off, is empty. No PIN, no file of a card proof.
-  const stored = emulator.shell(`find /data/data/${APP} -type f`).split("\n").map((l) => l.trim()).filter(Boolean).filter((f) => f !== REMINDER_FILE);
-  check(JSON.stringify(stored) === JSON.stringify([`/data/data/${APP}/shared_prefs/highest_crl_number.xml`]), `the app's storage holds the CRL numbers it used and nothing else: ${JSON.stringify(stored)}`);
+  countsChecked(shortId);
+
+  // What the app left on the emulator: the highest CRL number it used and the card proof device ID, and nothing else; the reminder's file,
+  // turned off, is empty. No PIN, no file of a card proof.
+  const stored = emulator.shell(`find /data/data/${APP} -type f`).split("\n").map((l) => l.trim()).filter(Boolean).filter((f) => f !== REMINDER_FILE).sort();
+  check(JSON.stringify(stored) === JSON.stringify([`/data/data/${APP}/shared_prefs/card_proof_device_id.xml`, `/data/data/${APP}/shared_prefs/highest_crl_number.xml`]), `the app's storage holds the CRL numbers it used and the card proof device ID, and nothing else: ${JSON.stringify(stored)}`);
+  const kept = emulator.shell(`cat /data/data/${APP}/shared_prefs/card_proof_device_id.xml`);
+  const keptIds = [...kept.matchAll(/>([0-9a-f]{32})\.(\d{4}-\d{2}-\d{2})</g)];
+  check(keptIds.length === 1 && (kept.match(/[0-9a-f]{32}/g) ?? []).length === 1, `the card proof device ID is kept once, with the date it was made on, and no other: ${kept.replace(/\s+/g, " ")}`);
   check(!/<string|<int|<long|<boolean/.test(reminderStored()), `the reminder's file, turned off, holds nothing: ${reminderStored()}`);
   check(emulator.shell(`grep -r -l ${PIN} /data/data/${APP} /sdcard 2>/dev/null; true`).trim() === "", "the PIN is in no file of the app's or of the shared storage");
 } catch (e) {
@@ -1810,4 +1921,81 @@ async function stoppedTakingCardProofs(): Promise<void> {
   bringBack();
   await waitText(say("common.next"), "step 1's 下一步, card proofs taken again", 20_000);
   taps = 0;
+}
+
+// 8. Too many people ---------------------------------------------------------------
+// (Called from cardProof, for the card proof again.)
+
+/** Step 1: the config without the mark turned away goes unnoticed; the start turned away keeps step 1, and says so above 下一步. */
+async function turnedAwayAtStart(): Promise<void> {
+  console.log("too many people: step 1");
+  // The config step 1 asks as the app comes back, turned away: step 1 is as it was (docs/api/card-proof.md, `config`).
+  const plain = asked.get("GET /api/v1/config") ?? 0;
+  away("GET /api/v1/config", 429, "rate_limited");
+  bringBack();
+  for (let i = 0; i < 100 && (asked.get("GET /api/v1/config") ?? 0) === plain; i++) await sleep(100);
+  await waitText(say("common.next"), "step 1's 下一步, its config turned away", 20_000);
+  check((turnAway.get("GET /api/v1/config") ?? []).length === 0, "step 1 asked its config as the app came back, and it was turned away");
+  for (const a of [say("before.busy"), say("before.paused")]) check(!textsOf(visible()).includes(a), `step 1's config turned away: step 1 does not say "${a}"`);
+
+  for (const [status, code] of [[503, "busy"], [429, "rate_limited"]] as const) {
+    const starts = asked.get("GET /api/v1/config?start") ?? 0;
+    const tapsBefore = taps;
+    away("GET /api/v1/config?start", status, code);
+    press(say("common.next"));
+    await waitText(say("before.busy"), `step 1: too many people (${status})`, 20_000);
+    const s = wholeScreen();
+    shows(s, `step 1, the start turned away (${status}),`, [step(1), say("before.title"), say("before.busy"), say("common.next")]);
+    check(s.indexOf(say("before.busy")) === s.indexOf(say("common.next")) - 1, `step 1, ${status}: the sentence is right above 下一步`);
+    check((asked.get("GET /api/v1/config?start") ?? 0) === starts + 1, `step 1, ${status}: 下一步 asked config with the mark of a start, once`);
+    await sleep(1_000);
+    check(waitingTaps.length === 0 && taps === tapsBefore && !textsOf(visible()).includes(step(2)), `step 1, ${status}: still step 1, and the app does not wait for a card`);
+    if (status === 503) {
+      shot("busy-1-before");
+      await designShot("card-proof-app-1-busy-phone.png");
+    }
+  }
+  // The start goes through below; the config the reading asks again, without the mark, is turned away: the card proof goes on.
+  away("GET /api/v1/config", 429, "rate_limited");
+}
+
+/** Step 3: the card signed, its state turned away; 再試一次 asks again, the card not held to the phone again, and on to step 4. */
+async function turnedAwayAtCardState(): Promise<void> {
+  console.log("too many people: step 3");
+  check((turnAway.get("GET /api/v1/config") ?? []).length === 0, "step 2: the reading's config was turned away, and the card was read all the same");
+  await waitText(say("stops.too_many"), "step 3: the card's state turned away", 60_000);
+  const s = wholeScreen();
+  shows(s, "step 3, the card's state turned away,", [step(3), say("stops.too_many"), say("progress.retry"), say("common.back")]);
+  check(!s.includes(say("pin.confirm_card")) && !s.includes(say("app_read.tap_again")), "step 3, the card's state turned away: 再試一次 in place of 確認卡片, and no tap offered");
+  check(field("pin").text === "", "step 3, the card's state turned away: the PIN's field is empty");
+  shot("busy-3-pin");
+  await designShot("card-proof-app-3-busy-phone.png");
+  const [tapsBefore, handed, states] = [taps, pinsHanded, asked.get("POST /api/v1/card-state") ?? 0];
+  press(say("progress.retry"));
+  await waitText(step(4), "step 4, after 再試一次", 60_000);
+  check(taps === tapsBefore && pinsHanded === handed && waitingTaps.length === 0, "step 3, 再試一次: the card was not held to the phone again, nor handed the PIN");
+  check((asked.get("POST /api/v1/card-state") ?? 0) === states + 1, "step 3, 再試一次: the card's state asked once more");
+}
+
+/** Step 5 stopped at `item` (`what` turned away): stops.too_many, 再試一次 and 取消; 再試一次 sends it again, and the card proof goes on. */
+async function turnedAwayAtStepFive(item: string, what: string): Promise<void> {
+  console.log(`too many people: step 5, ${what}`);
+  await waitText(say("stops.too_many"), `step 5: ${what} turned away`, 300_000);
+  const s = wholeScreen();
+  shows(s, `step 5, ${what} turned away,`, [step(5), item, say("common.halted"), say("stops.too_many"), say("progress.retry"), say("common.cancel")]);
+  const halted = s.indexOf(say("common.halted"));
+  check(halted > 0 && s[halted - 1] === item && s[halted + 1] === say("stops.too_many"), `step 5, ${what} turned away: stopped at "${item}" (${JSON.stringify(s.slice(Math.max(0, halted - 1), halted + 2))})`);
+  for (const a of [say("app_read.tap_again"), say("accounts.restart"), say("stops.submit_failed")]) check(!s.includes(a), `step 5, ${what} turned away: does not offer or say "${a}"`);
+  shot(`busy-5-${what.replaceAll(" ", "-")}`);
+  if (what === "the challenge") await designShot("card-proof-app-5-busy-phone.png");
+  const [tapsBefore, handed] = [taps, pinsHanded];
+  press(say("progress.retry"));
+  if (what === "the challenge") {
+    // The challenge asked for again; the card has signed nothing yet, and the last tap comes now.
+    await waitText(say("app_panel.android_wait_title"), "step 5, 再試一次: the panel of the last tap", 60_000);
+    check(pinsHanded === handed, "step 5, the challenge turned away: the card was not handed the PIN before 再試一次");
+  } else {
+    await sleep(1_000);
+    check(taps === tapsBefore && pinsHanded === handed && waitingTaps.length === 0, "step 5, 再試一次 after the submission: the card was not held to the phone again");
+  }
 }

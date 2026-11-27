@@ -36,6 +36,16 @@
 //    blocked) the page is the five pictures. Screenshots of the three. The
 //    page without a proof (/hang) plays it too, with the examples; a device
 //    that says it is Android shows Android's way back from the links on both.
+// 9. The counts the visitors' pages send (/count.js; spec/counts.md,
+//    ADR-0032, ADR-0039), read from the Worker's bucket: every kind of page
+//    once, of the right kind, the page of a card with its short ID; the
+//    source is the domain of the Referer and nothing of any address's query;
+//    a link to /proof is the action that starts a card proof, with the
+//    card's short ID, and 複製連結 on /hang/<short ID> is copy_proof_link;
+//    the card proof page takes the visit ID away, so the page after it has a
+//    new one; the visitors' counts carry no card proof device ID, and the
+//    card proof's no visit ID; without the script (/count.js, blocked) the
+//    page is the same.
 //
 // The screens' own sentences, every way a card proof stops and every kind
 // of record are test/e2e/ui.ts's, which runs against the Worker too (#69);
@@ -50,6 +60,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
+import { VISIT_ID_KEY, readCount } from "iamreal-protocol/counts.ts";
 import { COPY } from "../src/ui/copy.ts";
 import { Browser, type Page, sleep } from "./e2e/cdp.ts";
 import { FakeComponent } from "./e2e/fake-component.ts";
@@ -480,6 +491,98 @@ try {
     await android.eval(`(() => { for (const a of document.getAnimations()) a.finish(); })()`);
     check(await lastFrame(android), `${url} on Android: the last frame is the line of the link`);
   }
+
+  // 9. The visitors' counts -------------------------------------------------------
+  const counted = await browser.newPage();
+  await counted.send("Page.enable");
+  await counted.send("Runtime.enable");
+  await counted.send("Page.bringToFront");
+  await desktop(counted);
+  const visitIdNow = (): Promise<string | null> => counted.eval<string | null>(`sessionStorage.getItem(${JSON.stringify(VISIT_ID_KEY)})`);
+  /** Opens a page as a link on another site does: with that `Referer`, and waits for its counts' script to have made the visit ID. */
+  const openFrom = async (url: string, referrer: string): Promise<void> => {
+    const loaded = new Promise<void>((resolve) => {
+      const off = browser!.on((m, _p, s) => {
+        if (m === "Page.loadEventFired" && s === counted.sessionId) {
+          off();
+          resolve();
+        }
+      });
+    });
+    await counted.send("Page.navigate", { url, referrer });
+    await loaded;
+  };
+  // http: the local site is http, and a browser sends no Referer from https to http.
+  const THREADS_LINK = "http://l.threads.com/?u=https%3A%2F%2Fiamreal.tw%2Fp%2Fsecret-in-query&e=AT0secret";
+  await openFrom(`${ORIGIN}/p/${short}?utm_campaign=secret-in-query#also-secret`, THREADS_LINK);
+  const before = await counted.waitFor<string>(`sessionStorage.getItem(${JSON.stringify(VISIT_ID_KEY)})`, "the page of the card to make a visit ID", 5_000);
+  // 複製連結 on the page of hanging this card's proof, then back; then 我也要換島民證明 on the page of the card: the card proof page opens.
+  await counted.goto(`${ORIGIN}/hang/${short}`);
+  await counted.eval(`document.querySelector('[data-count="copy_proof_link"]').click()`);
+  await counted.goto(`${ORIGIN}/p/${short}`);
+  await counted.click('main a.button[href="/proof"]');
+  const ended = await counted
+    .waitFor<boolean>(`location.pathname === "/proof" && document.querySelector('[data-step="before"]') !== null && sessionStorage.getItem(${JSON.stringify(VISIT_ID_KEY)}) === null`, "the card proof page to open and take the visit ID away", 30_000)
+    .catch(() => false);
+  check(ended === true, "the card proof page opened from 我也要換島民證明, and the tab's visit ID is gone");
+  // Every kind of visitor's page after it: one visit, a new one; nothing of the addresses' queries counted.
+  const kinds: [string, string][] = [
+    ["/", "home"],
+    [`/p/${short}`, "card"],
+    ["/threads/@alice", "account"],
+    ["/proof-log?q=secret-in-query", "proof_log"],
+    ["/faq", "faq"],
+    ["/verify", "verify"],
+    ["/check", "check"],
+    ["/prepare", "prepare"],
+    ["/privacy", "privacy"],
+    ["/hang", "hang"],
+  ];
+  for (const [path] of kinds) {
+    await counted.goto(`${ORIGIN}${path}`);
+    await counted.waitFor<string>(`sessionStorage.getItem(${JSON.stringify(VISIT_ID_KEY)})`, `${path} to make or read the visit ID`, 5_000);
+  }
+  const after = await visitIdNow();
+  check(after !== null && after !== before, `a visitor's page after the card proof page has a new visit ID (${before} → ${after})`);
+  // Without the script: the page of the card is the same, and nothing is counted of it.
+  const noCount = await browser.newPage();
+  await noCount.send("Page.enable");
+  await noCount.send("Runtime.enable");
+  await noCount.send("Network.enable");
+  await noCount.send("Network.setBlockedURLs", { urls: ["*/count.js"] });
+  await desktop(noCount);
+  await noCount.goto(`${ORIGIN}/p/${short}?blocked`);
+  const blockedCard = squash(await noCount.text("body"));
+  check(blockedCard.includes("@alice") && blockedCard.includes(squash(`iamreal.tw/p/${short}`)) && (await noCount.eval<string | null>(`sessionStorage.getItem(${JSON.stringify(VISIT_ID_KEY)})`)) === null, "/p/<short ID> without /count.js: the page is the same, and no visit ID is made");
+  await shot(noCount, "card-without-count-desktop.png", 1100);
+  await shot(noCount, "card-without-count-phone.png", 390);
+
+  // The minute the counts are in is over by the Worker's clock: its file is written, and every file is read.
+  await sleep(1_000);
+  await worker.setClock(new Date(Date.now() + 120_000));
+  await worker.ringCounts();
+  const files = (await worker.connectionLog()).filter((o) => o.key.startsWith("count-events/"));
+  const all = files.flatMap((f) => (f.entry as { counts: Record<string, string>[] }).counts);
+  check(files.every((f) => (f.entry as { dropped: number }).dropped === 0) && all.length > 20, `the counts were kept: ${all.length} in ${files.length} minutes, none dropped`);
+  check(
+    all.every((c) => JSON.stringify(readCount(c)) === JSON.stringify(c)),
+    "every count kept is one the table takes, as it was kept",
+  );
+  check(all.every((c) => !(c.visit_id !== undefined && c.device_id !== undefined)) && all.some((c) => c.event === "step" && c.device_id !== undefined) && all.some((c) => c.visit_id !== undefined), "the visitors' counts carry no card proof device ID, and the card proof's no visit ID");
+  check(!JSON.stringify(all).includes("secret"), "nothing of an address's query or of the Referer's path is in a count");
+  const ofVisit = (id: string | null): Record<string, string>[] => all.filter((c) => c.visit_id === id);
+  const first = ofVisit(before);
+  check(
+    first.some((c) => c.event === "page" && c.page === "card" && c.short_id === short && c.source === "l.threads.com"),
+    `the page of the card opened from Threads: its short ID, and l.threads.com as its source ${JSON.stringify(first.filter((c) => c.event === "page"))}`,
+  );
+  check(first.some((c) => c.event === "page" && c.page === "hang" && c.short_id === undefined && c.source === undefined), "/hang/<short ID> is the page hang, without the short ID, and no source when opened from this site");
+  check(first.some((c) => c.event === "action" && c.action === "copy_proof_link" && c.short_id === undefined), "複製連結 on /hang/<short ID>: copy_proof_link");
+  check(first.some((c) => c.event === "action" && c.action === "start_card_proof" && c.short_id === short), "我也要換島民證明 on the page of the card: start_card_proof, with the card's short ID");
+  const second = ofVisit(after).filter((c) => c.event === "page");
+  check(JSON.stringify(second.map((c) => c.page)) === JSON.stringify(kinds.map(([, kind]) => kind)), `after the card proof page, one count for each page opened, of its kind: ${second.map((c) => c.page).join(", ")}`);
+  check(second.every((c) => (c.page === "card") === (c.short_id === short)), "the page of the card has its short ID, and no other page has one");
+  check(second.filter((c) => c.source !== undefined).every((c) => c.source === new URL(ORIGIN).hostname), `a page opened from the card proof page has this site as its source, and none has another (${JSON.stringify(second.map((c) => c.source ?? null))})`);
 
   const violations = browser.logs.filter((l) => /Content Security Policy/i.test(l.text) && !/threads\.com/.test(l.text));
   check(violations.length === 0, `no Content-Security-Policy violation on the card proof page or the visitors' pages ${JSON.stringify(violations.map((l) => l.text))}`);

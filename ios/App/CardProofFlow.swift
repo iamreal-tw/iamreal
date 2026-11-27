@@ -13,19 +13,23 @@ import Foundation
 ///   checksDone()      returns when every one of those passed
 ///   confirmCard(pin)  tap 2: the card signs the scope string; the core
 ///                     computes the scoped ID; the card's state
+///   retryCardState()  the card's state again, after the server turned it
+///                     away as too many; nothing signed again
 ///   choose(entries)   the account typed on each platform offered: the list
 ///                     the card would sign and what it does (the core
 ///                     computes it). No request, no signature
 ///   back()            from the consequence to the card's state again
 ///   prepare()         the date conditions again; a challenge, dated today;
 ///                     the list still does what the screen said; the
-///                     declaration code
+///                     declaration code. Again after the server turned the
+///                     challenge away as too many
 ///   sign()            tap 3: the card signs the declaration code; the PIN
 ///                     is cleared
 ///   prove()           the proof, made by the core; the certificate and the
 ///                     signatures are overwritten
 ///   submit()          the record goes to the server; again after a
-///                     failure, as it is
+///                     failure, as it is, and after the server turned it
+///                     away as too many
 ///   cancel()          drops everything
 ///
 /// Nothing is asked of a person or of the network during a tap: the
@@ -48,7 +52,15 @@ import Foundation
 ///                    are overwritten; the core's copies go with its session
 ///   name             from the core's check of the certificate, returned
 ///                    to the caller for the screen; sent nowhere
-///   failures         thrown to the caller only; no request carries them
+///   failures         thrown to the caller; of a failure only its reason
+///                    code goes in a count (Counts), never its text
+///
+/// The counts (Counts, spec/counts.md): each step the table names is sent
+/// once as it is reached; a failure that stops the flow as `stop`, one
+/// that leaves the step to be done again as `retry`; a card that left
+/// during a tap as an action, and the record sent again as another. The
+/// flow cancelled, or a call refused as out of order, is not counted.
+/// Nothing waits for them.
 @MainActor
 final class CardProofFlow {
     struct Dependencies {
@@ -63,6 +75,9 @@ final class CardProofFlow {
         var openSession: () throws -> DeviceCore.Session
         /// The files a proof needs, for the issuer of the certificate (G2, G3).
         var proofFiles: (_ issuer: String) throws -> DeviceCore.ProofFiles
+        /// The counts of this run of the app: the card proof device ID of the
+        /// submission. None in a test that does not look at them.
+        var counts: Counts?
     }
 
     /// Why a step did not do what it is for.
@@ -95,6 +110,12 @@ final class CardProofFlow {
         case dateChanged
         /// A step called out of order.
         case state
+
+        /// The server turned the request away as too many (BackendFailure.tooMany): the same request can be sent again.
+        var tooMany: Bool {
+            if case .server(let failure) = self { return failure.tooMany }
+            return false
+        }
     }
 
     /// What tap 1 has done, for the screen's list.
@@ -104,7 +125,7 @@ final class CardProofFlow {
     }
 
     enum Phase: Equatable {
-        case start, checking, statusKnown, chosen, readyToSign, signed, submitting, submitFailed, done, stopped
+        case start, checking, cardStateTurnedAway, statusKnown, chosen, readyToSign, signed, submitting, submitFailed, done, stopped
     }
 
     struct Account: Equatable {
@@ -290,9 +311,15 @@ final class CardProofFlow {
     /// opened. Throws `Stop.server` when it has no `platforms`, and with
     /// the code `paused` when it says the operator stopped taking card
     /// proofs (docs/api/card-proof.md): before the card is read.
-    init(_ deps: Dependencies, config: Data) throws {
+    /// This card proof's counts (Counts.attempt): the screen sent its first ones.
+    private let attempt: Counts.Attempt?
+    /// Cancelled by the caller: what fails after it is not counted.
+    private var cancelled = false
+
+    init(_ deps: Dependencies, config: Data, attempt: Counts.Attempt? = nil) throws {
         self.deps = deps
         self.config = config
+        self.attempt = attempt
         guard let body = try? JSONSerialization.jsonObject(with: config) as? [String: Any],
               let table = body["platforms"],
               let platforms = try? JSONSerialization.data(withJSONObject: table, options: [.fragmentsAllowed]),
@@ -301,6 +328,14 @@ final class CardProofFlow {
         if paused { throw Stop.server(BackendFailure(code: "paused", requestID: nil)) }
         self.platforms = platforms
         knownPlatforms = (try? JSONSerialization.data(withJSONObject: Platform.known.map(\.id))) ?? Data("[]".utf8)
+    }
+
+    /// Whether a card proof can start from `config`: it has a table of
+    /// platforms and says card proofs are taken. For the count of the step
+    /// `config` (spec/counts.md), before the lowest version is read.
+    static func takes(_ config: Data) -> Bool {
+        guard paused(config) == false, let body = try? JSONSerialization.jsonObject(with: config) as? [String: Any] else { return false }
+        return body["platforms"] != nil
     }
 
     /// `config`'s `paused` (docs/api/card-proof.md): whether the operator
@@ -324,16 +359,25 @@ final class CardProofFlow {
     /// Returns the name on it, for the screen before the PIN. The checks
     /// that need no signature go on after it returns (`checksDone`).
     func readCard(_ progress: @escaping (Progress) -> Void) async throws -> String {
+        try await counted { try await self.readCardSteps(progress) }
+    }
+
+    private func readCardSteps(_ progress: @escaping (Progress) -> Void) async throws -> String {
         try expect(.start)
         var certificates: [Data]
         do {
             certificates = try await deps.card.tap(.readCertificates) { try await $0.certificates() }
         } catch {
-            // Nothing is held yet: the same step can be done again.
-            throw Self.stop(error)
+            dropped(error, tap: 1)
+            let stop = Self.stop(error)
+            // Nothing is held yet: a tap that did not happen, was closed or lost the card is made again (Screens.tapsAgain);
+            // any other ends the card proof, and step 2 starts a new one.
+            if Screens.tapsAgain(stop) { throw stop }
+            throw fail(stop)
         }
         defer { for i in certificates.indices { Self.wipe(&certificates[i]) } }
         try live()
+        attempt?.step("certificates")
         progress(.certificatesRead)
         do {
             let session = try deps.openSession()
@@ -353,13 +397,24 @@ final class CardProofFlow {
             self.issuer = issuer
             notAfter = result["not_after"] as? String
             certificate = Secret(certificates[chosen])
+            attempt?.step("certificate")
             progress(.certificateChecked)
             phase = .checking
             let revocation = Task { try await self.checkRevocation(session, issuer: issuer) }
             self.revocation = revocation
             checks = Task {
-                try await revocation.value
-                try await self.buildTree(session, issuer: issuer)
+                do {
+                    try await revocation.value
+                    try await self.buildTree(session, issuer: issuer)
+                    // Every check that needs no signature has passed.
+                    self.attempt?.step("checked")
+                } catch {
+                    // Counted when it fails, as on the web page; the flow stops on it when the screen waits for it.
+                    if !self.cancelled, self.phase != .stopped, let reason = Counts.reason(of: Self.stop(error)) {
+                        self.attempt?.stop(reason)
+                    }
+                    throw error
+                }
             }
             return name
         } catch {
@@ -370,6 +425,7 @@ final class CardProofFlow {
     /// The first of the checks that need no signature: the CRL of the
     /// certificate's issuer, and that the certificate is not on it.
     private func checkRevocation(_ session: DeviceCore.Session, issuer: String) async throws {
+        let from = Date()
         let unavailable = Stop.revocation(problem: "crl_unavailable", days: nil)
         guard let index = try? await deps.backend.crlIndex() else { throw unavailable }
         let choice = try Self.object(try session.chooseCRL(index: index))
@@ -383,18 +439,26 @@ final class CardProofFlow {
         guard checked["ok"] as? Bool == true else {
             throw Stop.revocation(problem: checked["problem"] as? String ?? "crl_unavailable", days: checked["days"] as? Int)
         }
+        attempt?.took("crl", seconds: Date().timeIntervalSince(from))
+        attempt?.step("crl")
     }
 
     /// The rest of them, while the cardholder types the PIN: the tree and
     /// the certificate's path in it, and the files a proof needs.
     private func buildTree(_ session: DeviceCore.Session, issuer: String) async throws {
+        let from = Date()
         try await Self.background { try session.buildTree() }
+        attempt?.took("tree", seconds: Date().timeIntervalSince(from))
+        attempt?.step("tree")
         let files = try deps.proofFiles(issuer)
         do {
             try await Self.background { try session.checkArtifacts(files) }
         } catch let failure as DeviceCore.Failure where failure.code == IDC_ERR_INPUT {
             throw Stop.artifact
         }
+        // The files are the ones written into the core, which proves with them.
+        attempt?.step("circuit")
+        attempt?.step("engine")
         // A flow cancelled meanwhile keeps nothing.
         try live()
         self.files = files
@@ -403,6 +467,10 @@ final class CardProofFlow {
     /// Returns when the CRL passed and the certificate is not on it;
     /// throws why not, and the flow stops. The other checks go on.
     func revocationChecked() async throws {
+        try await counted { try await self.revocationCheckedSteps() }
+    }
+
+    private func revocationCheckedSteps() async throws {
         try expect(.checking)
         do {
             try await revocation?.value
@@ -415,6 +483,10 @@ final class CardProofFlow {
     /// Returns when every check that needs no signature has passed; throws
     /// the first that did not, and the flow stops.
     func checksDone() async throws {
+        try await counted { try await self.checksDoneSteps() }
+    }
+
+    private func checksDoneSteps() async throws {
         try expect(.checking)
         do {
             try await checks?.value
@@ -432,6 +504,11 @@ final class CardProofFlow {
     /// card that may have counted it wrong, with a PIN typed again otherwise.
     /// `signed` is called when the card has signed and can be taken away.
     func confirmCard(pin: PIN, signed: () -> Void) async throws -> CardStatus {
+        attempt?.step("pin")
+        return try await counted { try await self.confirmCardSteps(pin: pin, signed: signed) }
+    }
+
+    private func confirmCardSteps(pin: PIN, signed: () -> Void) async throws -> CardStatus {
         // Whatever stops it before the tap: the PIN is not kept.
         do {
             try await checksDone()
@@ -452,7 +529,7 @@ final class CardProofFlow {
         }
         var signature: Data
         do {
-            signature = try await signTap(scope, pin: pin)
+            signature = try await signTap(scope, pin: pin, tap: 2)
         } catch CardFailure.pinIncorrect {
             // The PIN is not the card's: it is not kept.
             pin.clear()
@@ -495,17 +572,63 @@ final class CardProofFlow {
             Self.wipe(&signature)
             guard let scopedID = try Self.object(body)["scoped_id"] as? String else { throw Stop.core(IDC_ERR_INTERNAL) }
             shortID = try DeviceCore.shortID(of: scopedID)
-            let state = try await deps.backend.cardState(body)
-            try live()
-            let status = try status(of: state)
-            cardState = state
-            phase = .statusKnown
-            return status
+            attempt?.step("scope_signed")
+            return try await cardStateNow(body)
+        } catch let away as TurnedAway {
+            // The card signed, the PIN is kept for tap 3: retryCardState() asks again.
+            throw Stop.server(away.failure)
         } catch {
             Self.wipe(&signature)
             pin.clear()
             throw fail(error)
         }
+    }
+
+    /// The card's state asked again, after the server turned it away as
+    /// too many (confirmCard): the card signed already and the PIN is
+    /// kept, so nothing is signed again.
+    func retryCardState() async throws -> CardStatus {
+        try await counted { try await self.retryCardStateSteps() }
+    }
+
+    private func retryCardStateSteps() async throws -> CardStatus {
+        try expect(.cardStateTurnedAway)
+        do {
+            guard let session, let scopeSignature else { throw Stop.state }
+            try stillValid(at: deps.clock())
+            let body = try session.cardStateRequest(now: deps.clock(), scopeSignature: scopeSignature.bytes)
+            return try await cardStateNow(body)
+        } catch let away as TurnedAway {
+            throw Stop.server(away.failure)
+        } catch {
+            throw fail(error)
+        }
+    }
+
+    /// The server turned a request away as too many people
+    /// (docs/api/card-proof.md, "Rules for every endpoint"): the card proof
+    /// does not end, and the same request can be sent again.
+    private struct TurnedAway: Error {
+        let failure: BackendFailure
+    }
+
+    /// The card's state, asked of the server with the scoped ID. Turned
+    /// away as too many, the flow waits in `cardStateTurnedAway`.
+    private func cardStateNow(_ body: Data) async throws -> CardStatus {
+        let state: Data
+        do {
+            state = try await deps.backend.cardState(body)
+        } catch let failure as BackendFailure where failure.tooMany {
+            try live()
+            phase = .cardStateTurnedAway
+            throw TurnedAway(failure: failure)
+        }
+        try live()
+        let status = try status(of: state)
+        cardState = state
+        phase = .statusKnown
+        attempt?.step("state")
+        return status
     }
 
     /// A tap with the PIN that ended without the PIN having gone to a card
@@ -522,14 +645,46 @@ final class CardProofFlow {
 
     /// One tap with the PIN: the card must hold the certificate chosen in
     /// tap 1, or the PIN is not sent.
-    private func signTap(_ message: Data, pin: PIN) async throws -> Data {
+    private func signTap(_ message: Data, pin: PIN, tap: Int) async throws -> Data {
         guard let certificate else { throw Stop.state }
-        return try await deps.card.tap(.sign) { connection in
-            var now = try await connection.certificates()
-            defer { for i in now.indices { Self.wipe(&now[i]) } }
-            guard now.contains(where: { $0 == certificate.bytes }) else { throw CardFailure.otherCard }
-            return try await connection.sign(message, pin: pin)
+        do {
+            return try await deps.card.tap(.sign) { connection in
+                var now = try await connection.certificates()
+                defer { for i in now.indices { Self.wipe(&now[i]) } }
+                guard now.contains(where: { $0 == certificate.bytes }) else { throw CardFailure.otherCard }
+                return try await connection.sign(message, pin: pin)
+            }
+        } catch {
+            dropped(error, tap: tap, pinAccepted: pin.accepted)
+            throw error
         }
+    }
+
+    /// A card that left during tap `tap` is an action, not a reason (spec/counts.md, "Actions of a card proof"); but
+    /// one that left while a PIN the card never accepted was going to it is the reason `pin_maybe_received`, and not
+    /// this action as well.
+    private func dropped(_ error: Error, tap: Int, pinAccepted: Bool = false) {
+        guard case CardFailure.dropped(let fate) = error, fate != .sent || pinAccepted else { return }
+        attempt?.tapDropped(tap)
+    }
+
+    /// Runs a step of the flow, and tells the counts why it failed: as
+    /// `stop` if the flow stopped, as `retry` if the step can be done again.
+    private func counted<T>(_ step: () async throws -> T) async throws -> T {
+        do {
+            return try await step()
+        } catch {
+            count(error)
+            throw error
+        }
+    }
+
+    private func count(_ error: Error) {
+        // Cancelled by the caller, or a call refused as out of order: nothing changed, nothing to count.
+        guard !cancelled, let stop = error as? Stop, stop != .state, let reason = Counts.reason(of: stop) else { return }
+        // Tap 3 lost the card while the PIN, accepted at tap 2, was going to it: the action was counted, and is no reason.
+        if stop == .card(.dropped(.sent)), pin?.accepted == true { return }
+        if phase == .stopped { attempt?.stop(reason) } else { attempt?.retry(reason) }
     }
 
     /// The card's state as the core reads it, for the screen.
@@ -569,10 +724,17 @@ final class CardProofFlow {
     /// the flow: the cardholder changes the list again.
     func choose(_ entries: [String: String]) throws -> Consequence {
         guard phase == .statusKnown || phase == .chosen else { throw Stop.state }
-        let (consequence, accounts, rows) = try consequence(of: entries)
+        let (consequence, accounts, rows): (Consequence, Data, Data)
+        do {
+            (consequence, accounts, rows) = try self.consequence(of: entries)
+        } catch {
+            count(error)
+            throw error
+        }
         self.entries = entries
         chosen = (consequence, accounts, rows)
         phase = .chosen
+        attempt?.step("chosen")
         return consequence
     }
 
@@ -648,11 +810,26 @@ final class CardProofFlow {
     /// date, a challenge, and the list still does on every platform what
     /// the screen said.
     func prepare() async throws {
+        try await counted { try await self.prepareSteps() }
+    }
+
+    private func prepareSteps() async throws {
         try expect(.chosen)
+        attempt?.step("confirmed")
+        let challenge: String
         do {
             try sameAsShown()
             try stillValid(at: deps.clock())
-            let challenge = try await deps.backend.challenge()
+            challenge = try await deps.backend.challenge()
+        } catch let failure as BackendFailure where failure.tooMany {
+            // Too many people: nothing was signed, the PIN is kept, and the
+            // flow is where it was; prepare() asks for a challenge again.
+            do { try live() } catch { throw fail(error) }
+            throw Stop.server(failure)
+        } catch {
+            throw fail(error)
+        }
+        do {
             try live()
             // The record is dated the challenge's date, and the core makes a
             // proof only for a challenge it took: dated today in Taiwan, in
@@ -673,6 +850,7 @@ final class CardProofFlow {
             code = try DeviceCore.declarationCode(deps.proofLog, accounts: chosen.accounts, challenge: Data(challenge.utf8))
             self.challenge = challenge
             phase = .readyToSign
+            attempt?.step("challenge")
         } catch {
             throw fail(error)
         }
@@ -682,10 +860,14 @@ final class CardProofFlow {
     /// tap 1, no card, or a card that left leaves the step to be done
     /// again, with the PIN in memory.
     func sign() async throws {
+        try await counted { try await self.signSteps() }
+    }
+
+    private func signSteps() async throws {
         try expect(.readyToSign)
         guard let pin, let code else { throw fail(Stop.state) }
         do {
-            var signature = try await signTap(code, pin: pin)
+            var signature = try await signTap(code, pin: pin, tap: 3)
             codeSignature = Secret(signature)
             Self.wipe(&signature)
         } catch let failure as CardFailure where Self.tapCanBeMadeAgain(failure) || failure == .dropped(.sent) {
@@ -700,13 +882,19 @@ final class CardProofFlow {
         self.pin = nil
         do { try live() } catch { throw fail(error) }
         phase = .signed
+        attempt?.step("code_signed")
     }
 
     /// The proof and the record's fields, made by the core. The
     /// certificate and the signatures are overwritten when it returns.
     func prove() async throws {
+        try await counted { try await self.proveSteps() }
+    }
+
+    private func proveSteps() async throws {
         try expect(.signed)
         guard let session, let files, let chosen, let challenge, let scopeSignature, let codeSignature else { throw fail(Stop.state) }
+        let from = Date()
         do {
             let accounts = chosen.accounts
             let body: Data
@@ -722,21 +910,29 @@ final class CardProofFlow {
             dropSecrets()
             submission = body
             phase = .submitting
+            attempt?.took("proved", seconds: Date().timeIntervalSince(from))
+            attempt?.step("proved")
         } catch {
             throw fail(error)
         }
     }
 
-    /// Sends the record. After `Stop.server` with the code `network`, it
-    /// can be sent again as it is.
+    /// Sends the record. After `Stop.server` with the code `network`, or
+    /// one the server turned away as too many, it can be sent again as it is.
     func submit() async throws -> Done {
+        try await counted { try await self.submitSteps() }
+    }
+
+    private func submitSteps() async throws -> Done {
         guard phase == .submitting || phase == .submitFailed else { throw Stop.state }
         guard let submission, let chosen, let challenge else { throw fail(Stop.state) }
+        // The same record again, after a submission that did not get through.
+        if phase == .submitFailed { attempt?.resubmitted() }
         phase = .submitting
         let response: Data
         do {
-            response = try await deps.backend.submit(submission)
-        } catch let failure as BackendFailure where failure.code == "network" {
+            response = try await deps.backend.submit(deps.counts?.deviceID().map { Self.withDeviceID(submission, $0) } ?? submission)
+        } catch let failure as BackendFailure where failure.code == "network" || failure.tooMany {
             try live()
             phase = .submitFailed
             throw Stop.server(failure)
@@ -746,6 +942,7 @@ final class CardProofFlow {
         do { try live() } catch { throw fail(error) }
         phase = .done
         self.submission = nil
+        attempt?.step("done")
         return Done(
             date: String(challenge.prefix(10)),
             shortID: shortID,
@@ -758,7 +955,16 @@ final class CardProofFlow {
 
     /// Drops everything. The flow cannot continue.
     func cancel() {
+        cancelled = true
         end()
+    }
+
+    /// The submission `body`, the core's, carrying the card proof device ID
+    /// (docs/api/card-proof.md, `device_id`): a member the server writes in
+    /// the connection log and nowhere else (ADR-0022, ADR-0039).
+    nonisolated static func withDeviceID(_ body: Data, _ id: String) -> Data {
+        guard body.count > 2, body.first == UInt8(ascii: "{"), id.utf8.count == 32, id.utf8.allSatisfy({ (UInt8(ascii: "0")...UInt8(ascii: "9")).contains($0) || (UInt8(ascii: "a")...UInt8(ascii: "f")).contains($0) }) else { return body }
+        return Data("{\"device_id\":\"\(id)\",".utf8) + body.dropFirst()
     }
 
     // ---------------------------------------------------------------------------

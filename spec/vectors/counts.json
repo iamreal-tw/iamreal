@@ -1,7 +1,7 @@
 {
   "spec": "counts",
   "status": "draft",
-  "note": "table: every code of spec/counts.md and the clients it is for, as an implementation has it. cases: a parsed count, and whether it is taken or dropped whole.",
+  "note": "table: every code of spec/counts.md and the clients it is for, as an implementation has it. cases: a parsed count, and whether it is taken or dropped whole. durations_of: how long a timed step took, in milliseconds, and the duration it is (null: none). device_ids: the value a device keeps (null: none), the moment (seconds since 1970), 16 random bytes as hex; the card proof device ID used then, and the value kept from then on (null: the one kept).",
   "generated_by": "protocol/test/generate/counts.ts",
   "table": {
     "clients": [
@@ -300,6 +300,10 @@
         "ios"
       ],
       "app_too_old": [
+        "android",
+        "ios"
+      ],
+      "clock": [
         "android",
         "ios"
       ],
@@ -760,6 +764,82 @@
       "taken": true
     },
     {
+      "name": "ios, with the phone's model",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "os_version": "18.1.1",
+        "app_version": "2026.11.5",
+        "model": "iPhone15,2"
+      },
+      "taken": true
+    },
+    {
+      "name": "android, with the phone's model",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "stop",
+        "reason": "nfc_off",
+        "os_version": "14",
+        "app_version": "2026.11.5",
+        "model": "SM-S918B"
+      },
+      "taken": true
+    },
+    {
+      "name": "a model with spaces and brackets",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "moto g(60)"
+      },
+      "taken": true
+    },
+    {
+      "name": "a model with a plus",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "HTC U12+"
+      },
+      "taken": true
+    },
+    {
+      "name": "a model with an underscore",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "ASUS_AI2302"
+      },
+      "taken": true
+    },
+    {
+      "name": "a model of 32 characters",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "taken": true
+    },
+    {
       "name": "the members in another order",
       "count": {
         "step": "read",
@@ -822,7 +902,20 @@
       "taken": true
     },
     {
-      "name": "a visitor's action on a proof page",
+      "name": "a visitor's action on a proof page, with its short ID",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "action",
+        "action": "start_card_proof",
+        "short_id": "7K2Q9FM4XD"
+      },
+      "taken": true
+    },
+    {
+      "name": "a visitor's action without a short ID",
       "count": {
         "client": "web",
         "visit_id": "00112233445566778899aabbccddeeff",
@@ -830,6 +923,85 @@
         "os": "ios",
         "event": "action",
         "action": "download_app_ios"
+      },
+      "taken": true
+    },
+    {
+      "name": "a page, with the domain it came from",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "www.threads.com"
+      },
+      "taken": true
+    },
+    {
+      "name": "a proof page, with its short ID and the domain it came from",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "card",
+        "short_id": "7K2Q9FM4XD",
+        "source": "l.threads.com"
+      },
+      "taken": true
+    },
+    {
+      "name": "a source of one character",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "x"
+      },
+      "taken": true
+    },
+    {
+      "name": "a source of 253 characters",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      "taken": true
+    },
+    {
+      "name": "a source that is a name in punycode",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "xn--kpry57d.xn--kpry57d"
+      },
+      "taken": true
+    },
+    {
+      "name": "a source that is an IPv4 address",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "203.0.113.7"
       },
       "taken": true
     },
@@ -1546,6 +1718,150 @@
       "taken": false
     },
     {
+      "name": "a short ID in a visitor's action, in lowercase",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "action",
+        "action": "start_card_proof",
+        "short_id": "7k2q9fm4xd"
+      },
+      "taken": false
+    },
+    {
+      "name": "a source on a visitor's action",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "action",
+        "action": "start_card_proof",
+        "source": "www.threads.com"
+      },
+      "taken": false
+    },
+    {
+      "name": "a source on a card proof",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "open",
+        "source": "www.threads.com"
+      },
+      "taken": false
+    },
+    {
+      "name": "a source with an uppercase letter",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "www.Threads.com"
+      },
+      "taken": false
+    },
+    {
+      "name": "a source with a port",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "localhost:8787"
+      },
+      "taken": false
+    },
+    {
+      "name": "a source that is a whole address",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "https://www.threads.com/@alice"
+      },
+      "taken": false
+    },
+    {
+      "name": "a source with a path",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "www.threads.com/@alice"
+      },
+      "taken": false
+    },
+    {
+      "name": "a source with a letter that is not ASCII",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "島民.tw"
+      },
+      "taken": false
+    },
+    {
+      "name": "a source with an underscore",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "a_b.example"
+      },
+      "taken": false
+    },
+    {
+      "name": "an empty source",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": ""
+      },
+      "taken": false
+    },
+    {
+      "name": "a source of 254 characters",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      "taken": false
+    },
+    {
       "name": "an ID of 31 digits",
       "count": {
         "client": "web",
@@ -1756,6 +2072,261 @@
         "reader": ""
       },
       "taken": false
+    },
+    {
+      "name": "a model of 33 characters",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "taken": false
+    },
+    {
+      "name": "an empty model",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": ""
+      },
+      "taken": false
+    },
+    {
+      "name": "a model with a slash",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "Pixel 8/Pro"
+      },
+      "taken": false
+    },
+    {
+      "name": "a model with a character outside ASCII",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "小米 13"
+      },
+      "taken": false
+    },
+    {
+      "name": "a name the phone's owner gave it",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "Alice’s iPhone"
+      },
+      "taken": false
+    },
+    {
+      "name": "a web count with a model",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "model": "SM-S918B"
+      },
+      "taken": false
+    },
+    {
+      "name": "a page with a model",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "model": "SM-S918B"
+      },
+      "taken": false
+    }
+  ],
+  "durations_of": [
+    {
+      "ms": 0,
+      "took": "lt_1s"
+    },
+    {
+      "ms": 999,
+      "took": "lt_1s"
+    },
+    {
+      "ms": 1000,
+      "took": "1s_3s"
+    },
+    {
+      "ms": 2999.5,
+      "took": "1s_3s"
+    },
+    {
+      "ms": 3000,
+      "took": "3s_10s"
+    },
+    {
+      "ms": 9999,
+      "took": "3s_10s"
+    },
+    {
+      "ms": 10000,
+      "took": "10s_30s"
+    },
+    {
+      "ms": 29999,
+      "took": "10s_30s"
+    },
+    {
+      "ms": 30000,
+      "took": "30s_60s"
+    },
+    {
+      "ms": 59999,
+      "took": "30s_60s"
+    },
+    {
+      "ms": 60000,
+      "took": "1m_3m"
+    },
+    {
+      "ms": 179999,
+      "took": "1m_3m"
+    },
+    {
+      "ms": 180000,
+      "took": "gt_3m"
+    },
+    {
+      "ms": 3600000,
+      "took": "gt_3m"
+    },
+    {
+      "ms": -1,
+      "took": null
+    }
+  ],
+  "device_ids": [
+    {
+      "name": "none kept: a new one",
+      "stored": null,
+      "now": 1798776000,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-01-01"
+    },
+    {
+      "name": "made today",
+      "stored": "0123456789abcdef0123456789abcdef.2027-01-01",
+      "now": 1798776000,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "0123456789abcdef0123456789abcdef",
+      "store": null
+    },
+    {
+      "name": "made 30 days ago",
+      "stored": "0123456789abcdef0123456789abcdef.2027-01-01",
+      "now": 1801368000,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "0123456789abcdef0123456789abcdef",
+      "store": null
+    },
+    {
+      "name": "made 31 days ago: replaced",
+      "stored": "0123456789abcdef0123456789abcdef.2027-01-01",
+      "now": 1801454400,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-02-01"
+    },
+    {
+      "name": "the day in Taiwan, not in UTC: 23:59 on day 30",
+      "stored": "0123456789abcdef0123456789abcdef.2027-01-01",
+      "now": 1801411199,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "0123456789abcdef0123456789abcdef",
+      "store": null
+    },
+    {
+      "name": "the day in Taiwan, not in UTC: 00:00 on day 31",
+      "stored": "0123456789abcdef0123456789abcdef.2027-01-01",
+      "now": 1801411200,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-02-01"
+    },
+    {
+      "name": "made in Taiwan's evening: that day",
+      "stored": null,
+      "now": 1798817400,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-01-01"
+    },
+    {
+      "name": "dated after today: replaced",
+      "stored": "0123456789abcdef0123456789abcdef.2027-01-02",
+      "now": 1798776000,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-01-01"
+    },
+    {
+      "name": "a date that does not exist: replaced",
+      "stored": "0123456789abcdef0123456789abcdef.2027-02-30",
+      "now": 1803873600,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-03-01"
+    },
+    {
+      "name": "an ID in capitals: replaced",
+      "stored": "0123456789ABCDEF0123456789ABCDEF.2027-01-01",
+      "now": 1798776000,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-01-01"
+    },
+    {
+      "name": "an ID without its date: replaced",
+      "stored": "0123456789abcdef0123456789abcdef",
+      "now": 1798776000,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-01-01"
+    },
+    {
+      "name": "anything else: replaced",
+      "stored": "x",
+      "now": 1798776000,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-01-01"
+    },
+    {
+      "name": "an empty value: replaced",
+      "stored": "",
+      "now": 1798776000,
+      "random": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.2027-01-01"
     }
   ]
 }

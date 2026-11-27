@@ -5,8 +5,10 @@ import Foundation
 /// (ADR-0027). Bodies go in and out as bytes: the core writes the requests
 /// and reads the answers, not this file.
 protocol Backend {
-    /// GET /api/v1/config: the body.
-    func config() async throws -> Data
+    /// GET /api/v1/config: the body. With `start`, GET /api/v1/config?start:
+    /// the one request of a card proof's start, which the server counts
+    /// against its site-wide limit (docs/api/card-proof.md, ADR-0026).
+    func config(start: Bool) async throws -> Data
     /// The index of the CRL archive: the body of crl/index.jsonl.
     func crlIndex() async throws -> Data
     /// One CRL of the archive: the body of crl/<sha256>.crl.
@@ -19,6 +21,17 @@ protocol Backend {
     /// 201: the record is in the proof log. The answer's body, as it came;
     /// the core reads it (spec/records-response.md).
     func submit(_ body: Data) async throws -> Data
+    /// POST /api/v1/counts with `body`, the core's (spec/counts.md). Its
+    /// answer says nothing and is not read; one that does not get through
+    /// is nobody's failure, and is not sent again.
+    func count(_ body: Data) async
+}
+
+extension Backend {
+    /// GET /api/v1/config, without the mark of a start.
+    func config() async throws -> Data {
+        try await config(start: false)
+    }
 }
 
 /// The back end did not give what was asked for.
@@ -29,13 +42,30 @@ struct BackendFailure: Error, Equatable {
     let code: String
     /// The answer's X-Request-Id, for the cardholder to report.
     let requestID: String?
+    /// The answer's HTTP status; 0 when there was no answer, or the app
+    /// itself could not read one.
+    let status: Int
+
+    init(code: String, requestID: String?, status: Int = 0) {
+        self.code = code
+        self.requestID = requestID
+        self.status = status
+    }
+
+    /// The server turned the request away as too many: rate limited
+    /// (429), or the proof log overloaded or too many card proofs starting
+    /// (503 `busy`). The same request can be sent again later
+    /// (docs/api/card-proof.md, "Rules for every endpoint").
+    var tooMany: Bool { status == 429 || (status == 503 && code == "busy") }
 }
 
 /// The back end over HTTPS. The two hosts are fixed when the app is built
 /// (AppEnvironment); a test gives it the address of a local Worker.
 ///
-/// No request carries a cookie, a cache or an identifier of the device,
-/// and nothing is stored: the session is ephemeral. Two headers the system
+/// No request carries a cookie or a cache, and nothing is stored: the
+/// session is ephemeral. Of the device, only the counts and the submission
+/// carry anything: the card proof device ID, and in a count the system's
+/// version, the app's and the phone's model (spec/counts.md; ADR-0039). Two headers the system
 /// would fill with what differs from phone to phone are fixed: User-Agent
 /// (the system's has the app's build and the system's version) and
 /// Accept-Language (the system's is the phone's list of languages). The
@@ -68,8 +98,8 @@ struct HTTPBackend: Backend {
         return URLSession(configuration: configuration)
     }
 
-    func config() async throws -> Data {
-        try await api("GET", "api/v1/config", body: nil, expecting: 200)
+    func config(start: Bool) async throws -> Data {
+        try await api("GET", "api/v1/config", query: start ? "start" : nil, body: nil, expecting: 200)
     }
 
     func crlIndex() async throws -> Data {
@@ -156,7 +186,7 @@ struct HTTPBackend: Backend {
             throw BackendFailure(code: "network", requestID: nil)
         }
         guard response.statusCode == 200 else {
-            throw BackendFailure(code: Self.errorCode(data) ?? "http_\(response.statusCode)", requestID: Self.requestID(response))
+            throw BackendFailure(code: Self.errorCode(data) ?? "http_\(response.statusCode)", requestID: Self.requestID(response), status: response.statusCode)
         }
         return data
     }
@@ -190,9 +220,18 @@ struct HTTPBackend: Backend {
             data = Data()
         }
         guard response.statusCode == 201 else {
-            throw BackendFailure(code: Self.errorCode(data) ?? "http_\(response.statusCode)", requestID: Self.requestID(response))
+            throw BackendFailure(code: Self.errorCode(data) ?? "http_\(response.statusCode)", requestID: Self.requestID(response), status: response.statusCode)
         }
         return data
+    }
+
+    func count(_ body: Data) async {
+        var request = URLRequest(url: site.appendingPathComponent("api/v1/counts"))
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Taken or dropped, answered or not: the same.
+        _ = try? await session.data(for: request)
     }
 
     /// What every request calls itself: the same for every phone and every
@@ -207,8 +246,14 @@ struct HTTPBackend: Backend {
     /// The most the app reads of the answer to a submission or to the request for a challenge: 1 MiB.
     private static let mostOfAnAnswer = 1 << 20
 
-    private func api(_ method: String, _ path: String, body: Data?, expecting status: Int) async throws -> Data {
-        var request = URLRequest(url: site.appendingPathComponent(path))
+    /// `query`: the part of the URL after the `?`, as it is.
+    private func api(_ method: String, _ path: String, query: String? = nil, body: Data?, expecting status: Int) async throws -> Data {
+        var url = site.appendingPathComponent(path)
+        if let query, var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            parts.percentEncodedQuery = query
+            url = parts.url ?? url
+        }
+        var request = URLRequest(url: url)
         request.httpMethod = method
         if let body {
             request.httpBody = body
@@ -216,7 +261,7 @@ struct HTTPBackend: Backend {
         }
         let (data, response) = try await send(request)
         guard response.statusCode == status else {
-            throw BackendFailure(code: Self.errorCode(data) ?? "http_\(response.statusCode)", requestID: Self.requestID(response))
+            throw BackendFailure(code: Self.errorCode(data) ?? "http_\(response.statusCode)", requestID: Self.requestID(response), status: response.statusCode)
         }
         return data
     }

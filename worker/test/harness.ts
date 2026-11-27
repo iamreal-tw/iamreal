@@ -184,6 +184,8 @@ export interface TestWorker {
   emptyConnectionLog(): Promise<void>;
   /** Puts an object into the connection log's bucket behind the Worker's back, under any key. */
   putInConnectionLogBucket(key: string, text: string): Promise<void>;
+  /** Takes one object out of the connection log's bucket behind the Worker's back. */
+  deleteInConnectionLogBucket(key: string): Promise<void>;
   /**
    * What the proof log's Durable Object knows of the CRL archive, through the
    * test build's `GET /__test/newest-crls`.
@@ -658,6 +660,9 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
     },
     async putInConnectionLogBucket(key, text) {
       await (await worker.getEnv()).CONNECTION_LOG.put(key, text);
+    },
+    async deleteInConnectionLogBucket(key) {
+      await (await worker.getEnv()).CONNECTION_LOG.delete(key);
     },
     async emptyConnectionLog() {
       const { CONNECTION_LOG } = await worker.getEnv();

@@ -66,6 +66,19 @@ final class CardProofModel: ObservableObject {
     /// button. Until the config answers, and when it does not: false, and
     /// step 2 asks again.
     private var paused = false
+    /// What `config` answered when step 1's 下一步 was last pressed
+    /// (GET /api/v1/config?start), when it could be read: the card proofs
+    /// that follow fall back on it when the server turns the `config` they
+    /// ask away as too many (docs/api/card-proof.md, `config`).
+    private var startConfig: Data?
+    /// Step 1's 下一步 was pressed, and the server has not answered yet.
+    private var starting = false
+    /// The server turned the start away as too many: step 1 says so above
+    /// its 下一步, which stays, to be pressed again (card-proof.md, step 1,
+    /// 人太多的時候).
+    private var startTurnedAway = false
+    /// The counts of the card proof to come or under way (Counts); its first count is `open`, as step 1 shows.
+    private var attempt: Counts.Attempt?
     /// What the server's lowest version says of this build, as the config
     /// last said. Until the config answers: as if it were not too old.
     private var version = MinApp.ok
@@ -185,11 +198,7 @@ final class CardProofModel: ObservableObject {
         case .start:
             // Not from a screen that stands in the place of step 1.
             guard deps.canReadCards(), !version.stops else { return }
-            idle = false
-            reset()
-            // The demonstration of where the card goes plays as the step comes up.
-            sensePlaying = true
-            screen = read(reached: 0, running: false, stop: nil)
+            run { await self.start() }
         case .readAgain:
             reset()
             // The card was tapped once already: the demonstration is at rest, and plays again only by its button.
@@ -200,6 +209,7 @@ final class CardProofModel: ObservableObject {
         case .toPIN:
             screen = screens.pin(name: name, state: .waiting(nil))
         case .confirmCard: run { await self.confirmCard() }
+        case .retryCardState: run { await self.retryCardState() }
         case .toConfirm: toConfirm()
         case .refresh:
             // The list as it is: nothing to type.
@@ -282,6 +292,7 @@ final class CardProofModel: ObservableObject {
     }
 
     private func before() -> Screen {
+        opened()
         // A phone that cannot read a card, a version that can no longer do a card proof: in the place of step 1.
         guard deps.canReadCards() else { return screens.noNFC() }
         if case .stop(let from) = version { return screens.tooOld(from: from) }
@@ -294,7 +305,84 @@ final class CardProofModel: ObservableObject {
         case .asked: notice = reminderScreens.fromNotification(snoozed: nil)
         case .snoozed(let settings): notice = reminderScreens.fromNotification(snoozed: settings)
         }
-        return screens.before(notice: notice, paused: paused, updateFrom: updateFrom, idle: idle)
+        return screens.before(notice: notice, paused: paused, updateFrom: updateFrom, idle: idle, busy: startTurnedAway, starting: starting)
+    }
+
+    // The counts -------------------------------------------------------------------------
+
+    /// Step 1 shows: the first screen of a card proof (spec/counts.md,
+    /// `open`). A new attempt, unless the one there has no card asked for
+    /// yet: step 1 drawn again, also after its start was turned away, is
+    /// the same screen.
+    private func opened() {
+        guard let counts = deps.flow.counts, attempt?.tapped ?? true else { return }
+        attempt = counts.attempt()
+        attempt?.step("open")
+    }
+
+    /// The attempt of the card proof going on: the one step 1 opened, or
+    /// a new one if it has begun (a card proof started again from step 2).
+    private func going() -> Counts.Attempt? {
+        if let attempt, !attempt.begun { return attempt }
+        attempt = deps.flow.counts?.attempt()
+        return attempt
+    }
+
+    /// The card proof stopped before a flow had it: `stop`'s reason.
+    private func stopped(_ stop: CardProofFlow.Stop) {
+        if let reason = Counts.reason(of: stop) { going()?.stop(reason) }
+    }
+
+    // Step 1's 下一步 ------------------------------------------------------------------
+
+    /// The start of a card proof: `config` asked with the mark of a start,
+    /// the one request of a card proof the server counts against its
+    /// site-wide limit (docs/api/card-proof.md, `config`; ADR-0026), before
+    /// step 2. Turned away as too many, step 1 stays and says so; card
+    /// proofs stopped, step 1 says that in place of 下一步. No answer, or
+    /// another refusal: on to step 2, whose reading asks again.
+    private func start() async {
+        idle = false
+        startTurnedAway = false
+        starting = true
+        screen = before()
+        let answer: Data?
+        do {
+            answer = try await deps.flow.backend.config(start: true)
+        } catch let failure as BackendFailure where failure.tooMany {
+            starting = false
+            startTurnedAway = true
+            stopped(.server(failure))
+            screen = before()
+            return
+        } catch {
+            answer = nil
+        }
+        starting = false
+        if let answer {
+            if CardProofFlow.paused(answer) == true {
+                paused = true
+                stopped(.server(BackendFailure(code: "paused", requestID: nil)))
+                screen = before()
+                return
+            }
+            // Only what a card proof can start from is one to fall back on: the reading asks again in any case.
+            startConfig = (try? CardProofFlow(deps.flow, config: answer)) != nil ? answer : nil
+            version = deps.minApp(answer, deps.flow.clock())
+            if version.stops {
+                going()?.stop("app_too_old")
+                screen = before()
+                return
+            }
+        } else {
+            startConfig = nil
+        }
+        // The reading asks config again, without the mark: asked now, while step 2 comes up.
+        askConfigAgain()
+        reset()
+        // The demonstration of where the card goes plays as the step comes up.
+        sensePlaying = true
+        screen = read(reached: 0, running: false, stop: nil)
     }
 
     // The PIN's five minutes ---------------------------------------------------------
@@ -361,6 +449,7 @@ final class CardProofModel: ObservableObject {
             stopPINClock()
             return false
         }
+        attempt?.stop("idle")
         reset()
         idle = true
         askConfigAgain()
@@ -549,6 +638,8 @@ final class CardProofModel: ObservableObject {
         sensePlayed = true
         reached = 0
         screen = read(reached: 0, running: true, stop: nil)
+        let attempt = going()
+        attempt?.step("read")
         // The server first: the lowest version that may do a card proof is its to say.
         var config: Data
         do {
@@ -561,36 +652,49 @@ final class CardProofModel: ObservableObject {
                 guard let again = try await askedConfig() else { return }
                 config = again
             }
+        } catch let failure as BackendFailure where failure.tooMany && startConfig != nil {
+            // Turned away as too many: the card proof goes on with the config of its start (docs/api/card-proof.md, `config`).
+            configuring = nil
+            config = startConfig!
         } catch {
             configuring = nil
             let failure = error as? BackendFailure ?? BackendFailure(code: "network", requestID: nil)
+            stopped(.server(failure))
             screen = read(reached: 0, running: false, stop: .server(failure))
             return
         }
+        // The server answered a config a card proof can start from.
+        if CardProofFlow.takes(config) { attempt?.step("config") }
         // The lowest version, from the config this card proof will use: before any card is read.
         version = deps.minApp(config, deps.flow.clock())
         switch version {
         case .stop:
+            attempt?.stop("app_too_old")
             // In the place of step 1 from now on.
             screen = before()
             return
         case .unreadable:
             // As a platform table that cannot be read: the card proof does not go on (ADR-0035).
-            screen = read(reached: 0, running: false, stop: .server(BackendFailure(code: "malformed_response", requestID: nil)))
+            let stop = CardProofFlow.Stop.server(BackendFailure(code: "malformed_response", requestID: nil))
+            stopped(stop)
+            screen = read(reached: 0, running: false, stop: stop)
             return
         case .ok, .okUntil:
             break
         }
         let flow: CardProofFlow
         do {
-            flow = try CardProofFlow(deps.flow, config: config)
+            flow = try CardProofFlow(deps.flow, config: config, attempt: attempt)
         } catch CardProofFlow.Stop.server(let failure) where failure.code == "paused" {
             // Step 1 says so from now on.
             paused = true
+            stopped(.server(failure))
             screen = read(reached: 0, running: false, stop: .server(failure))
             return
         } catch {
-            screen = read(reached: 0, running: false, stop: error as? CardProofFlow.Stop ?? .state)
+            let stop = error as? CardProofFlow.Stop ?? .state
+            stopped(stop)
+            screen = read(reached: 0, running: false, stop: stop)
             return
         }
         self.flow = flow
@@ -658,15 +762,15 @@ final class CardProofModel: ObservableObject {
                 self.screen = self.screens.pin(name: self.name, state: .signed)
             }
             guard self.flow === flow else { return }
-            self.status = status
-            mode = .open
-            typed = Screens.listNow(status)
-            screen = accounts(status)
+            showAccounts(status)
         } catch {
             guard self.flow === flow else { return }
             let stop = error as? CardProofFlow.Stop ?? .state
             let why = screens.message(stop, tap: 2)
             switch stop {
+            case _ where stop.tooMany:
+                // The card signed; the flow keeps the PIN for tap 3, and 再試一次 asks for the card's state again.
+                screen = screens.pin(name: name, state: .retry(why))
             case .card(.pinIncorrect), .card(.channel), .card(.dropped(.sent)):
                 // The flow dropped the PIN: it is typed again.
                 screen = screens.pin(name: name, state: .waiting(why.first))
@@ -681,6 +785,38 @@ final class CardProofModel: ObservableObject {
                 screen = screens.pin(name: name, state: .stopped(why))
             }
         }
+    }
+
+    /// 再試一次 of step 3: the card's state asked again, after the server
+    /// turned it away as too many. Nothing is signed again.
+    private func retryCardState() async {
+        guard let flow else { return }
+        // The PIN for the last tap is the flow's: one typed into the field meanwhile goes to no card, and is not kept.
+        pinText = ""
+        screen = screens.pin(name: name, state: .signed)
+        do {
+            let status = try await flow.retryCardState()
+            guard self.flow === flow else { return }
+            showAccounts(status)
+        } catch {
+            guard self.flow === flow else { return }
+            let stop = error as? CardProofFlow.Stop ?? .state
+            let why = screens.message(stop, tap: 2)
+            if stop.tooMany {
+                screen = screens.pin(name: name, state: .retry(why))
+            } else {
+                screen = screens.pin(name: name, state: .stopped(why))
+            }
+        }
+        stopPINClockIfThePINIsGone()
+    }
+
+    /// Step 4, as it opens for the card's state.
+    private func showAccounts(_ status: CardProofFlow.CardStatus) {
+        self.status = status
+        mode = .open
+        typed = Screens.listNow(status)
+        screen = accounts(status)
     }
 
     // The list ----------------------------------------------------------------------

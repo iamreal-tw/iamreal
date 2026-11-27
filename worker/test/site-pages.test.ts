@@ -249,7 +249,7 @@ describe("hanging a proof on a profile", () => {
     wantHangPage(page, [...copyLines(block("hang.md", "2. ", 0), ...onTestSite), ...copyLines(block("hang.md", "3. "))], true, ...onTestSite);
     // The pictures write the card's account, not the example's.
     assert.ok(!page.includes("alice"), "no @alice on the page of @carol.tw");
-    assert.equal([...page.matchAll(/<script\b/g)].length, 2, "two scripts, both files of this site: the copy buttons' and the demonstration's player");
+    assert.equal([...page.matchAll(/<script\b/g)].length, 3, "three scripts, all files of this site: the counts', the copy buttons' and the demonstration's player");
     // The link is the one the page of the card writes (hang.md, part 2: 和島民證明頁面上的寫法相同): on a test
     // log's site, its own domain (design/copy/test-site.md). 複製連結 copies it whole, with https://.
     const address = testSiteCardAddress(CARD_A);
@@ -258,7 +258,7 @@ describe("hanging a proof on a profile", () => {
     const hung = copyLines(block("hang.md", "3. "))[0]!;
     for (const want of [
       `<p class="backlink">${address}</p>`,
-      `<button type="button" class="copy button" data-copy-text="https://${address}" data-copied="${copiedWord("hang.md")}" hidden>複製連結</button>`,
+      `<button type="button" class="copy button" data-copy-text="https://${address}" data-copied="${copiedWord("hang.md")}" data-count="copy_proof_link" hidden>複製連結</button>`,
       '<a class="button quiet" href="https://www.threads.com/@carol.tw" target="_blank" rel="noopener noreferrer">打開 Threads</a>',
       `<a href="/p/${CARD_A}">${hung}</a>`,
       '<span class="account">@carol.tw</span>',
@@ -329,10 +329,10 @@ describe("hanging a proof on a profile", () => {
     const words = [said, ...demoWords("島民證明的畫面").slice(1)];
     assert.equal(squash(visibleText(row)), squash(copyLines(words, "iamreal.tw/p/", "test.iamreal.tw/p/").join("")));
     // The player and nothing else: no copy button, so not its script.
-    assert.deepEqual(whole.match(/<script src="[^"]*"/g), ['<script src="/demo.js"']);
+    assert.deepEqual(whole.match(/<script src="[^"]*"/g), ['<script src="/count.js"', '<script src="/demo.js"']);
     // The pictures write hang.md's examples, in the site's own domain.
     wantHangPage(page, copyLines(block("hang.md", "2. ", 1)), false, "iamreal.tw/p/", "test.iamreal.tw/p/");
-    for (const want of ['<a class="button quiet" href="https://www.threads.com/" target="_blank" rel="noopener noreferrer">打開 Threads</a>', '<a class="button" href="/proof">我要換島民證明</a>']) {
+    for (const want of ['<a class="button quiet" href="https://www.threads.com/" target="_blank" rel="noopener noreferrer">打開 Threads</a>', '<a class="button" href="/proof" data-count="start_card_proof">我要換島民證明</a>']) {
       assert.ok(page.includes(want), `the page has ${want}`);
     }
     // No 複製連結, not the two lines of part 3.
@@ -443,6 +443,26 @@ describe("the demonstration's player", () => {
     for (const s of ["http", "fetch", "XMLHttpRequest", "sendBeacon", "WebSocket", "import", "eval", "Function(", "innerHTML", "location", "cookie", "localStorage", ".style"]) assert.ok(!code.includes(s), `demo.js has ${s}`);
     assert.doesNotMatch(script, /[^\x00-\x7f]/, "ASCII only: Static Assets sends no charset on Cloudflare");
     for (const method of ["POST", "PUT", "DELETE"]) assert.equal((await worker.fetch("/demo.js", { method })).status, 405, `${method} /demo.js`);
+    assert.deepEqual(await worker.seen(), [], "the Worker's code ran for none of these requests");
+  });
+});
+
+describe("the counts' script", () => {
+  test("/count.js: sent by Static Assets without the Worker, with the pages' headers; it is the file of the repository; its one request is to this origin's counts, and it reads no card proof device ID", async () => {
+    await pagesWorld(worker, "2026-11-18", []);
+    await worker.seen();
+    const res = await worker.fetch("/count.js");
+    assert.deepEqual([res.status, res.headers.get("content-type")], [200, "text/javascript; charset=utf-8"]);
+    checkVisitorHeaders("/count.js", res, { cache: "no-cache" });
+    const script = await res.text();
+    assert.equal(script, readFileSync(join(WORKER_DIR, "site", "count.js"), "utf8"));
+    // Without its comments: one request, to a path of this origin; no other kind of request, no address, no code made from text.
+    const code = script.replace(/^\s*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    assert.deepEqual(code.match(/fetch\(/g), ["fetch("]);
+    assert.ok(code.includes('fetch("/api/v1/counts", {'));
+    for (const s of ["http", "XMLHttpRequest", "sendBeacon", "WebSocket", "import", "eval", "Function(", "innerHTML", "location", "cookie", "localStorage", "card_proof_device_id", "device_id", ".style"]) assert.ok(!code.includes(s), `count.js has ${s}`);
+    assert.doesNotMatch(script, /[^\x00-\x7f]/, "ASCII only: Static Assets sends no charset on Cloudflare");
+    for (const method of ["POST", "PUT", "DELETE"]) assert.equal((await worker.fetch("/count.js", { method })).status, 405, `${method} /count.js`);
     assert.deepEqual(await worker.seen(), [], "the Worker's code ran for none of these requests");
   });
 });

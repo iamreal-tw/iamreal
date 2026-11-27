@@ -64,6 +64,23 @@ object DeviceCore {
     fun shortId(scopedId: ByteArray): ByteArray = nativeShortId(scopedId)
 
     /**
+     * The count to send (spec/counts.md), the body of `POST /api/v1/counts`, from [count]: a JSON object
+     * whose every value is a string. A version or the phone's model not in its format is left out; the rest
+     * must be a count the server takes, or [DeviceCoreException] `INPUT`.
+     */
+    fun count(count: ByteArray): ByteArray = nativeCount(count)
+
+    /**
+     * The card proof device ID at [now] (seconds since 1970) from [stored], the value the app keeps ("" for none), and
+     * 16 [random] bytes (spec/counts.md, "The card proof device ID"): JSON, `{"device_id":"…","store":"…"}`, `store`
+     * null when what the app keeps stays as it is.
+     */
+    fun countDeviceId(stored: ByteArray, now: Long, random: ByteArray): ByteArray = nativeCountDeviceId(stored, now, random)
+
+    /** The code a timed step that took [ms] milliseconds is sent as (spec/counts.md, "Durations"). */
+    fun countTook(ms: Long): String = String(nativeCountTook(ms), Charsets.US_ASCII)
+
+    /**
      * The answer to a submission as step 6 tells it (spec/records-response.md): JSON, as
      * `idc_records_response` of the header describes it.
      *
@@ -139,6 +156,12 @@ object DeviceCore {
     ): ByteArray = nativeSessionRecordsRequest(session, circuit, verificationKey, crsG1, crsG2, accountsJson, challenge, scopeSignature, declarationCodeSignature)
 
     private external fun nativeSelfCheck()
+
+    private external fun nativeCount(count: ByteArray): ByteArray
+
+    private external fun nativeCountTook(ms: Long): ByteArray
+
+    private external fun nativeCountDeviceId(stored: ByteArray, now: Long, random: ByteArray): ByteArray
 
     private external fun nativeScopeString(proofLog: Int): ByteArray
 

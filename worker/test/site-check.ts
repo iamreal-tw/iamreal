@@ -12,7 +12,7 @@
 // - no page has a script that is not a file of the site itself. The pages
 //   are asked for as a browser asks (`Accept: text/html`): what stands
 //   between the Worker and the visitor may add to a page only then;
-// - the style sheet, the copy buttons' script and the card proof page are
+// - the style sheet, the scripts and the card proof page are
 //   there (the page in a browser, up to its first screen, is another check:
 //   web/test/e2e/smoke.ts), and the old address of its help page goes to
 //   /prepare;
@@ -117,15 +117,15 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
   // The pages the Worker makes.
   const pageHeaders = { ...EVERY_RESPONSE, ...VISITOR_HEADERS, ...TEST_SITE_HEADERS, "Cache-Control": PROOF_LOG_PAGE_CACHE, "Content-Type": "text/html; charset=utf-8" };
   const pages: readonly (readonly [path: string, status: number, script?: true])[] = [
-    ["/", 200],
+    ["/", 200, true],
     [`/p/${NO_SUCH_CARD}`, 404],
-    ["/threads/@alice", 200],
-    ["/proof-log", 200],
+    ["/threads/@alice", 200, true],
+    ["/proof-log", 200, true],
     ["/faq", 200, true],
     ["/verify", 200, true],
-    ["/check", 200],
-    ["/prepare", 200],
-    ["/privacy", 200],
+    ["/check", 200, true],
+    ["/prepare", 200, true],
+    ["/privacy", 200, true],
     ["/hang", 200, true],
     ["/no-such-page", 404],
   ];
@@ -145,7 +145,7 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
 
   // The files Static Assets sends.
   const fileHeaders = { ...EVERY_RESPONSE, ...VISITOR_HEADERS, ...TEST_SITE_HEADERS, "Cache-Control": VISITOR_FILE_CACHE };
-  for (const path of ["/pages.css", "/copy.js", "/demo.js", `/${FAVICON_FILE}`, `/${FONT_FILE}`, `/${OG_IMAGE_FILE}`]) {
+  for (const path of ["/pages.css", "/copy.js", "/count.js", "/demo.js", `/${FAVICON_FILE}`, `/${FONT_FILE}`, `/${OG_IMAGE_FILE}`]) {
     await check(`GET ${path}`, async () => {
       const res = await file(path);
       await res.arrayBuffer();

@@ -24,12 +24,15 @@ final class PausedTests: XCTestCase {
     /// The back end: `config` as `paused` says, counted; `challenges` and `records` answer `paused`.
     private final class PausedBackend: Backend {
         var paused: Bool
+        /// What the start's config (`?start`) says, when not as `paused`.
+        var pausedAtStart: Bool?
         private(set) var configs = 0
 
         init(paused: Bool) { self.paused = paused }
 
-        func config() async throws -> Data {
+        func config(start: Bool) async throws -> Data {
             configs += 1
+            let paused = start ? pausedAtStart ?? self.paused : self.paused
             return Data(#"{"paused":\#(paused),"crl_max_age_days":3,"platforms":[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}]}"#.utf8)
         }
 
@@ -38,6 +41,7 @@ final class PausedTests: XCTestCase {
         func cardState(_ body: Data) async throws -> Data { throw BackendFailure(code: "network", requestID: nil) }
         func challenge() async throws -> String { throw BackendFailure(code: "paused", requestID: "0123456789abcdef") }
         func submit(_ body: Data) async throws -> Data { throw BackendFailure(code: "paused", requestID: "0123456789abcdef") }
+        func count(_ body: Data) async {}
     }
 
     private func model(_ backend: Backend) -> CardProofModel {
@@ -98,10 +102,10 @@ final class PausedTests: XCTestCase {
         model.open()
         try await until("the config answered") { backend.configs == 1 }
         XCTAssertEqual(model.screen.buttons.map(\.action), [.start])
-        // The operator stops card proofs; the cardholder goes to step 2 and back.
+        // The operator stops card proofs; the cardholder presses 下一步, whose config (with the mark of a start) says so.
         backend.paused = true
         model.perform(.start)
-        model.perform(.back)
+        await model.work?.value
         try await until("step 1 says card proofs are stopped") { says(model.screen, copy("before.paused")) }
         XCTAssertEqual(model.screen.buttons, [])
         XCTAssertEqual(backend.configs, 2)
@@ -109,9 +113,12 @@ final class PausedTests: XCTestCase {
 
     func testConfigSaysSoOnTheWayStepTwoStopsBeforeTheCard() async throws {
         let backend = PausedBackend(paused: true)
+        // The start's config said nothing of it yet: stopped since.
+        backend.pausedAtStart = false
         let model = model(backend)
         // Step 1 did not hear it yet (the config had not answered): step 2's first item stops.
         model.perform(.start)
+        await model.work?.value
         model.perform(.readCard)
         await model.work?.value
         XCTAssertEqual(model.screen.step, 2)

@@ -14,14 +14,19 @@ import java.net.URL
  * on [site], and the CRL archive on [data] (ADR-0027). The two origins are
  * the build's (Target.kt); nothing a server answers changes them.
  *
- * No request carries a cookie or anything of the phone: no identifier, no
- * version, no failure of the app's own checks (ADR-0016). An answer is the
+ * No request carries a cookie. Of the phone, only the counts ([count]) and
+ * the submission carry anything: the card proof device ID, and in a count
+ * the system's version, the app's and the phone's model, and a failure as a
+ * code of the table (spec/counts.md; ADR-0032, ADR-0039). An answer is the
  * bytes of its body as they came; the core reads them. Every call blocks:
  * for a background thread.
  */
 class Backend(private val site: String, private val data: String) {
-    /** `GET /api/v1/config`: the body. */
-    fun config(): ByteArray = request("GET", "$site/api/v1/config", null, API_TIMEOUT_MS, MAX_ANSWER)
+    /**
+     * `GET /api/v1/config`: the body. With [start], `GET /api/v1/config?start`: the one request of a card proof's start, which
+     * the server counts against its site-wide limit (docs/api/card-proof.md, ADR-0026).
+     */
+    fun config(start: Boolean = false): ByteArray = request("GET", if (start) "$site/api/v1/config?start" else "$site/api/v1/config", null, API_TIMEOUT_MS, MAX_ANSWER)
 
     /** `POST /api/v1/card-state` with [body], the core's: the body of the answer. */
     fun cardState(body: ByteArray): ByteArray = request("POST", "$site/api/v1/card-state", body, API_TIMEOUT_MS, MAX_ANSWER)
@@ -47,6 +52,18 @@ class Backend(private val site: String, private val data: String) {
      * does not arrive whole is no bytes, not a failure.
      */
     fun submit(body: ByteArray): ByteArray = request("POST", "$site/api/v1/records", body, API_TIMEOUT_MS, MAX_ANSWER, created = true)
+
+    /**
+     * `POST /api/v1/counts` with [body], the core's (`idc_count`). Its answer says nothing and is not read; a count that
+     * does not get through is nobody's failure, and is not sent again.
+     */
+    fun count(body: ByteArray) {
+        try {
+            request("POST", "$site/api/v1/counts", body, API_TIMEOUT_MS, MAX_ANSWER)
+        } catch (e: ServerException) {
+            // Not taken, or not answered: the same.
+        }
+    }
 
     /** The index of the CRL archive, `crl/index.jsonl`. */
     fun crlIndex(): ByteArray = request("GET", "$data/crl/index.jsonl", null, FILE_TIMEOUT_MS, MAX_INDEX)
@@ -177,4 +194,10 @@ class Backend(private val site: String, private val data: String) {
  * [requestId] the answer's `X-Request-Id`, which the screen shows next to
  * the error (docs/api/card-proof.md).
  */
-class ServerException(val code: String, val status: Int, val requestId: String?) : Exception(code)
+class ServerException(val code: String, val status: Int, val requestId: String?) : Exception(code) {
+    /**
+     * The server turned the request away as too many: rate limited (`429`), or the proof log overloaded or too many card proofs
+     * starting (`503` `busy`). The same request can be sent again later (docs/api/card-proof.md, "Rules for every endpoint").
+     */
+    val tooMany: Boolean get() = status == 429 || (status == 503 && code == "busy")
+}
