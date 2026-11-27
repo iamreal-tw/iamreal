@@ -125,7 +125,7 @@ class CountsTest {
             listOf("crl_unavailable", "crl_hash", "crl_unusable", "crl_rollback", "crl_stale").map { Stop("crl", mapOf("code" to it, "days" to "9")) } +
             listOf("network", "malformed_response", "paused", "busy", "rate_limited", "internal", "crl_stale", "challenge_unknown", "challenge_used", "challenge_attempts", "proof", "root", "date_order", "empty", "switch_limit", "daily_limit", "malformed", "scope", "platform", "challenge_malformed")
                 .map { Stop("server", mapOf("code" to it), "req-1") } +
-            listOf("other_card", "revoked", "card_signature", "artifact", "engine", "date_mismatch", "date_changed", "idle", "clock", "state").map { Stop(it) } +
+            listOf("other_card", "revoked", "card_signature", "artifact", "engine", "date_mismatch", "idle", "clock", "state").map { Stop(it) } +
             Stop("min_app", mapOf("from" to "2027-03-01"))
         for (stop in stops) {
             val reason = Counts.reasonOf(stop)

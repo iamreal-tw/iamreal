@@ -178,7 +178,6 @@ export function reasonOf(stop: Stop): Reason {
     case "engine":
     case "proof_check":
     case "username":
-    case "date_changed":
     case "state":
       return stop.code;
   }

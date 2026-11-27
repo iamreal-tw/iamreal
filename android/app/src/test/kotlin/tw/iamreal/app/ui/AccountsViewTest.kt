@@ -22,7 +22,7 @@ class AccountsViewTest {
     private fun status(vararg slots: Slot, daysSince: Int? = null, dailyLimit: Boolean = false, table: List<String> = listOf("threads")) =
         Status("7K2Q9FM4XD", daysSince?.let { "2026-11-04" }, daysSince, slots.toList(), table, dailyLimit, "2026-11-16")
 
-    private val preview = "預覽會在 Threads 或瀏覽器打開個人檔案，讓你確認沒有打錯。"
+    private val preview = "預覽會在 Threads 或瀏覽器打開個人檔案，讓你小心確認沒有打錯帳號。"
 
     @Test
     fun `a card that never declared, only the field to fill`() {

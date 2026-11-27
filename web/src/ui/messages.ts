@@ -146,9 +146,6 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
       if (stop.reason === "daily_limit") return say(s.daily_limit);
       // Another account typed on a row whose 5 switches are used up (switch_limit).
       return say(COPY.accounts.row_cannot_switch);
-    // The date changed since step 5, and the list would now do something else: nothing was signed.
-    case "date_changed":
-      return say(s.date_changed);
     // The wait for the second signature ran out: the screen is back at step 1.
     case "idle":
       return say(COPY.before.idle);
@@ -261,8 +258,6 @@ export function itemStates(items: readonly ListItem[], seen: ReadonlySet<Progres
  *               ("chosen"): it is asked again, the card signs, no PIN typed again
  */
 export function progressButtons(phase: string, stop?: Stop): ("back" | "read_again" | "retry" | "restart")[] {
-  // The date changed: nothing was signed, and the card proof starts again from the beginning (stops.date_changed).
-  if (stop?.code === "date_changed") return ["restart"];
   // The server takes no card proof for now: reading the card again or sending again meets the same answer.
   if (stop?.code === "server" && stop.server === "paused") return ["restart"];
   // Too many people when the challenge was asked: nothing was signed, the PIN is kept; the challenge asked again.

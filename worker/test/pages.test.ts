@@ -122,8 +122,7 @@ describe("the page of a card", () => {
       const cells = line.split("|");
       if (cells.length === 4 && !cells[1]!.startsWith("---") && cells[1]!.trim() !== "這一筆紀錄") table.set(cells[1]!.trim(), cells[2]!.trim());
     }
-    // 更正 is a row no record has had since version 3 of the record rules (ADR-0018); the copy loses it in #510.
-    assert.equal(table.size, 7, "the table of section 4 has the 6 rows this test writes, and 更正");
+    assert.equal(table.size, 6, "the table of section 4 has the 6 rows this test writes");
     const row = (kind: string, date: string, ...accounts: string[]): string => {
       const words = table.get(kind);
       assert.ok(words !== undefined, `proof-page.md section 4 has a row ${kind}`);

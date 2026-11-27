@@ -1452,7 +1452,24 @@ describe("a card proof that crosses midnight", () => {
   });
 
   // Since version 3 of the record rules (ADR-0018) no event rule reads a date: a list does the same on any date,
-  // and the check before the challenge (stops.date_changed) has no case left. #510 takes it out of the flow.
+  // and what it does is not worked out again after midnight (#510).
+
+  test("the button is pressed after midnight: the list confirmed before it is signed, dated the new day", async () => {
+    const s = await setup({
+      echoPublicInputs: true,
+      start: LATE,
+      backend: {
+        challenge: () => "2026-11-17.000G40R40M30E209185GR38E1W",
+        cardState: cardState({ last_card_proof: "2026-11-16", platforms: { threads: has("alice") } }),
+      },
+    });
+    const cq = await toChosen(s, { threads: "bob" });
+    assert.deepEqual(cq.rows.map((r) => r.kind), ["switch"]);
+    s.advance(3 * 60_000); // 2026-11-17 00:01
+    const done = await s.flow.proceed(cq.accounts);
+    assert.equal(done.date, "2026-11-17");
+    assert.equal(s.card.signed.length, 2, "the second signature");
+  });
 
   test("midnight passes while the challenge is on its way, and the list does the same on the new date: signed", async () => {
     const s = await setup({

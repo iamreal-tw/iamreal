@@ -105,9 +105,6 @@ final class CardProofFlow {
         /// The challenge is not dated today in Taiwan by the device's
         /// clock. Nothing was signed.
         case challengeNotToday
-        /// The date changed since the list was confirmed, and the list
-        /// would now do something else. Nothing was signed.
-        case dateChanged
         /// A step called out of order.
         case state
 
@@ -298,7 +295,6 @@ final class CardProofFlow {
     private var codeSignature: Secret?
     private var cardState: Data?
     private var shortID = ""
-    private var entries: [String: String]?
     /// The list chosen: what the screen said of it, the list the card signs
     /// and the screen's rows, both as the core takes them.
     private var chosen: (consequence: Consequence, accounts: Data, rows: Data)?
@@ -729,7 +725,6 @@ final class CardProofFlow {
             count(error)
             throw error
         }
-        self.entries = entries
         chosen = (consequence, accounts, rows)
         phase = .chosen
         attempt?.step("chosen")
@@ -751,7 +746,6 @@ final class CardProofFlow {
     func back() throws {
         guard phase == .statusKnown || phase == .chosen else { throw Stop.state }
         chosen = nil
-        entries = nil
         phase = .statusKnown
     }
 
@@ -815,8 +809,10 @@ final class CardProofFlow {
         try expect(.chosen)
         attempt?.step("confirmed")
         let challenge: String
+        // What the list does is not worked out again after midnight: since
+        // version 3 of the record rules (ADR-0018) no event rule reads the
+        // date, and a new day only lifts the day's limit.
         do {
-            try sameAsShown()
             try stillValid(at: deps.clock())
             challenge = try await deps.backend.challenge()
         } catch let failure as BackendFailure where failure.tooMany {
@@ -843,7 +839,6 @@ final class CardProofFlow {
                 default: throw Self.dateStop(taken)
                 }
             }
-            try sameAsShown()
             guard let chosen else { throw Stop.state }
             code = try DeviceCore.declarationCode(deps.proofLog, accounts: chosen.accounts, challenge: Data(challenge.utf8))
             self.challenge = challenge
@@ -983,20 +978,6 @@ final class CardProofFlow {
         return Stop.certificate(problem: problem, date: (answer["not_after"] ?? answer["not_before"]) as? String)
     }
 
-    /// The chosen list, worked out again on today's date: it must do on
-    /// every platform what the screen said.
-    private func sameAsShown() throws {
-        guard let entries, let chosen else { throw Stop.state }
-        let again: Consequence
-        do {
-            again = try consequence(of: entries).0
-        } catch Stop.blocked {
-            throw Stop.dateChanged
-        }
-        guard again.accounts == chosen.consequence.accounts else { throw Stop.state }
-        guard again.rows == chosen.consequence.rows else { throw Stop.dateChanged }
-    }
-
     private func expect(_ phase: Phase) throws {
         guard self.phase == phase else { throw Stop.state }
     }
@@ -1021,7 +1002,6 @@ final class CardProofFlow {
         dropSecrets()
         cardState = nil
         chosen = nil
-        entries = nil
         challenge = nil
         code = nil
         submission = nil

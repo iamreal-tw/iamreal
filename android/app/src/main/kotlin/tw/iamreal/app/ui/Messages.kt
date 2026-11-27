@@ -73,7 +73,6 @@ internal class Messages(private val c: Copy) {
             else -> c.say("stops.server_unreadable", "code" to code)
         }
         "date_mismatch" -> c.say("app_stops.date_mismatch")
-        "date_changed" -> c.say("stops.date_changed")
         else -> null
     }
 
