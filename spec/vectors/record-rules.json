@@ -1,8 +1,8 @@
 {
   "spec": "record-rules",
   "status": "draft",
-  "rules_version": 2,
-  "note": "Events stand for well-formed records; `verifies` says whether the record passes check 1; `crl_dates` are the CRL dates of the usable CRLs whose tree has the record's root (one root can belong to several CRLs; empty means none). `date` repeats the date in `challenge`. `proof_log` says whose platform table applies (spec/scope.md): production has threads, a test log test-example and threads. A valid result's `kinds` are the (platform, kind) pairs of the platforms that have a kind, in ascending order of platform. In `state`, a card's `accounts` is its current list and `accounts` of the scope is the output per account; `proofs_on_last_date` and `slots` (one per platform of the table: `current`, `last_declared`, `switch_count`, `correction_date`) are items of the state (\"State\"), not of the output. null means none. `ordinals` lists every card of the output with its ordinal (\"The ordinal\"), in ascending order of ordinal; it is beside `state`, not in its cards.",
+  "rules_version": 3,
+  "note": "Events stand for well-formed records; `verifies` says whether the record passes check 1; `crl_dates` are the CRL dates of the usable CRLs whose tree has the record's root (one root can belong to several CRLs; empty means none). `date` repeats the date in `challenge`. `proof_log` says whose platform table applies (spec/scope.md): production has threads, a test log test-example and threads. A valid result's `kinds` are the (platform, kind) pairs of the platforms that have a kind, in ascending order of platform. In `state`, a card's `accounts` is its current list and `accounts` of the scope is the output per account; `slots` (one per platform of the table: `current`, `last_declared`, `switch_count`) are items of the state (\"State\"), not of the output. null means none. `ordinals` lists every card of the output with its ordinal (\"The ordinal\"), in ascending order of ordinal; it is beside `state`, not in its cards.",
   "cases": [
     {
       "name": "first declaration, refresh, withdraw by the empty list",
@@ -95,13 +95,11 @@
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "last_card_proof": "2026-04-01",
               "accounts": [],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": null,
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -245,13 +243,11 @@
                   "username": "carol"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "carol",
                   "last_declared": "carol",
-                  "switch_count": 3,
-                  "correction_date": "2026-04-01"
+                  "switch_count": 3
                 }
               }
             }
@@ -374,13 +370,11 @@
                   "username": "bob"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "bob",
                   "last_declared": "bob",
-                  "switch_count": 1,
-                  "correction_date": "2026-01-03"
+                  "switch_count": 1
                 }
               }
             }
@@ -503,13 +497,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -644,13 +636,11 @@
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "last_card_proof": "2026-01-02",
               "accounts": [],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": null,
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -870,13 +860,11 @@
                   "username": "f"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "f",
                   "last_declared": "f",
-                  "switch_count": 5,
-                  "correction_date": "2026-01-06"
+                  "switch_count": 5
                 }
               }
             }
@@ -1134,13 +1122,11 @@
                   "username": "f"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "f",
                   "last_declared": "f",
-                  "switch_count": 5,
-                  "correction_date": "2026-01-06"
+                  "switch_count": 5
                 }
               }
             }
@@ -1393,13 +1379,11 @@
                   "username": "f"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "f",
                   "last_declared": "f",
-                  "switch_count": 5,
-                  "correction_date": "2026-01-06"
+                  "switch_count": 5
                 }
               }
             }
@@ -1495,13 +1479,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-02"
+                  "switch_count": 0
                 }
               }
             }
@@ -1629,13 +1611,11 @@
                   "username": "bob"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "bob",
                   "last_declared": "bob",
-                  "switch_count": 1,
-                  "correction_date": "2026-01-05"
+                  "switch_count": 1
                 }
               }
             },
@@ -1648,13 +1628,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -1787,13 +1765,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -1894,13 +1870,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-02"
+                  "switch_count": 0
                 }
               }
             },
@@ -1913,13 +1887,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -2056,13 +2028,11 @@
                   "username": "a.b"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "a.b",
                   "last_declared": "a.b",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             },
@@ -2075,13 +2045,11 @@
                   "username": "a0"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "a0",
                   "last_declared": "a0",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             },
@@ -2094,13 +2062,11 @@
                   "username": "a_b"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "a_b",
                   "last_declared": "a_b",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -2221,13 +2187,11 @@
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "last_card_proof": "2026-01-02",
               "accounts": [],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": null,
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -2312,13 +2276,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -2547,13 +2509,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-09"
+                  "switch_count": 0
                 }
               }
             }
@@ -2751,7 +2711,7 @@
           "kinds": [
             {
               "platform": "threads",
-              "kind": "correction"
+              "kind": "switch"
             }
           ]
         }
@@ -2769,13 +2729,11 @@
                   "username": "grace"
                 }
               ],
-              "proofs_on_last_date": 2,
               "slots": {
                 "threads": {
                   "current": "grace",
                   "last_declared": "grace",
-                  "switch_count": 0,
-                  "correction_date": "2028-06-01"
+                  "switch_count": 1
                 }
               }
             },
@@ -2788,13 +2746,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2028-06-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -2932,13 +2888,11 @@
                   "username": "bob"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "bob",
                   "last_declared": "bob",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-16"
+                  "switch_count": 0
                 }
               }
             },
@@ -2951,13 +2905,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-20"
+                  "switch_count": 0
                 }
               }
             }
@@ -3073,13 +3025,11 @@
                   "username": "bob"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "bob",
                   "last_declared": "bob",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-09"
+                  "switch_count": 0
                 }
               }
             },
@@ -3092,13 +3042,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-13"
+                  "switch_count": 0
                 }
               }
             }
@@ -3211,13 +3159,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-12"
+                  "switch_count": 0
                 }
               }
             }
@@ -3311,13 +3257,11 @@
                   "username": "bob"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "bob",
                   "last_declared": "bob",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -3467,13 +3411,11 @@
                   "username": "bob"
                 }
               ],
-              "proofs_on_last_date": 2,
               "slots": {
                 "threads": {
                   "current": "bob",
                   "last_declared": "bob",
-                  "switch_count": 0,
-                  "correction_date": "2026-06-01"
+                  "switch_count": 0
                 }
               }
             },
@@ -3486,13 +3428,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-06-02"
+                  "switch_count": 0
                 }
               }
             }
@@ -3535,7 +3475,7 @@
       ]
     },
     {
-      "name": "daily_limit counts the records of the card's last card proof: the fourth that date is daily_limit, an earlier date is date_order, a later date starts again",
+      "name": "a card's dates do not go back: an earlier date is date_order, a later date is valid; a fourth record of one date is valid",
       "proof_log": "production",
       "events": [
         {
@@ -3701,8 +3641,13 @@
         },
         {
           "seq": 5,
-          "valid": false,
-          "reason": "daily_limit"
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "refresh"
+            }
+          ]
         },
         {
           "seq": 6,
@@ -3733,13 +3678,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-06-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -3992,13 +3935,11 @@
                   "username": "f"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "f",
                   "last_declared": "f",
-                  "switch_count": 5,
-                  "correction_date": "2026-06-06"
+                  "switch_count": 5
                 }
               }
             }
@@ -4094,13 +4035,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -4191,13 +4130,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -4225,7 +4162,7 @@
       ]
     },
     {
-      "name": "daily_limit: three valid records of a card on one date; a fourth is invalid, whatever it changes",
+      "name": "the rules do not count a card's records of one date: a fourth and a fifth are valid, whatever they change",
       "proof_log": "production",
       "events": [
         {
@@ -4342,13 +4279,23 @@
         },
         {
           "seq": 4,
-          "valid": false,
-          "reason": "daily_limit"
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "refresh"
+            }
+          ]
         },
         {
           "seq": 5,
-          "valid": false,
-          "reason": "daily_limit"
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "withdraw"
+            }
+          ]
         }
       ],
       "state": [
@@ -4358,35 +4305,17 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "last_card_proof": "2026-05-10",
-              "accounts": [
-                {
-                  "platform": "threads",
-                  "username": "alice"
-                }
-              ],
-              "proofs_on_last_date": 3,
+              "accounts": [],
               "slots": {
                 "threads": {
-                  "current": "alice",
+                  "current": null,
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-05-10"
+                  "switch_count": 0
                 }
               }
             }
           ],
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice",
-              "cards": [
-                {
-                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-                  "last_card_proof": "2026-05-10"
-                }
-              ]
-            }
-          ]
+          "accounts": []
         }
       ],
       "ordinals": [
@@ -4398,7 +4327,7 @@
       ]
     },
     {
-      "name": "daily_limit: declare, correct a mistyped account and withdraw fit in one day",
+      "name": "declare a mistyped account, replace it and withdraw on one date: the replacement is a switch; a fourth record that date is valid",
       "proof_log": "production",
       "events": [
         {
@@ -4482,7 +4411,7 @@
           "kinds": [
             {
               "platform": "threads",
-              "kind": "correction"
+              "kind": "switch"
             }
           ]
         },
@@ -4498,155 +4427,6 @@
         },
         {
           "seq": 4,
-          "valid": false,
-          "reason": "daily_limit"
-        }
-      ],
-      "state": [
-        {
-          "scope_string": "iamreal:public:0_______________",
-          "cards": [
-            {
-              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-              "last_card_proof": "2026-05-10",
-              "accounts": [],
-              "proofs_on_last_date": 3,
-              "slots": {
-                "threads": {
-                  "current": null,
-                  "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-05-10"
-                }
-              }
-            }
-          ],
-          "accounts": []
-        }
-      ],
-      "ordinals": [
-        {
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "ordinal": 1
-        }
-      ]
-    },
-    {
-      "name": "daily_limit: the next date allows three more",
-      "proof_log": "production",
-      "events": [
-        {
-          "seq": 1,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-05-10.WNTQ7EBCWEKYKTG44Z008Y0PZ4",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        },
-        {
-          "seq": 2,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-05-10.DZ5M9ZRR3Q7GVBDSTD6N4HQYH4",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        },
-        {
-          "seq": 3,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-05-10.BCD253QNAZPTZ1SSZHAZPDXVEW",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        },
-        {
-          "seq": 4,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-05-10.ZFS9Q8N6EHRB6GE1J8E0S0TY0R",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        },
-        {
-          "seq": 5,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-05-11.FXD5GV0SDVM9QSTV6HFPQRBDC4",
-          "date": "2026-05-11",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-11"
-          ]
-        },
-        {
-          "seq": 6,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [],
-          "challenge": "2026-05-11.342XKQ6KDBAFVRYCKWF6K6Z2J8",
-          "date": "2026-05-11",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-11"
-          ]
-        }
-      ],
-      "results": [
-        {
-          "seq": 1,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "first"
-            }
-          ]
-        },
-        {
-          "seq": 2,
           "valid": true,
           "kinds": [
             {
@@ -4654,240 +4434,6 @@
               "kind": "refresh"
             }
           ]
-        },
-        {
-          "seq": 3,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "refresh"
-            }
-          ]
-        },
-        {
-          "seq": 4,
-          "valid": false,
-          "reason": "daily_limit"
-        },
-        {
-          "seq": 5,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "refresh"
-            }
-          ]
-        },
-        {
-          "seq": 6,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "withdraw"
-            }
-          ]
-        }
-      ],
-      "state": [
-        {
-          "scope_string": "iamreal:public:0_______________",
-          "cards": [
-            {
-              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-              "last_card_proof": "2026-05-11",
-              "accounts": [],
-              "proofs_on_last_date": 2,
-              "slots": {
-                "threads": {
-                  "current": null,
-                  "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-05-10"
-                }
-              }
-            }
-          ],
-          "accounts": []
-        }
-      ],
-      "ordinals": [
-        {
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "ordinal": 1
-        }
-      ]
-    },
-    {
-      "name": "daily_limit: records invalid under another rule do not count",
-      "proof_log": "production",
-      "events": [
-        {
-          "seq": 1,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-05-10.WNTQ7EBCWEKYKTG44Z008Y0PZ4",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        },
-        {
-          "seq": 2,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-05-10.DZ5M9ZRR3Q7GVBDSTD6N4HQYH4",
-          "date": "2026-05-10",
-          "verifies": false,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        },
-        {
-          "seq": 3,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-05-10.WNTQ7EBCWEKYKTG44Z008Y0PZ4",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        },
-        {
-          "seq": 4,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-05-10.ZFS9Q8N6EHRB6GE1J8E0S0TY0R",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": []
-        },
-        {
-          "seq": 5,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-05-10.VZY6ASYYQE8VHXDQWYRXEA8CVG",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        },
-        {
-          "seq": 6,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [],
-          "challenge": "2026-05-10.2RYF9BWJXYX77025D9Y7CQSMYG",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        },
-        {
-          "seq": 7,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-05-10.W67VBV1BVEBWMYREN8ZTGAGRTC",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        }
-      ],
-      "results": [
-        {
-          "seq": 1,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "first"
-            }
-          ]
-        },
-        {
-          "seq": 2,
-          "valid": false,
-          "reason": "proof"
-        },
-        {
-          "seq": 3,
-          "valid": false,
-          "reason": "challenge_reused"
-        },
-        {
-          "seq": 4,
-          "valid": false,
-          "reason": "root"
-        },
-        {
-          "seq": 5,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "refresh"
-            }
-          ]
-        },
-        {
-          "seq": 6,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "withdraw"
-            }
-          ]
-        },
-        {
-          "seq": 7,
-          "valid": false,
-          "reason": "daily_limit"
         }
       ],
       "state": [
@@ -4897,19 +4443,33 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "last_card_proof": "2026-05-10",
-              "accounts": [],
-              "proofs_on_last_date": 3,
+              "accounts": [
+                {
+                  "platform": "threads",
+                  "username": "alice"
+                }
+              ],
               "slots": {
                 "threads": {
-                  "current": null,
+                  "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-05-10"
+                  "switch_count": 1
                 }
               }
             }
           ],
-          "accounts": []
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "alice",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-05-10"
+                }
+              ]
+            }
+          ]
         }
       ],
       "ordinals": [
@@ -4921,7 +4481,7 @@
       ]
     },
     {
-      "name": "daily_limit: a record the event rules block is switch_limit or empty, not daily_limit",
+      "name": "the event rules block a record whatever the card's other records that date: switch_limit or empty",
       "proof_log": "production",
       "events": [
         {
@@ -5293,13 +4853,11 @@
               "scoped_id": "0400000000000000000000000000000000000000000000000000",
               "last_card_proof": "2026-05-07",
               "accounts": [],
-              "proofs_on_last_date": 3,
               "slots": {
                 "threads": {
                   "current": null,
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-05-07"
+                  "switch_count": 0
                 }
               }
             },
@@ -5312,13 +4870,11 @@
                   "username": "f"
                 }
               ],
-              "proofs_on_last_date": 3,
               "slots": {
                 "threads": {
                   "current": "f",
                   "last_declared": "f",
-                  "switch_count": 5,
-                  "correction_date": "2026-05-06"
+                  "switch_count": 5
                 }
               }
             }
@@ -5351,300 +4907,7 @@
       ]
     },
     {
-      "name": "daily_limit: two cards count separately",
-      "proof_log": "production",
-      "events": [
-        {
-          "seq": 1,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-05-10.WNTQ7EBCWEKYKTG44Z008Y0PZ4",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        },
-        {
-          "seq": 2,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-05-10.DZ5M9ZRR3Q7GVBDSTD6N4HQYH4",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        },
-        {
-          "seq": 3,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-05-10.BCD253QNAZPTZ1SSZHAZPDXVEW",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        },
-        {
-          "seq": 4,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "0400000000000000000000000000000000000000000000000000",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "bob"
-            }
-          ],
-          "challenge": "2026-05-10.N5W24K9EGTVWGWW0N7PEMMM3BR",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        },
-        {
-          "seq": 5,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "0400000000000000000000000000000000000000000000000000",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "bob"
-            }
-          ],
-          "challenge": "2026-05-10.SE8CXVYJ3CNE771GCA8GZB5KDM",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        },
-        {
-          "seq": 6,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "0400000000000000000000000000000000000000000000000000",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "bob"
-            }
-          ],
-          "challenge": "2026-05-10.WN21FD699PJQE7W2TJ56DEAMHG",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        },
-        {
-          "seq": 7,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-05-10.W67VBV1BVEBWMYREN8ZTGAGRTC",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        },
-        {
-          "seq": 8,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "0400000000000000000000000000000000000000000000000000",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "bob"
-            }
-          ],
-          "challenge": "2026-05-10.Q61GYCCF703WCK7Z260YX77MKW",
-          "date": "2026-05-10",
-          "verifies": true,
-          "crl_dates": [
-            "2026-05-10"
-          ]
-        }
-      ],
-      "results": [
-        {
-          "seq": 1,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "first"
-            }
-          ]
-        },
-        {
-          "seq": 2,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "refresh"
-            }
-          ]
-        },
-        {
-          "seq": 3,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "refresh"
-            }
-          ]
-        },
-        {
-          "seq": 4,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "first"
-            }
-          ]
-        },
-        {
-          "seq": 5,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "refresh"
-            }
-          ]
-        },
-        {
-          "seq": 6,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "refresh"
-            }
-          ]
-        },
-        {
-          "seq": 7,
-          "valid": false,
-          "reason": "daily_limit"
-        },
-        {
-          "seq": 8,
-          "valid": false,
-          "reason": "daily_limit"
-        }
-      ],
-      "state": [
-        {
-          "scope_string": "iamreal:public:0_______________",
-          "cards": [
-            {
-              "scoped_id": "0400000000000000000000000000000000000000000000000000",
-              "last_card_proof": "2026-05-10",
-              "accounts": [
-                {
-                  "platform": "threads",
-                  "username": "bob"
-                }
-              ],
-              "proofs_on_last_date": 3,
-              "slots": {
-                "threads": {
-                  "current": "bob",
-                  "last_declared": "bob",
-                  "switch_count": 0,
-                  "correction_date": "2026-05-10"
-                }
-              }
-            },
-            {
-              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-              "last_card_proof": "2026-05-10",
-              "accounts": [
-                {
-                  "platform": "threads",
-                  "username": "alice"
-                }
-              ],
-              "proofs_on_last_date": 3,
-              "slots": {
-                "threads": {
-                  "current": "alice",
-                  "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-05-10"
-                }
-              }
-            }
-          ],
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice",
-              "cards": [
-                {
-                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-                  "last_card_proof": "2026-05-10"
-                }
-              ]
-            },
-            {
-              "platform": "threads",
-              "username": "bob",
-              "cards": [
-                {
-                  "scoped_id": "0400000000000000000000000000000000000000000000000000",
-                  "last_card_proof": "2026-05-10"
-                }
-              ]
-            }
-          ]
-        }
-      ],
-      "ordinals": [
-        {
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "ordinal": 1
-        },
-        {
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "0400000000000000000000000000000000000000000000000000",
-          "ordinal": 2
-        }
-      ]
-    },
-    {
-      "name": "around midnight: records dated the day before their card's last card proof are date_order, not daily_limit; the last date still allows three",
+      "name": "around midnight: records dated the day before their card's last card proof are date_order; the last date stays valid",
       "proof_log": "production",
       "events": [
         {
@@ -5847,8 +5110,13 @@
         },
         {
           "seq": 8,
-          "valid": false,
-          "reason": "daily_limit"
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "refresh"
+            }
+          ]
         }
       ],
       "state": [
@@ -5864,13 +5132,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 3,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-05-10"
+                  "switch_count": 0
                 }
               }
             }
@@ -5966,13 +5232,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-05-11"
+                  "switch_count": 0
                 }
               }
             }
@@ -6225,13 +5489,11 @@
                   "username": "f"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "f",
                   "last_declared": "f",
-                  "switch_count": 5,
-                  "correction_date": "2026-01-06"
+                  "switch_count": 5
                 }
               }
             }
@@ -6259,7 +5521,7 @@
       ]
     },
     {
-      "name": "a first followed on its date by a correction and a second correction; switch_count stays 0",
+      "name": "a first replaced on its date, and again: two switches, switch_count 2",
       "proof_log": "production",
       "events": [
         {
@@ -6331,7 +5593,7 @@
           "kinds": [
             {
               "platform": "threads",
-              "kind": "correction"
+              "kind": "switch"
             }
           ]
         },
@@ -6341,7 +5603,7 @@
           "kinds": [
             {
               "platform": "threads",
-              "kind": "correction"
+              "kind": "switch"
             }
           ]
         }
@@ -6359,13 +5621,11 @@
                   "username": "alice_"
                 }
               ],
-              "proofs_on_last_date": 3,
               "slots": {
                 "threads": {
                   "current": "alice_",
                   "last_declared": "alice_",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 2
                 }
               }
             }
@@ -6393,7 +5653,7 @@
       ]
     },
     {
-      "name": "a switch followed on its date by a correction; switch_count is 1",
+      "name": "a switch followed on its date by another account is a second switch; switch_count is 2",
       "proof_log": "production",
       "events": [
         {
@@ -6475,7 +5735,7 @@
           "kinds": [
             {
               "platform": "threads",
-              "kind": "correction"
+              "kind": "switch"
             }
           ]
         }
@@ -6493,13 +5753,11 @@
                   "username": "bob"
                 }
               ],
-              "proofs_on_last_date": 2,
               "slots": {
                 "threads": {
                   "current": "bob",
                   "last_declared": "bob",
-                  "switch_count": 1,
-                  "correction_date": "2026-01-02"
+                  "switch_count": 2
                 }
               }
             }
@@ -6527,7 +5785,7 @@
       ]
     },
     {
-      "name": "A to B to A on one date is a switch and a correction, count 1; on three dates two switches",
+      "name": "A to B to A is two switches, on one date or on three",
       "proof_log": "production",
       "events": [
         {
@@ -6660,7 +5918,7 @@
           "kinds": [
             {
               "platform": "threads",
-              "kind": "correction"
+              "kind": "switch"
             }
           ]
         },
@@ -6708,13 +5966,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 2,
-                  "correction_date": "2026-01-03"
+                  "switch_count": 2
                 }
               }
             },
@@ -6727,13 +5983,11 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 2,
               "slots": {
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 1,
-                  "correction_date": "2026-01-02"
+                  "switch_count": 2
                 }
               }
             }
@@ -6843,13 +6097,11 @@
                   "username": "bob"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "bob",
                   "last_declared": "bob",
-                  "switch_count": 1,
-                  "correction_date": "2026-01-02"
+                  "switch_count": 1
                 }
               }
             }
@@ -6877,7 +6129,7 @@
       ]
     },
     {
-      "name": "a correction after the fifth switch, on its date, is valid; the same change a date later is switch_limit",
+      "name": "after the fifth switch, another account on the date of the fifth is switch_limit, as on a later date",
       "proof_log": "production",
       "events": [
         {
@@ -7080,13 +6332,8 @@
         },
         {
           "seq": 7,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "correction"
-            }
-          ]
+          "valid": false,
+          "reason": "switch_limit"
         },
         {
           "seq": 8,
@@ -7104,16 +6351,14 @@
               "accounts": [
                 {
                   "platform": "threads",
-                  "username": "g"
+                  "username": "f"
                 }
               ],
-              "proofs_on_last_date": 2,
               "slots": {
                 "threads": {
-                  "current": "g",
-                  "last_declared": "g",
-                  "switch_count": 5,
-                  "correction_date": "2026-01-06"
+                  "current": "f",
+                  "last_declared": "f",
+                  "switch_count": 5
                 }
               }
             }
@@ -7121,7 +6366,7 @@
           "accounts": [
             {
               "platform": "threads",
-              "username": "g",
+              "username": "f",
               "cards": [
                 {
                   "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
@@ -7141,7 +6386,7 @@
       ]
     },
     {
-      "name": "a withdraw and a refresh on one date open nothing: another account that date is a switch",
+      "name": "a withdraw and a refresh on one date: another account that date is a switch",
       "proof_log": "production",
       "events": [
         {
@@ -7263,13 +6508,11 @@
                   "username": "bob"
                 }
               ],
-              "proofs_on_last_date": 3,
               "slots": {
                 "threads": {
                   "current": "bob",
                   "last_declared": "bob",
-                  "switch_count": 1,
-                  "correction_date": "2026-01-02"
+                  "switch_count": 1
                 }
               }
             }
@@ -7297,7 +6540,7 @@
       ]
     },
     {
-      "name": "an account withdrawn and another declared on the date of the first is a correction",
+      "name": "an account withdrawn and another declared on the date of the first is a switch",
       "proof_log": "production",
       "events": [
         {
@@ -7374,7 +6617,7 @@
           "kinds": [
             {
               "platform": "threads",
-              "kind": "correction"
+              "kind": "switch"
             }
           ]
         }
@@ -7392,13 +6635,11 @@
                   "username": "bob"
                 }
               ],
-              "proofs_on_last_date": 3,
               "slots": {
                 "threads": {
                   "current": "bob",
                   "last_declared": "bob",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 1
                 }
               }
             }
@@ -7426,312 +6667,7 @@
       ]
     },
     {
-      "name": "around midnight: dates must be equal; a record of another card in between changes nothing",
-      "proof_log": "production",
-      "events": [
-        {
-          "seq": 1,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-01-01.GQ6BW1FY2H0WBP91MMG57JWPF0",
-          "date": "2026-01-01",
-          "verifies": true,
-          "crl_dates": [
-            "2026-01-01"
-          ]
-        },
-        {
-          "seq": 2,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "bob"
-            }
-          ],
-          "challenge": "2026-01-03.CZZBSSK73F4Y94FFYKA5NKQ2XR",
-          "date": "2026-01-03",
-          "verifies": true,
-          "crl_dates": [
-            "2026-01-03"
-          ]
-        },
-        {
-          "seq": 3,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "carol"
-            }
-          ],
-          "challenge": "2026-01-02.PB900KTKNR7VH2W5YAJ3H67NR0",
-          "date": "2026-01-02",
-          "verifies": true,
-          "crl_dates": [
-            "2026-01-02"
-          ]
-        },
-        {
-          "seq": 4,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "0400000000000000000000000000000000000000000000000000",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-01-01.GJDCNETYD0029PANHA6XEGJFS8",
-          "date": "2026-01-01",
-          "verifies": true,
-          "crl_dates": [
-            "2026-01-01"
-          ]
-        },
-        {
-          "seq": 5,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "0400000000000000000000000000000000000000000000000000",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "bob"
-            }
-          ],
-          "challenge": "2026-01-02.PMS9S415C3KPF1EEYAFJ1EG604",
-          "date": "2026-01-02",
-          "verifies": true,
-          "crl_dates": [
-            "2026-01-02"
-          ]
-        },
-        {
-          "seq": 6,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "040000000000000000000000000000000000000000000000000G",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "dave"
-            }
-          ],
-          "challenge": "2026-01-03.AW3D9VPCZRD5G28PA741S4T9EM",
-          "date": "2026-01-03",
-          "verifies": true,
-          "crl_dates": [
-            "2026-01-03"
-          ]
-        },
-        {
-          "seq": 7,
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "0400000000000000000000000000000000000000000000000000",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "carol"
-            }
-          ],
-          "challenge": "2026-01-02.57VH83CN4C7CE5YA4X19VJZF48",
-          "date": "2026-01-02",
-          "verifies": true,
-          "crl_dates": [
-            "2026-01-02"
-          ]
-        }
-      ],
-      "results": [
-        {
-          "seq": 1,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "first"
-            }
-          ]
-        },
-        {
-          "seq": 2,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "switch"
-            }
-          ]
-        },
-        {
-          "seq": 3,
-          "valid": false,
-          "reason": "date_order"
-        },
-        {
-          "seq": 4,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "first"
-            }
-          ]
-        },
-        {
-          "seq": 5,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "switch"
-            }
-          ]
-        },
-        {
-          "seq": 6,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "first"
-            }
-          ]
-        },
-        {
-          "seq": 7,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "correction"
-            }
-          ]
-        }
-      ],
-      "state": [
-        {
-          "scope_string": "iamreal:public:0_______________",
-          "cards": [
-            {
-              "scoped_id": "0400000000000000000000000000000000000000000000000000",
-              "last_card_proof": "2026-01-02",
-              "accounts": [
-                {
-                  "platform": "threads",
-                  "username": "carol"
-                }
-              ],
-              "proofs_on_last_date": 2,
-              "slots": {
-                "threads": {
-                  "current": "carol",
-                  "last_declared": "carol",
-                  "switch_count": 1,
-                  "correction_date": "2026-01-02"
-                }
-              }
-            },
-            {
-              "scoped_id": "040000000000000000000000000000000000000000000000000G",
-              "last_card_proof": "2026-01-03",
-              "accounts": [
-                {
-                  "platform": "threads",
-                  "username": "dave"
-                }
-              ],
-              "proofs_on_last_date": 1,
-              "slots": {
-                "threads": {
-                  "current": "dave",
-                  "last_declared": "dave",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-03"
-                }
-              }
-            },
-            {
-              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-              "last_card_proof": "2026-01-03",
-              "accounts": [
-                {
-                  "platform": "threads",
-                  "username": "bob"
-                }
-              ],
-              "proofs_on_last_date": 1,
-              "slots": {
-                "threads": {
-                  "current": "bob",
-                  "last_declared": "bob",
-                  "switch_count": 1,
-                  "correction_date": "2026-01-03"
-                }
-              }
-            }
-          ],
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "bob",
-              "cards": [
-                {
-                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-                  "last_card_proof": "2026-01-03"
-                }
-              ]
-            },
-            {
-              "platform": "threads",
-              "username": "carol",
-              "cards": [
-                {
-                  "scoped_id": "0400000000000000000000000000000000000000000000000000",
-                  "last_card_proof": "2026-01-02"
-                }
-              ]
-            },
-            {
-              "platform": "threads",
-              "username": "dave",
-              "cards": [
-                {
-                  "scoped_id": "040000000000000000000000000000000000000000000000000G",
-                  "last_card_proof": "2026-01-03"
-                }
-              ]
-            }
-          ]
-        }
-      ],
-      "ordinals": [
-        {
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "ordinal": 1
-        },
-        {
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "0400000000000000000000000000000000000000000000000000",
-          "ordinal": 2
-        },
-        {
-          "scope_string": "iamreal:public:0_______________",
-          "scoped_id": "040000000000000000000000000000000000000000000000000G",
-          "ordinal": 3
-        }
-      ]
-    },
-    {
-      "name": "a first, two corrections, then a fourth record on that date is daily_limit",
+      "name": "a first and three other accounts on its date: three switches, all valid",
       "proof_log": "production",
       "events": [
         {
@@ -7820,7 +6756,7 @@
           "kinds": [
             {
               "platform": "threads",
-              "kind": "correction"
+              "kind": "switch"
             }
           ]
         },
@@ -7830,14 +6766,19 @@
           "kinds": [
             {
               "platform": "threads",
-              "kind": "correction"
+              "kind": "switch"
             }
           ]
         },
         {
           "seq": 4,
-          "valid": false,
-          "reason": "daily_limit"
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "switch"
+            }
+          ]
         }
       ],
       "state": [
@@ -7850,16 +6791,14 @@
               "accounts": [
                 {
                   "platform": "threads",
-                  "username": "carol"
+                  "username": "dave"
                 }
               ],
-              "proofs_on_last_date": 3,
               "slots": {
                 "threads": {
-                  "current": "carol",
-                  "last_declared": "carol",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "current": "dave",
+                  "last_declared": "dave",
+                  "switch_count": 3
                 }
               }
             }
@@ -7867,7 +6806,7 @@
           "accounts": [
             {
               "platform": "threads",
-              "username": "carol",
+              "username": "dave",
               "cards": [
                 {
                   "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
@@ -7945,19 +6884,16 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "test-example": {
                   "current": "a-b",
                   "last_declared": "a-b",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 },
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -8080,19 +7016,16 @@
                   "username": "bob"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "test-example": {
                   "current": "a-b",
                   "last_declared": "a-b",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-02"
+                  "switch_count": 0
                 },
                 "threads": {
                   "current": "bob",
                   "last_declared": "bob",
-                  "switch_count": 1,
-                  "correction_date": "2026-01-02"
+                  "switch_count": 1
                 }
               }
             }
@@ -8215,19 +7148,16 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "test-example": {
                   "current": null,
                   "last_declared": "a-b",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 },
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -8374,19 +7304,16 @@
                   "username": "bob"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "test-example": {
                   "current": "a-b",
                   "last_declared": "a-b",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 },
                 "threads": {
                   "current": "bob",
                   "last_declared": "bob",
-                  "switch_count": 1,
-                  "correction_date": "2026-01-03"
+                  "switch_count": 1
                 }
               }
             }
@@ -8521,19 +7448,16 @@
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "last_card_proof": "2026-01-02",
               "accounts": [],
-              "proofs_on_last_date": 1,
               "slots": {
                 "test-example": {
                   "current": null,
                   "last_declared": "a-b",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 },
                 "threads": {
                   "current": null,
                   "last_declared": null,
-                  "switch_count": 0,
-                  "correction_date": null
+                  "switch_count": 0
                 }
               }
             }
@@ -8879,19 +7803,16 @@
                   "username": "f"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "test-example": {
                   "current": "e-f",
                   "last_declared": "e-f",
-                  "switch_count": 2,
-                  "correction_date": "2026-01-08"
+                  "switch_count": 2
                 },
                 "threads": {
                   "current": "f",
                   "last_declared": "f",
-                  "switch_count": 5,
-                  "correction_date": "2026-01-06"
+                  "switch_count": 5
                 }
               }
             }
@@ -9225,19 +8146,16 @@
                   "username": "f"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "test-example": {
                   "current": "a-b",
                   "last_declared": "a-b",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-08"
+                  "switch_count": 0
                 },
                 "threads": {
                   "current": "f",
                   "last_declared": "f",
-                  "switch_count": 5,
-                  "correction_date": "2026-01-06"
+                  "switch_count": 5
                 }
               }
             }
@@ -9587,19 +8505,16 @@
                   "username": "f"
                 }
               ],
-              "proofs_on_last_date": 3,
               "slots": {
                 "test-example": {
                   "current": "a-b",
                   "last_declared": "a-b",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-07"
+                  "switch_count": 0
                 },
                 "threads": {
                   "current": "f",
                   "last_declared": "f",
-                  "switch_count": 5,
-                  "correction_date": "2026-01-06"
+                  "switch_count": 5
                 }
               }
             }
@@ -9637,7 +8552,7 @@
       ]
     },
     {
-      "name": "a switch on one platform opens no correction on the other: a change there that date is a switch",
+      "name": "a switch on one platform and another account on the other on that date: a switch on each platform",
       "proof_log": "test",
       "events": [
         {
@@ -9765,19 +8680,16 @@
                   "username": "bob"
                 }
               ],
-              "proofs_on_last_date": 2,
               "slots": {
                 "test-example": {
                   "current": "c-d",
                   "last_declared": "c-d",
-                  "switch_count": 1,
-                  "correction_date": "2026-01-02"
+                  "switch_count": 1
                 },
                 "threads": {
                   "current": "bob",
                   "last_declared": "bob",
-                  "switch_count": 1,
-                  "correction_date": "2026-01-02"
+                  "switch_count": 1
                 }
               }
             }
@@ -9815,7 +8727,7 @@
       ]
     },
     {
-      "name": "a correction on one platform and a blocked switch on the other: switch_limit, the correction not applied",
+      "name": "a change on one platform and a blocked switch on the other: switch_limit, the change not applied; the change alone is a switch",
       "proof_log": "test",
       "events": [
         {
@@ -10070,7 +8982,7 @@
           "kinds": [
             {
               "platform": "test-example",
-              "kind": "correction"
+              "kind": "switch"
             },
             {
               "platform": "threads",
@@ -10096,19 +9008,16 @@
                   "username": "f"
                 }
               ],
-              "proofs_on_last_date": 2,
               "slots": {
                 "test-example": {
                   "current": "c-d",
                   "last_declared": "c-d",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-07"
+                  "switch_count": 1
                 },
                 "threads": {
                   "current": "f",
                   "last_declared": "f",
-                  "switch_count": 5,
-                  "correction_date": "2026-01-06"
+                  "switch_count": 5
                 }
               }
             }
@@ -10131,233 +9040,6 @@
                 {
                   "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
                   "last_card_proof": "2026-01-07"
-                }
-              ]
-            }
-          ]
-        }
-      ],
-      "ordinals": [
-        {
-          "scope_string": "iamreal-test:public:0__________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "ordinal": 1
-        }
-      ]
-    },
-    {
-      "name": "the daily limit counts per card, across changes on different platforms",
-      "proof_log": "test",
-      "events": [
-        {
-          "seq": 1,
-          "scope_string": "iamreal-test:public:0__________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "test-example",
-              "username": "a-b"
-            }
-          ],
-          "challenge": "2026-01-01.X1DE5XDHQ72RH6W7ATG279S2CG",
-          "date": "2026-01-01",
-          "verifies": true,
-          "crl_dates": [
-            "2026-01-01"
-          ]
-        },
-        {
-          "seq": 2,
-          "scope_string": "iamreal-test:public:0__________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "test-example",
-              "username": "a-b"
-            },
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-01-01.GCRD4276GKP8QN6F0VVRB6NZZ4",
-          "date": "2026-01-01",
-          "verifies": true,
-          "crl_dates": [
-            "2026-01-01"
-          ]
-        },
-        {
-          "seq": 3,
-          "scope_string": "iamreal-test:public:0__________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-01-01.6BJ2HQ548591Z9KMH74GGCT3FC",
-          "date": "2026-01-01",
-          "verifies": true,
-          "crl_dates": [
-            "2026-01-01"
-          ]
-        },
-        {
-          "seq": 4,
-          "scope_string": "iamreal-test:public:0__________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "test-example",
-              "username": "a-b"
-            },
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-01-01.5ZCTSC4EC7QKH61H8AD2FA115R",
-          "date": "2026-01-01",
-          "verifies": true,
-          "crl_dates": [
-            "2026-01-01"
-          ]
-        },
-        {
-          "seq": 5,
-          "scope_string": "iamreal-test:public:0__________",
-          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-          "accounts": [
-            {
-              "platform": "test-example",
-              "username": "a-b"
-            },
-            {
-              "platform": "threads",
-              "username": "alice"
-            }
-          ],
-          "challenge": "2026-01-02.WF2PF8ZZYZ7VGYVKCB5A33H3NM",
-          "date": "2026-01-02",
-          "verifies": true,
-          "crl_dates": [
-            "2026-01-02"
-          ]
-        }
-      ],
-      "results": [
-        {
-          "seq": 1,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "test-example",
-              "kind": "first"
-            }
-          ]
-        },
-        {
-          "seq": 2,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "test-example",
-              "kind": "refresh"
-            },
-            {
-              "platform": "threads",
-              "kind": "first"
-            }
-          ]
-        },
-        {
-          "seq": 3,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "test-example",
-              "kind": "withdraw"
-            },
-            {
-              "platform": "threads",
-              "kind": "refresh"
-            }
-          ]
-        },
-        {
-          "seq": 4,
-          "valid": false,
-          "reason": "daily_limit"
-        },
-        {
-          "seq": 5,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "test-example",
-              "kind": "refresh"
-            },
-            {
-              "platform": "threads",
-              "kind": "refresh"
-            }
-          ]
-        }
-      ],
-      "state": [
-        {
-          "scope_string": "iamreal-test:public:0__________",
-          "cards": [
-            {
-              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-              "last_card_proof": "2026-01-02",
-              "accounts": [
-                {
-                  "platform": "test-example",
-                  "username": "a-b"
-                },
-                {
-                  "platform": "threads",
-                  "username": "alice"
-                }
-              ],
-              "proofs_on_last_date": 1,
-              "slots": {
-                "test-example": {
-                  "current": "a-b",
-                  "last_declared": "a-b",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
-                },
-                "threads": {
-                  "current": "alice",
-                  "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
-                }
-              }
-            }
-          ],
-          "accounts": [
-            {
-              "platform": "test-example",
-              "username": "a-b",
-              "cards": [
-                {
-                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-                  "last_card_proof": "2026-01-02"
-                }
-              ]
-            },
-            {
-              "platform": "threads",
-              "username": "alice",
-              "cards": [
-                {
-                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-                  "last_card_proof": "2026-01-02"
                 }
               ]
             }
@@ -10485,19 +9167,16 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "test-example": {
                   "current": null,
                   "last_declared": null,
-                  "switch_count": 0,
-                  "correction_date": null
+                  "switch_count": 0
                 },
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             },
@@ -10510,19 +9189,16 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "test-example": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 },
                 "threads": {
                   "current": null,
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             }
@@ -10677,19 +9353,16 @@
                   "username": "alice"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "test-example": {
                   "current": "a-b",
                   "last_declared": "a-b",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 },
                 "threads": {
                   "current": "alice",
                   "last_declared": "alice",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-01"
+                  "switch_count": 0
                 }
               }
             },
@@ -10702,19 +9375,16 @@
                   "username": "bob"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "test-example": {
                   "current": null,
                   "last_declared": null,
-                  "switch_count": 0,
-                  "correction_date": null
+                  "switch_count": 0
                 },
                 "threads": {
                   "current": "bob",
                   "last_declared": "bob",
-                  "switch_count": 1,
-                  "correction_date": "2026-01-02"
+                  "switch_count": 1
                 }
               }
             }
@@ -10767,7 +9437,7 @@
       ]
     },
     {
-      "name": "an invalid record of each code changes no slot and no last_card_proof; the change after them is still a correction",
+      "name": "an invalid record of each code changes no slot and no last_card_proof; the change after them is a switch",
       "proof_log": "test",
       "events": [
         {
@@ -11217,8 +9887,13 @@
         },
         {
           "seq": 17,
-          "valid": false,
-          "reason": "daily_limit"
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "refresh"
+            }
+          ]
         },
         {
           "seq": 18,
@@ -11226,7 +9901,7 @@
           "kinds": [
             {
               "platform": "test-example",
-              "kind": "correction"
+              "kind": "switch"
             },
             {
               "platform": "threads",
@@ -11248,19 +9923,16 @@
                   "username": "x"
                 }
               ],
-              "proofs_on_last_date": 3,
               "slots": {
                 "test-example": {
                   "current": null,
                   "last_declared": null,
-                  "switch_count": 0,
-                  "correction_date": null
+                  "switch_count": 0
                 },
                 "threads": {
                   "current": "x",
                   "last_declared": "x",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-07"
+                  "switch_count": 0
                 }
               }
             },
@@ -11277,19 +9949,16 @@
                   "username": "f"
                 }
               ],
-              "proofs_on_last_date": 2,
               "slots": {
                 "test-example": {
                   "current": "c-d",
                   "last_declared": "c-d",
-                  "switch_count": 0,
-                  "correction_date": "2026-01-07"
+                  "switch_count": 1
                 },
                 "threads": {
                   "current": "f",
                   "last_declared": "f",
-                  "switch_count": 5,
-                  "correction_date": "2026-01-06"
+                  "switch_count": 5
                 }
               }
             }
@@ -11557,13 +10226,11 @@
                   "username": "bob"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "bob",
                   "last_declared": "bob",
-                  "switch_count": 0,
-                  "correction_date": "2026-02-02"
+                  "switch_count": 0
                 }
               }
             },
@@ -11571,13 +10238,11 @@
               "scoped_id": "040000000000000000000000000000000000000000000000000G",
               "last_card_proof": "2026-02-05",
               "accounts": [],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": null,
                   "last_declared": "carol.tw",
-                  "switch_count": 0,
-                  "correction_date": "2026-02-03"
+                  "switch_count": 0
                 }
               }
             },
@@ -11590,13 +10255,11 @@
                   "username": "dave"
                 }
               ],
-              "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
                   "current": "dave",
                   "last_declared": "dave",
-                  "switch_count": 1,
-                  "correction_date": "2026-02-04"
+                  "switch_count": 1
                 }
               }
             }
