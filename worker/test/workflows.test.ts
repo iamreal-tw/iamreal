@@ -326,7 +326,7 @@ for (const [label, cp] of [
 // runs the repository's code without it, started by hand only.
 const U = "upload-ios.yml";
 const IOS_KEY_ENV = "        env:\n          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}\n";
-const IOS_ARCHIVE_STEP = "      - name: Archive the store's build and check it\n";
+const IOS_ARCHIVE_STEP = "      - name: Archive the production app and check it\n";
 const IOS_UNPACK_STEP = "      - name: Unpack the archive\n";
 Object.assign(CHANGES, {
   "ios-upload 1 triggered by a push to main too": [replace(U, "on:\n  workflow_dispatch:\n", "on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main\n")],
@@ -342,6 +342,22 @@ Object.assign(CHANGES, {
   "ios-upload 9 a run cancelling the one before": [replace(U, "  group: upload-ios\n  cancel-in-progress: false\n", "  group: upload-ios\n  cancel-in-progress: true\n")],
   "ios-upload 10 the default Xcode of the runner": [replace(U, "env:\n  # The one Xcode", "env:\n  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer\n  # The one Xcode")],
   "ios-upload 11 the key written to a file other users of the runner can read": [replace(U, "        run: umask 077 && ", "        run: ")],
+});
+
+// The upload of the iPhone's test app (#484): the same rules, its own group, the test app archived with its build numbers.
+const UT = "upload-ios-test.yml";
+const IOS_TEST_ARCHIVE = './archive.sh --test-app "$RUNNER_TEMP/IamrealApp.xcarchive" "$((GITHUB_RUN_NUMBER + 1000000))"';
+Object.assign(CHANGES, {
+  "ios-test-upload 1 triggered by a push to main too": [replace(UT, "on:\n  workflow_dispatch:\n", "on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main\n")],
+  "ios-test-upload 2 the build job in the environment that has the key": [replace(UT, "  build:\n    runs-on: xcode-27\n", "  build:\n    runs-on: xcode-27\n    environment: app-test\n")],
+  "ios-test-upload 3 the key given to the step that archives": [replace(UT, "      - name: Archive the test app and check it\n        working-directory: ios\n", `      - name: Archive the test app and check it\n        working-directory: ios\n${IOS_KEY_ENV}`)],
+  "ios-test-upload 4 the upload job outside the environment": [replace(UT, "    environment: app-test\n", "")],
+  "ios-test-upload 5 the production app archived": [replace(UT, IOS_TEST_ARCHIVE, './archive.sh "$RUNNER_TEMP/IamrealApp.xcarchive" "$((GITHUB_RUN_NUMBER + 1000000))"')],
+  "ios-test-upload 6 the run number as the build, which takes turns with the production app's": [replace(UT, IOS_TEST_ARCHIVE, './archive.sh --test-app "$RUNNER_TEMP/IamrealApp.xcarchive" "$GITHUB_RUN_NUMBER"')],
+  "ios-test-upload 7 the production app's group, so that one waits for the other": [replace(UT, "  group: upload-ios-test\n", "  group: upload-ios\n")],
+  "ios-test-upload 8 the upload job checking out the repository": [
+    replace(UT, IOS_UNPACK_STEP, `      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n${IOS_UNPACK_STEP}`),
+  ],
 });
 
 // The daily re-verification (#421): by its schedule and by hand only, no secret, no cache, a token
@@ -578,6 +594,8 @@ const SIGN_ENV = "        env:\n          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ se
 const PLAY_ENV = "        env:\n          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}\n";
 const BUNDLE_RELEASE = '        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleRelease';
 const UPLOAD_JOBS_PROBLEM = /^upload-android\.yml: the jobs are not exactly the ones in test\/workflows\.ts/;
+const T = "upload-android-test.yml";
+const UPLOAD_TEST_JOBS_PROBLEM = /^upload-android-test\.yml: the jobs are not exactly the ones in test\/workflows\.ts/;
 const SECRETS_PROBLEM = /^the lines with "secrets" in them are/;
 
 const UPLOAD_ANDROID_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
@@ -614,7 +632,7 @@ const UPLOAD_ANDROID_CHANGES: Record<string, { changes: Change[]; problem: RegEx
     problem: SECRETS_PROBLEM,
   },
   "258 the service account's key put into the command": {
-    changes: [replace(A, 'run: bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"', 'run: echo "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" > key.json && bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"')],
+    changes: [replace(A, 'run: bash .github/workflows/play-upload.sh tw.iamreal.app "$RUNNER_TEMP/signed/app-release.aab"', 'run: echo "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" > key.json && bash .github/workflows/play-upload.sh tw.iamreal.app "$RUNNER_TEMP/signed/app-release.aab"')],
     problem: SECRETS_PROBLEM,
   },
   "259 the build job's token given more than the workflow's": {
@@ -640,6 +658,27 @@ const UPLOAD_ANDROID_CHANGES: Record<string, { changes: Change[]; problem: RegEx
   "264 a step of the upload job continuing when signing fails": {
     changes: [replace(A, "      - name: Sign the bundle with the upload key\n", "      - name: Sign the bundle with the upload key\n        continue-on-error: true\n")],
     problem: UPLOAD_JOBS_PROBLEM,
+  },
+  // upload-android-test.yml (#483): the same two jobs, for the test app (ADR-0040).
+  "265 the test app's upload building the production app": {
+    changes: [replace(T, "./gradlew --no-daemon bundleTrial ", "./gradlew --no-daemon bundleRelease ")],
+    problem: UPLOAD_TEST_JOBS_PROBLEM,
+  },
+  "266 the test app's bundle uploaded to the production app": {
+    changes: [replace(T, 'play-upload.sh tw.iamreal.app.test "', 'play-upload.sh tw.iamreal.app "')],
+    problem: UPLOAD_TEST_JOBS_PROBLEM,
+  },
+  "267 the test app's build numbers not above the production app's": {
+    changes: [replace(T, '"$(date -u +%Y-%m-%dT%H:%M:%SZ)" 1000000 >>', '"$(date -u +%Y-%m-%dT%H:%M:%SZ)" 0 >>')],
+    problem: UPLOAD_TEST_JOBS_PROBLEM,
+  },
+  "268 the test app's upload started by a push to main too": {
+    changes: [replace(T, "on:\n  workflow_dispatch:\n", "on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main\n")],
+    problem: /^upload-android-test\.yml: not triggered by hand \(workflow_dispatch\) only/,
+  },
+  "269 the test app's upload key given to its build job, where Gradle runs": {
+    changes: [replace(T, '        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleTrial', `${SIGN_ENV.replace("        env:\n", "")}        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleTrial`)],
+    problem: UPLOAD_TEST_JOBS_PROBLEM,
   },
 };
 

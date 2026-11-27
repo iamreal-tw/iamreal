@@ -317,12 +317,29 @@
 			};
 			name = Release;
 		};
+		1A0000000000000000000040 /* TestApp */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 1A0000000000000000000004 /* Test.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(IAMREAL_ENVIRONMENT) IAMREAL_TEST_APP";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = TestApp;
+		};
 		1A0000000000000000000027 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Config/IamrealApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2000000;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Config/Info.plist;
@@ -369,6 +386,32 @@
 			};
 			name = Release;
 		};
+		1A0000000000000000000041 /* TestApp */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/IamrealApp.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1000000;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "島民證明 測試";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 2026.11.20;
+				OTHER_LDFLAGS = (
+					"$(IAMREAL_CORE_LIBRARY)",
+					"-lc++",
+					"$(IAMREAL_TESTING_LDFLAGS)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(IAMREAL_BUNDLE_IDENTIFIER)";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = App/Bridge.h;
+			};
+			name = TestApp;
+		};
 		1A000000000000000000002A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -401,6 +444,22 @@
 			};
 			name = Release;
 		};
+		1A0000000000000000000042 /* TestApp */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 2026.11.20;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(IAMREAL_BUNDLE_IDENTIFIER).tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = Tests/Bridge.h;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/IamrealApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/IamrealApp";
+			};
+			name = TestApp;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -409,6 +468,7 @@
 			buildConfigurations = (
 				1A0000000000000000000024 /* Debug */,
 				1A0000000000000000000025 /* Release */,
+				1A0000000000000000000040 /* TestApp */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -418,6 +478,7 @@
 			buildConfigurations = (
 				1A0000000000000000000027 /* Debug */,
 				1A0000000000000000000028 /* Release */,
+				1A0000000000000000000041 /* TestApp */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -427,6 +488,7 @@
 			buildConfigurations = (
 				1A000000000000000000002A /* Debug */,
 				1A000000000000000000002B /* Release */,
+				1A0000000000000000000042 /* TestApp */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
