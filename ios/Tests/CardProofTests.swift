@@ -140,12 +140,12 @@ final class CardProofTests: XCTestCase {
             "還沒有自然人憑證，怎麼申辦？",
             "滿 18 歲，未受監護宣告，本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
             "找附近的戶政事務所",
-            "內政部憑證管理中心：怎麼辦自然人憑證（moica.nat.gov.tw）",
+            "內政部憑證管理中心：怎麼申辦自然人憑證（moica.nat.gov.tw）",
         ])
         // The two ways to a card: the phone's map, and MOICA's page on applying. Nothing of the app goes with them.
         try await press("找附近的戶政事務所", in: model)
         XCTAssertEqual(opened.last?.absoluteString.removingPercentEncoding, "https://maps.apple.com/?q=戶政事務所")
-        try await press("內政部憑證管理中心：怎麼辦自然人憑證（moica.nat.gov.tw）", in: model)
+        try await press("內政部憑證管理中心：怎麼申辦自然人憑證（moica.nat.gov.tw）", in: model)
         XCTAssertEqual(opened.last?.absoluteString, "https://moica.nat.gov.tw/rac.html")
         XCTAssertEqual(model.screen.step, 1)
 
