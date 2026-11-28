@@ -215,11 +215,28 @@ smaller. The built-in 7 days is the widest the record rule is expected to
 become, so that widening the rule from 3 days does not require updating
 installed apps.
 
-**The server**, when accepting a card proof, accepts only the roots of the
-two newest CRLs of that issuer in the mirror (the usable ones with the
-highest `cRLNumber`), and none if today in Taiwan is later than the newest
-one's CRL date plus 3 days. This keeps normal operation on fresh CRLs. Nobody else can
-check it, since it depends on what the mirror had at that moment.
+**The server**, when accepting a card proof, looks at the two newest CRLs of
+that issuer in the mirror (the usable ones with the highest `cRLNumber`):
+
+- it accepts the root of the newest one;
+- it accepts the root of the second newest one only if the challenge was
+  issued before the server first learned of the newest one, or at most 2
+  minutes after. A card proof whose challenge was issued before MOICA's
+  list changed goes through; one whose challenge comes later uses the newest
+  list. The 2 minutes cover the
+  60 seconds a device can be served the index from the cache of the data
+  domain, and the time between the mirror writing the index and the part of
+  the server that accepts card proofs learning of the CRL. The mirror tells
+  it the newest CRLs again and again; what counts is the first time;
+- it accepts none if today in Taiwan is later than the newest one's CRL
+  date plus 3 days.
+
+This keeps normal operation on fresh CRLs: without the time limit, the
+second newest list would be accepted until the next one came, 5 to 7 hours
+later, and a revoked card would pass for that much longer. It is the
+server's policy, not part of the record rules: nobody else can check it,
+since it depends on what the mirror had and when, and the record rules and
+their version number do not change with it.
 
 **Anyone re-verifying** checks the rule of the previous section against the
 archived CRLs.

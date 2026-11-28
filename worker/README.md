@@ -9,7 +9,7 @@
 | 有 | 還沒有 |
 |---|---|
 | 清冊鏡像（[排程做什麼](#排程做什麼)）：每小時抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl`，驗章、建樹，寫清冊存檔的索引 `crl/index.jsonl`，寫清冊差異檔 `crl/patches/`。`crl/testdata/` 的每一案和 Go 的 `crl/` 比對過 | |
-| 證明紀錄的 Durable Object：題目表、紀錄、卡片狀態表、證明紀錄的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | |
+| 證明紀錄的 Durable Object：題目表、紀錄、卡片狀態表、證明紀錄的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期，以及每份第一次交來的時間 | |
 | 限流（[限流](#限流)）：照 IP 的上限，題目、卡片現況、送出、公開的讀取、計數、頁面六類分開算，IPv4 照單一位址、IPv6 照 /64，超過回 `429` 和 `Retry-After`，訪客頁面回一頁說明；全站的總量上限，只數開始過卡的那一次 `config?start`；Durable Object 撐不住時介面回 `503` `busy`、頁面回人太多的那一頁。第二層的 WAF 限流規則（整個 zone，照 IP 每 10 秒 100 次）開著，緊急時的挑戰頁做好、關著，2026-11-27 在測試網站設好、實際打過一次（[營運者的說明](#營運者的說明)，[#423](https://github.com/iamreal-tw/iamreal/issues/423)） | 正式上線時挑戰頁的規則要加 `iamreal.tw`；資料網域多一個目錄時，WAF 的規則要加進排除；兩層的上限照量測再調（[#52](https://github.com/iamreal-tw/iamreal/issues/52)） |
 | 收計數（[計數](#計數)，ADR-0032、ADR-0039）：`POST /api/v1/counts` 照 `spec/counts.md` 的表收，不合的整筆丟掉；收下的交給專門收計數的 Durable Object，每分鐘寫成不公開的儲存桶裡 `count-events/` 底下的一個檔，裡面沒有 IP，留 31 天；每分鐘的明細有上限；每小時公布最舊一檔的日期。送計數的客戶端有網頁版的過卡和訪客頁面（[頁面和檔案](#頁面和檔案)「訪客頁面送計數」）。加總（[計數的加總](#計數的加總)）：每天的、每月的、每張島民證明每月一筆、每月送出好幾張卡片的裝置，永久存在 `count-totals/`，裡面沒有 IP 和編號；每小時公布最早一天的加總的日期，外部檢查每小時讀它（[#435](https://github.com/iamreal-tw/iamreal/issues/435)，2026-11-27 打開）。營運者在自己的電腦上產生看數字的那一頁（[營運者看數字的那一頁](#營運者看數字的那一頁)） | 兩個 app 送計數（[#433](https://github.com/iamreal-tw/iamreal/issues/433)、[#434](https://github.com/iamreal-tw/iamreal/issues/434)）；島民證明的「下載 app」和商店的來源參數（[#457](https://github.com/iamreal-tw/iamreal/issues/457)）；這個物件一秒收得了多少還沒量；手機型號的加總（表上還沒有這個欄位） |
 | 連線紀錄（[連線紀錄](#連線紀錄)）：被算了一次的送出一筆各記一個 R2 物件（請求編號、時間、結果、IP、國家代碼、網路業者的編號、過卡裝置編號；成功的加第幾筆，沒成功的加錯誤代碼和內文），留 31 天，靠儲存桶的生命週期規則；每小時公布最舊一筆的日期，讓外面看得出規則有沒有在刪；外部檢查每小時讀它（[#53](https://github.com/iamreal-tw/iamreal/issues/53)，2026-11-27 打開）。其他的請求不記。營運者查詢的指令和收到查詢、刪除請求時的做法（[查連線紀錄](#查連線紀錄)） | 帶過卡裝置編號的客戶端現在只有網頁版，兩個 app 還沒有 |
@@ -140,6 +140,8 @@ pnpm local                       # 可加 --port 8080、--data <目錄>
 | `full_files` | 一個已經搬到 R2 的寫滿的紀錄檔 | `records_before`（這一檔之前的筆數，就是檔名裡的數字）、`fingerprint_after`（這一檔結尾的指紋）、`file_sha256`（寫進 R2、讀回來核對過的那一檔的 SHA-256） |
 | `cards` | 一張有過有效紀錄的卡片 | `scope_string`、`scoped_id`、`last_card_proof`、`proofs_on_last_date`、`slots`、`last_seq`（這張卡片最後一筆有效紀錄的序號） |
 | `cards_copy` | 公布途中才有：卡片狀態表在公布那一刻的複本，欄位和 `cards` 相同 | 同 `cards` |
+| `newest_crls` | 一把發證金鑰最新兩份可用清冊的其中一份，照鏡像上一次交來的（[排程做什麼](#排程做什麼)第三步） | `issuer`、`place`（0 是最新的）、`root`、`crl_number`、`crl_date` |
+| `crl_arrivals` | 一份清冊第一次交給物件的時間 | `issuer`、`crl_number`、`root`、`first_ms` |
 | `proof_log` | 整份證明紀錄，只有一列 | `count`（筆數）、`fingerprint`（指紋）、`latest_valid_date`（證明紀錄裡最晚的有效日期）、`rules_version`（卡片狀態是照哪一版規則算的）、`schema_version`（這些表是照哪一版建的） |
 
 - `cards` 的欄位就是 `spec/record-rules.md`「State」的項目，加上 `last_seq` 和 `proofs_on_last_date`（這張卡片日期是 `last_card_proof` 的有效紀錄有幾筆）。後者不是紀錄規則的狀態，是後台自己的上限要讀的（[送出一筆](#送出一筆)的 `daily_limit`），卡片狀態檔不寫它；放在同一列，是因為它和規則的狀態在同一個交易裡跟著每一筆有效紀錄改。`slots` 是一個 JSON 物件，鍵是平台代號，每個值恰好是 `current`、`last_declared`、`switch_count`，名稱和寫法跟 `card-state` 回應的 `platforms` 相同。只存事實（更換過幾次），不存結論（還能不能換）。沒有有效紀錄的卡片沒有列。
@@ -149,6 +151,7 @@ pnpm local                       # 可加 --port 8080、--data <目錄>
 - `published` 和 `first_day` 是每天公布（[#70](https://github.com/iamreal-tw/iamreal/issues/70)）加的新表，表的版本沒有變。`published` 的列寫了就不改、不刪：一個日期的那一行不會變。它是指紋檔的正本，儲存桶裡的檔每次整個從它寫出來，寫之前先看儲存桶現有的是不是它的開頭（[每天換日公布證明紀錄](#每天換日公布證明紀錄)）。
 - `cards_copy` 是換日公布寫卡片狀態檔用的（[#183](https://github.com/iamreal-tw/iamreal/issues/183)），不是一直在的表：公布那一刻建、公布結束就刪，表的版本沒有變（[每天換日公布證明紀錄](#每天換日公布證明紀錄)「同一刻」）。除了公布，沒有程式讀它。
 - `retries` 是失敗後等多久再試（[#181](https://github.com/iamreal-tw/iamreal/issues/181)）加的新表，表的版本沒有變；在它之前建的物件下一次啟動時補上一張空表，等於沒有失敗過。一件定時工作（重建衍生表、搬檔、每天公布）上一次失敗時有一列：連續失敗了幾次、下一次什麼時候試；成功就刪掉那一列（[過期的題目怎麼刪](#過期的題目怎麼刪)的「失敗後多久再試」）。
+- `crl_arrivals` 是後台收第二新的樹根加時限（[#543](https://github.com/iamreal-tw/iamreal/issues/543)）加的新表，表的版本沒有變。列寫了就不改：同一份清冊再交一次，時間不變。不在最新兩份裡、而且是 7 天前交來的列刪掉；7 天比任何一份清冊能當最新的時間都長（清冊日期加 3 天），所以換回比較舊的兩份時，還找得到它們第一次的時間。在它之前建的物件下一次啟動時補上這張表，存著的最新兩份都當作那一刻才交來：升級那一刻正在進行的過卡，照樣收第二新的樹根。
 - `rules_version` 在物件第一次啟動時記下當時程式的版本號；和程式的不同時不收過卡（見下面）。
 
 ### 兩個版本號
@@ -225,7 +228,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 - **一天的筆數上限**（ADR-0018）：紀錄規則接受的一筆，如果這張卡片日期是同一天的有效紀錄已經寫入 `dailyLimit` 筆（`src/settings.ts` 的 `DAILY_LIMITS`，正式和測試的證明紀錄現在都是 3），就不寫入，回 `400` `daily_limit`。數的是 `cards` 那一列的 `proofs_on_last_date`：一張卡片的日期不往回（檢查 4），所以同一天的筆數只要記最後那一天的。規則先套：會被規則擋下的一筆回規則的代碼，不是 `daily_limit`。這是後台的政策，不是紀錄規則：已經在證明紀錄裡的紀錄只照紀錄規則判斷，重驗也不看這個數字。`card-state` 把這張卡片的筆數和上限一起回，裝置在要 PIN 之前就知道今天滿了沒有。
 - **題目**：發出滿 10 分鐘就是不認得（剛好 10 分鐘也是）。已經寫入過一筆的題目是 `challenge_used`，不計次。第 6 次送出起是 `challenge_attempts`：第 2 段每通過一次就加一，不管後來停在哪一段，第 4 段再看題目時擋下的（`challenge_used`、`challenge_unknown`）和回 `500` 的（驗證器跑不起來、第 4 段出錯）也算。第 1 段擋下的、`paused` 的、第 2 段就是 `challenge_unknown` 或 `challenge_used` 的不計次；計次的那一次寫入自己失敗（`500`）也沒有計到。
 - **第 4 段為什麼再看一次題目**：驗證證明的那段時間，同一個題目可能已經被另一個請求寫入（回 `challenge_used`），也可能剛好過期（回 `challenge_unknown`）。同一個題目同時送兩次，只有一次寫入。過期是照寫入那一刻的時鐘看的：第 2 段時還差 1 毫秒到 10 分鐘、驗證完已經滿 10 分鐘的那一次，回 `challenge_unknown`、不寫入、已經算一次。這一點比 Go 的舊後台嚴，是有意的：它只在第一次看題目時看過期，寫入時只看題目是不是已經用過。
-- **清冊**：`issuer` 那把發證金鑰在鏡像裡沒有可用的清冊，或最新一份的清冊日期加 3 天早於今天（台灣日期），是 `crl_stale`；`smt_root` 不是最新兩份其中一份的樹根，是 `root`。紀錄規則的檢查 3 拿到的清冊日期，是這兩份裡樹根相同的那幾份的日期。重驗的人用的是整份清冊存檔，日期只會更多，所以後台收下的紀錄重驗時這一項一定過。
+- **清冊**：`issuer` 那把發證金鑰在鏡像裡沒有可用的清冊，或最新一份的清冊日期加 3 天早於今天（台灣日期），是 `crl_stale`；`smt_root` 不是最新那一份的樹根，也不是後台還收的第二新那一份的樹根，是 `root`。第二新那一份只收題目在最新那一份第一次交給 Durable Object 之前、或之後 2 分鐘內發出的（`CRL_SWITCH_GRACE_MS`）：題目在清冊換之前拿到的過卡照常通過，換了之後才拿題目的要用最新的。裝置在讀卡之後就下載清冊，按下確認才拿題目，中間清冊換了、而且拿題目時已過 2 分鐘，送出會是 `root`。2 分鐘是資料網域上索引的快取（60 秒）加上鏡像寫索引到交給 Durable Object 的時間差。這是後台的政策，不是紀錄規則（`spec/revocation-tree.md`「Who checks what」），紀錄規則的版本號不動。樹根收下之後，紀錄規則的檢查 3 拿到的清冊日期，是這兩份裡樹根相同的那幾份的日期，第二新那一份過了時限也算：兩份樹根相同，列的卡片就相同。重驗的人用的是整份清冊存檔，日期只會更多，所以後台收下的紀錄重驗時這一項一定過。
 - **驗證器跑不起來**（`EngineError`，見[驗證證明](#驗證證明)）不是拒絕也不是通過：回 `500`，那一行紀錄的 `where` 是 `verifier`，不問 Durable Object 寫任何東西。這一次送出已經在第 2 段算了一次。
 
 ### 寫入是一個交易
@@ -442,7 +445,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 **這一層沒比到的。** `rule-event` 和真的送出一筆共用的只有讀狀態、寫狀態那兩段（`src/proof-log.ts` 的 `ruleState`、`keepRuleState`）、寫衍生表的那兩段（`src/views.ts` 的 `viewOf`、`writeView`）和 `protocol/` 的 `applyRecord`。送出一筆的第 4 段（`#acceptAt`）其餘的部分這裡都沒走到：
 
 - 題目表：`challenge_unknown`、`challenge_used`、計次。用過的題目記在測試專用建置自己的表（`test_used_challenges`），`challenge_reused` 比的是那張表配規則的檢查 2
-- 清冊的政策：`crl_stale`、只認最新兩份清冊的樹根
+- 清冊的政策：`crl_stale`、只認最新那一份清冊的樹根，第二新那一份只在清冊剛換時認
 - 寫 `records`、證明紀錄那一列的 `count`、`fingerprint` 的交易
 - 數 `account_cards` 的查詢在寫入的交易裡跑的那一次（這裡比的是同一句查詢，在交易外面另外叫）
 
@@ -1022,12 +1025,12 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 - **一個檔拿不到行，只是那個檔的事。** 內容和檔名不符、讀不出來、建樹時 Barretenberg 出錯：那個檔記一行 `failed`，其他檔照做，Durable Object 照樣被告知，下一輪再試那個檔。這一次排程最後以例外結束。
 - **這一輪抓到的檔先做，一定做。** 之前留下、還沒有行的檔接著做，照寫進儲存桶的時間，新的先做（過卡要用的是最新的清冊）；但這一輪開始補索引滿 2.5 分鐘之後就不再開始新的一份，留給下一輪。一輪假設自己拿得到 300,000 毫秒的 CPU 時間（`wrangler.jsonc` 的 `limits.cpu_ms` 設的數字；排程實際拿到的是不是這個數字還沒量到，見 [Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)），留下的 2.5 分鐘給最後開始的那一份建樹：最大的一份（G2）在本機要 27 到 29 秒，留的是本機的 5 倍；Cloudflare 上量到的是四棵樹約 157 秒，不到本機的 2 倍。Worker 裡讀不到自己用了多少 CPU 時間，所以用牆上時間算；補索引這一段不是在算就是在等儲存桶，用掉的 CPU 時間不會比牆上時間多。**這個算法靠時鐘是新的，而 Cloudflare 上的時鐘只在 I/O 之後才前進**：程式在算的時候 `Date.now()` 停在上一次 I/O 的時間（[Performance and timers](https://developers.cloudflare.com/workers/runtime-apis/performance/)：「only advance or increment after I/O occurs」；[Security model](https://developers.cloudflare.com/workers/reference/security-model/)：「`Date.now()` returns the time of the last I/O. It does not advance during code execution」；2026-11-20 讀的）。一棵樹是幾十秒沒有 I/O 的計算，所以每次要不要再起一份之前，先對儲存桶問一次索引在不在（`head`），問完才讀時鐘（`src/mirror.ts` 的 `elapsedMs`）；前一份失敗、後面沒有任何 I/O 的時候也一樣。把讀時鐘挪到別的地方，這條界線在線上會無聲地失效，而本機的 workerd 時鐘照常前進（同一頁：「In local development, however, timers will increment regardless of whether I/O happens or not」），測試看不出來。整份索引不見時，要分好幾輪才補得完，每一輪寫的行都留著。
 - **一輪做到一半被停掉，寫好的行留著。** 用完 CPU 時間的那一次呼叫會被 Cloudflare 停掉。索引每做完一個檔就寫一次、寫完就告訴 Durable Object，所以停在第二份的建樹時，第一份的行已經在索引裡、Durable Object 也知道；第二份的檔已經存著，之後的某一輪補它的行。這一輪抓到的兩份不看時間、一定做：兩份加起來超過一次呼叫的上限時，沒有哪一輪做得完，那是把鏡像搬出 Worker 的時候（ADR-0023）。
-- **兩輪同時跑，不會蓋掉對方的行。** 索引用條件式寫入：只有儲存桶裡的索引還是這一輪讀到的那一份（照 ETag），或讀的時候沒有、現在也還沒有，才寫得進去（[R2 的條件式操作](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/#conditional-operations)）。寫不進去就重讀索引、把自己的行加到新的那一份上再寫，最多試 5 次。Durable Object 那邊沒有同樣的保護：`setNewestCrls` 整份換掉、不比新舊，所以兩輪同時跑時，比較晚讀索引的那一輪第一次交，可能把 Durable Object 換回比較舊的兩份，到它下一次交（寫完下一行，或下一輪開始）才又是最新的。排程一小時一次、一輪不到一分鐘，兩輪重疊要有一輪跑超過一小時或被手動觸發。
+- **兩輪同時跑，不會蓋掉對方的行。** 索引用條件式寫入：只有儲存桶裡的索引還是這一輪讀到的那一份（照 ETag），或讀的時候沒有、現在也還沒有，才寫得進去（[R2 的條件式操作](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/#conditional-operations)）。寫不進去就重讀索引、把自己的行加到新的那一份上再寫，最多試 5 次。Durable Object 那邊沒有同樣的保護：`setNewestCrls` 整份換掉、不比新舊，所以兩輪同時跑時，比較晚讀索引的那一輪第一次交，可能把 Durable Object 換回比較舊的兩份，到它下一次交（寫完下一行，或下一輪開始）才又是最新的。換回來時，最新那一份第一次交來的時間照舊（`crl_arrivals` 的列寫了就不改，不在最新兩份裡也留 7 天），所以它不會被當成剛到，第二新那一份也不會因此多收一段。排程一小時一次、一輪不到一分鐘，兩輪重疊要有一輪跑超過一小時或被手動觸發。
 - **讀一個檔花的時間和記憶體不超過它大小的線性倍數。** 清冊編號最多 20 個位元組、延伸欄位最多 16 個是規格的規定（[#120](https://github.com/iamreal-tw/iamreal/issues/120)）：超過的清冊不可用，讀的時候先看長度、只數個數，不轉成數字、不留下來。16 個以內的延伸欄位兩兩比有沒有重複。見[量到的](#清冊鏡像量到的)「故意做來拖時間的檔」。
 - **不替每一筆廢止建物件**（[#26](https://github.com/iamreal-tw/iamreal/issues/26)）：在原始位元組上逐筆走，簽章驗得過之後再走一遍，每個序號的鍵直接寫進一個 `Uint32Array`，重複的序號和最低 127 位元相同的鍵用排序找。沒有簽章的檔不配置鍵的陣列。讀完之後檔案的位元組就放掉，建樹時只留著鍵。
 - **建樹時讓出執行緒。** 樹切成最多 4,096 塊（樹根往下 12 層的子樹），每做完約 256 個鍵就等一次 `setTimeout(0)`，同一個實例裡等著的請求在這時候被處理。
 
-**三、告訴證明紀錄的 Durable Object。** 從索引取每把發證金鑰最新兩份可用的清冊（照清冊編號，和裝置選清冊的方法相同；不可用的不算），把樹根、編號、清冊日期交給證明紀錄的 Durable Object，它整份換掉自己存的（[`src/proof-log.ts`](src/proof-log.ts) 的 `setNewestCrls`）。每一輪一開始讀完索引就交一次，不管有沒有新的清冊；之後每寫完一次索引再交一次，所以 G2 的新清冊不用等 G3 的樹建完。
+**三、告訴證明紀錄的 Durable Object。** 從索引取每把發證金鑰最新兩份可用的清冊（照清冊編號，和裝置選清冊的方法相同；不可用的不算），把樹根、編號、清冊日期交給證明紀錄的 Durable Object，它整份換掉自己存的（[`src/proof-log.ts`](src/proof-log.ts) 的 `setNewestCrls`），並記下每一份第一次交來的時間：同一份（同一把金鑰、同一個清冊編號、同一個樹根）再交一次，時間不變。每一輪一開始讀完索引就交一次，不管有沒有新的清冊；之後每寫完一次索引再交一次，所以 G2 的新清冊不用等 G3 的樹建完。
 
 要守住的只有一條：**鏡像交給 Durable Object 的樹根，交的那一刻已經列在儲存桶的索引裡。** 交出去的是從剛寫成功、或剛讀到的那一份索引算的。寫索引時丟例外的話，那次寫入可能其實做了，所以先重讀索引才決定交什麼；重讀也失敗，就在讀到之前都不交（[`test/mirror-invariant.test.ts`](test/mirror-invariant.test.ts) 用一個寫入會出錯的假儲存桶，在每一次交的當下核對）。
 
@@ -1053,7 +1056,7 @@ interface KnownCrl {
 type NewestCrls = { G2: KnownCrl[]; G3: KnownCrl[] }; // 每把最多兩份，最新的在前
 ```
 
-Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（樹根是不是這兩份之一、最新那一份是不是太舊）用的就是它（見[送出一筆](#送出一筆)）。
+Durable Object 用 `newestCrls()` 讀出來。送出一筆時的檢查（樹根是不是最新那一份的，或清冊剛換時第二新那一份的；最新那一份是不是太舊）用的就是它和第一次交來的時間（見[送出一筆](#送出一筆)）。
 
 只要有一份清冊沒抓到、有一個檔沒補上行、索引沒寫成、沒交給 Durable Object、或有一份差異檔沒寫成，這一次排程就以例外結束，在 Cloudflare 的紀錄上是失敗的一次；做得到的部分照樣做完。
 
