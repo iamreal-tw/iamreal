@@ -54,8 +54,8 @@ export interface BackendOptions {
   cardState?: Record<string, unknown>;
   /** An answer of its own to card-state (an error such as 503 busy), or null for the usual one. */
   cardStateReply?: () => { status: number; body: unknown } | null;
-  /** The answer to a submission; by default 201 with the kinds of the proof log of its own. */
-  submit?: (body: Record<string, unknown>) => { status: number; body: unknown };
+  /** The answer to a submission, or null for the usual one: 201 with the kinds of the proof log of its own. */
+  submit?: (body: Record<string, unknown>) => { status: number; body: unknown } | null;
 }
 
 export interface Answer {
@@ -202,10 +202,8 @@ export class FakeBackend {
     if (method === "POST" && path === "/api/v1/records") {
       const parsed = JSON.parse(body) as Record<string, unknown>;
       this.submissions.push(parsed);
-      if (o.submit) {
-        const r = o.submit(parsed);
-        return this.json(r.status, r.body);
-      }
+      const r = o.submit?.(parsed) ?? null;
+      if (r !== null) return this.json(r.status, r.body);
       return this.accept(parsed, body);
     }
     return this.json(404, { error: "not_found" });

@@ -6,7 +6,8 @@
 //
 //   readCard()        read certificates (no PIN); check them; start the
 //                     checks that need no signature: the server's config
-//                     (CRL age bound, platform table), CRL, tree, circuit, CRS
+//                     (CRL age bound, platform table), a challenge, CRL,
+//                     tree, circuit, CRS
 //   checksDone()      resolves when every one of those passed; until then
 //                     the screen shows no PIN field (`phase` is "checking")
 //   confirmCard(pin)  card signs the scope string; scoped ID; card state;
@@ -15,7 +16,8 @@
 //                     the card would sign and what it does on every platform
 //                     (Consequence). No request, no signature
 //   back()            from the consequence to the card's state again
-//   proceed(list)     the caller confirms the list it showed; challenge,
+//   proceed(list)     the caller confirms the list it showed; the challenge
+//                     of readCard(), or a new one (HELD_CHALLENGE_MS),
 //                     checked; card signs the declaration code; PIN dropped;
 //                     prove; submit; what the server recorded, against what
 //                     was shown (Done.mismatches)
@@ -221,6 +223,17 @@ const STEP_OF: Readonly<Record<Progress, Step>> = {
 export const IDLE_MS = 5 * 60_000;
 
 /**
+ * The challenge asked for before the CRL's index (#553) is the one the card
+ * signs if the first signature was made less than this after it was asked
+ * for, and proceed() comes on the same date in Taiwan; otherwise proceed()
+ * asks for a new one. The second signature comes at most IDLE_MS after the
+ * first, so the challenge is at most 8 minutes old when the card signs it,
+ * of the 10 the server takes it for (spec/challenge.md): at least 2 are left
+ * for the proof and the submission.
+ */
+export const HELD_CHALLENGE_MS = 3 * 60_000;
+
+/**
  * What the flow has done, as it is done. Several happen at the same time
  * (config, circuit, engine, crl and tree run together after the card is
  * read), so they come in any order; each comes at most once per flow.
@@ -388,11 +401,20 @@ interface BackgroundResult {
   platforms: readonly PlatformRow[];
 }
 
+/** The challenge asked for before the CRL's index: what came, when it was asked for (deps.clock) and on which date in Taiwan. */
+interface HeldChallenge {
+  challenge: unknown;
+  askedAt: number;
+  day: Day;
+}
+
 interface Background {
   promise: Promise<BackgroundResult>;
   failed: Stop | null;
   /** Set when every check passed. */
   done: BackgroundResult | null;
+  /** Set before the CRL is fetched if the server answered; signed by proceed() while it is usable (usableEarlyChallenge()). */
+  held: HeldChallenge | null;
 }
 
 export class CardProofFlow {
@@ -732,10 +754,11 @@ export class CardProofFlow {
    * the server's config (the CRL age bound, and the platform table: without
    * one it can read the device has nothing to offer, docs/api/card-proof.md),
    * the CRL, the tree and the serial number's absence, the circuit's and the
-   * CRS's hashes (the engine's start).
+   * CRS's hashes (the engine's start). Before the CRL, a challenge, for
+   * proceed() (usableEarlyChallenge()).
    */
   private startBackground(cert: CardCertificate, today: Day): Background {
-    const bg: Background = { failed: null, done: null, promise: Promise.resolve() as never };
+    const bg: Background = { failed: null, done: null, held: null, promise: Promise.resolve() as never };
     const circuit = circuitOf(cert);
     const serial = cert.serial;
     const issuer = cert.issuer;
@@ -758,6 +781,7 @@ export class CardProofFlow {
         // The maintainer stopped taking card proofs since step 1 asked (docs/api/card-proof.md, `paused`): before the PIN.
         if (config.paused) throw new FlowStop({ code: "server", server: "paused", status: 200 });
         progress("config");
+        bg.held = await this.askEarly();
         const maxAgeDays = crlMaxAge(config.crlMaxAgeDays);
         const crl = await this.timed("crl", loadCrl({ fetch: this.deps.dataFetch, issuer, today, maxAgeDays, store: this.deps.store }), "crl");
         progress("crl");
@@ -784,6 +808,40 @@ export class CardProofFlow {
     });
     bg.promise.catch(() => undefined);
     return bg;
+  }
+
+  /**
+   * A challenge, asked for before the CRL's index is (#553): the server
+   * accepts the root of the second newest CRL only for a challenge issued
+   * before it learned of the newest, or at most 2 minutes after
+   * (spec/revocation-tree.md, "Who checks what"). A challenge asked for
+   * before the device read the index is that, whenever the list changes
+   * after. Any failure leaves none: proceed() asks then, as it would have.
+   * It is checked when it is used, before the card signs.
+   */
+  private async askEarly(): Promise<HeldChallenge | null> {
+    const askedAt = this.deps.clock();
+    const day = this.today();
+    try {
+      return { challenge: await requestChallenge(this.deps.fetch), askedAt, day };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The challenge of readCard(), if the first signature was made within
+   * HELD_CHALLENGE_MS of asking for it and `today` is the date in Taiwan it
+   * was asked on; null otherwise. A new date would make it
+   * `challenge_not_today`. proceed() called again (a blocked window) signs
+   * the same one.
+   */
+  private usableEarlyChallenge(today: Day): HeldChallenge | null {
+    const held = this.background?.held ?? null;
+    const first = this.firstSignedAt;
+    if (held === null || first === null) return null;
+    const age = first - held.askedAt;
+    return age >= 0 && age < HELD_CHALLENGE_MS && held.day === today ? held : null;
   }
 
   /** The server's `config`, or, when the server turned this request away as too many people, the one of the card proof's start. */
@@ -966,9 +1024,10 @@ export class CardProofFlow {
     this.phaseValue = "signing";
     this.reached("confirmed");
 
+    const held = this.usableEarlyChallenge(this.today());
     let challenge: unknown;
     try {
-      challenge = await requestChallenge(this.deps.fetch);
+      challenge = held ? held.challenge : await requestChallenge(this.deps.fetch);
     } catch (e) {
       this.live();
       if (tooMany(e)) {

@@ -189,6 +189,14 @@ also publishes a patch that gives the file from the issuer's previous one
 
 **The device**
 
+- asks the server for the card proof's challenge before it downloads the
+  index of the mirror, and has the card sign that challenge if the first
+  signature came less than 3 minutes after and the date in Taiwan has not
+  changed ([`docs/api/card-proof.md`](../docs/api/card-proof.md),
+  `POST /api/v1/challenges`). The challenge is then issued before the
+  server learns of any CRL newer than the one the device uses, or within
+  the 2 minutes of the server's rule below (the index the device read may
+  have been cached);
 - downloads the newest CRL of its certificate's issuer from the mirror;
 - checks that it is usable, with the issuer key the device already trusts for
   its own certificate;
@@ -223,7 +231,10 @@ that issuer in the mirror (the usable ones with the highest `cRLNumber`):
   issued before the server first learned of the newest one, or at most 2
   minutes after. A card proof whose challenge was issued before MOICA's
   list changed goes through; one whose challenge comes later uses the newest
-  list. The 2 minutes cover the
+  list. Devices ask for the challenge before they download the index (above),
+  so a list that changes during a card proof does not fail it, unless the
+  cardholder took 3 minutes or more to the first signature and the device
+  asked for a new challenge at the confirmation. The 2 minutes cover the
   60 seconds a device can be served the index from the cache of the data
   domain, and the time between the mirror writing the index and the part of
   the server that accepts card proofs learning of the CRL. The mirror tells

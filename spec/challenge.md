@@ -91,8 +91,11 @@ Who checks what. Only the last group can be checked from the public proof log.
 - It issued this challenge, less than 10 minutes ago, and has not accepted a
   card proof for it before. It compares challenges as strings.
 
-**The cardholder's device**, when it receives the challenge, before the
-card signs anything with it:
+**The cardholder's device**, before the card signs anything with the
+challenge. It may ask for the challenge some minutes before
+([`docs/api/card-proof.md`](../docs/api/card-proof.md),
+`POST /api/v1/challenges`); it makes these checks on the challenge it has
+the card sign:
 
 - It computes today's date in Taiwan from its clock's absolute time, as
   UTC+8. It does not use the time zone set on the device.

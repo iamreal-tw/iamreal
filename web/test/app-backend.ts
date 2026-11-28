@@ -22,7 +22,11 @@
 //    proofs, as the back end writes at most 3 records of a card a day. And `PUT /__app-test/paused` (`true`
 //    or `false`): from then on the maintainer has stopped taking card proofs,
 //    or taken them again (`CARD_PROOFS_PAUSED`, worker/README.md, "停止和恢復
-//    收過卡"), for the tests of #394's screens.
+//    收過卡"), for the tests of #394's screens. And `PUT /__app-test/crl`
+//    (`G2` or `G3`): the fake MOICA publishes that issuer's next CRL (the
+//    next CRL number, dated the latest time the Worker's clock was set to,
+//    the same cards), and the schedule mirrors it before the answer, for the
+//    tests of a CRL that changes during a card proof (#553).
 // 4. Writes test-output/app/backend.json, which the tests read from the
 //    disk (a simulator sees the files of the machine it runs on), and
 //    prints `listening on <origin>`. The file is removed when the command
@@ -105,9 +109,12 @@ const privateKey = createPrivateKey({ key: Buffer.from(await crypto.subtle.expor
 const today = new Date(Date.now() + TAIWAN_MS).toISOString().slice(0, 10);
 const start = new Date(`${today}T09:00:00+08:00`);
 const crlTime = new Date(`${today}T00:00:00+08:00`);
+const revoked = { G2: randomSerials(2_000, 5n), G3: randomSerials(20_000, 3n) };
+/** The CRL number of each issuer's newest CRL: PUT /__app-test/crl makes the next one. */
+const crlNumbers = { G2: 200n, G3: 300n };
 const crls = {
-  G2: await makeCrl({ issuer: issuerKeys.G2, serials: randomSerials(2_000, 5n), crlNumber: 200n, thisUpdate: crlTime }),
-  G3: await makeCrl({ issuer: issuerKeys.G3, serials: randomSerials(20_000, 3n), crlNumber: 300n, thisUpdate: crlTime }),
+  G2: await makeCrl({ issuer: issuerKeys.G2, serials: revoked.G2, crlNumber: crlNumbers.G2, thisUpdate: crlTime }),
+  G3: await makeCrl({ issuer: issuerKeys.G3, serials: revoked.G3, crlNumber: crlNumbers.G3, thisUpdate: crlTime }),
 };
 
 // 2. The Worker and its mirror -----------------------------------------------------
@@ -134,6 +141,13 @@ const APP_TEST: Readonly<Record<string, (body: string) => Promise<number>>> = {
     if (body !== "true" && body !== "false") return 400;
     await worker.setSettings(body === "true" ? { CARD_PROOFS_PAUSED: "true" } : {});
     return 204;
+  },
+  "/__app-test/crl": async (body) => {
+    if (body !== "G2" && body !== "G3") return 400;
+    crlNumbers[body]++;
+    worker.moica.serve(body, await makeCrl({ issuer: issuerKeys[body], serials: revoked[body], crlNumber: crlNumbers[body], thisUpdate: clock }));
+    const round = await worker.runSchedule();
+    return check(round.outcome === "ok", `the Worker's schedule mirrored ${body}'s CRL number ${crlNumbers[body]} (${round.outcome})`) ? 204 : 500;
   },
 };
 const front = await startWorkerSite({

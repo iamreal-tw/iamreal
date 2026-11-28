@@ -58,6 +58,17 @@ struct TestBackend {
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 204)
     }
 
+    /// MOICA publishes a newer CRL of `issuer` (`G2`, `G3`), listing the
+    /// same cards, and the Worker's mirror hands it on before this returns
+    /// (app-backend.ts, PUT /__app-test/crl).
+    func newCRL(_ issuer: String) async throws {
+        var request = URLRequest(url: origin.appendingPathComponent("__app-test/crl"))
+        request.httpMethod = "PUT"
+        request.httpBody = Data(issuer.utf8)
+        let (_, response) = try await URLSession.shared.data(for: request)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 204)
+    }
+
     /// A session of the core that trusts the back end's issuer keys in
     /// place of MOICA's: the library of the tests has the function, the
     /// library of an app for an iPhone does not.
