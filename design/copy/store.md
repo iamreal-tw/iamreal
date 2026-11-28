@@ -7,7 +7,7 @@
 - 名稱和完整說明兩個商店共用。兩個 app 寫法不同的地方，這裡寫「手機」，不寫 Android、iPhone
 - 字數照 Google 的上限：簡短說明 80 字、完整說明 4,000 字，全形和半形一樣算一個字（[Add preview assets](https://support.google.com/googleplay/android-developer/answer/9859152)：「Character limits apply to both full-width and half-width characters.」）。程式碼區塊裡的字就是要貼的字，空一行是分段
 - 不寫排名和使用者的推薦，不重複關鍵字（[Metadata](https://support.google.com/googleplay/android-developer/answer/9898842)）
-- 「我們」是維護者（原則「文字的寫法」）
+- 「我們」是服務自稱（原則「文字的寫法」）
 - `{site}` 是 app 連的網站：上線前是 `test.iamreal.tw`，上線起是 `iamreal.tw`（ADR-0040）。貼的時候換掉；上線那天和商店頁的網址一起改（#491）
 
 ## 1. 名稱
