@@ -1299,7 +1299,7 @@ await tryStep("a first declaration of one platform (a wrong PIN first; a blocked
   const ex = (await rowsOnScreen()).find((r) => r.platform === EXAMPLE)!.why;
   check(ex === A.format_no_hint && (await page.eval<boolean>(`!!${step("accounts")}`)), `an account not in the format of a platform with no hint in the copy: the general sentence under its row ("${ex}")`);
   await screenshot("first-4-accounts-format-no-hint");
-  check(componentCount() === signs && challengeCount() === 0, "step 4's messages: nothing signed, no challenge");
+  check(componentCount() === signs && challengeCount() === 1, "step 4's messages: nothing signed, no challenge but the reading's (#553)");
   await typeRows({ [EXAMPLE]: "", [THREADS]: "alice" });
   const c = await waitConfirm();
   check((await whereText()).includes(stepLine(5)), "step 5: 第 5 步，共 7 步");
@@ -2738,7 +2738,14 @@ await tryStep("too many people at the submission: 再試一次 sends the same re
 
 await tryStep("the proof log overloaded (the Worker's own 503 busy): the screen of too many people; 再試一次 once it is not", async () => {
   component.card = busyCards.overloaded.spec();
-  await toAccounts();
+  // The challenge the reading asks for (#553) is turned away, so that step 5 asks for its own, which the proof log refuses.
+  const early = await tooManyOn("*/api/v1/challenges", 503, "busy");
+  try {
+    await toAccounts();
+  } finally {
+    await early.undo();
+  }
+  check(early.answered() === 1, "overloaded: the reading asked for a challenge, and was turned away");
   await typeRows({ [THREADS]: "sol" });
   await waitConfirm();
   const records = await recordCount();
