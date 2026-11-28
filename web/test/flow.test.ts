@@ -23,6 +23,7 @@ import { poseidon } from "./bb.ts";
 import { type BackendOptions, FakeBackend } from "./fixtures/backend.ts";
 import { IDP } from "./fixtures/crls.ts";
 import { makeKey } from "./fixtures/der-build.ts";
+import { apartFromIds } from "./fixtures/counts.ts";
 import { type World, makeWorld, mirror, randomSerials } from "./fixtures/world.ts";
 
 // 2026-11-16 12:00 in Taiwan.
@@ -2118,8 +2119,8 @@ describe("the counts the page sends (spec/counts.md; ADR-0032, ADR-0039)", () =>
     assert.deepEqual(Object.keys(s.backend.submissions[0]!).at(-1), "device_id");
     assert.equal(s.backend.submissions[0]!.device_id, device);
     for (const r of s.backend.log.filter((r) => r.path !== "/api/v1/records")) assert.ok(!(r.path + r.body).includes(device), `${r.path} carries the device ID`);
-    // Nothing of the card, the account, the record or the PIN in any count.
-    const all = JSON.stringify(counted);
+    // Nothing of the card, the account, the record or the PIN in any count, apart from its random IDs (fixtures/counts.ts).
+    const all = JSON.stringify(counted.map(apartFromIds));
     for (const part of [done.scopedId, done.shortId, "alice", "threads", PIN, done.record.challenge, done.record.smt_root, "2026-11-16"]) assert.ok(!all.includes(part), part);
   });
 
