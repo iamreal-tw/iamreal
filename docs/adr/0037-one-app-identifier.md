@@ -15,24 +15,24 @@ Android 和 iOS 各只有一個商店上的 app，識別碼 `tw.iamreal.app`。�
 | 識別碼（Android、iOS 相同） | `tw.iamreal.app` | `tw.iamreal.app.dev` |
 | 連哪裡 | 上線前：測試網站。上線起：正式網站 | 測試網站 |
 | 簽的場合字串 | 跟著連的網站 | `iamreal-test:public:0` |
-| 發到哪裡 | Google Play 的測試軌道和正式版、TestFlight 和 App Store | 不上傳商店。營運者用線裝；少數測試者：Android 給安裝檔，iPhone 用 Ad Hoc |
+| 發到哪裡 | Google Play 的測試軌道和正式版、TestFlight 和 App Store | 不上傳商店。維護者用線裝；少數測試者：Android 給安裝檔，iPhone 用 Ad Hoc |
 
 - **環境在建置時寫死**，和 ADR-0036 相同。商店的 build 連哪個網站，是程式庫裡的一個設定；上線那一天用一個 PR 改它。
 - **上線前每一個商店的 build 都連測試網站**，包括 Google Play 封閉測試的 14 天。這不再是例外。
 - **開發用 build 和商店的 build 能同時裝在一支手機上**，因為識別碼不同。上線後要在測試網站試錯誤情況的人用它，不會把手上的正式版換掉。
 - **開發用 build 的 Android 簽章金鑰是另一把**，和商店的 app 簽章金鑰無關。
-- **商店 app 的 Android 簽章金鑰由營運者保管，不放在 GitHub**，CI 用不到它。ADR-0036 金鑰表上的「離線保管」改成這一句；怎麼保管不寫在 ADR，和 ADR-0036 開頭說的一致。
+- **商店 app 的 Android 簽章金鑰由維護者保管，不放在 GitHub**，CI 用不到它。ADR-0036 金鑰表上的「離線保管」改成這一句；怎麼保管不寫在 ADR，和 ADR-0036 開頭說的一致。
 
 ## 誰上傳、誰發布
 
 | | 做什麼 | 誰 |
 |---|---|---|
-| 上傳 | GitHub Actions 建置，傳到 Google Play 的內部測試和 TestFlight | 營運者手動觸發；營運者電腦上的 coding agent 也可以觸發 |
-| 給測試者 | 把一個 build 推到封閉測試、TestFlight 的外部測試 | 營運者在商店的後台按 |
-| 發布正式版 | 把一個 build 升到 Google Play 的正式版、送 App Store 審查 | 營運者在商店的後台按 |
-| 標籤 | 升上正式版的 build 的提交，推 `android/v…`、`ios/v…` | 營運者；標籤不觸發上傳，用來讓人找到那一版的原始碼做比對 |
+| 上傳 | GitHub Actions 建置，傳到 Google Play 的內部測試和 TestFlight | 維護者手動觸發；維護者電腦上的 coding agent 也可以觸發 |
+| 給測試者 | 把一個 build 推到封閉測試、TestFlight 的外部測試 | 維護者在商店的後台按 |
+| 發布正式版 | 把一個 build 升到 Google Play 的正式版、送 App Store 審查 | 維護者在商店的後台按 |
+| 標籤 | 升上正式版的 build 的提交，推 `android/v…`、`ios/v…` | 維護者；標籤不觸發上傳，用來讓人找到那一版的原始碼做比對 |
 
-- **CI 的金鑰只能上傳到測試軌道。** Google Play 的服務帳號只有「將應用程式發布至測試群組」；正式版和送審留給營運者手動做，和 ADR-0036 的理由相同。
+- **CI 的金鑰只能上傳到測試軌道。** Google Play 的服務帳號只有「將應用程式發布至測試群組」；正式版和送審留給維護者手動做，和 ADR-0036 的理由相同。
 - **上傳的金鑰放在 GitHub 的 environment `app-test`**，只讓受保護的分支上的工作拿。程式庫已經公開，environment 可以用（ADR-0036 的 Consequences 寫的「公開之前」不再適用）。
 
 ## 理由

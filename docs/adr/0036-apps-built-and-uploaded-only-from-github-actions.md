@@ -4,9 +4,9 @@ status: accepted（部分由 ADR-0040 取代）
 
 # app 只從 GitHub Actions 建置和上傳；Android 的簽章金鑰自己產生，不放在 GitHub
 
-> app 有正式 app `tw.iamreal.app`、測試 app `tw.iamreal.app.test`，加上不上傳商店的開發用 build `tw.iamreal.app.dev`（ADR-0040）。這一份的「兩個 app」「誰建置、誰上傳」「例外：Google Play 的封閉測試」三段，開頭一段的「正式 app 要營運者推標籤、核准才上傳」，標題和金鑰分層裡的「Android 的簽章金鑰自己產生」（改由 Google 產生），金鑰表上 Android 簽章金鑰那一列和 Google Play 的 API 金鑰「只給一個 app」，金鑰分層裡「測試 app 和正式 app 各一個 environment」那一條，理由裡「Android 的簽章金鑰是唯一丟了補不回來的」和「正式 app 的標籤要先有測試 app 的 build」兩條，和 Consequences 裡「每次發正式 app 之前要先觸發一次測試 app 的上傳」，由 ADR-0040 取代（先前由 ADR-0037 取代）。其餘有效。
+> app 有正式 app `tw.iamreal.app`、測試 app `tw.iamreal.app.test`，加上不上傳商店的開發用 build `tw.iamreal.app.dev`（ADR-0040）。這一份的「兩個 app」「誰建置、誰上傳」「例外：Google Play 的封閉測試」三段，開頭一段的「正式 app 要維護者推標籤、核准才上傳」，標題和金鑰分層裡的「Android 的簽章金鑰自己產生」（改由 Google 產生），金鑰表上 Android 簽章金鑰那一列和 Google Play 的 API 金鑰「只給一個 app」，金鑰分層裡「測試 app 和正式 app 各一個 environment」那一條，理由裡「Android 的簽章金鑰是唯一丟了補不回來的」和「正式 app 的標籤要先有測試 app 的 build」兩條，和 Consequences 裡「每次發正式 app 之前要先觸發一次測試 app 的上傳」，由 ADR-0040 取代（先前由 ADR-0037 取代）。其餘有效。
 
-手機 app（Android、iOS）傳到商店的每一個 build 都由 GitHub Actions 建置和上傳。正式 app 要營運者推標籤、核准才上傳，送審和對一般人發布由營運者在商店的後台手動做。這一份把 ADR-0029 對網站的做法接到 app 上，另外定：兩個 app 識別碼、金鑰分層、版本號、可重現的建置在兩個平台各做到哪裡。
+手機 app（Android、iOS）傳到商店的每一個 build 都由 GitHub Actions 建置和上傳。正式 app 要維護者推標籤、核准才上傳，送審和對一般人發布由維護者在商店的後台手動做。這一份把 ADR-0029 對網站的做法接到 app 上，另外定：兩個 app 識別碼、金鑰分層、版本號、可重現的建置在兩個平台各做到哪裡。
 
 金鑰誰保管、怎麼保管，不寫在這裡。
 
@@ -27,14 +27,14 @@ status: accepted（部分由 ADR-0040 取代）
 
 | | 測試 app | 正式 app |
 |---|---|---|
-| 什麼時候 | 營運者手動觸發工作流程 | 營運者推一個標籤，在 GitHub 上核准之後 |
+| 什麼時候 | 維護者手動觸發工作流程 | 維護者推一個標籤，在 GitHub 上核准之後 |
 | 從哪裡 | 只從 GitHub Actions | 只從 GitHub Actions |
 | 前提 | 無 | 標籤指到的提交，Actions 已經用測試 app 的識別碼建置並上傳過；沒有就直接失敗 |
-| 上傳之後 | 直接到測試者手上 | 營運者在商店的後台送審、發布 |
+| 上傳之後 | 直接到測試者手上 | 維護者在商店的後台送審、發布 |
 
-- **營運者的電腦只做開發用的建置**，用線裝到自己的手機。電腦上不放任何能上傳到商店的金鑰。
+- **維護者的電腦只做開發用的建置**，用線裝到自己的手機。電腦上不放任何能上傳到商店的金鑰。
 - **合併到 `main` 不會上傳。** 測試者不需要每個提交都收到更新。
-- **營運者電腦上的 coding agent 可以觸發測試 app 的上傳；不推正式 app 的標籤、不核准**，和 ADR-0029 對正式網站的規定相同。
+- **維護者電腦上的 coding agent 可以觸發測試 app 的上傳；不推正式 app 的標籤、不核准**，和 ADR-0029 對正式網站的規定相同。
 - **建置和上傳是兩個工作。** 上傳的工作拿得到金鑰，建置的工作拿不到。
 
 ## 版本號和標籤
@@ -48,16 +48,16 @@ status: accepted（部分由 ADR-0040 取代）
 
 | 金鑰 | 是什麼 | 放在哪裡 |
 |---|---|---|
-| Android 的 app 簽章金鑰 | 手機靠它判斷一個更新和已經裝的是不是同一個 app。自己產生，交一份給 Google Play | 營運者離線保管。不放在 GitHub，CI 用不到它 |
+| Android 的 app 簽章金鑰 | 手機靠它判斷一個更新和已經裝的是不是同一個 app。自己產生，交一份給 Google Play | 維護者離線保管。不放在 GitHub，CI 用不到它 |
 | Android 的上傳金鑰 | 對 Google Play 證明這個 build 是我們傳的 | GitHub 的 environment |
 | Google Play 的 API 金鑰 | 一個服務帳號，只給一個 app 的「Release apps to testing tracks」 | GitHub 的 environment |
 | iOS 的發布憑證的私鑰 | 對 Apple 證明這個 build 是我們傳的 | GitHub 的 environment |
 | App Store Connect 的 API 金鑰 | Developer 角色：能上傳，不能送審 | GitHub 的 environment |
 
-- **測試 app 和正式 app 各一個 environment、各一組金鑰**，可以分別撤銷；正式的那個要營運者核准。測試 app 的 Android 簽章金鑰是另一把。
+- **測試 app 和正式 app 各一個 environment、各一組金鑰**，可以分別撤銷；正式的那個要維護者核准。測試 app 的 Android 簽章金鑰是另一把。
 - **Android 的簽章金鑰自己產生。** Google Play 的說明：「You can have Google generate this key, or you can provide your own. This key cannot be reset if you manage it yourself and lose it.」；上傳金鑰「If compromised or lost, Google can reset it for you.」（[Use Play App Signing](https://support.google.com/googleplay/android-developer/answer/9842756)，2026-11-20 讀）。新的 app 預設由 Google 產生，要在第一次發到公開測試或正式軌道之前改成自己提供。
 - **Google Play 的 API 金鑰發不了正式版。**「Release apps to testing tracks」的說明寫「Does not allow users to publish apps to production on Google Play」，權限可以只給一個 app（[Add developer account users and manage permissions](https://support.google.com/googleplay/android-developer/answer/9844686)）。
-- **Apple 的 API 金鑰不能只給一個 app。**「Team API keys can access all apps, regardless of their role.」（[Creating API keys for App Store Connect API](https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api)）。所以測試 app 的金鑰外流時，拿到的人能把 build 傳到正式 app 底下，但不能送審（[Program roles](https://developer.apple.com/help/account/access/roles/)）。擋在這裡的是送審由營運者手動做。
+- **Apple 的 API 金鑰不能只給一個 app。**「Team API keys can access all apps, regardless of their role.」（[Creating API keys for App Store Connect API](https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api)）。所以測試 app 的金鑰外流時，拿到的人能把 build 傳到正式 app 底下，但不能送審（[Program roles](https://developer.apple.com/help/account/access/roles/)）。擋在這裡的是送審由維護者手動做。
 - **iOS 的私鑰能不能不放 CI，施工前實測。** Xcode 可以用 Apple 代管的憑證，CI 只拿 API 金鑰；文件寫這預設要 Admin 角色（[Xcode 13 release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-13-release-notes)）。Developer 角色的金鑰做得到就用它，私鑰不放任何地方；做不到就照上面的表。不用 Admin 角色的金鑰。
 
 ## 可重現的建置
@@ -83,17 +83,17 @@ Google Play 新的個人帳號要先跑封閉測試，至少 12 位測試者連�
 
 ## 理由
 
-- **能上傳的金鑰不放在跑 coding agent 的電腦上**，和 ADR-0029 相同。測試網站允許從營運者的電腦部署，是為了開發時直接看結果；app 用線裝到手機就看得到，不需要上傳的金鑰。
+- **能上傳的金鑰不放在跑 coding agent 的電腦上**，和 ADR-0029 相同。測試網站允許從維護者的電腦部署，是為了開發時直接看結果；app 用線裝到手機就看得到，不需要上傳的金鑰。
 - **Android 的簽章金鑰是唯一丟了補不回來的。** 它外流時，拿到的人簽的安裝檔，手機會當成這個 app 的更新。CI 用不到它，所以不放在 CI。自己產生，任何人才能核對安裝檔是哪一把金鑰簽的，離開 Google Play 時也還能發更新。
 - **iOS 沒有對應的金鑰。** 發布憑證可以撤銷重發，App Store 上已經發布的 app 不受影響；已經上傳、還沒送審的 build 可能變成無效（[Certificates overview](https://developer.apple.com/help/account/certificates/certificates-overview/)：「Builds already uploaded to App Store Connect but not yet submitted for App Review may be marked as Invalid Binary if they were signed with a revoked certificate.」）。
-- **送審和發布留給營運者手動做**，CI 的金鑰就能縮到只能上傳。正式版不常發。
+- **送審和發布留給維護者手動做**，CI 的金鑰就能縮到只能上傳。正式版不常發。
 - **正式 app 的標籤要先有測試 app 的 build**：正式 app 的每一行程式都先在手機上用測試 app 跑過，兩個 build 只差識別碼、連的網站和場合字串。
 - **iOS 不講做不到的事。** 說「可驗證」而實際上沒有人能比對，比不說更糟。
 - **封閉測試連測試網站**：三個月過一次卡的 app，測試者在正式網站上過一次卡就沒事可做；在測試網站可以重複過卡、試各種錯誤，測試的證明紀錄可以清空。
 
 ## Considered Options
 
-- **營運者的電腦也能上傳測試 app**：和測試網站一致，但電腦上會多一把 Apple 的金鑰，而那把金鑰碰得到正式 app。
+- **維護者的電腦也能上傳測試 app**：和測試網站一致，但電腦上會多一把 Apple 的金鑰，而那把金鑰碰得到正式 app。
 - **合併到 `main` 就上傳測試 app**：測試者每個提交都收到更新；macOS 的建置慢。
 - **Android 的簽章金鑰由 Google 產生**：不用自己保管。但沒有人能核對金鑰是哪一把，離開 Google Play 就發不了更新，而且註冊之後改不了。
 - **Android 的簽章金鑰放 GitHub，自己簽好再上傳**：CI 外流就是簽章金鑰外流，而它不能重設。

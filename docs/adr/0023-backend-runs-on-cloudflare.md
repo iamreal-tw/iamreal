@@ -23,7 +23,7 @@ status: accepted（部分由 ADR-0025、ADR-0026 取代）
 
 理由：
 
-- **營運者只有一個人，維護簡單排第一。** 自己管一台機器，作業系統更新、TLS、備份和還原演練、監控、機器壞掉時重建都是持續的工作，而且沒有自動切換。重寫是一次的代價。
+- **維護者只有一個人，維護簡單排第一。** 自己管一台機器，作業系統更新、TLS、備份和還原演練、監控、機器壞掉時重建都是持續的工作，而且沒有自動切換。重寫是一次的代價。
 - **每件事都對得到元件。** 限制和出處整理在[整個後台放在 Cloudflare 上，有哪些元件可用、各有什麼限制](https://github.com/iamreal-tw/iamreal/issues/6)。
 - **驗證在 Workers 上做得到。** 用 Workers 允許的載入方式，WASM 的驗證和原生的 `bb verify` 在 1,123 個案例上通過或拒絕全部相同（[實測](https://github.com/iamreal-tw/iamreal/issues/16)）。
 - **Durable Object 和 R2 之間沒有共同的交易，設計成不需要。** 紀錄先完整落在 Durable Object，才算接受；搬到 R2 是之後的事，失敗就重做。
@@ -32,7 +32,7 @@ status: accepted（部分由 ADR-0025、ADR-0026 取代）
 
 ## Considered Options
 
-- **一台自己管的機器，Go 程式加 SQLite，前面放 Cloudflare**：架構最直白，程式幾乎不用重寫。沒有採用，因為上面第一條的那些工作都落在營運者身上，機器壞掉時寫入和沒被快取的頁面一起停。
+- **一台自己管的機器，Go 程式加 SQLite，前面放 Cloudflare**：架構最直白，程式幾乎不用重寫。沒有採用，因為上面第一條的那些工作都落在維護者身上，機器壞掉時寫入和沒被快取的頁面一起停。
 - **代管的容器平台加代管的資料庫**：零件數和全部放 Cloudflare 差不多，還要維護容器映像檔，資料庫要改寫。
 - **在 Cloudflare Containers 跑現有的 Go 執行檔**：磁碟不保留、隨時可能被停掉，SQLite 檔不能放在上面（[Containers FAQ](https://developers.cloudflare.com/containers/faq/)）。
 - **重驗工具也改成 TypeScript，程式庫只剩一種語言**：後台和重驗工具會是同一份程式，錯會錯在一起。
