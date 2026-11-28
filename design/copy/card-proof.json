@@ -262,9 +262,6 @@
     "no_nfc": "這支手機沒有 NFC，不能用 app 過卡。",
     "no_nfc_reader": "可以用電腦和讀卡機，打開 {domain} 過卡。"
   },
-  "app_keyboard": {
-    "done": "完成"
-  },
   "app_panel": {
     "iphone_wait": "把自然人憑證貼在 iPhone 背面的上方",
     "reading": "讀取中，不要移動卡片……",
