@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -213,10 +214,10 @@ func TestDataTempDirOnError(t *testing.T) {
 	t.Setenv("TMPDIR", tmp)
 	files := testDataDomain(t)
 	served := serveData(t, files)
-	n := 0
+	var n atomic.Int32 // CRL files downloaded; the HEAD requests run beside them
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, ".crl") {
-			if n++; n == 2 {
+		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, ".crl") {
+			if n.Add(1) == 2 {
 				http.Error(w, "down", http.StatusInternalServerError)
 				return
 			}

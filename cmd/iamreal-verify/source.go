@@ -279,6 +279,11 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 	// CRL: the previous CRL of the next one of its key.
 	var previous *heldCRL
 	seen := map[string]bool{}
+	// The originals of the CRLs that may be given by patches: those the
+	// index says are usable, after the first usable one of their key.
+	var originals []string
+	sizes := map[string]*originalSize{}
+	firstOfKey := map[string]bool{}
 	for _, line := range bytes.Split(index, []byte("\n")) {
 		issuer, usable := indexUsable(line)
 		for _, m := range indexSHA256.FindAllSubmatch(line, -1) {
@@ -288,6 +293,13 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 				continue
 			}
 			seen[name] = true
+			if usable && firstOfKey[issuer] {
+				originals = append(originals, name)
+				sizes[name] = &originalSize{done: make(chan struct{})}
+			}
+			if usable {
+				firstOfKey[issuer] = true
+			}
 			out.files = append(out.files, crl.ArchiveFile{Name: name, Read: func() ([]byte, error) {
 				var b []byte
 				if usable && previous != nil && previous.issuer != issuer {
@@ -295,7 +307,7 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 				}
 				if usable && previous != nil {
 					var err error
-					if b, err = u.patchedOriginal(previous, sha, stderr); err != nil {
+					if b, err = u.patchedOriginal(previous, sha, sizes[name], stderr); err != nil {
 						return nil, err
 					}
 				}
@@ -316,7 +328,44 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 			}})
 		}
 	}
+	u.askSizes(originals, sizes)
 	return out, cleanup, nil
+}
+
+// headsAtOnce is how many HEAD requests askSizes keeps going at once.
+const headsAtOnce = 8
+
+// originalSize is the answer to the HEAD request for an original:
+// u.size's, once done is closed.
+type originalSize struct {
+	size int64
+	err  error
+	done chan struct{}
+}
+
+// askSizes asks for the length of each of names with HEAD (u.size), in
+// that order, headsAtOnce at a time, and gives each answer to sizes[name].
+// One HEAD takes about a third of a second at the data domain (README.md,
+// "下載"); one after another, the HEADs of a year's CRLs would take as long
+// as downloading them whole. They are asked ahead of rebuilding, which
+// waits for each answer when its CRL's turn comes, and holds no CRL.
+func (u urlSource) askSizes(names []string, sizes map[string]*originalSize) {
+	work := make(chan string)
+	go func() {
+		for _, name := range names {
+			work <- name
+		}
+		close(work)
+	}()
+	for range headsAtOnce {
+		go func() {
+			for name := range work {
+				r := sizes[name]
+				r.size, r.err = u.size(name)
+				close(r.done)
+			}
+		}()
+	}
 }
 
 // whole downloads the CRL file with SHA-256 sha whole. A file that is not
@@ -346,7 +395,8 @@ type heldCRL struct {
 }
 
 // patchedOriginal is patched, for a CRL whose original is there: it first
-// asks for the original with HEAD, so that a CRL file missing from the
+// has the answer to the HEAD request for the original (asked, from
+// askSizes; asked here if nil), so that a CRL file missing from the
 // archive is reported as when every file is downloaded whole. The original
 // is not there (404): crl.ErrLeftOut, and the patch is not downloaded. The
 // patch gives a file of another length than the original's: nil, after one
@@ -354,9 +404,16 @@ type heldCRL struct {
 // checked. A HEAD that fails, or gives no length: nil, after one line.
 // Only a file of the same length with other content is not seen without
 // downloading it whole (README.md, "下載").
-func (u urlSource) patchedOriginal(previous *heldCRL, sha string, stderr io.Writer) ([]byte, error) {
+func (u urlSource) patchedOriginal(previous *heldCRL, sha string, asked *originalSize, stderr io.Writer) ([]byte, error) {
 	name := sha + ".crl"
-	size, err := u.size(name)
+	var size int64
+	var err error
+	if asked != nil {
+		<-asked.done
+		size, err = asked.size, asked.err
+	} else {
+		size, err = u.size(name)
+	}
 	if errors.Is(err, errNotFound) {
 		return nil, crl.ErrLeftOut
 	}
