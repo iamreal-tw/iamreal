@@ -279,10 +279,12 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 	// CRL: the previous CRL of the next one of its key.
 	var previous *heldCRL
 	seen := map[string]bool{}
-	// The originals of the CRLs that may be given by patches: those the
-	// index says are usable, after the first usable one of their key.
-	var originals []string
-	sizes := map[string]*originalSize{}
+	// The originals of the CRLs that may be given by patches, asked for
+	// with HEAD ahead of rebuilding (askSizes): those the index says are
+	// usable, after the first usable one of their key. Rebuilding takes a
+	// patch only for one of them (previous is then of the same key); a file
+	// left out before it makes its HEAD unused, not wrong.
+	var originals []*originalSize
 	firstOfKey := map[string]bool{}
 	for _, line := range bytes.Split(index, []byte("\n")) {
 		issuer, usable := indexUsable(line)
@@ -293,9 +295,10 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 				continue
 			}
 			seen[name] = true
+			var asked *originalSize
 			if usable && firstOfKey[issuer] {
-				originals = append(originals, name)
-				sizes[name] = &originalSize{done: make(chan struct{})}
+				asked = &originalSize{name: name, done: make(chan struct{})}
+				originals = append(originals, asked)
 			}
 			if usable {
 				firstOfKey[issuer] = true
@@ -305,9 +308,9 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 				if usable && previous != nil && previous.issuer != issuer {
 					previous = nil // the first of another key: let the last one go
 				}
-				if usable && previous != nil {
+				if usable && previous != nil && asked != nil {
 					var err error
-					if b, err = u.patchedOriginal(previous, sha, sizes[name], stderr); err != nil {
+					if b, err = u.patchedOriginal(previous, sha, asked, stderr); err != nil {
 						return nil, err
 					}
 				}
@@ -328,41 +331,51 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 			}})
 		}
 	}
-	u.askSizes(originals, sizes)
-	return out, cleanup, nil
+	stop := make(chan struct{})
+	u.askSizes(originals, stop)
+	var once sync.Once
+	return out, func() {
+		once.Do(func() { close(stop) })
+		cleanup()
+	}, nil
 }
 
 // headsAtOnce is how many HEAD requests askSizes keeps going at once.
 const headsAtOnce = 8
 
-// originalSize is the answer to the HEAD request for an original:
+// originalSize is the HEAD request for the original name and its answer:
 // u.size's, once done is closed.
 type originalSize struct {
+	name string
 	size int64
 	err  error
 	done chan struct{}
 }
 
-// askSizes asks for the length of each of names with HEAD (u.size), in
-// that order, headsAtOnce at a time, and gives each answer to sizes[name].
-// One HEAD takes about a third of a second at the data domain (README.md,
-// "下載"); one after another, the HEADs of a year's CRLs would take as long
-// as downloading them whole. They are asked ahead of rebuilding, which
-// waits for each answer when its CRL's turn comes, and holds no CRL.
-func (u urlSource) askSizes(names []string, sizes map[string]*originalSize) {
-	work := make(chan string)
+// askSizes asks for the length of each of originals with HEAD (u.size), in
+// that order, headsAtOnce at a time. One HEAD takes about a third of a
+// second at the data domain (README.md, "下載"); one after another, the
+// HEADs of a year's CRLs would take as long as downloading them whole. They
+// are asked ahead of rebuilding, which waits for each answer when its CRL's
+// turn comes, and holds no CRL. Closing stop asks no more: the answers
+// not asked are never given, so nothing may wait for them after.
+func (u urlSource) askSizes(originals []*originalSize, stop <-chan struct{}) {
+	work := make(chan *originalSize)
 	go func() {
-		for _, name := range names {
-			work <- name
+		defer close(work)
+		for _, o := range originals {
+			select {
+			case work <- o:
+			case <-stop:
+				return
+			}
 		}
-		close(work)
 	}()
 	for range headsAtOnce {
 		go func() {
-			for name := range work {
-				r := sizes[name]
-				r.size, r.err = u.size(name)
-				close(r.done)
+			for o := range work {
+				o.size, o.err = u.size(o.name)
+				close(o.done)
 			}
 		}()
 	}
@@ -395,8 +408,8 @@ type heldCRL struct {
 }
 
 // patchedOriginal is patched, for a CRL whose original is there: it first
-// has the answer to the HEAD request for the original (asked, from
-// askSizes; asked here if nil), so that a CRL file missing from the
+// waits for the answer to the HEAD request for the original (asked, from
+// askSizes), so that a CRL file missing from the
 // archive is reported as when every file is downloaded whole. The original
 // is not there (404): crl.ErrLeftOut, and the patch is not downloaded. The
 // patch gives a file of another length than the original's: nil, after one
@@ -406,14 +419,8 @@ type heldCRL struct {
 // downloading it whole (README.md, "下載").
 func (u urlSource) patchedOriginal(previous *heldCRL, sha string, asked *originalSize, stderr io.Writer) ([]byte, error) {
 	name := sha + ".crl"
-	var size int64
-	var err error
-	if asked != nil {
-		<-asked.done
-		size, err = asked.size, asked.err
-	} else {
-		size, err = u.size(name)
-	}
+	<-asked.done
+	size, err := asked.size, asked.err
 	if errors.Is(err, errNotFound) {
 		return nil, crl.ErrLeftOut
 	}

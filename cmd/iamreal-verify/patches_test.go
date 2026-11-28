@@ -21,7 +21,6 @@ import (
 	"net/http/httptest"
 	"path"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -218,10 +217,10 @@ func headsAsked(srv *dataServer) []string {
 	return out
 }
 
-// problems is the lines of standard error that are not progress: neither
+// problemLines is the lines of standard error that are not progress: neither
 // "downloading …", nor "CRL …", nor a patch that was not used; with the
 // server's URL, url, written as "<data>/".
-func problems(errOut, url string) []string {
+func problemLines(errOut, url string) []string {
 	var out []string
 	for _, l := range strings.Split(strings.ReplaceAll(errOut, url, "<data>/"), "\n") {
 		if strings.HasPrefix(l, "iamreal-verify: downloading ") || strings.HasPrefix(l, "iamreal-verify: CRL ") || strings.HasSuffix(l, "downloading the CRL whole") {
@@ -255,9 +254,12 @@ func TestDataCRLOriginals(t *testing.T) {
 		edit func(map[string][]byte)
 		exit int
 		want string
+		// noPatch: the patch is not downloaded, the HEAD having said the
+		// original is not there.
+		noPatch bool
 	}{
-		{"not there", func(f map[string][]byte) { delete(f, target) }, exitInvalid, "the index lists a file the archive does not have"},
-		{"of another length", func(f map[string][]byte) { f[target] = append(slices.Clone(f[target]), 0) }, exitInvalid, "is not the SHA-256 of its content"},
+		{"not there", func(f map[string][]byte) { delete(f, target) }, exitInvalid, "the index lists a file the archive does not have", true},
+		{"of another length", func(f map[string][]byte) { f[target] = append(slices.Clone(f[target]), 0) }, exitInvalid, "is not the SHA-256 of its content", false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			files := maps.Clone(a.files)
@@ -269,10 +271,10 @@ func TestDataCRLOriginals(t *testing.T) {
 			}
 			whole := serveData(t, withoutPatches(files))
 			wholeCode, wholeOut, wholeErr := a.run(t, whole.URL)
-			if got, want := problems(errOut, srv.URL), problems(wholeErr, whole.URL); code != wholeCode || out != wholeOut || !slices.Equal(got, want) {
+			if got, want := problemLines(errOut, srv.URL), problemLines(wholeErr, whole.URL); code != wholeCode || out != wholeOut || !slices.Equal(got, want) {
 				t.Errorf("with patches: exit %d\n%s\nwhole: exit %d\n%s", code, strings.Join(got, "\n"), wholeCode, strings.Join(want, "\n"))
 			}
-			if slices.Contains(srv.paths(), "GET "+a.patchOf[target]) && c.name == "not there" {
+			if c.noPatch && slices.Contains(srv.paths(), "GET "+a.patchOf[target]) {
 				t.Errorf("asked for the patch of a CRL that is not there")
 			}
 		})
@@ -286,21 +288,13 @@ func TestDataCRLOriginals(t *testing.T) {
 		{"a HEAD without a length", func(w http.ResponseWriter) { w.Header().Set("Transfer-Encoding", "chunked"); w.(http.Flusher).Flush() }, "no Content-Length"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
+			served := serveData(t, a.files)
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				p := strings.TrimPrefix(r.URL.Path, "/")
-				if r.Method == http.MethodHead && p == target {
+				if r.Method == http.MethodHead && strings.TrimPrefix(r.URL.Path, "/") == target {
 					c.head(w)
 					return
 				}
-				b, ok := a.files[p]
-				if !ok {
-					http.NotFound(w, r)
-					return
-				}
-				w.Header().Set("Content-Length", strconv.Itoa(len(b)))
-				if r.Method == http.MethodGet {
-					w.Write(b)
-				}
+				forward(t, served, w, r)
 			}))
 			t.Cleanup(srv.Close)
 			code, _, errOut := a.run(t, srv.URL+"/")
