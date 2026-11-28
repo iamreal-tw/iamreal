@@ -49,6 +49,7 @@ import { type CardState, type RecordResult, RULES_VERSION, type SlotState, apply
 import { type ApiParts, api, isApiPath } from "../src/api.ts";
 import { copyCards, dropCardsCopy, recordsOnDate, writeCard } from "../src/card-table.ts";
 import { Counts as DeployedCounts, countsOf } from "../src/counts.ts";
+import type { NewestCrls } from "../src/crl-index.ts";
 import { EngineError } from "../src/engine.ts";
 import worker from "../src/index.ts";
 import { proofVerifier } from "../src/in-worker.ts";
@@ -383,6 +384,11 @@ export class ProofLog extends DeployedProofLog {
     this.ctx.storage.sql.exec("DROP TABLE newest_crls");
   }
 
+  /** Drops the table of when each CRL was first told: the object is then as one made by a build that did not have it yet. */
+  testDropCrlArrivals(): void {
+    this.ctx.storage.sql.exec("DROP TABLE crl_arrivals");
+  }
+
   /**
    * Makes the stored slots of one card text that is not JSON, by putting
    * `not JSON` in front of them, so that reading the row fails; or, with
@@ -618,7 +624,10 @@ export default {
    *   `challenges.accepted`, or null: every write to it fails from now on,
    *   or none does.
    * - `POST /__test/proof-log/drop-newest-crls` drops the table of the newest
-   *   CRLs, as on an object made before the build had it.
+   *   CRLs, and `POST /__test/proof-log/drop-crl-arrivals` the table of when
+   *   each was first told, as on an object made before the build had it.
+   * - `PUT /__test/proof-log/newest-crls` with a NewestCrls tells the object
+   *   those, as the CRL mirror does (src/proof-log.ts, `setNewestCrls`).
    * - `POST /__test/proof-log/rule-event` with a RuleEvent runs the record
    *   rules for it on the object's stored state and answers the result.
    * - `POST /__test/proof-log/rule-state` with `{scope_string, scoped_id}`
@@ -762,6 +771,14 @@ export default {
     }
     if (route === "POST /__test/proof-log/drop-newest-crls") {
       await testProofLogOf(env).testDropNewestCrls();
+      return done();
+    }
+    if (route === "POST /__test/proof-log/drop-crl-arrivals") {
+      await testProofLogOf(env).testDropCrlArrivals();
+      return done();
+    }
+    if (route === "PUT /__test/proof-log/newest-crls") {
+      await proofLogOf(env).setNewestCrls((await request.json()) as NewestCrls);
       return done();
     }
     if (route === "POST /__test/proof-log/rule-event") return json(await testProofLogOf(env).testApplyRuleEvent((await request.json()) as RuleEvent));

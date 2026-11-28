@@ -360,6 +360,89 @@ describe("the CRLs", () => {
     // An issuer without a CRL in the mirror is stale too.
     await wantError(worker, { ...(await sub(worker, newCard(), root, "threads:alice")), issuer: "G2", circuit: circuitOf("G2") }, 503, "crl_stale");
   });
+
+  // The CRLs of these tests: A, then B an hour later, each with a revocation more, so each has a root of its own.
+  const MINUTE = 60 * 1000;
+  const GRACE = 2 * MINUTE;
+  const later = (ms: number): Date => new Date(START.getTime() + ms);
+  const crlA = (): Promise<string> => publishCrl(worker, { issuer: "G3", number: 1, thisUpdate: CRL_TIME, serials: [1] });
+  const crlB = (): Promise<string> => publishCrl(worker, { issuer: "G3", number: 2, thisUpdate: new Date(CRL_TIME.getTime() + 3600 * 1000), serials: [1, 2] });
+
+  test("the second newest CRL's root: for a challenge issued before the newest one came, or at most 2 minutes after, and not later; the newest one's is accepted all along", async () => {
+    await fresh();
+    const a = await crlA();
+    await worker.setClock(later(60 * MINUTE));
+    const before = await sub(worker, newCard(), a, "threads:alice");
+    // B comes: the mirror tells the proof log's object at this moment.
+    const arrived = later(61 * MINUTE);
+    await worker.setClock(arrived);
+    const b = await crlB();
+    await worker.setClock(new Date(arrived.getTime() + GRACE));
+    const within = await sub(worker, newCard(), a, "threads:alice");
+    await worker.setClock(new Date(arrived.getTime() + GRACE + 1));
+    const after = await sub(worker, newCard(), a, "threads:alice");
+    const newest = await sub(worker, newCard(), b, "threads:alice");
+    await worker.setClock(new Date(arrived.getTime() + 5 * MINUTE));
+    await mustSubmit(worker, before, "threads first");
+    await mustSubmit(worker, within, "threads first");
+    await wantError(worker, after, 400, "root", "issued more than 2 minutes after B came");
+    await mustSubmit(worker, newest, "threads first");
+    // Hours later, the newest CRL's root is accepted as before.
+    await worker.setClock(new Date(arrived.getTime() + 6 * 60 * MINUTE));
+    await mustSubmit(worker, await sub(worker, newCard(), b, "threads:alice"), "threads first");
+    await wantError(worker, await sub(worker, newCard(), a, "threads:alice"), 400, "root");
+  });
+
+  test("a CRL told again keeps the time it was first told: the mirror's next round does not make the second newest acceptable again", async () => {
+    await fresh();
+    const a = await crlA();
+    await worker.setClock(later(61 * MINUTE));
+    await crlB();
+    await worker.setClock(later(71 * MINUTE));
+    // The next round finds nothing new and tells the object the same two CRLs.
+    await worker.runSchedule();
+    await wantError(worker, await sub(worker, newCard(), a, "threads:alice"), 400, "root");
+  });
+
+  test("two rounds of the mirror at once, the slower one telling an older pair: once the newest is told again, it has its first time, and the older ones are not taken for new", async () => {
+    await fresh();
+    await crlA();
+    await worker.setClock(later(61 * MINUTE));
+    const b = await crlB();
+    const told = await worker.newestCrls();
+    const [newB, oldA] = told.G3;
+    // C comes at 3 hours, and the slower round puts B and A back half an hour later.
+    await worker.setClock(later(3 * 60 * MINUTE));
+    const c = await publishCrl(worker, { issuer: "G3", number: 3, thisUpdate: new Date(CRL_TIME.getTime() + 2 * 3600 * 1000), serials: [1, 2, 3] });
+    const [newC] = (await worker.newestCrls()).G3;
+    await worker.setClock(later(3 * 60 * MINUTE + 30 * MINUTE));
+    await worker.proofLog.setNewestCrls({ G2: told.G2, G3: [newB!, oldA!] });
+    // Meanwhile B is the newest: it came hours ago, so A's root is not accepted.
+    await wantError(worker, await sub(worker, newCard(), oldA!.root, "threads:alice"), 400, "root", "A while B and A are back");
+    await mustSubmit(worker, await sub(worker, newCard(), b, "threads:alice"), "threads first");
+    // The next round tells C and B again: C keeps the time it first came, so B's root is not accepted.
+    await worker.setClock(later(3 * 60 * MINUTE + 31 * MINUTE));
+    await worker.proofLog.setNewestCrls({ G2: told.G2, G3: [newC!, newB!] });
+    await wantError(worker, await sub(worker, newCard(), b, "threads:alice"), 400, "root", "B once C is told again");
+    await mustSubmit(worker, await sub(worker, newCard(), c, "threads:alice"), "threads first");
+  });
+
+  test("an object made before it kept when each CRL was first told: the CRLs it holds count as told when it starts, so a card proof under way is not refused", async () => {
+    await fresh();
+    const a = await crlA();
+    await worker.setClock(later(61 * MINUTE));
+    const b = await crlB();
+    await worker.setClock(later(3 * 60 * MINUTE));
+    const underWay = await sub(worker, newCard(), a, "threads:alice");
+    await worker.proofLog.dropCrlArrivals();
+    const upgraded = later(3 * 60 * MINUTE + MINUTE);
+    await worker.setClock(upgraded);
+    await worker.proofLog.restart();
+    await mustSubmit(worker, underWay, "threads first");
+    await worker.setClock(new Date(upgraded.getTime() + GRACE + 1));
+    await wantError(worker, await sub(worker, newCard(), a, "threads:alice"), 400, "root");
+    await mustSubmit(worker, await sub(worker, newCard(), b, "threads:alice"), "threads first");
+  });
 });
 
 describe("the record rules", () => {

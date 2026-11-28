@@ -258,8 +258,9 @@ Submits one card proof: the card's whole list of accounts.
   field's format; checks the challenge (issued by it, less than 10 minutes
   ago, not accepted before, at most 5 submissions); verifies the record
   ([`spec/proof-verification.md`](../../spec/proof-verification.md)); checks
-  that `smt_root` is the root of one of the two newest CRLs of `issuer` in
-  the mirror and that the newest is at most 3 days old; applies the record
+  that `smt_root` is the root of the newest CRL of `issuer` in the mirror,
+  or of the second newest for a challenge issued while the list was
+  changing, and that the newest is at most 3 days old; applies the record
   rules. If everything passes it appends the record and marks the challenge
   as accepted, in one transaction.
 - Response `201`:
@@ -310,7 +311,7 @@ Submits one card proof: the card's whole list of accounts.
   | `400` | `challenge_used` | A card proof was already accepted for it |
   | `400` | `challenge_attempts` | Submitted more than 5 times |
   | `400` | `proof` | The record does not verify |
-  | `400` | `root` | `smt_root` is not one of the two newest roots of the issuer |
+  | `400` | `root` | `smt_root` is not the root of the issuer's newest CRL, nor of the second newest for a challenge issued before the server learned of the newest or at most 2 minutes after |
   | `400` | `date_order` | The record rule of that name (check 4): the challenge's date is more than 4 days before the latest date among the valid records of the proof log, or before the card's `last_card_proof`. The second happens to a card that took two challenges around midnight and submitted the later-dated one first; the earlier one cannot be submitted, and the card proof is made again with a new challenge. The whole list is refused; nothing is recorded for any platform |
   | `400` | `empty`, `switch_limit` | The record rule of that name. The whole list is refused; nothing is recorded for any platform |
   | `400` | `daily_limit` | The record rules accept the record, but the server has written `daily_limit` records of the card with the challenge's date (`card-state`). It is the server's rule, not the record rules'. The whole list is refused; the card proof can be made the next day |
@@ -412,7 +413,9 @@ Submits one card proof: the card's whole list of accounts.
 
   "More than 3 days old" compares dates in Taiwan: the server's date is
   later than the CRL date plus 3 days. The two newest CRLs are the two
-  usable ones with the highest `crl_number`.
+  usable ones with the highest `crl_number`; when the second newest is
+  accepted is in [`spec/revocation-tree.md`](../../spec/revocation-tree.md),
+  "Who checks what".
 
 ## `GET /api/v1/config`
 
