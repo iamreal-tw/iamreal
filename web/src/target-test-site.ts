@@ -46,3 +46,6 @@ export const IDLE_LIMIT_MS: number = IDLE_MS;
 
 /** The test site (ADR-0028): its pages of cards are at test.iamreal.tw/p/<short ID> (design/copy/test-site.md). */
 export const SITE_DOMAIN = "test.iamreal.tw";
+
+/** The test site's app domain (ADR-0040, design/copy/app-domain.md): the card proof starts with the choice of a way, whose QR code and button link here. */
+export const APP_LINK: string | null = "https://test-app.iamreal.tw/";

@@ -29,6 +29,8 @@ from qrcodegen import QrCode, QrSegment
 TEXTS = [
     "https://iamreal.tw/hang/7K2Q9FM4XD",
     "https://test.iamreal.tw/hang/7K2Q9FM4XD",
+    # The test site's app domain: the QR code of the choice of a way (card-proof.md).
+    "https://test-app.iamreal.tw/",
     "A",
     "hello, world",
     "https://iamreal.tw/hang/" + "7K2Q9FM4XD" * 4,

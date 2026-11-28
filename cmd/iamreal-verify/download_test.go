@@ -130,11 +130,15 @@ func TestDataNoRedirect(t *testing.T) {
 // SHA-256 is reported, and counts as missing from the archive.
 func TestDataCRLNotItsName(t *testing.T) {
 	files := testDataDomain(t)
+	// A and B, each the first CRL of its issuer key, so both downloaded
+	// whole (C is given by its patch from B, and its file not asked for).
 	var names []string
-	for n := range files {
-		if strings.HasSuffix(n, ".crl") {
-			names = append(names, n)
+	for _, name := range []string{crlA, crlB} {
+		b, err := os.ReadFile(filepath.Join("testdata", "archive", name))
+		if err != nil {
+			t.Fatal(err)
 		}
+		names = append(names, "crl/"+sha256Hex(b)+".crl")
 	}
 	files[names[0]], files[names[1]] = files[names[1]], files[names[0]]
 	code, _, errOut := runDataArchive(t, serveData(t, files).URL)
@@ -289,9 +293,10 @@ func TestDataTempDirOnInterrupt(t *testing.T) {
 }
 
 // With -data at a URL the CRL files are downloaded one at a time as the
-// index is rebuilt, and none is written to disk (#439): whenever one is
-// asked for, the temporary directory holds index.jsonl and no CRL file, and
-// the one asked for before has had its line computed. The result is that of
+// index is rebuilt, whole or as their patches, and none is written to disk
+// (#439): whenever a CRL file or a patch is asked for, the temporary
+// directory holds index.jsonl and no CRL file, and the one asked for before
+// has had its line computed. The result is that of
 // the same archive in a directory.
 func TestDataCRLsOneAtATime(t *testing.T) {
 	tmp := t.TempDir()
@@ -300,7 +305,7 @@ func TestDataCRLsOneAtATime(t *testing.T) {
 	served := serveData(t, files)
 	var held []string // what the temporary directory holds at each request for a CRL
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, ".crl") {
+		if strings.HasSuffix(r.URL.Path, ".crl") || strings.HasSuffix(r.URL.Path, ".patch") {
 			dirs := crlTempDirs(t, tmp)
 			if len(dirs) != 1 {
 				t.Errorf("temporary directories %v", dirs)
@@ -341,19 +346,22 @@ func TestDataCRLsOneAtATime(t *testing.T) {
 		}
 	}
 	if len(held) != crls || crls < 2 {
-		t.Fatalf("%d CRL files asked for, of %d", len(held), crls)
+		t.Fatalf("%d CRL files or patches asked for, of %d CRLs", len(held), crls)
 	}
 	for i, names := range held {
 		if names != "index.jsonl" {
 			t.Errorf("at the request for CRL %d the temporary directory held %q", i+1, names)
 		}
 	}
-	// Each file is downloaded, then indexed, before the next is downloaded.
+	// Each file is downloaded, whole or as its patch (C, from B), then
+	// indexed, before the next is downloaded.
 	var steps []string
 	for _, l := range strings.Split(errOut, "\n") {
 		switch {
 		case strings.HasPrefix(l, "iamreal-verify: downloading ") && strings.HasSuffix(l, ".crl"):
 			steps = append(steps, "download "+l[strings.LastIndex(l, "/")+1:])
+		case strings.HasPrefix(l, "iamreal-verify: downloading ") && strings.HasSuffix(l, ".patch"):
+			steps = append(steps, "download "+strings.TrimSuffix(l[strings.LastIndex(l, "-")+1:], ".patch")+".crl")
 		case strings.HasPrefix(l, "iamreal-verify: CRL ") && strings.HasSuffix(l, ".crl"):
 			steps = append(steps, "index "+strings.TrimPrefix(l, "iamreal-verify: CRL "))
 		}

@@ -13,6 +13,8 @@ import (
 	"bytes"
 	"crypto/rsa"
 	"crypto/x509"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -51,15 +53,22 @@ func TestWorkerDirectory(t *testing.T) {
 // back end published (worker/test/publication-verify.test.ts): the directory
 // named by IAMREAL_WORKER_DATA holds data/, a copy of the data bucket with
 // the log directory under proof-log/ (log files, record hash lists,
-// fingerprint file, card state files) and the CRL archive under crl/, and
+// fingerprint file, card state files) and the CRL archive under crl/ (with
+// the mirror's CRL patches in crl/patches/), and
 // issuers/, the two issuer keys the archive's CRLs are signed by
 // (issuer-G2.der, issuer-G3.der, SubjectPublicKeyInfo). The command is given
-// `-proof-log test -data <data>` and nothing else: it reads the fingerprint
+// `-proof-log test -data <the URL of data/>` and nothing else: it reads the fingerprint
 // file, the log files up to the last line's count, their lists, the card
 // state file of the last line's date, and rebuilds the CRL archive from its
 // CRLs under those keys. It writes the command's JSON output to
 // verify.json, what it printed for people to verify.txt and its exit code
 // to verify.code, in that directory. It is skipped without the variable.
+//
+// data/ is served by a local HTTP server, as the data domain serves the
+// bucket, so that the command reads it as it reads a URL: each issuer
+// key's first CRL whole, every later one from the CRL patch the mirror wrote
+// in crl/patches/ (README.md, "下載"). A local directory would be read
+// whole.
 //
 // The records carry placeholder proofs, so the proof verifier is the fake
 // one of main_test.go, which accepts every record. Everything else is the
@@ -82,9 +91,11 @@ func TestWorkerData(t *testing.T) {
 		}
 		keys = append(keys, crl.NamedKey{Name: name, Key: k.(*rsa.PublicKey)})
 	}
+	srv := httptest.NewServer(http.FileServer(http.Dir(filepath.Join(dir, "data"))))
+	defer srv.Close()
 	var out, errOut bytes.Buffer
 	mk := func(verifier.Config) (prooflog.ProofVerifier, error) { return allVerify{}, nil }
-	code := run([]string{"-bb", "bb", "-crs", "crs", "-proof-log", "test", "-json", "-data", filepath.Join(dir, "data")},
+	code := run([]string{"-bb", "bb", "-crs", "crs", "-proof-log", "test", "-json", "-data", srv.URL + "/"},
 		&out, &errOut, deps{mk, openArchive(func() ([]crl.NamedKey, error) { return keys, nil })})
 	for name, text := range map[string]string{"verify.json": out.String(), "verify.txt": errOut.String(), "verify.code": strconv.Itoa(code)} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644); err != nil {
