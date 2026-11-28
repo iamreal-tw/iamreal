@@ -124,7 +124,7 @@ final class ScreensTests: XCTestCase {
     func testAButtonLeadsToAnotherPageAndAChangeOnThePageDoesNot() {
         // A card's first declaration, from step 1 to step 8: each screen another page.
         let pages = firstDeclaration().map(\.1.page)
-        XCTAssertEqual(Set(pages).count, pages.count, pages.joined(separator: "\n"))
+        XCTAssertEqual(Set(pages).count, pages.count, pages.map { "\($0)" }.joined(separator: "\n"))
         // Step 4: what the card declares, changing the account, changing the list (上一步 goes from one to the other).
         let open = screens.accounts(card(), typed: ["threads": "alice"], errors: [:], message: nil)
         let switching = screens.accounts(card(), mode: .switching, typed: ["threads": "carol.tw"], errors: [:], message: nil)
@@ -136,10 +136,29 @@ final class ScreensTests: XCTestCase {
         let short = screens.hang(recorded("refresh", "alice"), single: "Threads", copied: false)
         XCTAssertNotEqual(screens.hang(recorded("refresh", "alice"), single: "Threads", copied: false, whole: true).page, short.page)
         XCTAssertEqual(screens.hang(recorded("refresh", "alice"), single: "Threads", copied: true).page, short.page)
+        // 3 records today: step 4 and the whole step 6 its 重新掛上連結 shows, and back with 上一步.
+        let limit = card(dailyLimit: true)
+        XCTAssertNotEqual(screens.accounts(limit, typed: [:], errors: [:], message: nil).page, screens.hangFromLimit(limit, copied: false).page)
+        XCTAssertEqual(screens.hangFromLimit(limit, copied: true).page, screens.hangFromLimit(limit, copied: false).page)
         // Step 7 with the reminder set is the same page.
         XCTAssertEqual(screens.remind(.on(threeMonths, counted: true), notAfter: nil).page, screens.remind(.ask(threeMonths), notAfter: nil).page)
         // Step 3 while the card signs.
         XCTAssertEqual(screens.pin(name: "王小明", state: .waiting("x")).page, screens.pin(name: "王小明", state: .waiting(nil)).page)
+        // When the card declares no account the app knows, switching shows what the card declares: that page.
+        let elsewhere = Flow.CardStatus(
+            shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-04", daysSince: 12, dailyLimit: false, knownPlatforms: ["threads"],
+            rows: [Flow.StatusRow(platform: "test-example", known: false, current: "alice-b", lastDeclared: "alice-b", switchCount: 0, switchesLeft: 5)])
+        let none = screens.accounts(elsewhere, mode: .switching, typed: [:], errors: [:], message: nil)
+        XCTAssertEqual(none.page, screens.accounts(elsewhere, typed: [:], errors: [:], message: nil).page)
+    }
+
+    /// ScreenView knows the buttons under the blocks by their words: no
+    /// screen has two with the same words.
+    func testNoScreenHasTwoButtonsWithTheSameWords() {
+        for (name, screen) in firstDeclaration() + laterCardProofs() {
+            let labels = screen.buttons.map(\.label)
+            XCTAssertEqual(Set(labels).count, labels.count, name)
+        }
     }
 
     /// Step 1 as card-proof.md writes it for the app: what to prepare, the

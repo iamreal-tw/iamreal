@@ -47,18 +47,25 @@ struct Screen: Equatable {
     /// On the right of the header: the settings (steps 1 and 8).
     var settings: Button?
 
-    /// Which of a step's pages under the same title it is: step 4's
-    /// changing an account and changing the list; empty for the others.
-    var part = ""
+    /// Step 4 after "改成別的帳號" or "修改帳號清單": another page under
+    /// the same title as what the card declares. Nil for the others.
+    var accountsMode: Screens.AccountsMode?
 
-    /// Which page it is: the step, its title and `part`. Another page is
-    /// drawn anew, from its top (ScreenView), as the Android app keys each
-    /// step; a change on the same page (typing, the progress, 已複製, the
+    /// Which page a screen is: its step, its title, and on step 4 which
+    /// of its pages. Another page is drawn anew, from its top (ScreenView);
+    /// a change on the same page (typing, the progress, 已複製, the
     /// reminder set from step 7) is not.
-    var page: String {
+    struct Page: Hashable {
+        var step: Int
+        var inSteps: Bool
+        var title: String
+        var accountsMode: Screens.AccountsMode?
+    }
+
+    var page: Page {
         var title = ""
         for case .title(let text) in blocks { title = text; break }
-        return "\(step) \(inSteps) \(part) \(title)"
+        return Page(step: step, inSteps: inSteps, title: title, accountsMode: accountsMode)
     }
 
     /// Every sentence on the screen, in its order: for tests. The

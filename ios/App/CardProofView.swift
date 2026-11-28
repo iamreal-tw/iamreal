@@ -53,6 +53,8 @@ struct ScreenView: View {
         .background(Theme.bg.color.ignoresSafeArea())
         .foregroundColor(Theme.text.color)
         .environment(\.colorScheme, .light)
+        // Where step 6's demonstration is at belongs to the page it plays on.
+        .onChange(of: screen.page) { _ in demoStep = 0 }
         // One page to the next, or a change on the page, is drawn at once: nothing on the screen slides, fades or
         // grows into something else, whatever the system animates a button's action with. What moves on purpose
         // (the mark, the demonstrations) sets its own animation.

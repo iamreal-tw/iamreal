@@ -252,7 +252,7 @@ struct Screens {
     }
 
     /// Which of step 4's screens is up.
-    enum AccountsMode: Equatable {
+    enum AccountsMode: Hashable {
         /// As the step opens: the rows to fill when the card declares
         /// nothing; what it declares and what can be done when it does.
         case open
@@ -325,14 +325,8 @@ struct Screens {
         if status.dailyLimit { return declaredNow(status, message: whole) }
         switch mode {
         case .open: return declaredNow(status, message: whole)
-        case .switching:
-            var screen = switching(status, typed: typed, errors: errors, message: message)
-            screen.part = "switching"
-            return screen
-        case .editing:
-            var screen = editing(status, typed: typed, errors: errors, message: message)
-            screen.part = "editing"
-            return screen
+        case .switching: return switching(status, typed: typed, errors: errors, message: message)
+        case .editing: return editing(status, typed: typed, errors: errors, message: message)
         }
     }
 
@@ -445,7 +439,7 @@ struct Screens {
         if row.switchesLeft == 0 {
             blocks.append(.text(copy("accounts.row_used_up", ["switches_used": String(row.switchCount)])))
             if let whole = message ?? errors[row.platform] { blocks.append(.message(whole)) }
-            return Screen(step: 4, blocks: blocks, buttons: [backToDeclared], mainButton: false, cancel: cancel)
+            return Screen(step: 4, blocks: blocks, buttons: [backToDeclared], mainButton: false, cancel: cancel, accountsMode: .switching)
         }
         let cost = row.switchesLeft == 1
             ? copy("confirm.uses_final_switch")
@@ -457,7 +451,7 @@ struct Screens {
         if let message { blocks.append(.message(message)) }
         blocks.append(.sentences([copy("accounts.switch_effect", ["account": now]), cost]))
         blocks += previewNote(single, counted: true)
-        return Screen(step: 4, blocks: blocks, buttons: [backToDeclared, Button(label: copy("common.next"), action: .toConfirm)], cancel: cancel)
+        return Screen(step: 4, blocks: blocks, buttons: [backToDeclared, Button(label: copy("common.next"), action: .toConfirm)], cancel: cancel, accountsMode: .switching)
     }
 
     /// After "修改帳號清單": a row for each platform, each changed on its own.
@@ -468,7 +462,7 @@ struct Screens {
         if let message { blocks.append(.message(message)) }
         blocks.append(.text(copy("accounts.how_change") + copy("accounts.switches_limited")))
         blocks += previewNote(single, counted: true)
-        return Screen(step: 4, blocks: blocks, buttons: [backToDeclared, Button(label: copy("common.next"), action: .toConfirm)], cancel: cancel)
+        return Screen(step: 4, blocks: blocks, buttons: [backToDeclared, Button(label: copy("common.next"), action: .toConfirm)], cancel: cancel, accountsMode: .editing)
     }
 
     // Step 5: confirming ----------------------------------------------------------------------
