@@ -93,7 +93,7 @@ jobs:
       GO_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes cmd/** crl/** prooflog/** verifier/** spec/** design/copy/** circuits/package.json protocol/package.json web/package.json worker/package.json"
       TYPESCRIPT_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes protocol/** worker/** web/** design/** spec/** cmd/** crl/** prooflog/** verifier/** android/** ios/** device-core/** .github/workflows/** circuits/**"
       DEVICE_CORE_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes device-core/** spec/** crl/testdata/** web/circuits/** verifier/vk/** .github/workflows/cache.yml"
-      ANDROID_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes android/** device-core/** web/circuits/** verifier/vk/** spec/vectors/** design/fonts/** design/copy/** design/motion/** .github/workflows/cache.yml"
+      ANDROID_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes android/** device-core/** web/circuits/** verifier/vk/** spec/vectors/** design/fonts/** design/copy/** design/motion/** .github/workflows/cache.yml .github/workflows/gradle-retry.sh"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -239,6 +239,8 @@ jobs:
   # Gradle downloads is checked against android/gradle/verification-metadata.xml.
   # `build` assembles both installers, runs the unit tests on the JVM against
   # the same Rust, runs lint, and checks what was built (android/README.md).
+  # Gradle runs through gradle-retry.sh, which runs it again, three runs at
+  # most, when it failed resolving a plugin or a library (#573).
   # cargo's registry, the three directories of device-core/target/ it builds
   # into, and Gradle's caches and wrapper are restored from the caches
   # cache.yml saved on main, for exactly the files hashed in the keys (no
@@ -297,4 +299,4 @@ jobs:
         run: ./fetch-crs.sh
       - name: gradlew build
         working-directory: android
-        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon build
+        run: JAVA_HOME="$JAVA_HOME_17_X64" bash ../.github/workflows/gradle-retry.sh ./gradlew --no-daemon build

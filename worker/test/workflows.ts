@@ -34,6 +34,8 @@
 // - what the scripts the two Android uploads run do (android-version.sh,
 //   android-sign.sh, play-upload.sh): test/upload-android.test.ts runs them,
 //   with curl replaced, and Google Play's own answers are seen only on GitHub;
+// - what gradle-retry.sh, which every job that runs Gradle runs it through,
+//   does: test/gradle-retry.test.ts runs it, with Gradle replaced;
 // - what reverify.yml runs: the repository's Go (the build of
 //   iamreal-verify) and reverify.sh, with no secret, a token that can only
 //   read and no cache; test/workflows.test.ts runs the script with
@@ -337,8 +339,17 @@ export const FETCH_BARRETENBERG = 'BB_LIB_DIR="$(./fetch-barretenberg.sh)" && ex
  * android/build-native.sh calls.
  */
 export const ANDROID_JOB = "android";
-/** The one line of that job that runs Gradle: the wrapper of the repository, with the runner's JDK 17. */
-export const GRADLE_BUILD = 'JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon build';
+/**
+ * The script every job that runs Gradle runs it through, from android/:
+ * it runs Gradle again when it failed resolving a plugin or a library,
+ * three runs at most, and on any other failure stops at once
+ * (test/gradle-retry.test.ts runs it).
+ */
+export const GRADLE_RETRY_SCRIPT = "gradle-retry.sh";
+/** How a job runs the Gradle wrapper of the repository, with the runner's JDK 17, through GRADLE_RETRY_SCRIPT, with these arguments after --no-daemon. */
+export const gradlewThroughRetry = (args: string): string => `JAVA_HOME="$JAVA_HOME_17_X64" bash ../.github/workflows/${GRADLE_RETRY_SCRIPT} ./gradlew --no-daemon ${args}`;
+/** The one line of that job that runs Gradle. */
+export const GRADLE_BUILD = gradlewThroughRetry("build");
 /** How that job gets the NDK, the platform and the build tools android/app/build.gradle.kts names, with the SDK manager the runner has. */
 export const ANDROID_SDK_PARTS = '$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.0.0" > /dev/null';
 /**
@@ -1041,7 +1052,7 @@ function androidUploadJobs(app: AndroidApp): YamlMap {
           name: app.buildStep,
           "working-directory": "android",
           env: { VERSION_NAME: "${{ steps.version.outputs.name }}", VERSION_CODE: "${{ steps.version.outputs.code }}" },
-          run: `JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon ${task} -Piamreal.versionName="$VERSION_NAME" -Piamreal.versionCode="$VERSION_CODE"`,
+          run: gradlewThroughRetry(`${task} -Piamreal.versionName="$VERSION_NAME" -Piamreal.versionCode="$VERSION_CODE"`),
         },
         { uses: uses("actions/upload-artifact"), with: { ...unsigned, "if-no-files-found": "error" } },
       ],
@@ -1225,8 +1236,8 @@ export const TYPESCRIPT_PATHS: readonly string[] = [
  * restores (a change to it is a job that builds from nothing).
  */
 export const DEVICE_CORE_PATHS: readonly string[] = [...EVERY_CHECK_PATHS, "device-core/**", "spec/**", "crl/testdata/**", "web/circuits/**", "verifier/vk/**", ".github/workflows/cache.yml"];
-/** The android job: the app, the Rust it links, the files Gradle bundles into the app, the ones its unit tests read, and cache.yml, hashed into the keys of its caches like device-core's. */
-export const ANDROID_PATHS: readonly string[] = [...EVERY_CHECK_PATHS, "android/**", "device-core/**", "web/circuits/**", "verifier/vk/**", "spec/vectors/**", "design/fonts/**", "design/copy/**", "design/motion/**", ".github/workflows/cache.yml"];
+/** The android job: the app, the Rust it links, the files Gradle bundles into the app, the ones its unit tests read, cache.yml, hashed into the keys of its caches like device-core's, and the script it runs Gradle through. */
+export const ANDROID_PATHS: readonly string[] = [...EVERY_CHECK_PATHS, "android/**", "device-core/**", "web/circuits/**", "verifier/vk/**", "spec/vectors/**", "design/fonts/**", "design/copy/**", "design/motion/**", ".github/workflows/cache.yml", `.github/workflows/${GRADLE_RETRY_SCRIPT}`];
 /** A list of patterns for each required check, by the check's name. */
 export type CheckLists = Readonly<Record<string, readonly string[]>>;
 /** Each required check's list. */

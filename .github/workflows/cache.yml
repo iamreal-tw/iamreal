@@ -87,7 +87,7 @@ jobs:
   # What the android job of checks.yml runs, the same steps: Gradle's build of
   # both installers, the unit tests on the JVM and lint, and the three builds
   # of device-core/ in it (two Android targets, and this machine's for the
-  # unit tests).
+  # unit tests). Gradle runs through gradle-retry.sh, as there (#573).
   cache-android:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -131,6 +131,6 @@ jobs:
         run: ./fetch-crs.sh
       - name: gradlew build
         working-directory: android
-        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon build
+        run: JAVA_HOME="$JAVA_HOME_17_X64" bash ../.github/workflows/gradle-retry.sh ./gradlew --no-daemon build
       - name: Leave Gradle's lock files and gc.properties out of the cache
         run: find "$HOME/.gradle/caches" -type f \( -name "*.lock" -o -name gc.properties \) -delete
