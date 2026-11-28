@@ -9,7 +9,7 @@ import { DEVICE_ID_DAYS, DEVICE_ID_KEY, cardProofCounts, deviceIdOn, endVisit, f
 import type { Stop } from "../src/flow.ts";
 import { VISIT_ID_KEY, readCount } from "iamreal-protocol/counts.ts";
 import { parseDay } from "iamreal-protocol/date.ts";
-import { apartFromIds } from "./fixtures/counts.ts";
+import { withoutRandomIds } from "./random-ids.ts";
 import { vectors } from "./vectors.ts";
 
 const TABLE = vectors("counts.json").table as { steps: Record<string, string[]>; reasons: Record<string, string[]>; card_proof_actions: Record<string, string[]>; browsers: string[]; oses: string[] };
@@ -140,7 +140,7 @@ describe("a count as it is sent", () => {
       ],
     );
     for (const c of p.sent) assert.deepEqual(readCount(c), c);
-    for (const part of ["2500", "45123", "200000"]) assert.ok(!JSON.stringify(p.sent.map(apartFromIds)).includes(part), part);
+    for (const part of ["2500", "45123", "200000"]) assert.ok(!JSON.stringify(p.sent.map(withoutRandomIds)).includes(part), part);
   });
 
   test("the card reader's name: in every count of the attempt once it is known, only in its form; another attempt has none until it is told", async () => {
