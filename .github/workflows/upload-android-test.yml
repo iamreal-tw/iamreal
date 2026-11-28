@@ -19,7 +19,8 @@
 # every run of a day, and the build number. It builds the test app's bundle
 # with that version the way the android check of checks.yml builds the app
 # (no cache here), which runs the checks of the bundle, and hands the bundle
-# on as an artifact.
+# on as an artifact. Gradle runs through gradle-retry.sh, as in the check,
+# which runs it again when it failed resolving a plugin or a library (#573).
 #
 # "upload" is the one job of the environment app-test, which GitHub gives
 # its keys to only for jobs on main (#162). It builds nothing and runs no
@@ -78,7 +79,7 @@ jobs:
         env:
           VERSION_NAME: ${{ steps.version.outputs.name }}
           VERSION_CODE: ${{ steps.version.outputs.code }}
-        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleTrial -Piamreal.versionName="$VERSION_NAME" -Piamreal.versionCode="$VERSION_CODE"
+        run: JAVA_HOME="$JAVA_HOME_17_X64" bash ../.github/workflows/gradle-retry.sh ./gradlew --no-daemon bundleTrial -Piamreal.versionName="$VERSION_NAME" -Piamreal.versionCode="$VERSION_CODE"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-test-bundle

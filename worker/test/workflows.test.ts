@@ -33,6 +33,7 @@ import {
   DEVICE_CORE_CACHES,
   EVERY_CHECK_PATHS,
   GRADLE_BUILD,
+  GRADLE_RETRY_SCRIPT,
   GRADLE_DISTRIBUTION_SHA256,
   GRADLE_VERSION,
   GRADLE_WRAPPER_JAR_SHA256,
@@ -55,7 +56,7 @@ const WORKFLOWS_DIR = join(REPO, ".github", "workflows");
 /** The script the changes job of checks.yml runs. */
 const CHANGED_PATHS_NAME = basename(CHANGED_PATHS_SCRIPT);
 /** The files of .github/workflows/ that are not workflows: the scripts the workflows run. */
-const SCRIPTS = [CHANGED_PATHS_NAME, REVERIFY_SCRIPT, ...UPLOAD_ANDROID_SCRIPTS];
+const SCRIPTS = [CHANGED_PATHS_NAME, REVERIFY_SCRIPT, ...UPLOAD_ANDROID_SCRIPTS, GRADLE_RETRY_SCRIPT];
 
 function realFiles(): Record<string, string> {
   return Object.fromEntries(
@@ -238,6 +239,8 @@ const CHANGES: Record<string, Change[]> = {
   "124 the android job running the wrapper of another directory": [replace(C, `        working-directory: android\n        run: ${GRADLE_BUILD}`, `        working-directory: web\n        run: ${GRADLE_BUILD}`)],
   "125 one more step in the android job": [replace(C, "      - name: gradlew build\n", "      - run: sudo snap install zig\n      - name: gradlew build\n")],
   "126 the android job without the parameter files' script": [replace(C, "        working-directory: device-core\n        run: ./fetch-crs.sh", "        working-directory: device-core\n        run: curl -o vendor/crs/bn254_g2.dat https://example.com/g2.dat")],
+  "127 the android job running the wrapper without the retry of gradle-retry.sh": [replace(C, `run: ${GRADLE_BUILD}`, 'run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon build')],
+  "128 the android job running the wrapper through another script": [replace(C, `run: ${GRADLE_BUILD}`, `run: ${GRADLE_BUILD.replace("gradle-retry.sh", "android-version.sh")}`)],
   // The merge queue (#180): checks.yml also runs on merge_group, and nothing else does.
   "130 deploy-test.yml also on merge_group": [replace(D, "on:\n  push:\n", `on:\n${MERGE_GROUP}  push:\n`)],
   "131 checks-browser.yml also on merge_group": [replace(B, "on:\n", `on:\n${MERGE_GROUP}`)],
@@ -278,7 +281,7 @@ const CHANGES: Record<string, Change[]> = {
   "222 an output of the changes job written in, not the script's": [replace(C, "      go: ${{ steps.paths.outputs.go }}\n", "      go: false\n")],
   "223 an output of the changes job that is another check's": [replace(C, "      go: ${{ steps.paths.outputs.go }}\n", "      go: ${{ steps.paths.outputs.android }}\n")],
   "224 a path less in a list the changes job is given": [replace(C, " cmd/** crl/** prooflog/**", " crl/** prooflog/**")],
-  "225 a path more in a list the changes job is given": [replace(C, ' design/motion/** .github/workflows/cache.yml"\n', ' design/motion/** .github/workflows/cache.yml docs/**"\n')],
+  "225 a path more in a list the changes job is given": [replace(C, ' .github/workflows/cache.yml .github/workflows/gradle-retry.sh"\n', ' .github/workflows/cache.yml .github/workflows/gradle-retry.sh docs/**"\n')],
   "226 the changes job without the whole history": [replace(C, "          fetch-depth: 0\n", "")],
   "227 the changes job keeping the token": [replace(C, "          persist-credentials: false\n          fetch-depth: 0\n", "          fetch-depth: 0\n")],
   "228 the changes job with an if": [replace(C, "  changes:\n", "  changes:\n    if: github.event_name == 'pull_request'\n")],
@@ -621,7 +624,7 @@ for (const [name, { changes, problem }] of Object.entries(CACHE_CHANGES)) {
 const A = "upload-android.yml";
 const SIGN_ENV = "        env:\n          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}\n          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}\n";
 const PLAY_ENV = "        env:\n          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}\n";
-const BUNDLE_RELEASE = '        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleRelease';
+const BUNDLE_RELEASE = '        run: JAVA_HOME="$JAVA_HOME_17_X64" bash ../.github/workflows/gradle-retry.sh ./gradlew --no-daemon bundleRelease';
 const UPLOAD_JOBS_PROBLEM = /^upload-android\.yml: the jobs are not exactly the ones in test\/workflows\.ts/;
 const T = "upload-android-test.yml";
 const UPLOAD_TEST_JOBS_PROBLEM = /^upload-android-test\.yml: the jobs are not exactly the ones in test\/workflows\.ts/;
@@ -706,8 +709,12 @@ const UPLOAD_ANDROID_CHANGES: Record<string, { changes: Change[]; problem: RegEx
     problem: /^upload-android-test\.yml: not triggered by hand \(workflow_dispatch\) only/,
   },
   "269 the test app's upload key given to its build job, where Gradle runs": {
-    changes: [replace(T, '        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleTrial', `${SIGN_ENV.replace("        env:\n", "")}        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleTrial`)],
+    changes: [replace(T, '        run: JAVA_HOME="$JAVA_HOME_17_X64" bash ../.github/workflows/gradle-retry.sh ./gradlew --no-daemon bundleTrial', `${SIGN_ENV.replace("        env:\n", "")}        run: JAVA_HOME="$JAVA_HOME_17_X64" bash ../.github/workflows/gradle-retry.sh ./gradlew --no-daemon bundleTrial`)],
     problem: UPLOAD_TEST_JOBS_PROBLEM,
+  },
+  "270 the upload's build running the wrapper without the retry of gradle-retry.sh": {
+    changes: [replace(A, "bash ../.github/workflows/gradle-retry.sh ./gradlew --no-daemon bundleRelease", "./gradlew --no-daemon bundleRelease")],
+    problem: UPLOAD_JOBS_PROBLEM,
   },
 };
 
