@@ -484,6 +484,11 @@ final class CardProofTests: XCTestCase {
         try await press("下一步", in: model)
         try await press("感應卡片", in: model)
         try await press("下一步", in: model)
+        // The PIN 5 minutes after the reading (#553): the challenge the reading asked for is too old by step 5, and the
+        // phone asks for its own there.
+        let challenges = asked.asked["challenges", default: 0]
+        XCTAssertGreaterThan(challenges, 0, "the reading asked for a challenge")
+        now = now.addingTimeInterval(CardProofFlow.heldChallengeSeconds)
 
         card.nextTapFinds = other
         model.pinText = backend.pin
@@ -558,6 +563,7 @@ final class CardProofTests: XCTestCase {
 
         try await press("再感應一次", in: model)
         XCTAssertEqual(card.signatures, 6, "two signatures for each of the three card proofs so far")
+        XCTAssertEqual(asked.asked["challenges", default: 0] - challenges, 1, "step 5 asked for a challenge of its own; the tap made again signs the same")
         XCTAssertFalse(model.holdsPIN)
         // Another account: the whole of step 6, for the new account's profile.
         XCTAssertEqual(model.screen.step, 6)
