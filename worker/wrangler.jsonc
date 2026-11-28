@@ -77,7 +77,7 @@
       // DATA: the public data (ADR-0027). CONNECTION_LOG: the bucket the connection log is written
       // to (ADR-0022), under "connection/": a bucket with no public domain, apart from the public
       // data, whose lifecycle rule deletes every object under that prefix after 31 days (README.md,
-      // "連線紀錄"). The operator makes the bucket and the rule before the first deploy; every hour the
+      // "連線紀錄"). The maintainer makes the bucket and the rule before the first deploy; every hour the
       // Worker publishes the date of the oldest entry, so that a rule that does not delete shows.
       // The same bucket holds the counts (ADR-0032), under "count-events/", with a rule of their own
       // that deletes after 31 days too, and the same hourly look (README.md, "計數").
@@ -90,7 +90,7 @@
       // each machine: these stop a network that sends many requests over one connection, not one that
       // opens a connection for each (README.md, "限流"). "limit" is how many requests one
       // network may send in "period" seconds (10 or 60; the code tells a refused request to come
-      // back in 60). The numbers are the operator's to tune (README.md, "限流"). A namespace_id is
+      // back in 60). The numbers are the maintainer's to tune (README.md, "限流"). A namespace_id is
       // an integer of the account's own choosing, one to a counter: never the same for two bindings
       // or two environments, or they would count together.
       "ratelimits": [
@@ -113,11 +113,11 @@
         // and test/environments.test.ts fails before that.
         "PROOF_LOG_KIND": "test",
         // "true" stops taking card proofs; "false" takes them (ADR-0033; README.md, "停止和恢復收過卡").
-        // The operator changes it on Cloudflare's dashboard. The next deploy writes this file's value
+        // The maintainer changes it on Cloudflare's dashboard. The next deploy writes this file's value
         // over the dashboard's: to deploy while it is stopped, write "true" here and deploy that.
         "CARD_PROOFS_PAUSED": "false",
-        // The name of a rebuild from the proof log the operator asks for, or "" for none (ADR-0033;
-        // README.md, "從證明紀錄重建"). A name of the operator's own (1 to 40 of A-Za-z0-9._-); the proof
+        // The name of a rebuild from the proof log the maintainer asks for, or "" for none (ADR-0033;
+        // README.md, "從證明紀錄重建"). A name of the maintainer's own (1 to 40 of A-Za-z0-9._-); the proof
         // log's object makes one rebuild for each name, and only while CARD_PROOFS_PAUSED is "true".
         // Changed on Cloudflare's dashboard, like the one above, and written over by the next deploy.
         "REBUILD_PROOF_LOG": "",
@@ -130,7 +130,7 @@
         "COUNT_EVENTS_PER_MINUTE": "600",
         // The site-wide limit (ADR-0026; src/rate-limit.ts, withinStarts): how many card proofs may start in a
         // minute, all networks together, counted on `GET /api/v1/config?start` only, by the object STARTS.
-        // Plain digits, 0 to 100000. A starting value for the operator to set (README.md, "全站的總量上限").
+        // Plain digits, 0 to 100000. A starting value for the maintainer to set (README.md, "全站的總量上限").
         "CARD_PROOF_STARTS_PER_MINUTE": "60",
         // The app domain (ADR-0040; README.md, "app 網域"): a second custom domain of this Worker, set in the
         // dashboard, whose every address opens the apps named here. On it the Worker answers the two files a

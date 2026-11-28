@@ -1,5 +1,5 @@
 # Builds the test app of Android (tw.iamreal.app.test, ADR-0040) and puts it
-# on Google Play's internal testing track, when the operator starts it by
+# on Google Play's internal testing track, when the maintainer starts it by
 # hand on main: Actions, upload-android-test, "Run workflow"; or `gh workflow
 # run upload-android-test.yml --ref main`. A push or a merge uploads
 # nothing. The test app always talks to the test site and signs for the test
@@ -25,7 +25,7 @@
 # its keys to only for jobs on main (#162). It builds nothing and runs no
 # Gradle: it signs the bundle the build job checked with the upload key
 # (android-sign.sh), keeps the signed bundle as an artifact (for when the
-# API does not take it: the operator uploads it by hand, from Play Console;
+# API does not take it: the maintainer uploads it by hand, from Play Console;
 # .github/README.md), then uploads it with the Google Play Developer API
 # (play-upload.sh), to the test app. Each secret is in the env of the one
 # step that uses it. What it trusts besides: the pinned actions; the
@@ -103,7 +103,7 @@ jobs:
           ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
           ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
         run: JAVA_HOME="$JAVA_HOME_17_X64" bash .github/workflows/android-sign.sh "$RUNNER_TEMP/bundle/app-trial.aab" "$RUNNER_TEMP/signed/app-trial.aab"
-      # Kept with the run: the operator can upload it from Play Console when the API cannot.
+      # Kept with the run: the maintainer can upload it from Play Console when the API cannot.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-test-bundle-signed

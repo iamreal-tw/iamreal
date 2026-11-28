@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The operator's daily re-verification of one proof log (ADR-0025), from its
+# The maintainer's daily re-verification of one proof log (ADR-0025), from its
 # first record: run by each job of reverify.yml. Plain bash; what verifies
 # is iamreal-verify (cmd/iamreal-verify), the command anyone runs, reading
 # the published files and nothing else.
@@ -23,12 +23,12 @@
 #
 # Ends with iamreal-verify's exit code, so the job fails unless it is 0:
 #   0  it passed
-#   1  it did not pass: the operator does what ADR-0025 says
+#   1  it did not pass: the maintainer does what ADR-0025 says
 #   2  it could not be checked (a file could not be read): not a failure of
 #      the proof log (ADR-0025), and the next run starts over
 #   any other: iamreal-verify did not run to its end (not found, killed)
 # The last line says which, and how long the run took: past an hour, the
-# operator opens a ticket for the progress file (.github/README.md).
+# maintainer opens a ticket for the progress file (.github/README.md).
 set -uf -o pipefail
 export LC_ALL=C
 
@@ -58,7 +58,7 @@ grep -E '^  [0-9]+ invalid ' "$out" || true
 
 case $code in
   0) verdict="passed" ;;
-  1) verdict="DID NOT PASS (the lines above say which record or file, and what; ADR-0025 says what the operator does)" ;;
+  1) verdict="DID NOT PASS (the lines above say which record or file, and what; ADR-0025 says what the maintainer does)" ;;
   2) verdict="could not be checked (not a failure of the proof log; the next run starts over)" ;;
   *) verdict="did not run to its end (iamreal-verify was not found or was stopped; nothing is known about the proof log)" ;;
 esac

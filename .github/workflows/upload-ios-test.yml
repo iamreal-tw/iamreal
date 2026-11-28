@@ -1,10 +1,10 @@
 # Builds the test app of the iPhone (tw.iamreal.app.test, ADR-0040) and
 # uploads it to App Store Connect, from where TestFlight hands it to the
-# operator (#484). The same two jobs as upload-ios.yml, which uploads the
+# maintainer (#484). The same two jobs as upload-ios.yml, which uploads the
 # production app, but its own workflow: GitHub counts each workflow's runs
 # on its own, so the test app's build numbers do not take turns with the
-# production app's. Only by hand: the operator, or the coding agent on the
-# operator's computer, starts it on main with
+# production app's. Only by hand: the maintainer, or the coding agent on the
+# maintainer's computer, starts it on main with
 # `gh workflow run upload-ios-test.yml --ref main`. ios/README.md has the
 # details; worker/test/workflows.ts holds this file's two jobs, exactly, and
 # worker/test/workflows.test.ts checks this file against them.
@@ -102,7 +102,7 @@ jobs:
         env:
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
         run: test -n "$APPLE_TEAM_ID" && plutil -replace teamID -string "$APPLE_TEAM_ID" "$RUNNER_TEMP/ios-upload/ExportOptions.plist"
-      # The Apple Distribution certificate the operator made, and its key, into a keychain of this
+      # The Apple Distribution certificate the maintainer made, and its key, into a keychain of this
       # job's own, with a password made for this run; only codesign may use the key, and the
       # .p12 is removed once imported. GitHub destroys the runner after the job (#143, ADR-0036).
       - name: Put the distribution certificate in a keychain of this job's own
@@ -110,7 +110,7 @@ jobs:
           IOS_DIST_P12_BASE64: ${{ secrets.IOS_DIST_P12_BASE64 }}
           IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
         run: umask 077 && printf '%s' "$IOS_DIST_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dist.p12" && password="$(openssl rand -hex 24)" && security create-keychain -p "$password" "$RUNNER_TEMP/signing.keychain-db" && security set-keychain-settings -lut 21600 "$RUNNER_TEMP/signing.keychain-db" && security unlock-keychain -p "$password" "$RUNNER_TEMP/signing.keychain-db" && security import "$RUNNER_TEMP/dist.p12" -k "$RUNNER_TEMP/signing.keychain-db" -f pkcs12 -P "$IOS_DIST_P12_PASSWORD" -T /usr/bin/codesign && rm "$RUNNER_TEMP/dist.p12" && security set-key-partition-list -S 'apple-tool:,apple:' -s -k "$password" "$RUNNER_TEMP/signing.keychain-db" > /dev/null && security list-keychains -d user -s "$RUNNER_TEMP/signing.keychain-db" && security find-identity -v -p codesigning "$RUNNER_TEMP/signing.keychain-db" | grep -q 'Apple Distribution'
-      # The App Store profile the operator made: it must be for this app under the team and allow
+      # The App Store profile the maintainer made: it must be for this app under the team and allow
       # the NFC tag reading and the associated domains the app asks for; the export options name it
       # for the identifier.
       - name: Install the App Store profile of tw.iamreal.app.test and name it in the export options
