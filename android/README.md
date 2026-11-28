@@ -21,11 +21,11 @@
 
 ## 圖示
 
-app 的圖示是記號（紅色的自然人憑證和墨色的台灣，`web/src/ui/logo.ts`）放在頁面的白底上，營運者從三個方向裡選的（[#490](https://github.com/iamreal-tw/iamreal/issues/490)），和 iOS 的相同。每一種 build 都是同一個圖示，靠圖示下面的名稱分。
+app 的圖示是記號（紅色的自然人憑證和墨色的台灣，`web/src/ui/logo.ts`）放在頁面的白底上，維護者從三個方向裡選的（[#490](https://github.com/iamreal-tw/iamreal/issues/490)），和 iOS 的相同。每一種 build 都是同一個圖示，靠圖示下面的名稱分。
 
 - `app/src/main/res/mipmap-anydpi/ic_launcher.xml`：adaptive icon，底是 `token_bg`，前景是 `drawable/launcher_mark.xml`。前景 108dp，系統只顯示中間的 72dp、裁成它自己的形狀；記號每單位 0.76dp、放在正中間，卡片的每個角都在直徑 66dp 的圓裡，裁成圓形也不會切到。`ThemeTest` 核對底是 `token_bg`、前景畫的記號和啟動畫面的 `splash_mark.xml` 相同，台灣的每一點和卡片的四個角都在那個圓裡
 - 沒有單色的那一層（`<monochrome>`）：手機設成用主題色的圖示時，這個 app 照樣顯示原本的顏色
-- `test/AppIcon.java` 照 `launcher_mark.xml` 放記號的位置（和台灣的輪廓，卡片照 `web/src/ui/logo.ts` 寫在程式裡）畫出 iOS 的圖示（1024×1024、沒有透明度，寫進 `ios/App/Assets.xcassets/`），和 Google Play 商店頁的兩張圖：圖示（512×512、32 位元 PNG）、主題圖片（1024×500、24 位元 PNG，記號加「島民證明」，名稱從 `design/copy/app.json` 的 `splash.name` 讀、用 `design/fonts/` 的源流明體）。只用 JDK，改了記號或 `launcher_mark.xml` 之後在程式庫的根目錄手動跑；建置和部署都不跑它。商店的兩張由營運者自己換上 Play Console：
+- `test/AppIcon.java` 照 `launcher_mark.xml` 放記號的位置（和台灣的輪廓，卡片照 `web/src/ui/logo.ts` 寫在程式裡）畫出 iOS 的圖示（1024×1024、沒有透明度，寫進 `ios/App/Assets.xcassets/`），和 Google Play 商店頁的兩張圖：圖示（512×512、32 位元 PNG）、主題圖片（1024×500、24 位元 PNG，記號加「島民證明」，名稱從 `design/copy/app.json` 的 `splash.name` 讀、用 `design/fonts/` 的源流明體）。只用 JDK，改了記號或 `launcher_mark.xml` 之後在程式庫的根目錄手動跑；建置和部署都不跑它。商店的兩張由維護者自己換上 Play Console：
 
   ```sh
   java android/test/AppIcon.java android/test-output/store
@@ -45,7 +45,7 @@ app 的圖示是記號（紅色的自然人憑證和墨色的台灣，`web/src/u
 
 ### 真卡片的測試清單
 
-讀卡的指令只有真卡片測得到（模擬器的測試用的是假卡片）。營運者用自己的卡片和手機照這份清單測，結果記在拉取請求上。用開發用 build（「怎麼用線裝到手機」）：連測試網站，簽的是測試的證明紀錄的場合字串，不會記進正式的證明紀錄。記下手機的型號和 Android 版本。
+讀卡的指令只有真卡片測得到（模擬器的測試用的是假卡片）。維護者用自己的卡片和手機照這份清單測，結果記在拉取請求上。用開發用 build（「怎麼用線裝到手機」）：連測試網站，簽的是測試的證明紀錄的場合字串，不會記進正式的證明紀錄。記下手機的型號和 Android 版本。
 
 1. **三次感應的完整過卡**：第 1 步到第 8 步走完一次。第 2 步在按「感應卡片」之前先看示範，再照它做一次：卡片平貼在手機背面、沒有反應就慢慢上下移動，讀不讀得到，實際感應到的位置在哪裡（記下手機的型號和位置，#153）。每一次感應，面板依序是「把卡片貼在手機背面」、「讀取中」、「可以拿開卡片了」。第 6 步「打開你的島民證明」打開後是這次宣告的帳號
 2. **中途拿開卡片**：第 2 步面板寫「讀取中」時拿開卡片，畫面寫「卡片在讀取途中離開了手機……」，按「再感應一次」可以讀完。第 5 步感應時面板寫「讀取中」就拿開，畫面寫「卡片在感應途中離開了手機。請再感應一次。」，按「再感應一次」不用再輸入 PIN 就能完成
@@ -107,7 +107,7 @@ Android 有三種 app（ADR-0040），識別碼不同，三個可以同時裝在
 | 打開它的 app 網域（「app 網域」） | 上線前：`test-app.iamreal.tw` | `test-app.iamreal.tw`，上線後也是 | 沒有 |
 | 簽的場合字串 | 上線前：`iamreal-test:public:0` | `iamreal-test:public:0`，上線後也是 | `iamreal-test:public:0`，上線後也是 |
 | 「到 Google Play 更新」開的頁 | `tw.iamreal.app` 的商店頁 | `tw.iamreal.app.test` 的商店頁：從內部測試裝的人在那一頁更新 | 沒有這個按鈕（不在 Google Play 上，和 iOS 的開發用 build 相同），句子照舊 |
-| 怎麼裝 | Google Play 的內部測試（營運者手動觸發 [`upload-android.yml`](../.github/workflows/upload-android.yml)；「上傳到 Google Play」） | Google Play 的內部測試（營運者手動觸發 [`upload-android-test.yml`](../.github/workflows/upload-android-test.yml)） | 用線裝（「怎麼用線裝到手機」） |
+| 怎麼裝 | Google Play 的內部測試（維護者手動觸發 [`upload-android.yml`](../.github/workflows/upload-android.yml)；「上傳到 Google Play」） | Google Play 的內部測試（維護者手動觸發 [`upload-android-test.yml`](../.github/workflows/upload-android-test.yml)） | 用線裝（「怎麼用線裝到手機」） |
 | 顯示的版本 | 上傳時給：台灣的日期（`2026.11.5`，同一天相同） | 同左 | `dev` |
 | build 號碼（`versionCode`） | 上傳工作流程的執行編號，不到 1,000,000 | 它自己的上傳工作流程的執行編號加 1,000,000，1,000,000 以上、不到 2,000,000 | 固定 2,000,000 |
 
@@ -138,13 +138,13 @@ adb shell pm verify-app-links --re-verify tw.iamreal.app   # 改了 assetlinks.j
 
 ## 上傳到 Google Play
 
-正式 app 和測試 app 只從 GitHub Actions 上傳（ADR-0036、ADR-0040）：營運者在 `main` 上手動觸發 [`.github/workflows/upload-android.yml`](../.github/workflows/upload-android.yml)（正式 app，建置 `bundleRelease`）或 [`.github/workflows/upload-android-test.yml`](../.github/workflows/upload-android-test.yml)（測試 app，建置 `bundleTrial`），連 `build.gradle.kts` 的 bundle 檢查（「建置時的檢查」），用上傳金鑰簽章，傳到那個 app 的內部測試。簽章、上傳、版本號怎麼算，見 [`.github/README.md`「上傳 Android 的 app」](../.github/README.md#上傳-android-的-app175)。
+正式 app 和測試 app 只從 GitHub Actions 上傳（ADR-0036、ADR-0040）：維護者在 `main` 上手動觸發 [`.github/workflows/upload-android.yml`](../.github/workflows/upload-android.yml)（正式 app，建置 `bundleRelease`）或 [`.github/workflows/upload-android-test.yml`](../.github/workflows/upload-android-test.yml)（測試 app，建置 `bundleTrial`），連 `build.gradle.kts` 的 bundle 檢查（「建置時的檢查」），用上傳金鑰簽章，傳到那個 app 的內部測試。簽章、上傳、版本號怎麼算，見 [`.github/README.md`「上傳 Android 的 app」](../.github/README.md#上傳-android-的-app175)。
 
 版本由兩個 Gradle 屬性給：`-Piamreal.versionName=2026.11.21 -Piamreal.versionCode=42`（`app/build.gradle.kts`）。沒給的時候顯示的版本是 `dev`，build 號碼是那個 build type 範圍裡的第一個：正式 app `1`、測試 app `1000000`；開發用 build 不收這個屬性，固定 `2000000`。
 
 ## 商店頁的圖片
 
-Google Play 商店頁的圖片（截圖是 [#489](https://github.com/iamreal-tw/iamreal/issues/489) 的第一版，圖示和主題圖片是 [#490](https://github.com/iamreal-tw/iamreal/issues/490) 的）。都由程式產生，在這台電腦上跑，產生的圖不進程式庫：營運者在 Play Console 的商店資訊上傳。改了 app 的排版、字、顏色之後重跑，換掉商店頁上的。
+Google Play 商店頁的圖片（截圖是 [#489](https://github.com/iamreal-tw/iamreal/issues/489) 的第一版，圖示和主題圖片是 [#490](https://github.com/iamreal-tw/iamreal/issues/490) 的）。都由程式產生，在這台電腦上跑，產生的圖不進程式庫：維護者在 Play Console 的商店資訊上傳。改了 app 的排版、字、顏色之後重跑，換掉商店頁上的。
 
 **手機截圖 4 張**：「模擬器上過一次卡」的測試加上 `IAMREAL_STORE_SCREENS=<目錄>`，在新宣告的那一次拍：
 
@@ -374,7 +374,7 @@ IAMREAL_BB=<bb 6.0.0 的路徑> node --experimental-strip-types test/app-backend
 
 需要 Node 22、go、`bb` 6.0.0（`verifier/README.md`）、一個開著的模擬器。**測試只對模擬器下指令**：每一道 `adb` 都帶模擬器的序號（`test/emulator.ts`，不是 `emulator-<數字>` 的序號不收），接著線的手機不會被碰到。同時開著幾個模擬器時用 `IAMREAL_EMULATOR=emulator-5554` 指定。拉取請求的檢查不跑這一個（那裡沒有模擬器）。
 
-它不測的：會讓過卡停下來的每一種情況（[#171](https://github.com/iamreal-tw/iamreal/issues/171)），和真卡片的指令（營運者用真卡片照「真卡片的測試清單」測）。
+它不測的：會讓過卡停下來的每一種情況（[#171](https://github.com/iamreal-tw/iamreal/issues/171)），和真卡片的指令（維護者用真卡片照「真卡片的測試清單」測）。
 
 ## 怎麼用線裝到手機
 

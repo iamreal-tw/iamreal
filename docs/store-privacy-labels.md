@@ -2,7 +2,7 @@
 
 App Store 的「App 隱私權」和 Google Play 的「資料安全性」，兩個 app（`android/`、`ios/`）各要填一份。這一份是填表的依據：app 送出什麼、在兩家各算哪一類、用途、連結與否，每一格對得到 ADR 或程式，和兩家的文件。
 
-- 在兩家的後台照這一份填，是營運者的動作（[#161](https://github.com/iamreal-tw/iamreal/issues/161)、[#162](https://github.com/iamreal-tw/iamreal/issues/162)）
+- 在兩家的後台照這一份填，是維護者的動作（[#161](https://github.com/iamreal-tw/iamreal/issues/161)、[#162](https://github.com/iamreal-tw/iamreal/issues/162)）
 - **對外的承諾是 [`design/copy/privacy.md`](../design/copy/privacy.md)**，這一份跟著它。app 送的東西多一種、保存的期限改了，同一個 PR 改 ADR、隱私權說明和這一份（[#94](https://github.com/iamreal-tw/iamreal/issues/94) 第 8 點）
 - **原則：兩家的文件答不出來的，往多報的方向填**（#94 第 7 點；那裡的理由是少報可能被下架，別人拿公開的程式來對也對得出來）。往多報填的每一格都標「多報」。有三項沒有照這個方向填，都寫明了為什麼、要多報時怎麼填：「[文件沒有回答的](#文件沒有回答的)」第 2、4、5 項
 - 只管兩個 app。網頁版不經過商店，沒有標示；它收什麼寫在隱私權說明
@@ -48,13 +48,13 @@ App Store 的「App 隱私權」和 Google Play 的「資料安全性」，兩�
 各列的類別為什麼這樣選：
 
 1. **帳號和島民編號。** Apple（Types of data › Identifiers）的 User ID 是「screen name, handle, account ID, assigned user ID, customer number, or other user- or account-level ID that can be used to identify a particular user or account」；Google（Data types › Personal info）的 User IDs 是「Identifiers that relate to an identifiable person. For example, an account ID, account number, or account name.」。帳號名稱本身就是；島民編號是一張卡片一個的編號，和帳號寫在同一筆，一起報。用途是服務本身：公開宣告就是這個 app 做的事。連結填「是」：帳號就是那個身分。
-2. **沒有成功的送出**和第 1 列是同一種資料，多出來的是它沒有公開、連同 IP 留在營運者手上 31 天，用來重現問題。Apple 的 App Functionality 包括「minimize app crashes, improve scalability and performance, or perform customer support」；Google 的 Analytics 包括「to monitor app health, to diagnose and fix bugs or crashes」，所以 Google 多勾一個 Analytics。
+2. **沒有成功的送出**和第 1 列是同一種資料，多出來的是它沒有公開、連同 IP 留在維護者手上 31 天，用來重現問題。Apple 的 App Functionality 包括「minimize app crashes, improve scalability and performance, or perform customer support」；Google 的 Analytics 包括「to monitor app health, to diagnose and fix bugs or crashes」，所以 Google 多勾一個 Analytics。
 3. **IP 位址。** 兩家都說照用途報。Apple（Additional guidance）：「Declare the relevant data types based on how you use IP address, such as precise location, coarse location, device ID, or diagnostics.」Google（Data types › Location）：「Approximate location that is inferred, such as via IP address or Access Point Name, must be disclosed here.」後台從 IP 得出國家和網路業者的編號，所以是概略的位置；IP 也用來查問題，Apple 多報一個 Diagnostics › Other Diagnostic Data。用途是限流、擋濫用的連線、查問題（ADR-0022），在 Apple 是 App Functionality（「prevent fraud, implement security measures」），在 Google 是 Fraud prevention, security, and compliance 加 Analytics。IP 當成「裝置的編號」的那一種用法這裡沒有，Device ID 另外因為第 5 列而報。
 4. **送出的結果和錯誤代碼**是技術診斷：Apple 的 Other Diagnostic Data 是「Any other data collected for the purposes of measuring technical diagnostics related to the app」，Google 的 Diagnostics 是「Information about the performance of your app. For example battery life, loading time, latency, framerate, or any technical diagnostics.」。
 5. **過卡裝置編號。** Apple 的 Device ID 是「Such as the device's advertising identifier, or other device-level ID」；Google 的 Device or other IDs 是「Identifiers that relate to an individual device, browser or app. For example, an IMEI number, MAC address, Widevine Device ID, Firebase installation ID, or advertising identifier.」。它不是系統給的編號，是 app 自己產生、31 天就換的；兩家的文件都沒有講這一種要不要報（下面第 1 項），照往多報填：它在 31 天內指的是同一份安裝，和 Google 舉的 Firebase installation ID 同一種。用途是看同一台裝置的幾次過卡（分析）和查濫用（ADR-0039）。連結填「是」：它和 IP、寫成了第幾筆記在連線紀錄的同一筆，從第幾筆對得到證明紀錄裡的帳號。
 6. **計數的步驟和動作。** Apple 的 Product Interaction 是「app launches, taps, clicks, scrolling information … or other information about how the user interacts with the app」；Google 的 App interactions 是「Information about how a user interacts with the app. For example, the number of times they visit a page, screenshots taken, or sections they tap on.」。**連結填「是」，理由和 #94 不同**：#94 那時計數和 IP 存在同一筆；現在計數不存 IP（ADR-0032，2026-11-26 改），但每一筆帶著過卡裝置編號，而過卡裝置編號在連線紀錄裡對得到 IP 和帳號（第 5 列）。Apple 要算不連結，得在收集之前拿掉這種編號，之後也不能對得回去；這裡兩樣都不成立。對得到帳號的只有走到送出的裝置；沒有送出過的裝置，計數只連到那個編號，Apple 的「via their account, device, or other details」裡的 device 仍然算。第 7、8、9 列的連結是同一個理由。
    嘗試編號不另外報一類：它只認得一次過卡，隨這一列的計數送出（下面第 2 項）。
-7. **停下來時的錯誤代碼**是技術診斷，類別同第 4 列。原因是卡片被廢止或暫時停用時，營運者看得出有一台裝置有這樣一張卡片，看不出是哪一張（ADR-0016；隱私權說明第 7 段）。
+7. **停下來時的錯誤代碼**是技術診斷，類別同第 4 列。原因是卡片被廢止或暫時停用時，維護者看得出有一台裝置有這樣一張卡片，看不出是哪一張（ADR-0016；隱私權說明第 7 段）。
 8. **花了多久。** Apple 的 Performance Data 是「Such as launch time, hang rate, or energy use」；Google 的 Diagnostics 舉的例子有「loading time, latency」。分成幾級而不是確切的時間，類別不變。
 9. **手機型號、系統版本、app 版本。** 兩家的資料類別都沒有提到型號或系統版本（下面第 3 項）。它們是為了看哪些型號讀卡失敗而收的，照往多報填成技術診斷那一類。
 10. **紀錄的其他欄位。** 兩家的類別沒有一類是它們（下面第 4 項）。Apple 有一類收其他的：Other Data Types 是「Any other data types not mentioned」，照往多報填；連結填「是」，它們和帳號在同一筆。Google 沒有這樣的一類。
@@ -81,7 +81,7 @@ App Store 的「App 隱私權」和 Google Play 的「資料安全性」，兩�
 | 商店自己收的安裝數、各版本的使用量、當機報告 | 不是 app 送出的。Apple（Additional guidance）：「You are not responsible for disclosing data collected by Apple.」Google 的文件沒有講（下面第 6 項） | #94 第 6、7 點；隱私權說明第 12 段 |
 | 島民證明上「下載 app」的連結帶的短編號 | 是網頁上的連結帶給商店的，app 不讀（ADR-0039） | 隱私權說明第 7 段 |
 | app 裡點開的網頁（常見問題、隱私權說明、Threads） | app 沒有內嵌的網頁，連結交給系統的瀏覽器開（`ios/App/IamrealApp.swift` 的 `UIApplication.shared.open`、Android 的 `Intent.ACTION_VIEW`） | Apple（Additional guidance）：「Data collected via web traffic must be declared, unless you are enabling the user to navigate the open web.」 |
-| 寫給營運者的信 | 不在 app 裡 | 隱私權說明第 12 段 |
+| 寫給維護者的信 | 不在 app 裡 | 隱私權說明第 12 段 |
 
 ## 文件沒有回答的
 
@@ -103,7 +103,7 @@ App Store 的「App 隱私權」和 Google Play 的「資料安全性」，兩�
 | 列 | 現在 | 做了之後 |
 |---|---|---|
 | 1、10 | 有 | |
-| 3 | 後台不寫連線紀錄；Cloudflare 自己的那一份有 IP、營運者看得到（隱私權說明第 5、6 段），所以現在就要報 | #20 做完，後台多一份，填法不變 |
+| 3 | 後台不寫連線紀錄；Cloudflare 自己的那一份有 IP、維護者看得到（隱私權說明第 5、6 段），所以現在就要報 | #20 做完，後台多一份，填法不變 |
 | 2、4 | 沒有 | #20 做完才有 |
 | 5 到 9 | 沒有：app 不送計數，沒有過卡裝置編號 | Android [#433](https://github.com/iamreal-tw/iamreal/issues/433)、iOS [#434](https://github.com/iamreal-tw/iamreal/issues/434) 做完才有 |
 

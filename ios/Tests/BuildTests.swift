@@ -130,7 +130,7 @@ final class BuildTests: XCTestCase {
     }
 
     /// The answer to App Store Connect's export compliance question, given
-    /// once in Info.plist so that no build waits on it (README.md, "上傳之後營運者做的").
+    /// once in Info.plist so that no build waits on it (README.md, "上傳之後維護者做的").
     func testTheAppSaysItUsesOnlyExemptEncryption() {
         XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "ITSAppUsesNonExemptEncryption") as? Bool, false)
     }

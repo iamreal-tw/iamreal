@@ -1,6 +1,6 @@
 # worker/measure/：上線前的負載量測
 
-**這個目錄讓人檢查的事：#52 和 #196 要負載的那幾個數字是怎麼量的。** 一個臨時的 Worker `iamreal-measure`、兩個臨時的儲存桶，營運者一次量完、量完全部刪掉。量到的數字寫回 [`worker/README.md`](../README.md)「上線前的量測」。
+**這個目錄讓人檢查的事：#52 和 #196 要負載的那幾個數字是怎麼量的。** 一個臨時的 Worker `iamreal-measure`、兩個臨時的儲存桶，維護者一次量完、量完全部刪掉。量到的數字寫回 [`worker/README.md`](../README.md)「上線前的量測」。
 
 要量的：
 
@@ -18,17 +18,17 @@
 [`measure-build/index.ts`](../measure-build/index.ts) 是部署的 Worker 和它的兩個物件（`src/index.ts`），前面加幾個 `/__measure/` 的門。其中兩個寫入的東西沒有人驗證過：
 
 - 做出來的證明紀錄（[`measure-build/log.ts`](../measure-build/log.ts)）：每一筆每個欄位的格式都對（`spec/record.md`「Check a line」），證明是同樣長度的隨機位元組。重建不驗證證明（ADR-0033 的重建只重做紀錄規則），所以拿得來量重建
-- 寫入的門（`/__measure/write`）：和 `POST /api/v1/records` 一樣向物件拿題目、計次、讓它收下一筆，中間少了驗證。驗證是在 Worker 裡做的，不佔物件（[送出一筆](../README.md#送出一筆)）；這裡量的就是物件那一側。驗證那一側的 CPU 時間在測試網站上用真卡片量（`worker/README.md`「營運者用真卡片過卡時看的」）
+- 寫入的門（`/__measure/write`）：和 `POST /api/v1/records` 一樣向物件拿題目、計次、讓它收下一筆，中間少了驗證。驗證是在 Worker 裡做的，不佔物件（[送出一筆](../README.md#送出一筆)）；這裡量的就是物件那一側。驗證那一側的 CPU 時間在測試網站上用真卡片量（`worker/README.md`「維護者用真卡片過卡時看的」）
 
 **為什麼不違反 ADR-0028**：ADR-0028 擋的是測試網站或正式網站收下假卡片，所以發證金鑰不是設定值、假的發證金鑰不進任何建置。這個建置裡沒有假的發證金鑰，認的仍然是內政部的兩把（`src/target.ts`）；它沒有驗證任何一張卡片，而是不驗證。做出來的紀錄只寫進這個臨時 Worker 自己的物件（名稱 `test-measure`）和自己的兩個儲存桶，不進測試的證明紀錄，也不進正式的；量完 Worker、物件、儲存桶都刪掉。
 
 只能部署成這一個 Worker：
 
 - [`config.ts`](config.ts) 每次從 `wrangler.jsonc` 的測試環境做出設定，名稱固定是 `iamreal-measure`、儲存桶固定是 `iamreal-measure-data` 和 `iamreal-measure-logs`，只開 `workers.dev`，沒有排程（清冊鏡像不跑，不對內政部送任何請求）、沒有路由；名稱是 `wrangler.jsonc` 裡任何一個環境的、多了排程或路由、用了別的儲存桶，就拒絕
-- [`deploy.ts`](deploy.ts) 只讀營運者自己的權杖檔裡的 `CLOUDFLARE_API_TOKEN_MEASURE`，不讀 `.env.local` 那把部署測試網站的
+- [`deploy.ts`](deploy.ts) 只讀維護者自己的權杖檔裡的 `CLOUDFLARE_API_TOKEN_MEASURE`，不讀 `.env.local` 那把部署測試網站的
 - 部署測試網站、之後的正式網站用的檢查（`scripts/deploy-build-checks.ts` 的 `NOT_DEPLOYED`）看到 `measure-build`、`/__measure/`、`MEASURE_KEY` 就失敗；沒有任何工作流程、`package.json` 的指令跑這個目錄（[`test/measure.test.ts`](../test/measure.test.ts)、[`test/bundle.test.ts`](../test/bundle.test.ts)）
 
-**門要密碼。** 門開在公開的 `workers.dev` 網址上，所以要帶營運者自己產生、自己設在 Worker 上的密碼（Worker 的 secret `MEASURE_KEY`，請求帶 `Authorization: Bearer <密碼>`）。沒設、設的不到 32 個字、帶錯或沒帶，`/__measure/` 底下都是部署的 Worker 回的 `404`。密碼不經過維護者或 agent。
+**門要密碼。** 門開在公開的 `workers.dev` 網址上，所以要帶維護者自己產生、自己設在 Worker 上的密碼（Worker 的 secret `MEASURE_KEY`，請求帶 `Authorization: Bearer <密碼>`）。沒設、設的不到 32 個字、帶錯或沒帶，`/__measure/` 底下都是部署的 Worker 回的 `404`。密碼不經過維護者或 agent。
 
 | 門 | 做什麼 |
 |---|---|
@@ -63,11 +63,11 @@ node --experimental-strip-types measure/smoke.ts
 - 計數：同時 2 個，一分鐘送了 40,920 筆、明細檔收了 40,920 筆
 - 公布 2,600 多張卡片 0.3 秒，一個請求最久等了 250 到 290 ms
 
-## 營運者要做的
+## 維護者要做的
 
 一次做完約一到兩小時（產生和重建十萬筆的時間還不知道，本機的比例推是十幾分鐘）。費用：儲存桶存 2 GB 一天、百萬次以下的請求，可以忽略。
 
-**之前（在 Cloudflare 的儀表板，ADR-0029：後台以外的設定由營運者做）**
+**之前（在 Cloudflare 的儀表板，ADR-0029：後台以外的設定由維護者做）**
 
 1. R2 → 建兩個儲存桶：`iamreal-measure-data`、`iamreal-measure-logs`。位置 Automatic、存放等級 Standard；**不設**公開網域、CORS、生命週期規則
 2. Workers & Pages → 建一個 Worker，名稱 `iamreal-measure`，用 Hello World 的範本。先有這個 Worker，下一步的權杖才能只限定它。它的 `workers.dev` 網址（`https://iamreal-measure.<子網域>.workers.dev`）記下來
@@ -119,7 +119,7 @@ node --experimental-strip-types measure/smoke.ts
 | 檔 | 內容 |
 |---|---|
 | [`config.ts`](config.ts) | 從 `wrangler.jsonc` 做出臨時 Worker 的設定，名稱和儲存桶不對就拒絕 |
-| [`deploy.ts`](deploy.ts) | 部署、設密碼，用營運者的權杖檔 |
+| [`deploy.ts`](deploy.ts) | 部署、設密碼，用維護者的權杖檔 |
 | [`load.ts`](load.ts) | 負載的每一步 |
 | [`smoke.ts`](smoke.ts) | 在本機的 workerd 跑一次小的 |
 | [`../measure-build/`](../measure-build) | 這個 Worker 的入口和做出來的證明紀錄 |

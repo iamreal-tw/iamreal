@@ -9,13 +9,13 @@
 | [`workflows/checks-ios.yml`](workflows/checks-ios.yml) | PR 改到 `ios/`、`device-core/`、app 包進去或測試讀的檔、或這個檔時（`pull_request` 的 `paths`）；不在合併佇列裡跑 | 在 macOS 上編 `device-core/` 給模擬器、建置 `ios/` 的 app、在模擬器上跑它的測試：`ios` 一個工作（`ios/README.md`）。只能讀，不引用任何 secret |
 | [`workflows/checks-circuits.yml`](workflows/checks-circuits.yml) | PR 改到電路的原始碼、編好的電路檔、驗證金鑰，或重建和電路的測試用到的其他檔時（`pull_request` 的 `paths`）；不在合併佇列裡跑 | 從 `circuits/` 重編兩份電路和驗證金鑰，和 `web/circuits/`、`verifier/vk/` 逐位元組比對；`nargo test`；`circuits/` 的 JavaScript 測試，含和 circom 電路的逐案比對：`circuits` 一個工作（下面「`checks-circuits.yml`」）。只能讀，不引用任何 secret |
 | [`workflows/deploy-test.yml`](workflows/deploy-test.yml) | 推到 `main` | 建置過卡的頁面、打包 Worker、檢查兩者，再把它們上傳到測試網站。碰不到快取（`cache-mode: none`） |
-| [`workflows/upload-android.yml`](workflows/upload-android.yml) | 營運者手動觸發（`workflow_dispatch`），只在 `main` 上 | 建置 Android 的正式 app（`tw.iamreal.app`）、用上傳金鑰簽章，傳到它在 Google Play 的內部測試：`build`、`upload` 兩個工作（下面「上傳 Android 的 app」）。金鑰只在 `upload`，它在 environment `app-test` 裡；碰不到快取（`cache-mode: none`） |
-| [`workflows/upload-android-test.yml`](workflows/upload-android-test.yml) | 營運者手動觸發（`workflow_dispatch`），只在 `main` 上 | 同上，傳的是 Android 的測試 app（`tw.iamreal.app.test`）（下面「上傳 Android 的 app」） |
+| [`workflows/upload-android.yml`](workflows/upload-android.yml) | 維護者手動觸發（`workflow_dispatch`），只在 `main` 上 | 建置 Android 的正式 app（`tw.iamreal.app`）、用上傳金鑰簽章，傳到它在 Google Play 的內部測試：`build`、`upload` 兩個工作（下面「上傳 Android 的 app」）。金鑰只在 `upload`，它在 environment `app-test` 裡；碰不到快取（`cache-mode: none`） |
+| [`workflows/upload-android-test.yml`](workflows/upload-android-test.yml) | 維護者手動觸發（`workflow_dispatch`），只在 `main` 上 | 同上，傳的是 Android 的測試 app（`tw.iamreal.app.test`）（下面「上傳 Android 的 app」） |
 | [`workflows/upload-ios.yml`](workflows/upload-ios.yml) | 只能手動觸發（`workflow_dispatch`），在 `main` 上 | 建置 iPhone 的正式 app（`tw.iamreal.app`，ADR-0040）、檢查它，再簽章、上傳到 App Store Connect（TestFlight）：`build`、`upload` 兩個工作。`build` 沒有金鑰；`upload` 在 environment `app-test`，不取出程式庫、不跑程式庫的腳本；發布憑證和描述檔只在用到它們的兩步，App Store Connect 的 API 金鑰只在最後一步（[`ios/README.md`「上傳到 TestFlight」](../ios/README.md#上傳到-testflight)）。碰不到快取（`cache-mode: none`） |
 | [`workflows/upload-ios-test.yml`](workflows/upload-ios-test.yml) | 只能手動觸發（`workflow_dispatch`），在 `main` 上 | 和 `upload-ios.yml` 相同的兩個工作，建置、上傳的是 iPhone 的測試 app（`tw.iamreal.app.test`，ADR-0040）：`ios/archive.sh --test-app`，build 號碼是這個工作流程的執行編號加 1,000,000。分成兩個工作流程，是因為執行編號各自數，兩個 app 的號碼不會交錯（[`ios/README.md`「版本和 build」](../ios/README.md#版本和-build)）。用同一個 environment `app-test`、同一組金鑰和同一張發布憑證，描述檔是自己的。碰不到快取（`cache-mode: none`） |
 | [`workflows/cache.yml`](workflows/cache.yml) | 推到 `main` | 編譯 `device-core/`、建置 `android/`，把 cargo 的 registry、`device-core/target/`、Gradle 的依賴和 wrapper 存成快取，給 `checks.yml` 的 `device-core`、`android` 還原：`cache-device-core`、`cache-android` 兩個工作。不引用任何 secret，`GITHUB_TOKEN` 只能讀（`contents: read`）；唯一能存快取的工作流程（`cache-mode: write`） |
-| [`workflows/reverify.yml`](workflows/reverify.yml) | 每天台灣時間 00:30（排程，`schedule`），和手動觸發（`workflow_dispatch`） | 營運者每天的重驗（ADR-0025）：用 Go 的 `iamreal-verify` 和原生的 `bb`，讀公開的網址，把測試的證明紀錄從第 1 筆整份重驗：`test` 一個工作；正式的那一份 `production` 寫好了、還不跑（下面「每天的重驗」）。不引用任何 secret，`GITHUB_TOKEN` 只能讀，碰不到快取（`cache-mode: none`） |
-| [`workflows/watch-test.yml`](workflows/watch-test.yml) | 每小時一次（`schedule`，每小時的第 17 分），和營運者手動觸發（`workflow_dispatch`） | 從 Cloudflare 以外檢查測試網站公開的結果，有一項不對工作就失敗，GitHub 寄通知信（[從外面定時檢查](#從外面定時檢查53)）。不引用任何 secret，權杖只能讀，碰不到快取（`cache-mode: none`） |
+| [`workflows/reverify.yml`](workflows/reverify.yml) | 每天台灣時間 00:30（排程，`schedule`），和手動觸發（`workflow_dispatch`） | 維護者每天的重驗（ADR-0025）：用 Go 的 `iamreal-verify` 和原生的 `bb`，讀公開的網址，把測試的證明紀錄從第 1 筆整份重驗：`test` 一個工作；正式的那一份 `production` 寫好了、還不跑（下面「每天的重驗」）。不引用任何 secret，`GITHUB_TOKEN` 只能讀，碰不到快取（`cache-mode: none`） |
+| [`workflows/watch-test.yml`](workflows/watch-test.yml) | 每小時一次（`schedule`，每小時的第 17 分），和維護者手動觸發（`workflow_dispatch`） | 從 Cloudflare 以外檢查測試網站公開的結果，有一項不對工作就失敗，GitHub 寄通知信（[從外面定時檢查](#從外面定時檢查53)）。不引用任何 secret，權杖只能讀，碰不到快取（`cache-mode: none`） |
 
 **為什麼 `browser` 分開、只在有關的檔改了才跑**（#123）：這兩套測試在 GitHub 的 runner 上要約 16 分鐘（2026-11-20 在 #119 量的：`browser` 15 分 28 秒，`go` 1 分 56 秒，`typescript` 5 分 11 秒），是一次檢查的三分之二。只動文件、app 或 `server/` 的 PR 和它們無關，不必多等這 16 分鐘（那時這兩套測試配的是 Go 的舊後台，只動 `worker/` 的 PR 也不跑；#69 之後它們對 Worker 跑，`worker/` 有改就跑）。分開的時候程式庫還沒公開，Actions 的用量算在組織免費方案每月含的額度裡，用完就不能再跑；2026-11-21 公開之後，標準的 GitHub-hosted runner 在公開的程式庫不算用量（「The following usage remains free independently and does not reduce the included compute usage: Standard GitHub-hosted runners in public repositories」，[GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)），所以現在分開是為了時間，不是額度。`checks.yml` 的四個必要檢查在 PR 階段也照路徑跳過（#206），但做法不同、在合併佇列裡四項全跑：見下面「必要檢查在 PR 階段照路徑跳過」。
 
@@ -211,7 +211,7 @@ gh cache list --repo iamreal-tw/iamreal --ref refs/heads/main --limit 100 --sort
 
 兩個檔的工作除了上表和 artifact 的名稱（`android-bundle`、`android-test-bundle`，簽好的各加 `-signed`）、`play-upload.sh` 傳到哪個 app 以外完全相同，`worker/test/workflows.ts` 用同一個函式寫出兩份來比對。分成兩個檔，是讓兩個 app 的執行編號各自數，號碼不會交錯（ADR-0036 的版本號那一段）。下面寫的每一點兩個都適用。
 
-**怎麼觸發。** 只能手動：GitHub 的 Actions 頁面選 `upload-android`（或 `upload-android-test`）、「Run workflow」，分支選 `main`；或在營運者的電腦上 `gh workflow run upload-android.yml --ref main`（測試 app 是 `upload-android-test.yml`；coding agent 也可以，ADR-0036）。推送、合併、別的工作流程都不會觸發它；它不收任何輸入。一次只跑一個，不取消正在跑的（`concurrency`）；在它跑的時候再觸發，新的那次等著，但同時只能有一次在等：再觸發一次，等著的那次會被取消（「By default, any existing pending job or workflow in the same concurrency group will be canceled and the new queued job or workflow will take its place」，[workflow syntax 的 `concurrency`](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency)，2026-11-21 讀）。
+**怎麼觸發。** 只能手動：GitHub 的 Actions 頁面選 `upload-android`（或 `upload-android-test`）、「Run workflow」，分支選 `main`；或在維護者的電腦上 `gh workflow run upload-android.yml --ref main`（測試 app 是 `upload-android-test.yml`；coding agent 也可以，ADR-0036）。推送、合併、別的工作流程都不會觸發它；它不收任何輸入。一次只跑一個，不取消正在跑的（`concurrency`）；在它跑的時候再觸發，新的那次等著，但同時只能有一次在等：再觸發一次，等著的那次會被取消（「By default, any existing pending job or workflow in the same concurrency group will be canceled and the new queued job or workflow will take its place」，[workflow syntax 的 `concurrency`](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency)，2026-11-21 讀）。
 
 **兩個工作。**
 
@@ -223,8 +223,8 @@ gh cache list --repo iamreal-tw/iamreal --ref refs/heads/main --limit 100 --sort
 - **金鑰只在 `upload`。** 兩個工作流程用 environment `app-test` 的同一組 secret（ADR-0040），名稱照 #162：`ANDROID_UPLOAD_KEYSTORE_BASE64`、`ANDROID_UPLOAD_KEYSTORE_PASSWORD` 只在簽章那一步的 `env`，`PLAY_SERVICE_ACCOUNT_JSON` 只在上傳那一步的 `env`。`app-test` 只把 secret 給 `main` 上的工作（#162 的設定），所以在別的分支上觸發時，`build` 先停下來；就算它沒停，`upload` 也拿不到金鑰。
 - **跑 Gradle 的工作拿不到金鑰。** Gradle 的外掛、建置腳本、`build-native.sh` 都在 `build` 裡跑；`upload` 只跑釘住的三個 action、runner 上的 JDK（`jarsigner`）和工具（`bash`、`base64`、`unzip`、`awk`、`curl`、`openssl`、`jq`），和同一個提交的兩個腳本。
 - **傳上去的就是檢查過的。** `android-sign.sh` 簽完先用 `jarsigner -verify` 驗，再比對簽好的檔和 `build` 留下的檔：每個檔的 CRC-32 相同，只多了簽章的三個檔（`META-INF/MANIFEST.MF`、`UPLOAD.SF`、`UPLOAD.RSA`），否則停下來。
-- **app 的簽章金鑰不在這裡。** 上傳金鑰只對 Google Play 證明這個檔是我們傳的；手機上的 app 由 Google Play 用 app 的簽章金鑰重簽。兩個 app 的簽章金鑰都由 Google 產生（Play App Signing 的預設，ADR-0040），營運者和 GitHub 都沒有。
-- **新 app 的第一個 build，API 就收了。** Google 的文件說「You can only use this API to make changes to an existing app (that has at least one APK uploaded); thus, you will have to upload at least one APK through the Play Console before you can use this API.」（[Edits](https://developers.google.com/android-publisher/edits)，2026-11-21 讀），但正式 app 的第一個 build 用 API 直接傳上去了，沒有回 `Package not found`（`upload-android.yml` 第一次執行，[run 45928594859](https://github.com/iamreal-tw/iamreal/actions/runs/45928594859)，2026-11-27，#162）。測試 app 的第一個 build 預期一樣；API 不收的話，`play-upload.sh` 失敗、印出 API 的回答，營運者從這次執行的 artifact 下載簽好的 `.aab`（`android-test-bundle-signed`），在 Play Console 傳到內部測試。上傳金鑰不經過營運者的電腦。
+- **app 的簽章金鑰不在這裡。** 上傳金鑰只對 Google Play 證明這個檔是我們傳的；手機上的 app 由 Google Play 用 app 的簽章金鑰重簽。兩個 app 的簽章金鑰都由 Google 產生（Play App Signing 的預設，ADR-0040），維護者和 GitHub 都沒有。
+- **新 app 的第一個 build，API 就收了。** Google 的文件說「You can only use this API to make changes to an existing app (that has at least one APK uploaded); thus, you will have to upload at least one APK through the Play Console before you can use this API.」（[Edits](https://developers.google.com/android-publisher/edits)，2026-11-21 讀），但正式 app 的第一個 build 用 API 直接傳上去了，沒有回 `Package not found`（`upload-android.yml` 第一次執行，[run 45928594859](https://github.com/iamreal-tw/iamreal/actions/runs/45928594859)，2026-11-27，#162）。測試 app 的第一個 build 預期一樣；API 不收的話，`play-upload.sh` 失敗、印出 API 的回答，維護者從這次執行的 artifact 下載簽好的 `.aab`（`android-test-bundle-signed`），在 Play Console 傳到內部測試。上傳金鑰不經過維護者的電腦。
 
 **版本號**（ADR-0036「版本號和標籤」，照 #176 改的；兩個 app 寫法相同）。
 
@@ -245,13 +245,13 @@ gh cache list --repo iamreal-tw/iamreal --ref refs/heads/main --limit 100 --sort
 
 任何一步失敗就停，印出 API 的回答；沒有提交的 edit 不改變任何東西。服務帳號在 Play Console 只有兩個 app 各自的「將應用程式發布至測試群組」和兩項唯讀的權限（#162、ADR-0040），發不了正式版。
 
-**正式 app 已經驗過的**（#162，2026-11-27）：`build` 在 runner 上做得出 `.aab`；上傳金鑰、服務帳號的金鑰在 `app-test` 裡，名稱對得上；API 開的內部測試版本直接是 `completed`；營運者從內部測試裝到手機。
+**正式 app 已經驗過的**（#162，2026-11-27）：`build` 在 runner 上做得出 `.aab`；上傳金鑰、服務帳號的金鑰在 `app-test` 裡，名稱對得上；API 開的內部測試版本直接是 `completed`；維護者從內部測試裝到手機。
 
-**測試 app 合併之後才驗得到的**（本機驗了腳本和 `bundleTrial`，見下面「在本機檢查」；工作流程本身在本機跑不起來）：營運者觸發一次 `upload-android-test.yml`，API 收下測試 app 的 build；從它的內部測試裝到手機、打得開（測試 app 的 Play 後台在 #479）。
+**測試 app 合併之後才驗得到的**（本機驗了腳本和 `bundleTrial`，見下面「在本機檢查」；工作流程本身在本機跑不起來）：維護者觸發一次 `upload-android-test.yml`，API 收下測試 app 的 build；從它的內部測試裝到手機、打得開（測試 app 的 Play 後台在 #479）。
 
 ## 每天的重驗（#421）
 
-`workflows/reverify.yml` 是 ADR-0025 說的營運者每天的重驗，測試的證明紀錄也跑一份（ADR-0028）。它和任何人自己做的重驗是同一支指令、同一份公開的檔：建置這個程式庫的 `iamreal-verify`（[`cmd/iamreal-verify/README.md`](../cmd/iamreal-verify/README.md)），用 `@aztec-foundation/bb.js` 6.0.0 附的原生 `bb`（先核對 SHA-256），由同目錄的 [`workflows/reverify.sh`](workflows/reverify.sh) 對公開的網址跑一次：
+`workflows/reverify.yml` 是 ADR-0025 說的維護者每天的重驗，測試的證明紀錄也跑一份（ADR-0028）。它和任何人自己做的重驗是同一支指令、同一份公開的檔：建置這個程式庫的 `iamreal-verify`（[`cmd/iamreal-verify/README.md`](../cmd/iamreal-verify/README.md)），用 `@aztec-foundation/bb.js` 6.0.0 附的原生 `bb`（先核對 SHA-256），由同目錄的 [`workflows/reverify.sh`](workflows/reverify.sh) 對公開的網址跑一次：
 
 ```
 iamreal-verify -bb <bb> -crs <通用參數目錄> -proof-log test -data https://test-data.iamreal.tw/
@@ -274,11 +274,11 @@ iamreal-verify -bb <bb> -crs <通用參數目錄> -proof-log test -data https://
   ```
 
 - **什麼時候跑**：排程是 UTC 16:30，台灣時間 00:30。後台在台灣的日期換了之後公布那一天的指紋（[`worker/README.md`「每天換日公布證明紀錄」](../worker/README.md#每天換日公布證明紀錄)）。重驗比公布早跑到時，核對到前一天那一行為止，照樣有結果。GitHub 的排程在尖峰時會延後；公開的程式庫 60 天沒有活動，排程會被停掉（[schedule](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)），要到 Actions 的頁面重新打開。排程只在 `main` 上的那一份工作流程檔跑。手動觸發：Actions 頁面的「Run workflow」，或 `gh workflow run reverify.yml`。
-- **它拿不到什麼**：沒有任何 secret，`GITHUB_TOKEN` 只能讀，沒有快取。它停不了過卡，也改不了後台的任何東西（ADR-0025：停止收過卡由營運者手動做）。套件只裝 `web/` 的（`bb` 在那裡），不跑安裝腳本、不讀 `.pnpmfile.cjs`、只從 npm 的 registry 裝。兩個工作整個寫死在 `worker/test/workflows.ts`（`REVERIFY_JOBS`），觸發的方式、網址、少了核對 `bb`、多了任何一步，規則都擋；`reverify.sh` 的測試在 `workflows.test.ts`，把 `iamreal-verify` 換成一個照樣印字、照樣回結束碼的替身。
+- **它拿不到什麼**：沒有任何 secret，`GITHUB_TOKEN` 只能讀，沒有快取。它停不了過卡，也改不了後台的任何東西（ADR-0025：停止收過卡由維護者手動做）。套件只裝 `web/` 的（`bb` 在那裡），不跑安裝腳本、不讀 `.pnpmfile.cjs`、只從 npm 的 registry 裝。兩個工作整個寫死在 `worker/test/workflows.ts`（`REVERIFY_JOBS`），觸發的方式、網址、少了核對 `bb`、多了任何一步，規則都擋；`reverify.sh` 的測試在 `workflows.test.ts`，把 `iamreal-verify` 換成一個照樣印字、照樣回結束碼的替身。
 
 **沒過時。** 結束碼不是 0，工作就失敗。照 `reverify.sh` 印的最後一行分：
 
-| 最後一行 | 結束碼 | 營運者做什麼 |
+| 最後一行 | 結束碼 | 維護者做什麼 |
 |---|---|---|
 | `passed` | 0 | 不用做 |
 | `DID NOT PASS` | 1 | 往上看是哪一筆、哪一項，照下一張表 |
@@ -297,9 +297,9 @@ iamreal-verify -bb <bb> -crs <通用參數目錄> -proof-log test -data https://
 | `log file: broken at line …`（紀錄檔少了、切法不對、某一行壞掉） | 紀錄檔本身變了 | 先停止收過卡。沒有進度檔，這一次跑分不出是舊的紀錄檔被動過（ADR-0025：不停止收過卡，從備份換回那一檔）還是後台寫出了壞的紀錄；拿備份或另一份抄本（ADR-0033）比過、確定只是舊檔被動過，才照那一列處理 |
 | `CRL archive: …`（索引和清冊檔不同） | ADR-0025 的表沒有這一種 | 查清冊鏡像；結果照重建的索引算，所以紀錄有沒有因此無效，看上面幾列 |
 
-每一次都開一張公開的 issue：第幾筆、哪個代碼、原因、怎麼修的。**測試的證明紀錄沒通過時**只要營運者知道，不停收過卡、不開公開的 issue（ADR-0028）；現在跑的只有這一份。
+每一次都開一張公開的 issue：第幾筆、哪個代碼、原因、怎麼修的。**測試的證明紀錄沒通過時**只要維護者知道，不停收過卡、不開公開的 issue（ADR-0028）；現在跑的只有這一份。
 
-工作失敗時，營運者收到的是 GitHub 的通知信，和[從外面定時檢查](#從外面定時檢查53)走同一個管道（[#53](https://github.com/iamreal-tw/iamreal/issues/53)、#413「通知」）。信寄給誰、合併之後要把這個工作流程停用再啟用一次，見[通知信寄給誰](#通知信寄給誰)。
+工作失敗時，維護者收到的是 GitHub 的通知信，和[從外面定時檢查](#從外面定時檢查53)走同一個管道（[#53](https://github.com/iamreal-tw/iamreal/issues/53)、#413「通知」）。信寄給誰、合併之後要把這個工作流程停用再啟用一次，見[通知信寄給誰](#通知信寄給誰)。
 
 **一次超過一小時，就開票做進度檔。** 最後一行印秒數，超過 3,600 秒時再多印一行提醒。
 
@@ -358,9 +358,9 @@ GitHub 的兩頁文件說法不同（2026-11-26 讀）：
 - [Events that trigger workflows](https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#schedule)：「Notifications for scheduled workflows are sent to the user who last modified the cron syntax in the workflow file.」
 - [Notifications for workflow runs](https://docs.github.com/en/actions/concepts/workflows-and-actions/notifications-for-workflow-runs)：「Notifications for scheduled workflows are sent to the user who initially created the workflow. If a different user updates the cron syntax in the workflow file, subsequent notifications will be sent to that user instead.」同一頁還寫：「If a scheduled workflow is disabled and then re-enabled, notifications will be sent to the user who re-enabled the workflow rather than the user who last modified the cron syntax.」
 
-在這個程式庫，兩種說法都可能不是營運者。推到 `main` 的是合併佇列：2026-11-26 看 `cache.yml` 由推送觸發的 run，`actor` 和 `triggering_actor` 都是 `github-merge-queue[bot]`，合併提交的作者是營運者。文件沒有說「建立」「最後改 `cron` 的人」指推送的人還是提交的作者，所以信可能寄給這個 bot，也就是沒有人收。
+在這個程式庫，兩種說法都可能不是維護者。推到 `main` 的是合併佇列：2026-11-26 看 `cache.yml` 由推送觸發的 run，`actor` 和 `triggering_actor` 都是 `github-merge-queue[bot]`，合併提交的作者是維護者。文件沒有說「建立」「最後改 `cron` 的人」指推送的人還是提交的作者，所以信可能寄給這個 bot，也就是沒有人收。
 
-**所以合併之後，營運者要在 Actions 的頁面把 `watch-test` 和 `reverify` 各停用、再啟用一次。** 照上面第二頁的最後一句，之後的通知寄給重新啟用的人。之後有人改了 `cron` 那一行，或再停用、啟用過，收信的人可能又換掉，要再做一次。
+**所以合併之後，維護者要在 Actions 的頁面把 `watch-test` 和 `reverify` 各停用、再啟用一次。** 照上面第二頁的最後一句，之後的通知寄給重新啟用的人。之後有人改了 `cron` 那一行，或再停用、啟用過，收信的人可能又換掉，要再做一次。
 
 收不收得到信，看收信的人自己在 GitHub 的設定：Settings → Notifications → System → Actions，選 Email，並勾「Only notify for failed workflows」（[Configuring notifications for GitHub Actions](https://docs.github.com/en/subscriptions-and-notifications/how-tos/managing-github-actions-notifications)）。手動觸發的工作，信寄給按下觸發的人。
 
