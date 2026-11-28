@@ -233,11 +233,14 @@ func problemLines(errOut, url string) []string {
 }
 
 // The original of a CRL given by its patch is asked for with HEAD: it must
-// be there with the length of the file the patch gives. One that is not
-// there is left out of the archive and one of another length downloaded
-// whole, so that the command reports either as it does when it downloads
-// every file whole (here: the same files without patches/). A HEAD that
-// fails or gives no length: the CRL downloaded whole, with one line.
+// be there with the length of the file the patch gives and, its ETag being
+// the MD5 of its content (as serveData and R2 give it), that MD5. One that
+// is not there is left out of the archive; one of another length, or of
+// the same length with other bytes, is downloaded whole after one line; so
+// the command reports each as it does when it downloads every file whole
+// (here: the same files without patches/). A HEAD that fails, gives no
+// length or an ETag that is not the MD5 of the file the patch gives: the
+// CRL downloaded whole, with one line.
 func TestDataCRLOriginals(t *testing.T) {
 	a := newPatchArchiveT(t)
 	target := a.patched[0]
@@ -258,16 +261,18 @@ func TestDataCRLOriginals(t *testing.T) {
 		// noPatch: the patch is not downloaded, the HEAD having said the
 		// original is not there.
 		noPatch bool
+		// said is in the line on the original, if one is printed.
+		said string
 	}{
-		{"not there", func(f map[string][]byte) { delete(f, target) }, exitInvalid, "the index lists a file the archive does not have", true},
-		{"of another length", func(f map[string][]byte) { f[target] = append(slices.Clone(f[target]), 0) }, exitInvalid, "is not the SHA-256 of its content", false},
+		{"not there", func(f map[string][]byte) { delete(f, target) }, exitInvalid, "the index lists a file the archive does not have", true, ""},
+		{"of another length", func(f map[string][]byte) { f[target] = append(slices.Clone(f[target]), 0) }, exitInvalid, "is not the SHA-256 of its content", false, "not the"},
 		// Its ETag, the MD5 of what is there, is not that of the file the
 		// patch gives.
 		{"of the same length, other bytes", func(f map[string][]byte) {
 			b := slices.Clone(f[target])
 			b[len(b)/2] ^= 1
 			f[target] = b
-		}, exitInvalid, "is not the SHA-256 of its content", false},
+		}, exitInvalid, "is not the SHA-256 of its content", false, "not the MD5 of what its patch gives"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			files := maps.Clone(a.files)
@@ -285,6 +290,9 @@ func TestDataCRLOriginals(t *testing.T) {
 			if c.noPatch && slices.Contains(srv.paths(), "GET "+a.patchOf[target]) {
 				t.Errorf("asked for the patch of a CRL that is not there")
 			}
+			if c.said != "" && (!strings.Contains(errOut, srv.URL+target+": ") || !strings.Contains(errOut, c.said)) {
+				t.Errorf("no line on %s with %q\n%s", target, c.said, errOut)
+			}
 		})
 	}
 	for _, c := range []struct {
@@ -298,18 +306,21 @@ func TestDataCRLOriginals(t *testing.T) {
 			w.Header().Set("Content-Length", strconv.Itoa(len(a.files[target])))
 			w.Header().Set("ETag", `"00000000000000000000000000000000"`)
 		}, "ETag"},
+		// In capitals, as another server may write it: still an MD5.
+		{"an ETag in capitals that is not the MD5 of the file", func(w http.ResponseWriter) {
+			w.Header().Set("Content-Length", strconv.Itoa(len(a.files[target])))
+			w.Header().Set("ETag", `"0123456789ABCDEF0123456789ABCDEF"`)
+		}, `ETag "0123456789abcdef0123456789abcdef"`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			served := serveData(t, a.files)
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method == http.MethodHead && strings.TrimPrefix(r.URL.Path, "/") == target {
-					c.head(w)
-					return
+			url := serveWithHead(t, serveData(t, a.files), func(w http.ResponseWriter, p string) bool {
+				if p != target {
+					return false
 				}
-				forward(t, served, w, r)
-			}))
-			t.Cleanup(srv.Close)
-			code, _, errOut := a.run(t, srv.URL+"/")
+				c.head(w)
+				return true
+			})
+			code, _, errOut := a.run(t, url)
 			var said []string
 			for _, l := range strings.Split(errOut, "\n") {
 				if strings.Contains(l, "whole") {
@@ -317,7 +328,7 @@ func TestDataCRLOriginals(t *testing.T) {
 				}
 			}
 			if code != exitAllValid || len(said) != 1 || !strings.Contains(said[0], target) || !strings.Contains(said[0], c.why) ||
-				!strings.Contains(errOut, "downloading "+srv.URL+"/"+target+"\n") {
+				!strings.Contains(errOut, "downloading "+url+target+"\n") {
 				t.Errorf("exit %d, said %q\n%s", code, said, errOut)
 			}
 		})
@@ -331,29 +342,36 @@ func TestDataCRLOtherETags(t *testing.T) {
 	a := newPatchArchiveT(t)
 	for _, etag := range []string{`"5ac5c3597167ad1d7e024deb86f10571-2"`, `W/"5ac5c3597167ad1d7e024deb86f10571"`, `"abc"`, ""} {
 		t.Run(etag, func(t *testing.T) {
-			served := serveData(t, a.files)
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method == http.MethodHead {
-					b, ok := a.files[strings.TrimPrefix(r.URL.Path, "/")]
-					if !ok {
-						http.NotFound(w, r)
-						return
-					}
-					w.Header().Set("Content-Length", strconv.Itoa(len(b)))
-					if etag != "" {
-						w.Header().Set("ETag", etag)
-					}
-					return
+			url := serveWithHead(t, serveData(t, a.files), func(w http.ResponseWriter, p string) bool {
+				b, ok := a.files[p]
+				if !ok {
+					return false
 				}
-				forward(t, served, w, r)
-			}))
-			t.Cleanup(srv.Close)
-			code, _, errOut := a.run(t, srv.URL+"/")
+				w.Header().Set("Content-Length", strconv.Itoa(len(b)))
+				if etag != "" {
+					w.Header().Set("ETag", etag)
+				}
+				return true
+			})
+			code, _, errOut := a.run(t, url)
 			if code != exitAllValid || strings.Contains(errOut, "whole") || strings.Count(errOut, ".patch\n") != len(a.patches) {
 				t.Errorf("exit %d\n%s", code, errOut)
 			}
 		})
 	}
+}
+
+// serveWithHead is served behind a server that answers HEAD requests with
+// head when it returns true, and forwards every other request to served.
+func serveWithHead(t *testing.T, served *dataServer, head func(w http.ResponseWriter, p string) bool) string {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead && head(w, strings.TrimPrefix(r.URL.Path, "/")) {
+			return
+		}
+		forward(t, served, w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL + "/"
 }
 
 // crlAsked is what a server was asked for under crl/ whose name ends in
