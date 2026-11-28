@@ -31,7 +31,7 @@
 
 ### 開發用 build
 
-識別碼 `tw.iamreal.app.dev`，不上傳商店，營運者用線裝：
+識別碼 `tw.iamreal.app.dev`，不上傳商店，維護者用線裝：
 
 ```
 島民證明 dev

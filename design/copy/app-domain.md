@@ -31,6 +31,6 @@ Android 要先被加進測試名單。
 - 第一行是標題，也是分頁的標題（`「島民證明」測試版 app｜島民證明`）
 - 商店的連結畫成按鈕
 - 上線前，連結是正式 app（`tw.iamreal.app`）的測試：Android 的測試者在正式 app 的封閉測試。上線那天換成測試 app（`tw.iamreal.app.test`）的
-- iPhone 的那一顆「iPhone：加入 TestFlight 測試」和「要先裝好 TestFlight。」還沒有：正式 app 的 TestFlight 還沒有外部測試的群組，沒有公開連結。有了之後補回來（[#535](https://github.com/iamreal-tw/iamreal/issues/535)），放在 Android 那一顆之前，連到正式 app 的 TestFlight 公開連結（iPhone 的測試者用正式 app 的 TestFlight，ADR-0040「iOS 的測試 app 上線前不發給營運者以外的人」），「要先裝好 TestFlight。」放在「Android 要先被加進測試名單。」之前
+- iPhone 的那一顆「iPhone：加入 TestFlight 測試」和「要先裝好 TestFlight。」還沒有：正式 app 的 TestFlight 還沒有外部測試的群組，沒有公開連結。有了之後補回來（[#535](https://github.com/iamreal-tw/iamreal/issues/535)），放在 Android 那一顆之前，連到正式 app 的 TestFlight 公開連結（iPhone 的測試者用正式 app 的 TestFlight，ADR-0040「iOS 的測試 app 上線前不發給維護者以外的人」），「要先裝好 TestFlight。」放在「Android 要先被加進測試名單。」之前
 - 系統版本的下限是兩個 app 建置的下限：iOS 15（`ios/Config/Shared.xcconfig`）、Android 10（API 29，`android/app/build.gradle.kts`）
 - 「回到 test.iamreal.tw」連到測試網站的首頁

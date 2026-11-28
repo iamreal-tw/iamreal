@@ -18,7 +18,7 @@
 - 清空之後連到「找不到」的連結，靠這個日期說明原因，所以找不到的頁面也要有這一行
 - 正式的網站沒有這一行
 
-這一句是營運者定的（[#59](https://github.com/iamreal-tw/iamreal/issues/59)）。
+這一句是維護者定的（[#59](https://github.com/iamreal-tw/iamreal/issues/59)）。
 
 ## 寫出島民證明網址的地方
 

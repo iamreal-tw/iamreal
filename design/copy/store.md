@@ -1,13 +1,13 @@
 # 商店頁（Google Play、App Store）
 
-兩個商店的商店頁上的文字，和給審查人員的說明。營運者在 Play Console 的商店資訊和「應用程式存取權」（App access）、App Store Connect 的 App 資訊和審查備註，逐字從這裡貼。名稱、截圖、圖示、上架的地區在「[app 的名稱、商店頁和上架的地區](https://github.com/iamreal-tw/iamreal/issues/154)」定。原則在 `docs/design/principles.md`。
+兩個商店的商店頁上的文字，和給審查人員的說明。維護者在 Play Console 的商店資訊和「應用程式存取權」（App access）、App Store Connect 的 App 資訊和審查備註，逐字從這裡貼。名稱、截圖、圖示、上架的地區在「[app 的名稱、商店頁和上架的地區](https://github.com/iamreal-tw/iamreal/issues/154)」定。原則在 `docs/design/principles.md`。
 
 - 商店頁不在原則「首頁和事實頁」列的說明和號召的那幾處裡，照事實頁寫：看的人在這裡決定要不要裝一個會要 PIN 的 app。所以帳號照「一張台灣國民的自然人憑證，把它在 Threads 唯一的名額給了」寫，不寫「台灣人持有」「真人」
 - 只寫繁體中文。給審查人員的說明寫英文：Google 要登入的資料和說明是英文（[Requirements for providing sign in details for review](https://support.google.com/googleplay/android-developer/answer/15748846)）
 - 名稱和完整說明兩個商店共用。兩個 app 寫法不同的地方，這裡寫「手機」，不寫 Android、iPhone
 - 字數照 Google 的上限：簡短說明 80 字、完整說明 4,000 字，全形和半形一樣算一個字（[Add preview assets](https://support.google.com/googleplay/android-developer/answer/9859152)：「Character limits apply to both full-width and half-width characters.」）。程式碼區塊裡的字就是要貼的字，空一行是分段
 - 不寫排名和使用者的推薦，不重複關鍵字（[Metadata](https://support.google.com/googleplay/android-developer/answer/9898842)）
-- 「我們」是營運者（原則「文字的寫法」）
+- 「我們」是維護者（原則「文字的寫法」）
 - `{site}` 是 app 連的網站：上線前是 `test.iamreal.tw`，上線起是 `iamreal.tw`（ADR-0040）。貼的時候換掉；上線那天和商店頁的網址一起改（#491）
 
 ## 1. 名稱
@@ -34,7 +34,7 @@ Google Play 的「簡短說明」，商店頁最先看到的一句（[Add previe
 Google Play 的「完整說明」、App Store 的「描述」。
 
 ```
-島民證明不是政府或內政部的 app。由一位台灣的軟體工程師個人開發和營運，原始碼公開在 GitHub。
+島民證明不是政府或內政部的 app。由一位台灣的軟體工程師個人開發和維護，原始碼公開在 GitHub。
 
 用手機感應你的自然人憑證，把這張卡片在 Threads 唯一的名額給你的帳號，換一張島民證明。島民證明是一個公開的頁面，把它的網址放到你的 Threads 個人檔案上，看的人點進去，看得到有一張台灣國民的自然人憑證把它在 Threads 唯一的名額給了這個帳號，和上次過卡是幾天前，自己判斷。
 
@@ -79,7 +79,7 @@ Google Play 的「完整說明」、App Store 的「描述」。
 原始碼：github.com/iamreal-tw/iamreal
 ```
 
-- 第一段排在最前面：看的人最容易誤會的是這是政府的 app（原則 2）。Google 不讓 app 假稱和政府有關（[Deceptive Behavior](https://support.google.com/googleplay/android-developer/answer/9888077)：「Don't falsely claim affiliation with a government or an established entity when not properly authorized to do so.」）。「個人開發和營運」和 `privacy.md` 第 1 段相同
+- 第一段排在最前面：看的人最容易誤會的是這是政府的 app（原則 2）。Google 不讓 app 假稱和政府有關（[Deceptive Behavior](https://support.google.com/googleplay/android-developer/answer/9888077)：「Don't falsely claim affiliation with a government or an established entity when not properly authorized to do so.」）。「個人開發和維護」和 `privacy.md` 第 1 段相同
 - 島民證明是「公開的頁面」，不寫「網址」：`GLOSSARY.md`「島民證明」是證明和顯示它的頁面
 - 「需要什麼」：本國國民的自然人憑證、行動自然人憑證不能用，和 `prepare.md` 第 2 段相同；第一代的卡片 app 不能用（`card-proof.md` 第 2 步的 app 停止原因）。「大約 3 分鐘」和過卡提醒的通知（`app.md`）相同
 - 「怎麼過卡」是 app 八步裡要持卡人做事的五步，句子照 `card-proof.md` 第 2 到 6 步。不寫第幾步：商店頁不是過卡的畫面
