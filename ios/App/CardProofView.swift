@@ -37,6 +37,8 @@ struct ScreenView: View {
     @Environment(\.sizeCategory) private var sizeCategory
     /// Which of step 6's written steps its demonstration is at, 1 to 4; 0 when at none.
     @State private var demoStep = 0
+    /// The field the keyboard is up for: "pin", or a platform's ID.
+    @FocusState private var typing: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,11 +48,27 @@ struct ScreenView: View {
                 Spacer(minLength: 0)
             } else {
                 ScrollView { content }
+                    // Above the keyboard while it is up: 完成 puts it away (card-proof.md, "app：鍵盤").
+                    .safeAreaInset(edge: .bottom) { if typing != nil { keyboardBar } }
             }
         }
         .background(Theme.bg.color.ignoresSafeArea())
         .foregroundColor(Theme.text.color)
         .environment(\.colorScheme, .light)
+    }
+
+    /// The bar above the keyboard: 完成 at its right, which puts the keyboard away.
+    private var keyboardBar: some View {
+        HStack {
+            Spacer()
+            SwiftUI.Button { typing = nil } label: {
+                Text(copy("app_keyboard.done")).font(Theme.body(Theme.sizeBody, Theme.weightHeading)).foregroundColor(Theme.you.color)
+                    .frame(minWidth: Theme.minTarget.value, minHeight: Theme.minTarget.value)
+            }
+        }
+        .padding(.horizontal, Theme.gutter.value)
+        .background(Theme.soft.color)
+        .overlay(alignment: .top) { Divider().overlay(Theme.line.color) }
     }
 
     private var header: some View {
@@ -74,9 +92,11 @@ struct ScreenView: View {
                 .padding(.top, 36)
             }
             if !screen.buttons.isEmpty {
-                // The way on, the last of them, first: on the right side by side, on top one under the other.
+                // The way on, the last of them, first: on the right side by side, on top one under the other. Each
+                // button is known by its words, not its place: another step's button at the same place is another
+                // button, not this one changed.
                 ButtonRow(firstOnRight: true) {
-                    ForEach(Array(screen.buttons.enumerated().reversed()), id: \.offset) { index, button in
+                    ForEach(Array(screen.buttons.enumerated().reversed()), id: \.element.label) { index, button in
                         self.button(button, main: screen.mainButton && index == screen.buttons.count - 1)
                     }
                 }
@@ -99,6 +119,9 @@ struct ScreenView: View {
         .padding(.horizontal, Theme.gutter.value)
         .padding(.top, 24)
         .padding(.bottom, 48)
+        // One step to the next, or the keyboard going away as it does, is drawn at once: nothing on the screen slides
+        // or grows into something else. What moves on purpose (the mark, the demonstrations) sets its own animation.
+        .transaction { $0.animation = nil }
     }
 
     /// The box above the step: the note of the reminder the app was opened from.
@@ -289,6 +312,8 @@ struct ScreenView: View {
                 // No content type: the system is not to offer to fill the PIN in, or to save it.
                 SecureField("", text: $pinText)
                     .keyboardType(.asciiCapable)
+                    .submitLabel(.done)
+                    .focused($typing, equals: "pin")
                     .font(Theme.body(Theme.sizeBody))
                     .padding(.horizontal, 16)
                     .frame(height: Theme.buttonHeight.value)
@@ -504,6 +529,8 @@ struct ScreenView: View {
                         .textInputAutocapitalization(.never)
                         .disableAutocorrection(true)
                         .keyboardType(.asciiCapable)
+                        .submitLabel(.done)
+                        .focused($typing, equals: row.platform)
                         .accessibilityLabel(row.name)
                 }
                 .padding(.horizontal, 14)
