@@ -13,15 +13,15 @@ Android 和 iOS 各有兩個商店的 app：測試 app `tw.iamreal.app.test` 和
 | 識別碼（Android、iOS 相同） | `tw.iamreal.app` | `tw.iamreal.app.test` | `tw.iamreal.app.dev` |
 | 連哪裡 | 上線前：測試網站。上線起：正式網站 | 測試網站 | 測試網站 |
 | 簽的場合字串 | 跟著連的網站 | `iamreal-test:public:0` | `iamreal-test:public:0` |
-| 發到哪裡 | Google Play 的測試軌道和正式版、TestFlight 和 App Store | Google Play 的內部測試和封閉測試、TestFlight；永遠不上正式版 | 不上傳商店，營運者用線裝 |
-| 給誰 | 封閉測試的測試者；上線後所有人 | 測試網站的測試者 | 營運者 |
+| 發到哪裡 | Google Play 的測試軌道和正式版、TestFlight 和 App Store | Google Play 的內部測試和封閉測試、TestFlight；永遠不上正式版 | 不上傳商店，維護者用線裝 |
+| 給誰 | 封閉測試的測試者；上線後所有人 | 測試網站的測試者 | 維護者 |
 
 - **環境在建置時寫死**，和 ADR-0036 相同。正式 app 連哪個網站是程式庫裡的一個設定，上線那天用一個 PR 改它。
 - **app 網域跟著連的網站。** 連測試網站的 build 認 `test-app.iamreal.tw`，連正式網站的認 `app.iamreal.tw`，不用萬用字元；開發用 build 不認任何 app 網域。所以上線前，測試網站的 app 網域同時開正式 app 和測試 app。
 - **上線前，正式 app 也連測試網站。** Google Play 新的個人帳號，正式 app 自己要跑 12 位測試者、連續 14 天的封閉測試；那 14 天連測試網站（ADR-0036 的理由：測試者可以重複過卡，正式的證明紀錄不在公開之前開張）。
 - **三種 app 能同時裝在一支手機上**，因為識別碼不同。
-- **兩個 app 的 Android 簽章金鑰都由 Google 產生**（Play App Signing 的預設）。營運者和 GitHub 都沒有簽章金鑰；CI 只有上傳金鑰（ADR-0036）。
-- **iOS 的測試 app 上線前不發給營運者以外的人。** 上線前 iPhone 的測試者用正式 app 的 TestFlight（它連的也是測試網站）。
+- **兩個 app 的 Android 簽章金鑰都由 Google 產生**（Play App Signing 的預設）。維護者和 GitHub 都沒有簽章金鑰；CI 只有上傳金鑰（ADR-0036）。
+- **iOS 的測試 app 上線前不發給維護者以外的人。** 上線前 iPhone 的測試者用正式 app 的 TestFlight（它連的也是測試網站）。
 
 ## 測試網站的最低版本
 
@@ -34,10 +34,10 @@ Android 和 iOS 各有兩個商店的 app：測試 app `tw.iamreal.app.test` 和
 
 | | 做什麼 | 誰 |
 |---|---|---|
-| 上傳 | GitHub Actions 建置，傳到 Google Play 的內部測試和 TestFlight；兩個 app 各一個工作流程 | 營運者手動觸發；營運者電腦上的 coding agent 也可以觸發 |
-| 給測試者 | 把一個 build 推到封閉測試、TestFlight 的外部測試 | 營運者在商店的後台按 |
-| 發布正式版 | 把正式 app 的一個 build 升到 Google Play 的正式版、送 App Store 審查 | 營運者在商店的後台按 |
-| 標籤 | 升上正式版的 build 的提交，推 `android/v…`、`ios/v…` | 營運者；標籤不觸發上傳 |
+| 上傳 | GitHub Actions 建置，傳到 Google Play 的內部測試和 TestFlight；兩個 app 各一個工作流程 | 維護者手動觸發；維護者電腦上的 coding agent 也可以觸發 |
+| 給測試者 | 把一個 build 推到封閉測試、TestFlight 的外部測試 | 維護者在商店的後台按 |
+| 發布正式版 | 把正式 app 的一個 build 升到 Google Play 的正式版、送 App Store 審查 | 維護者在商店的後台按 |
+| 標籤 | 升上正式版的 build 的提交，推 `android/v…`、`ios/v…` | 維護者；標籤不觸發上傳 |
 
 - **CI 的金鑰只能上傳到測試軌道。** Google Play 的服務帳號在兩個 app 都只有「將應用程式發布至測試群組」。
 - **兩個 app 共用 GitHub 的 environment `app-test`。** 兩個工作流程拿的金鑰都只能傳到測試軌道；Apple 的 API 金鑰本來就碰得到帳號裡所有的 app（ADR-0036），分開也沒有隔離。

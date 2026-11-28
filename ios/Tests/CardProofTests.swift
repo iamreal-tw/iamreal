@@ -28,8 +28,8 @@ final class CardProofTests: XCTestCase {
     private var notifier: FakeNotifier!
     private var reminderStore: MemoryReminderStore!
     private var reminders: Reminders!
-    /// How many times the app opened the system's settings at its notifications.
-    private var notificationSettingsOpened = 0
+    /// How many times the app opened the screen to choose the reminder's interval and time.
+    private var scheduleOpened = 0
     /// What the lowest version says of the build, when a test changes it under a model.
     private var minApp: MinApp?
     /// The counts the models of a test sent, read, in the order they were sent (#434); and the card proof device ID as the
@@ -133,19 +133,19 @@ final class CardProofTests: XCTestCase {
             "開始之前",
             "請準備好你的實體自然人憑證卡片。",
             "非本國國民持有的自然人憑證無法用於島民證明。",
+            "下一步",
             "為什麼一定要實體的卡片？",
             "實體卡片簽章在卡片裡完成，卡片效期約 5 ~ 8 年。",
             "行動自然人憑證簽章依賴內政部伺服器，而且每年會更換金鑰，不適合作為島民證明使用。",
             "還沒有自然人憑證，怎麼申辦？",
             "滿 18 歲，未受監護宣告，本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
             "找附近的戶政事務所",
-            "內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）",
-            "下一步",
+            "內政部憑證管理中心：怎麼申辦自然人憑證（moica.nat.gov.tw）",
         ])
         // The two ways to a card: the phone's map, and MOICA's page on applying. Nothing of the app goes with them.
         try await press("找附近的戶政事務所", in: model)
         XCTAssertEqual(opened.last?.absoluteString.removingPercentEncoding, "https://maps.apple.com/?q=戶政事務所")
-        try await press("內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）", in: model)
+        try await press("內政部憑證管理中心：怎麼申辦自然人憑證（moica.nat.gov.tw）", in: model)
         XCTAssertEqual(opened.last?.absoluteString, "https://moica.nat.gov.tw/rac.html")
         XCTAssertEqual(model.screen.step, 1)
 
@@ -200,7 +200,7 @@ final class CardProofTests: XCTestCase {
             "輸入 PIN",
             "已讀到卡片", "測試用戶", "（姓名只顯示在這裡，不會送出。）",
             "PIN",
-            "按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的帳號。",
+            "按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的 Threads 帳號。",
             "PIN、姓名和憑證、卡片的簽章不會離開這支手機。",
             "上一步",
             "確認卡片",
@@ -222,7 +222,7 @@ final class CardProofTests: XCTestCase {
             "這張卡片還沒有宣告過帳號。",
             "填上你要宣告的 Threads 帳號。",
             "Threads", "預覽",
-            "預覽會在 Threads 或瀏覽器打開個人檔案，讓你小心確認沒有打錯帳號。",
+            "請預覽你的 Threads 個人檔案，避免打錯帳號。一張卡終身最多只能更換 5 次。",
             "下一步",
             "取消",
         ])
@@ -339,7 +339,7 @@ final class CardProofTests: XCTestCase {
             "建議定期更新島民證明，增加說服力。",
             "這支手機會在 \(When(appCopy: Copy.bundled("app")).day(Day(now).adding(days: 84)))晚上 9:00 提醒你，大約三個月後。",
         ]
-        XCTAssertEqual(model.screen.texts, offered + ["上一步", "開啟提醒", "改提醒間隔或時刻", "這次不要"])
+        XCTAssertEqual(model.screen.texts, offered + ["上一步", "設定提醒", "這次不要"])
         await Snapshot.save(model, as: "7-reminder")
         // Back to step 6, as it was left, and on again. The demonstration does not play by itself a second time.
         try await press("上一步", in: model)
@@ -350,36 +350,16 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(demonstration(on: model.screen)?.played, true)
         try await press("下一步", in: model)
 
-        // The system does not let the app notify: nothing is set, and the step says why.
-        notifier.allows = false
-        try await press("開啟提醒", in: model)
+        // "設定提醒": the screen to choose the interval and time, where the system is asked (ReminderTests). Nothing is
+        // asked or kept from here.
+        try await press("設定提醒", in: model)
+        XCTAssertEqual(scheduleOpened, 1)
         XCTAssertEqual(model.screen.step, 7)
-        XCTAssertEqual(model.screen.texts, [
-            "提醒我回來過卡",
-            "沒有排提醒：手機不允許這個 app 發通知。請允許通知設定，我們不會在沒有經過你同意的情況下打擾你。",
-            "上一步", "打開通知設定",
-            "這次不要",
-        ])
         XCTAssertNil(reminderStore.kept)
-        XCTAssertEqual(notifier.scheduled, [])
-        await Snapshot.save(model, as: "7-refused")
-        // Back in the app with nothing changed in the settings: the same screen.
-        try await press("打開通知設定", in: model)
-        XCTAssertEqual(notificationSettingsOpened, 1)
-        model.cameBack()
-        while let work = model.work { await work.value }
-        XCTAssertTrue(model.screen.texts.contains("打開通知設定"))
-        XCTAssertNil(reminderStore.kept)
-        // "這次不要", then back from the last step: asked again as step 7 comes up, and still refused.
-        try await press("這次不要", in: model)
-        XCTAssertEqual(model.screen.step, 8)
-        try await press("上一步", in: model)
-        XCTAssertTrue(model.screen.texts.contains("打開通知設定"))
-        XCTAssertNil(reminderStore.kept)
-        // Allowed in the settings: back in the app the reminder is set as offered, and the step says when.
-        notifier.allows = true
-        model.cameBack()
-        while let work = model.work { await work.value }
+        XCTAssertEqual(notifier.asked, 0, "the system was not asked from step 7")
+        // Set there as offered: back here the step says when, and stays until 下一步 is pressed.
+        let turnedOn = await reminders.turnOn(interval: .weeks12, time: .evening)
+        XCTAssertTrue(turnedOn)
         XCTAssertEqual(model.screen.step, 7)
         XCTAssertEqual(model.screen.texts, offered + ["上一步", "下一步", "改提醒間隔或時刻"])
         XCTAssertEqual(reminderStore.kept, ReminderSettings(interval: .weeks12, time: .evening, next: Day(now).adding(days: 84)))
@@ -391,15 +371,20 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.texts, [
             "恭喜你完成島民證明",
             "島民證明", "@alice", "島民編號 \(shortID) 開頭",
-            "這是第 \(ordinal) 張島民證明。", "愈多人成為島民，知道彼此都是台灣人，我們能讓台灣的網路討論變得更貼近真實、更有意義。",
-            "謝謝你加入島民，誠摯的邀請你分享島民證明。",
-            "上一步", "完成", "分享到 Threads",
+            "這是第 \(ordinal) 張島民證明，感謝你的參與。", "愈多人成為島民，知道彼此都是台灣人，我們能讓 Threads 上的網路聲量更貼近真實、更有意義。",
+            "分享到 Threads", "用其他 app 分享", "上一步", "完成",
         ])
         await Snapshot.save(model, as: "8-done")
-        // The share sheet, with the sentence and the card's page.
-        try await press("分享到 Threads", in: model)
+        // Threads's composer, then the share sheet: the sentence and the card's page.
         let words = Copy(json: try Repository.data("design/copy/card-proof.json"))
-        XCTAssertEqual(shared, ["\(words("done.share_text", ["ordinal": ordinal]))\n\(address.absoluteString)"])
+        let text = "\(words("done.share_text", ["ordinal": ordinal]))\n\(address.absoluteString)"
+        try await press("分享到 Threads", in: model)
+        let intent = try XCTUnwrap(opened.last.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) })
+        XCTAssertEqual("\(intent.scheme ?? "")://\(intent.host ?? "")\(intent.path)", "https://www.threads.com/intent/post")
+        XCTAssertEqual(intent.queryItems, [URLQueryItem(name: "text", value: text)])
+        XCTAssertEqual(shared, [], "Threads's composer is not the share sheet")
+        try await press("用其他 app 分享", in: model)
+        XCTAssertEqual(shared, [text])
         // Back to step 7 and on again: nothing touches the card.
         try await press("上一步", in: model)
         XCTAssertEqual(model.screen.step, 7)
@@ -523,9 +508,8 @@ final class CardProofTests: XCTestCase {
             "改成別的帳號",
             "Threads", "預覽",
             "改了之後，@alice 不再是這張卡片宣告的帳號。", "一張卡終身最多更換 5 次，這次之後還可以更換 4 次。",
-            "預覽會在 Threads 或瀏覽器打開個人檔案，讓你小心確認沒有打錯帳號。",
-            "下一步",
-            "不改了",
+            "請預覽你的 Threads 個人檔案，避免打錯帳號。",
+            "上一步", "下一步",
             "取消",
         ])
         XCTAssertEqual(typed(in: model), "", "the field starts empty")
@@ -540,14 +524,14 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(rows(on: model.screen), [["Threads", "@alice", "不變"]])
         XCTAssertEqual(model.screen.buttons.map(\.label), ["上一步", "更新島民證明"])
         try await press("上一步", in: model)
-        // "不改了": what the card declares again; then to the field once more.
-        try await press("不改了", in: model)
+        // 上一步: what the card declares again; then to the field once more.
+        try await press("上一步", in: model)
         XCTAssertTrue(model.screen.texts.contains("更新島民證明"))
         try await press("改成別的帳號", in: model)
 
         model.type("carol.tw", on: "threads")
         try await press("下一步", in: model)
-        XCTAssertEqual(rows(on: model.screen), [["Threads", "@carol.tw", "更換，原本是 @alice。", "用掉一次更換，不會恢復。之後還可以更換 4 次。"]])
+        XCTAssertEqual(rows(on: model.screen), [["Threads", "@carol.tw", "更換，原本是 @alice。", "用掉一次更換，之後還可以更換 4 次。"]])
         // Back: the field as it was typed.
         try await press("上一步", in: model)
         XCTAssertEqual(model.screen.step, 4)
@@ -585,7 +569,7 @@ final class CardProofTests: XCTestCase {
         XCTAssertFalse(model.screen.texts.contains { $0.hasPrefix("如果你換了新的自然人憑證") })
         // Step 7, asked again (nothing is kept on this phone), and "這次不要": nothing is kept, on to the last step.
         try await press("下一步", in: model)
-        XCTAssertEqual(model.screen.links.map(\.label), ["改提醒間隔或時刻", "這次不要"])
+        XCTAssertEqual(model.screen.links.map(\.label), ["這次不要"])
         try await press("這次不要", in: model)
         XCTAssertNil(reminderStore.kept)
         XCTAssertEqual(notifier.asked, 0, "the system was not asked for notifications")
@@ -604,7 +588,7 @@ final class CardProofTests: XCTestCase {
         // Changed today, and changing it again today is another switch all the same (rules version 3: no correction).
         try await press("改成別的帳號", in: model)
         XCTAssertTrue(model.screen.texts.contains("一張卡終身最多更換 5 次，這次之後還可以更換 3 次。"))
-        try await press("不改了", in: model)
+        try await press("上一步", in: model)
         try await press("收回對 @carol.tw 的宣告", in: model)
         let shortID = try shortID(on: model.screen)
         XCTAssertEqual(model.screen.texts, [
@@ -961,7 +945,7 @@ final class CardProofTests: XCTestCase {
             "從 2027-03-01 起，這一版的島民證明 app 不能過卡。請更新到最新的版本。",
             "卡片還沒有被讀取，沒有任何東西送出去。",
             "到 App Store 更新",
-            "也可以用電腦和讀卡機，在 \(try XCTUnwrap(backend.origin.host)) 過卡。",
+            "也可以用電腦和讀卡機，打開 \(try XCTUnwrap(backend.origin.host)) 過卡。",
         ])
         checkAgainstTheCopy(model.screen, file: #filePath, line: #line)
         XCTAssertEqual(model.screen.buttons, [])
@@ -1012,7 +996,7 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.texts, [
             "這支手機不能感應卡片",
             "這支手機沒有 NFC，不能用 app 過卡。",
-            "可以用電腦和讀卡機，在 \(try XCTUnwrap(backend.origin.host)) 過卡。",
+            "可以用電腦和讀卡機，打開 \(try XCTUnwrap(backend.origin.host)) 過卡。",
         ])
         checkAgainstTheCopy(model.screen, file: #filePath, line: #line)
         XCTAssertEqual(model.screen.buttons, [])
@@ -1238,8 +1222,7 @@ final class CardProofTests: XCTestCase {
             copy: Copy.bundled(),
             appCopy: Copy.bundled("app"),
             reminders: reminders,
-            openSchedule: {},
-            openNotificationSettings: { [unowned self] in self.notificationSettingsOpened += 1 },
+            openSchedule: { [unowned self] in self.scheduleOpened += 1 },
             openSettings: {},
             site: backend.origin,
             open: { [unowned self] in self.opened.append($0) },
@@ -1287,7 +1270,7 @@ final class CardProofTests: XCTestCase {
             }
         }
         let inline = (model.screen.blocks + model.screen.under).flatMap(within)
-        let buttons = model.screen.buttons + model.screen.links + (model.screen.cancel.map { [$0] } ?? []) + inline
+        let buttons = (model.screen.top.map { [$0] } ?? []) + (model.screen.beside.map { [$0] } ?? []) + model.screen.buttons + model.screen.links + (model.screen.cancel.map { [$0] } ?? []) + inline
         let button = try XCTUnwrap(buttons.first { $0.label == label }, "no button \(label) among \(buttons.map(\.label))", file: file, line: line)
         XCTAssertTrue(button.enabled, "\(label) cannot be pressed", file: file, line: line)
         model.perform(button.action)
@@ -1392,7 +1375,8 @@ final class CardProofTests: XCTestCase {
             let (starts, taps) = (asked.startRequests, card.taps.count)
             try await press("下一步", in: model)
             XCTAssertEqual(model.screen.step, 1, failure.code)
-            XCTAssertEqual(Array(model.screen.texts.suffix(2)), [say("before.busy"), "下一步"], "\(failure.code): the sentence right above 下一步")
+            XCTAssertEqual(model.screen.blocks.last, .message(say("before.busy")), "\(failure.code): the sentence right above 下一步")
+            XCTAssertEqual(model.screen.buttons.map(\.label), ["下一步"], failure.code)
             XCTAssertEqual(asked.startRequests, starts + 1, "\(failure.code): 下一步 asked config with the mark, once")
             XCTAssertEqual(card.taps.count, taps, "\(failure.code): no card tapped")
             if failure == CountingBackend.busy { await Snapshot.save(model, as: "1-busy") }

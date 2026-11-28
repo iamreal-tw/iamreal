@@ -1,25 +1,25 @@
-// The operator's page of the fixed files (test/operator-page-fixture.ts),
+// The maintainer's page of the fixed files (test/maintainer-page-fixture.ts),
 // opened in a headless Chrome (#436): every request the page makes is
 // recorded, and the check fails on any but the file itself; then the whole
 // page is drawn at a desktop's width into design/screens/. Not part of
 // `pnpm test`: it needs Chrome.
 //
-//   node --experimental-strip-types test/operator-page-browser.ts
+//   node --experimental-strip-types test/maintainer-page-browser.ts
 //   (CHROME=<path> if Chrome is not where macOS puts it)
 import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { DEFAULT_DAYS, gather, pageOf } from "../scripts/operator-page.ts";
-import { fixtureSources } from "./operator-page-fixture.ts";
+import { DEFAULT_DAYS, gather, pageOf } from "../scripts/maintainer-page.ts";
+import { fixtureSources } from "./maintainer-page-fixture.ts";
 
 const CHROME = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const SCREEN = join(import.meta.dirname, "..", "..", "design", "screens", "operator-page-desktop.png");
+const SCREEN = join(import.meta.dirname, "..", "..", "design", "screens", "maintainer-page-desktop.png");
 const WIDTH = 1280;
 
-const dir = mkdtempSync(join(tmpdir(), "iamreal-operator-page-"));
-const file = join(dir, "operator-page.html");
+const dir = mkdtempSync(join(tmpdir(), "iamreal-maintainer-page-"));
+const file = join(dir, "maintainer-page.html");
 writeFileSync(file, pageOf(await gather(fixtureSources(), { days: DEFAULT_DAYS, now: new Date("2026-11-27T03:00:00Z") })));
 const url = pathToFileURL(file).href;
 

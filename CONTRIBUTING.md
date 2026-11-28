@@ -51,7 +51,7 @@ ADR、`CLAUDE.md`、`GLOSSARY.md`、`docs/design/principles.md`、這一份。PR
 
 ## 部署會執行到的東西
 
-合併到 `main` 會部署測試網站，推版本標籤會部署正式網站；部署的工作拿著部署的權杖（ADR-0029）。營運者手動觸發的工作流程把 app 建置、簽章，傳到商店的測試軌道（ADR-0036）。所以 PR 動到下面任何一項，要逐行看，PR 的說明寫出改了什麼、為什麼：
+合併到 `main` 會部署測試網站，推版本標籤會部署正式網站；部署的工作拿著部署的權杖（ADR-0029）。維護者手動觸發的工作流程把 app 建置、簽章，傳到商店的測試軌道（ADR-0036）。所以 PR 動到下面任何一項，要逐行看，PR 的說明寫出改了什麼、為什麼：
 
 - `.github/workflows/` 裡的任何檔案
 - 工作流程用的 action：一律釘在完整的 commit SHA，不用標籤或分支
@@ -70,7 +70,7 @@ ADR、`CLAUDE.md`、`GLOSSARY.md`、`docs/design/principles.md`、這一份。PR
 
 - 讀公開的頁面；被要求登入、註冊、送表單，或被擋下來時，停在那裡，把它當成結果寫下來
 - 請求用一般的 `User-Agent`，內容不帶這個專案的名稱和任何人的個人資料
-  - 例外：後台的清冊鏡像對內政部送的請求。照 Cloudflare 的文件，Worker 送出的每個請求會被加上 `CF-Worker` 標頭，值是 Worker 所在 zone 的名稱，在這裡會是 `iamreal.tw`（[Cloudflare HTTP headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/)）；程式拿不掉它，營運者知道並接受。程式自己加的內容照上面那一句
+  - 例外：後台的清冊鏡像對內政部送的請求。照 Cloudflare 的文件，Worker 送出的每個請求會被加上 `CF-Worker` 標頭，值是 Worker 所在 zone 的名稱，在這裡會是 `iamreal.tw`（[Cloudflare HTTP headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/)）；程式拿不掉它，維護者知道並接受。程式自己加的內容照上面那一句
 - 本機的測試頁用 `http://127.0.0.1:<埠>` 開
 
 ## 寫進這個程式庫的字

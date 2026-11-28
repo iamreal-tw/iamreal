@@ -41,16 +41,24 @@ struct ScreenView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            // Another page is another view, from its top: nothing of the page before (a button at the same
+            // place, how far it was scrolled) carries over to it.
             if unscrolled {
-                content
+                content.id(screen.page)
                 Spacer(minLength: 0)
             } else {
-                ScrollView { content }
+                ScrollView { content }.id(screen.page)
             }
         }
         .background(Theme.bg.color.ignoresSafeArea())
         .foregroundColor(Theme.text.color)
         .environment(\.colorScheme, .light)
+        // Where step 6's demonstration is at belongs to the page it plays on.
+        .onChange(of: screen.page) { _ in demoStep = 0 }
+        // One page to the next, or a change on the page, is drawn at once: nothing on the screen slides, fades or
+        // grows into something else, whatever the system animates a button's action with. What moves on purpose
+        // (the mark, the demonstrations) sets its own animation.
+        .transaction { $0.animation = nil }
     }
 
     private var header: some View {
@@ -66,14 +74,23 @@ struct ScreenView: View {
             ForEach(Array(screen.blocks.enumerated()), id: \.offset) { index, block in
                 self.block(block, first: index == 0)
             }
+            if let top = screen.top {
+                HStack(spacing: SideBySide.spacing) {
+                    self.button(top, main: true)
+                    if let beside = screen.beside { self.shareSymbol(beside) }
+                }
+                .padding(.top, 36)
+            }
             if !screen.buttons.isEmpty {
-                // The way on, the last of them, first: on the right side by side, on top one under the other.
+                // The way on, the last of them, first: on the right side by side, on top one under the other. Each
+                // button is known by its words, not its place: another step's button at the same place is another
+                // button, not this one changed.
                 ButtonRow(firstOnRight: true) {
-                    ForEach(Array(screen.buttons.enumerated().reversed()), id: \.offset) { index, button in
+                    ForEach(Array(screen.buttons.enumerated().reversed()), id: \.element.label) { index, button in
                         self.button(button, main: screen.mainButton && index == screen.buttons.count - 1)
                     }
                 }
-                .padding(.top, 36)
+                .padding(.top, screen.top == nil ? 36 : SideBySide.spacing)
             }
             ForEach(Array(screen.under.enumerated()), id: \.offset) { _, block in self.block(block, first: false) }
             // The ways back, as links: to the screen before, then out of the card proof.
@@ -194,7 +211,8 @@ struct ScreenView: View {
             }
             .padding(.top, 40)
         case .proofCard(let card):
-            proofCard(card).frame(maxWidth: 260).padding(.top, 24)
+            // In the middle of the screen, as on Android (design/DESIGN.md, the components: the proof card).
+            proofCard(card).frame(maxWidth: 260).frame(maxWidth: .infinity).padding(.top, 24)
         case .steps(let steps):
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
@@ -215,9 +233,11 @@ struct ScreenView: View {
             .padding(.top, 20)
         case .linked(let before, let link, let after):
             SwiftUI.Button { perform(link.action) } label: {
-                (Text(before) + Text(link.label).underline() + Text(after))
-                    .font(Theme.body(Theme.sizeBody, Theme.weightHeading))
-                    .foregroundColor(Theme.you.color)
+                // Only the link looks like one, as on Android: the words around it are the text's (design/DESIGN.md, the components: links).
+                (Text(before).foregroundColor(Theme.ink.color)
+                    + Text(link.label).font(Theme.body(Theme.sizeBody, Theme.weightHeading)).underline().foregroundColor(Theme.you.color)
+                    + Text(after).foregroundColor(Theme.ink.color))
+                    .font(Theme.body(Theme.sizeBody))
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, minHeight: Theme.minTarget.value, alignment: .leading)
@@ -279,6 +299,8 @@ struct ScreenView: View {
                 // No content type: the system is not to offer to fill the PIN in, or to save it.
                 SecureField("", text: $pinText)
                     .keyboardType(.asciiCapable)
+                    // The keyboard's own return key is 完成, and puts the keyboard away (card-proof.md, "app：鍵盤").
+                    .submitLabel(.done)
                     .font(Theme.body(Theme.sizeBody))
                     .padding(.horizontal, 16)
                     .frame(height: Theme.buttonHeight.value)
@@ -339,7 +361,9 @@ struct ScreenView: View {
             }
         case .action(let button):
             SwiftUI.Button { perform(button.action) } label: {
+                // A button's label is centred unless told: a link of two lines starts each at the left, as Android's and the web's do.
                 Text(button.label).font(Theme.body(Theme.sizeBody)).underline().foregroundColor(Theme.you.color)
+                    .multilineTextAlignment(.leading)
                     .frame(minHeight: Theme.minTarget.value, alignment: .leading)
             }
             .padding(.top, 4)
@@ -412,6 +436,18 @@ struct ScreenView: View {
         .opacity(button.enabled ? 1 : 0.45)
     }
 
+    /// A square button of the system's share symbol, as tall as a
+    /// button; its label is only spoken.
+    private func shareSymbol(_ button: Button) -> some View {
+        SwiftUI.Button { perform(button.action) } label: {
+            Image(systemName: "square.and.arrow.up")
+                .font(Theme.body(Theme.sizeBody, Theme.weightHeading))
+                .frame(width: Theme.buttonHeight.value, height: Theme.buttonHeight.value)
+        }
+        .buttonStyle(Framed(main: false))
+        .accessibilityLabel(button.label)
+    }
+
     /// Buttons side by side, the first the main one, on the left: the
     /// order of step 6's demonstration's first screen (ButtonRow).
     private func sideBySide(_ buttons: [Button]) -> some View {
@@ -480,6 +516,7 @@ struct ScreenView: View {
                         .textInputAutocapitalization(.never)
                         .disableAutocorrection(true)
                         .keyboardType(.asciiCapable)
+                        .submitLabel(.done)
                         .accessibilityLabel(row.name)
                 }
                 .padding(.horizontal, 14)

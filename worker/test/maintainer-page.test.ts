@@ -1,5 +1,5 @@
-// The operator's page (scripts/operator-page.ts, #436): for a fixed set of
-// totals files (test/operator-page-fixture.ts), the numbers on the page are
+// The maintainer's page (scripts/maintainer-page.ts, #436): for a fixed set of
+// totals files (test/maintainer-page-fixture.ts), the numbers on the page are
 // the files' numbers; the page loads nothing from anywhere; and the totals
 // the Worker itself writes (src/count-totals.ts, run in the local workerd)
 // are read the same way, so that the page's reading of the format cannot
@@ -8,8 +8,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
-import { DAY_TOTALS_PREFIX, DEFAULT_DAYS, KEPT_PER_DAY, MONTH_TOTALS_PREFIX, type Snapshot, gather, lastRun, optionsOf, pageOf } from "../scripts/operator-page.ts";
-import { FINGERPRINTS, FIXTURE_DAYS, RUNS, androidDone, androidStarted, fixtureDays, fixtureSources, webDone, webStarted } from "./operator-page-fixture.ts";
+import { DAY_TOTALS_PREFIX, DEFAULT_DAYS, KEPT_PER_DAY, MONTH_TOTALS_PREFIX, type Snapshot, gather, lastRun, optionsOf, pageOf } from "../scripts/maintainer-page.ts";
+import { FINGERPRINTS, FIXTURE_DAYS, RUNS, androidDone, androidStarted, fixtureDays, fixtureMonth, fixtureSources, webDone, webStarted } from "./maintainer-page-fixture.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { freshProofLog, publishG3 } from "./records.ts";
 
@@ -42,7 +42,7 @@ function clientPart(html: string, section: string, client: string): string {
   return rest.slice(0, end);
 }
 
-describe("the operator's page of a fixed set of files", () => {
+describe("the maintainer's page of a fixed set of files", () => {
   let snapshot: Snapshot;
   let html: string;
   let asked: string[];
@@ -174,7 +174,7 @@ describe("what other people wrote is only text on the page", () => {
   test("a domain, a reader's name, a short ID: escaped, nothing of them is markup", async () => {
     const days = fixtureDays();
     days[6]!.sources.home!.domains[`"><script>alert(1)</script>`] = 999;
-    const months = [{ ...(await import("./operator-page-fixture.ts")).fixtureMonth() }];
+    const months = [{ ...fixtureMonth() }];
     months[0]!.card_proofs.web!.reader!.values[`<img src=x onerror=alert(1)>`] = { attempts: 500, done: 0, stops: {}, retries: {} };
     const html = pageOf(await gather(fixtureSources({ days, months }), { days: DEFAULT_DAYS, now: NOW }));
     assert.doesNotMatch(html, /<script|<img/);

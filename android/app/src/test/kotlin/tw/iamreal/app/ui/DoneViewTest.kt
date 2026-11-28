@@ -61,8 +61,9 @@ class DoneViewTest {
         // Step 8.
         assertEquals("恭喜你完成島民證明", view.title)
         assertEquals(listOf<Pair<String?, String>>(null to "@alice"), view.card)
-        assertEquals("這是第 128 張島民證明。", view.ordinal)
-        assertEquals(listOf("分享到 Threads"), view.shares)
+        assertEquals("這是第 128 張島民證明，感謝你的參與。愈多人成為島民，知道彼此都是台灣人，我們能讓 Threads 上的網路聲量更貼近真實、更有意義。", view.invite)
+        assertEquals(listOf("分享到 Threads"), view.shares.map { it.label })
+        assertEquals(listOf("threads"), view.shares.map { it.platform.platform })
         assertEquals("我剛剛換了第 128 張島民證明，宣告本帳號背後是一名台灣人。", view.shareText)
         assertEquals(listOf(false, false), listOf(view.withdrawAll, view.showRecord))
     }
@@ -98,10 +99,11 @@ class DoneViewTest {
     }
 
     @Test
-    fun `without an ordinal in the answer, step 8 starts at the invitation`() {
+    fun `without an ordinal in the answer, step 8 thanks without a number`() {
         val expected = listOf(row("threads", "refresh", "alice", current = "alice"))
-        assertNull(messages.done(done(expected, listOf(Recorded("threads", "refresh", "alice", 1)), ordinal = null), "Threads").ordinal)
-        assertEquals("這是第 1,284 張島民證明。", messages.done(done(expected, listOf(Recorded("threads", "refresh", "alice", 1)), ordinal = 1284), "Threads").ordinal)
+        val invite = "愈多人成為島民，知道彼此都是台灣人，我們能讓 Threads 上的網路聲量更貼近真實、更有意義。"
+        assertEquals("感謝你的參與。$invite", messages.done(done(expected, listOf(Recorded("threads", "refresh", "alice", 1)), ordinal = null), "Threads").invite)
+        assertEquals("這是第 1,284 張島民證明，感謝你的參與。$invite", messages.done(done(expected, listOf(Recorded("threads", "refresh", "alice", 1)), ordinal = 1284), "Threads").invite)
     }
 
     @Test

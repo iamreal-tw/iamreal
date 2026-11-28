@@ -22,7 +22,11 @@ class AccountsViewTest {
     private fun status(vararg slots: Slot, daysSince: Int? = null, dailyLimit: Boolean = false, table: List<String> = listOf("threads")) =
         Status("7K2Q9FM4XD", daysSince?.let { "2026-11-04" }, daysSince, slots.toList(), table, dailyLimit, "2026-11-16")
 
-    private val preview = "預覽會在 Threads 或瀏覽器打開個人檔案，讓你小心確認沒有打錯帳號。"
+    /** Under the field of a row never declared: with the switches a typo costs. */
+    private val preview = "請預覽你的 Threads 個人檔案，避免打錯帳號。一張卡終身最多只能更換 5 次。"
+
+    /** Where the screen already says how many switches are left. */
+    private val previewCounted = "請預覽你的 Threads 個人檔案，避免打錯帳號。"
 
     @Test
     fun `a card that never declared, only the field to fill`() {
@@ -44,7 +48,7 @@ class AccountsViewTest {
         val view = messages.accountsView(status(slot("threads", null, lastDeclared = "bob", switchCount = 1), daysSince = 12)) as Messages.FillView
         assertEquals(listOf("這張卡片目前沒有宣告任何帳號。", "填上你要宣告的 Threads 帳號。"), view.lead)
         assertEquals(listOf("上一次宣告的是 @bob，已經收回。填回 @bob 不算更換。", "更換過 1 次，還可以更換 4 次。"), view.rows[0].lines)
-        assertEquals(listOf(preview), view.notes)
+        assertEquals(listOf(previewCounted), view.notes)
     }
 
     @Test
@@ -120,8 +124,8 @@ class AccountsViewTest {
         assertEquals(listOf("threads", "", true), view.row!!.let { listOf(it.platform, it.current, it.editable) })
         assertEquals(emptyList<String>(), view.row!!.lines)
         assertEquals("改了之後，@alice 不再是這張卡片宣告的帳號。一張卡終身最多更換 5 次，這次之後還可以更換 3 次。", view.cost)
-        assertEquals(preview, view.previewNote)
-        assertEquals("不改了", view.keep)
+        assertEquals(previewCounted, view.previewNote)
+        assertEquals("上一步", view.back)
     }
 
     @Test
@@ -138,7 +142,7 @@ class AccountsViewTest {
         assertNull(view.heading)
         assertEquals("已經更換 5 次，這個平台不能再更換。", view.cost)
         assertNull(view.previewNote)
-        assertEquals("不改了", view.keep)
+        assertEquals("上一步", view.back)
     }
 
     @Test
@@ -175,7 +179,7 @@ class AccountsViewTest {
         assertEquals(listOf("test-example", "", "alice-b", false), listOf(other.name, other.prefix, other.current, other.editable))
         assertEquals(listOf("Threads", "@", "alice", true), listOf(threads.name, threads.prefix, threads.current, threads.editable))
         assertEquals(listOf("更換過 1 次，還可以更換 4 次。"), threads.lines)
-        assertEquals(listOf("填上空白的是新宣告，清空是收回，改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。", preview), view.notes)
+        assertEquals(listOf("填上空白的是新宣告，清空是收回，改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。", previewCounted), view.notes)
     }
 
     @Test

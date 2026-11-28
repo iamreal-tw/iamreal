@@ -42,7 +42,7 @@
 | `check-desktop.png`、`check-phone.png` | `/check`（如何檢查 Threads 帳號的島民證明；「惡意手法」都折著） | 實作版 |
 | `faq-desktop.png`、`faq-phone.png` | `/faq`（每一題都收著） | 實作版 |
 | `faq-question-desktop.png`、`faq-question-phone.png` | `/faq#threads-knows`（連到某一題：那一題展開） | 實作版 |
-| `operator-page-desktop.png` | 營運者在自己電腦上看數字的那一頁（`worker/scripts/operator-page.ts`），用固定的假資料（`worker/test/operator-page-browser.ts` 產生）；只有營運者看，不是網站的頁面 | 實作版 |
+| `maintainer-page-desktop.png` | 維護者在自己電腦上看數字的那一頁（`worker/scripts/maintainer-page.ts`），用固定的假資料（`worker/test/maintainer-page-browser.ts` 產生）；只有維護者看，不是網站的頁面 | 實作版 |
 | `busy-desktop.png`、`busy-phone.png` | 要讀證明紀錄的頁面，證明紀錄撐不住時（`503`，「現在人太多」；這裡是 `/p/7K2Q9FM4XD`） | 實作版 |
 | `privacy-desktop.png`、`privacy-phone.png` | `/privacy`（隱私權說明） | 實作版 |
 | `prepare-desktop.png`、`prepare-phone.png` | `/prepare`（過卡需要什麼） | 實作版 |
@@ -97,7 +97,6 @@ Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts
 | `card-proof-app-6-hang-short-phone.png` | 第 6 步：再次過卡的短版 | 實作版（Android） |
 | `card-proof-app-7-reminder-phone.png` | 第 7 步：提醒，手機上還沒有存提醒 | 實作版（Android） |
 | `card-proof-app-7-reminder-on-phone.png` | 第 7 步：提醒已經開著 | 實作版（Android） |
-| `card-proof-app-7-reminder-refused-phone.png` | 第 7 步：系統不允許這個 app 發通知 | 實作版（iOS） |
 | `card-proof-app-8-done-phone.png` | 第 8 步：完成和分享，這張卡片的第一筆紀錄 | 實作版（Android） |
 | `card-proof-app-8-done-switch-phone.png` | 第 8 步：更換之後 | 實作版（Android） |
 | `card-proof-app-8-withdraw-phone.png` | 第 8 步：全部收回（第 5 步之後直接到這裡） | 實作版（Android） |

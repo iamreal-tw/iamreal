@@ -1,15 +1,15 @@
-// The operator's page (#436; ADR-0032, ADR-0039): run on the operator's
+// The maintainer's page (#436; ADR-0032, ADR-0039): run on the maintainer's
 // computer, never by the back end, which has no page of numbers and no
-// operator's login. It reads the counts' totals and the state of the
+// maintainer's login. It reads the counts' totals and the state of the
 // operations, and writes one HTML file to open in a browser:
 //
-//   node --experimental-strip-types scripts/operator-page.ts [--days 30] [--out <file>]
+//   node --experimental-strip-types scripts/maintainer-page.ts [--days 30] [--out <file>]
 //
 // - The totals are in the bucket that is not public, under `count-totals/`
 //   (README.md, "計數的加總"). They are read with the token of the
 //   connection log's query (scripts/connection-log.ts, README.md,
 //   "查連線紀錄"): "Object Read only" on the bucket iamreal-test-logs, and
-//   nothing wider. Its keys are in the operator's file, never in the
+//   nothing wider. Its keys are in the maintainer's file, never in the
 //   repository. Nothing of `connection/` or `count-events/` is read.
 // - The state of the operations is read from what is public: the data
 //   domain's fingerprint file and CRL index, and GitHub's record of the last
@@ -20,7 +20,7 @@
 //   one is clicked.
 //
 // Which numbers are shown, and how they are laid out, is a first version
-// (#436): the operator looks, and it is changed. The page's words are
+// (#436): the maintainer looks, and it is changed. The page's words are
 // written here, as this command's output, and not in design/copy/: it is not
 // a page of the site.
 import { writeFileSync } from "node:fs";
@@ -32,7 +32,7 @@ import { DATA_ORIGINS } from "../src/headers.ts";
 import { ISSUER_NAMES, type IssuerName } from "../src/issuers.ts";
 import { type Store, keysIn, r2Store } from "./connection-log.ts";
 
-/** The prefixes of src/count-totals.ts, written again: that file needs the Workers runtime's types. test/operator-page.test.ts reads them there. */
+/** The prefixes of src/count-totals.ts, written again: that file needs the Workers runtime's types. test/maintainer-page.test.ts reads them there. */
 export const DAY_TOTALS_PREFIX = "count-totals/day/";
 export const MONTH_TOTALS_PREFIX = "count-totals/month/";
 /** The test site's data domain. */
@@ -54,7 +54,7 @@ const MONTHS = 3;
 /** How many lines of the fingerprint file, and how many values of a list, are shown. */
 const FINGERPRINT_LINES = 14;
 const TOP = 20;
-/** How many values of a monthly cell a day keeps by themselves (src/count-totals.ts, KEPT_PER_DAY; test/operator-page.test.ts checks it there). */
+/** How many values of a monthly cell a day keeps by themselves (src/count-totals.ts, KEPT_PER_DAY; test/maintainer-page.test.ts checks it there). */
 export const KEPT_PER_DAY = 100;
 
 type Numbers = Record<string, number>;
@@ -115,7 +115,7 @@ export interface Snapshot {
 
 /** Where the snapshot is read from. */
 export interface Sources {
-  /** The bucket that is not public, with the operator's token. */
+  /** The bucket that is not public, with the maintainer's token. */
   totals: Store;
   /** A file of the data domain. */
   data: (path: string) => Promise<Response>;
@@ -409,11 +409,11 @@ export function pageOf(s: Snapshot): string {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>iamreal 營運者的數字</title>
+<title>iamreal 維護者的數字</title>
 <style>${STYLE}</style>
 </head>
 <body>
-<h1>iamreal 營運者的數字</h1>
+<h1>iamreal 維護者的數字</h1>
 <p class="made">測試網站。產生的時間 ${escape(s.made)}；加總：${escape(range)}。這一頁只在這台電腦上，打開時不送出任何東西，只有按了執行紀錄的連結才會連到 GitHub。</p>
 <nav>${nav}</nav>
 ${body}
@@ -440,7 +440,7 @@ export async function lastRun(workflow: string, fetchFn: typeof fetch = fetch): 
 /** `--days N` and `--out <file>`. Throws on anything else. */
 export function optionsOf(args: readonly string[]): { days: number; out: string } {
   let days = DEFAULT_DAYS;
-  let out = join(tmpdir(), "iamreal-operator-page.html");
+  let out = join(tmpdir(), "iamreal-maintainer-page.html");
   for (let i = 0; i < args.length; i += 2) {
     const [name, value] = [args[i], args[i + 1]];
     if (value === undefined) throw new Error(`${name} needs a value`);

@@ -736,7 +736,7 @@ export const APP_ENVIRONMENT = "app-test";
  * team key with the Developer role, may not sign with a certificate Apple
  * keeps (#143), so the export signs by hand (ios/ExportOptions.plist,
  * signingStyle manual) with the Apple Distribution certificate and the App
- * Store profile the operator made, from the environment (ADR-0036):
+ * Store profile the maintainer made, from the environment (ADR-0036):
  * - the team, the environment's variable APPLE_TEAM_ID (not a secret: every
  *   signed app shows it), goes into the export options;
  * - the certificate and its key go into a keychain of this job's own, with a
@@ -877,7 +877,7 @@ export const IOS_TEST_UPLOAD_JOBS: YamlMap = iosUploadJobs({
 });
 
 /**
- * reverify.yml (#421, ADR-0025, ADR-0028): the operator's daily
+ * reverify.yml (#421, ADR-0025, ADR-0028): the maintainer's daily
  * re-verification of the published proof logs, each from record 1, by the
  * command anyone runs (cmd/iamreal-verify) on the files anyone reads.
  * Started by the schedule and by hand, and by nothing a change can bring
@@ -970,7 +970,7 @@ export const CACHE_JOBS: YamlMap = {
  * upload-android.yml (#175, ADR-0036, ADR-0040) and upload-android-test.yml
  * (#483): build an app of Android, the production app (tw.iamreal.app) and
  * the test app (tw.iamreal.app.test), and put it on its internal testing
- * track of Google Play, when the operator starts it by hand
+ * track of Google Play, when the maintainer starts it by hand
  * (workflow_dispatch) on main. A file for each app, so that their runs are
  * counted apart (the build number, ADR-0040). The two jobs of each, exactly,
  * the same but for the app (androidUploadJobs):
@@ -1512,7 +1512,7 @@ function cacheProblems(file: string, text: string): string[] {
  * The check from outside Cloudflare (#53, #413 "通知"): every hour, and by
  * hand, it runs test/outside-check.ts against the test site; a line that
  * fails fails the job, and GitHub's email for a failed scheduled run is the
- * operator's notification (.github/README.md). No secret, a token that can
+ * maintainer's notification (.github/README.md). No secret, a token that can
  * only read, no cache (the rules for every file above), and the packages
  * installed the way deploy-test.yml's upload installs wrangler: no install
  * script, no .pnpmfile.cjs, the worker package only. The minute is 17, not

@@ -30,7 +30,7 @@
     "how_to_get": "還沒有自然人憑證，怎麼申辦？",
     "how_to_get_counter": "滿 18 歲，未受監護宣告，本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
     "find_office": "找附近的戶政事務所",
-    "how_to_get_moica": "內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）",
+    "how_to_get_moica": "內政部憑證管理中心：怎麼申辦自然人憑證（moica.nat.gov.tw）",
     "idle": "超過 5 分鐘沒有完成，為了不讓 PIN 留在這一頁太久，已經回到開頭。請再讀一次卡片。",
     "paused": "現在暫停收過卡。已經換到的島民證明照常有效，證明紀錄也照常可以查。請晚點再來。",
     "busy": "現在人太多，請稍後再來。"
@@ -103,9 +103,11 @@
     "name_note": "（姓名只顯示在這裡，不會送出。）",
     "label": "PIN",
     "purpose": "按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的帳號。",
+    "purpose_single": "按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的 {platform} 帳號。",
     "stays": "PIN、姓名和憑證、卡片的簽章不會離開這台裝置。",
     "confirm_card": "確認卡片",
     "signing": "卡片簽章中，接著查這張卡片目前宣告的帳號……",
+    "signing_single": "卡片簽章中，接著查這張卡片目前宣告的 {platform} 帳號……",
     "pin_incorrect": "PIN 不正確。連續輸入錯誤三次，卡片會被鎖住。",
     "pin_characters": "這一頁不支援含有 +、% 或非英數符號的 PIN。請先到內政部憑證管理中心的網站變更 PIN。"
   },
@@ -126,11 +128,12 @@
     "switch": "改成別的帳號",
     "withdraw": "收回對 {account} 的宣告",
     "edit_list": "修改帳號清單",
-    "keep": "不改了",
     "switch_effect": "改了之後，{account} 不再是這張卡片宣告的帳號。",
     "switch_limit": "一張卡終身最多更換 5 次，這次之後還可以更換 {switches_left} 次。",
     "preview": "預覽個人檔案",
     "preview_note": "預覽會在新分頁開這個帳號的頁面，讓你小心確認沒有打錯帳號。",
+    "preview_note_single": "請預覽你的 {platform} 個人檔案，避免打錯帳號。一張卡終身最多只能更換 5 次。",
+    "preview_note_single_counted": "請預覽你的 {platform} 個人檔案，避免打錯帳號。",
     "one_per_platform": "一張卡片在每個平台只能宣告一個帳號，之後改成別的帳號是更換。",
     "how_change": "填上空白的是新宣告，清空是收回，改成別的帳號是更換。",
     "switches_limited": "一張卡終身最多只能更換宣告的帳號 5 次。",
@@ -162,7 +165,7 @@
     "date": "日期",
     "short_id_label": "島民編號",
     "short_id": "{short_id} 開頭",
-    "uses_switch": "用掉一次更換，不會恢復。之後還可以更換 {switches_left} 次。",
+    "uses_switch": "用掉一次更換，之後還可以更換 {switches_left} 次。",
     "uses_final_switch": "用掉最後一次更換。這次之後，這個平台不能再更換。",
     "withdraw_stays": "收回之後，證明紀錄裡原本的紀錄還在：看得出這張卡片宣告過這個帳號。",
     "history_stays": "歷史證明紀錄無法刪除，依然看得出這張卡片過去曾宣告過的帳號。",
@@ -241,9 +244,9 @@
   "finish": {
     "first": "恭喜你完成島民證明",
     "switched": "島民證明換成 {account} 了",
-    "ordinal": "這是第 {ordinal} 張島民證明。",
-    "invite": "愈多人成為島民，知道彼此都是台灣人，我們能讓台灣的網路討論變得更貼近真實、更有意義。",
-    "thanks": "謝謝你加入島民，誠摯的邀請你分享島民證明。",
+    "ordinal": "這是第 {ordinal} 張島民證明，感謝你的參與。",
+    "invite": "愈多人成為島民，知道彼此都是台灣人，我們能讓 Threads 上的網路聲量更貼近真實、更有意義。",
+    "thanks": "感謝你的參與。",
     "unlink_single": "你可以拿掉 {platform} 個人檔案上的證明連結。",
     "done": "完成"
   },
@@ -254,10 +257,10 @@
     "too_old_title": "這一版不能過卡了",
     "too_old": "從 {min_app_from} 起，這一版的島民證明 app 不能過卡。請更新到最新的版本。",
     "nothing_sent": "卡片還沒有被讀取，沒有任何東西送出去。",
-    "or_reader": "也可以用電腦和讀卡機，在 {domain} 過卡。",
+    "or_reader": "也可以用電腦和讀卡機，打開 {domain} 過卡。",
     "no_nfc_title": "這支手機不能感應卡片",
     "no_nfc": "這支手機沒有 NFC，不能用 app 過卡。",
-    "no_nfc_reader": "可以用電腦和讀卡機，在 {domain} 過卡。"
+    "no_nfc_reader": "可以用電腦和讀卡機，打開 {domain} 過卡。"
   },
   "app_panel": {
     "iphone_wait": "把自然人憑證貼在 iPhone 背面的上方",
@@ -328,11 +331,11 @@
     "stays": "PIN、姓名和憑證、卡片的簽章不會離開這支手機。",
     "need_pin": "請輸入 PIN。",
     "signed": "卡片簽好了，正在查這張卡片目前宣告的帳號……",
+    "signed_single": "卡片簽好了，正在查這張卡片目前宣告的 {platform} 帳號……",
     "pin_format": "卡片的 PIN 是 6 到 10 個半形的英數字或符號。這個 PIN 沒有送給卡片，請再輸入一次。"
   },
   "app_accounts": {
-    "preview": "預覽",
-    "preview_note": "預覽會在 {platform} 或瀏覽器打開個人檔案，讓你小心確認沒有打錯帳號。"
+    "preview": "預覽"
   },
   "app_progress": {
     "keep_open": "請不要關閉 app，也不要切到別的 app。",
@@ -343,14 +346,13 @@
     "reminder_title": "提醒我回來過卡",
     "reminder_next_about": "這支手機會在 {day}{time} 提醒你，大約{interval}後。",
     "reminder_next": "這支手機會在 {day}{time} 提醒你。",
-    "reminder_turn_on": "開啟提醒",
+    "reminder_set": "設定提醒",
+    "share_other": "用其他 app 分享",
     "reminder_expires": "這張自然人憑證在 {valid_until} 到期，比下次提醒早。到期之後要展期或換新卡，才能再過卡。"
   },
   "app_reminder": {
     "why": "建議定期更新島民證明，增加說服力。",
     "adjust": "改提醒間隔或時刻",
-    "skip": "這次不要",
-    "denied": "沒有排提醒：手機不允許這個 app 發通知。請允許通知設定，我們不會在沒有經過你同意的情況下打擾你。",
-    "settings": "打開通知設定"
+    "skip": "這次不要"
   }
 }

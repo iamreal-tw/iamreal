@@ -3,6 +3,7 @@ package tw.iamreal.app.ui
 import tw.iamreal.app.card.CardException
 import tw.iamreal.app.flow.CardProof
 import tw.iamreal.app.flow.Platforms
+import tw.iamreal.app.flow.Presentation
 import tw.iamreal.app.flow.Stop
 
 /**
@@ -119,7 +120,7 @@ internal class Messages(private val c: Copy) {
         val notes: List<String>,
         /** 3 records of the card today: the rows as they are, this sentence, and accounts.restart only. */
         val dailyLimit: String?,
-        /** Opened with accounts.edit_list: accounts.keep goes back to what the card declares. */
+        /** Opened with accounts.edit_list: 上一步 goes back to what the card declares. */
         val editList: Boolean,
     ) : AccountsView()
 
@@ -156,14 +157,20 @@ internal class Messages(private val c: Copy) {
         val row: AccountRow?,
         /** Below the field: what changing it does and what it uses up; or that no switch is left. */
         val cost: String,
-        /** app_accounts.preview_note; null without a field. */
+        /** accounts.preview_note_single_counted; null without a field. */
         val previewNote: String?,
-        val keep: String,
+        /** 上一步: back to what the card declares. */
+        val back: String,
     )
 
     private fun accountsTitle(single: String?): String = if (single != null) c.say("accounts.title_single", "platform" to single) else c.say("accounts.title")
 
-    private fun previewNote(single: String?): String = c.say("app_accounts.preview_note", "platform" to (single ?: Platforms.THREADS.name))
+    /**
+     * The sentence under the fields about the preview, naming the platform (the app knows Threads alone). With the switches a typo
+     * costs, unless the screen already says how many are left (`counted`; card-proof.md, step 4).
+     */
+    private fun previewNote(single: String?, counted: Boolean): String =
+        c.say(if (counted) "accounts.preview_note_single_counted" else "accounts.preview_note_single", "platform" to (single ?: Platforms.THREADS.name))
 
     private fun row(slot: CardProof.Slot, daily: Boolean, lines: Boolean, current: String = slot.current ?: ""): AccountRow {
         val p = if (slot.known) Platforms.of(slot.platform) else null
@@ -177,7 +184,8 @@ internal class Messages(private val c: Copy) {
         )
     }
 
-    private fun previewNotes(rows: List<AccountRow>, single: String?): List<String> = if (rows.any { it.editable }) listOf(previewNote(single)) else emptyList()
+    private fun previewNotes(rows: List<AccountRow>, single: String?, counted: Boolean): List<String> =
+        if (rows.any { it.editable }) listOf(previewNote(single, counted)) else emptyList()
 
     /** Step 4 as it opens ("4. 你的帳號"): rows to fill when the card declares nothing; what it declares and the actions when it does. */
     fun accountsView(status: CardProof.Status): AccountsView {
@@ -217,7 +225,8 @@ internal class Messages(private val c: Copy) {
             title = accountsTitle(single),
             lead = listOf(if (never) c.say("accounts.none_yet") else c.say("accounts.nothing_now"), if (single != null) c.say("accounts.fill_one_single", "platform" to single) else c.say("accounts.fill_one")),
             rows = rows,
-            notes = if (daily) emptyList() else rules + previewNotes(rows, single),
+            // A row never declared on one platform says no count: the full sentence.
+            notes = if (daily) emptyList() else rules + previewNotes(rows, single, counted = single == null || !never),
             dailyLimit = dailyLimit,
             editList = false,
         )
@@ -231,7 +240,7 @@ internal class Messages(private val c: Copy) {
             title = accountsTitle(single),
             lead = listOf(c.say("accounts.current")),
             rows = rows,
-            notes = listOf(c.say("accounts.how_change") + c.say("accounts.switches_limited")) + previewNotes(rows, single),
+            notes = listOf(c.say("accounts.how_change") + c.say("accounts.switches_limited")) + previewNotes(rows, single, counted = true),
             dailyLimit = null,
             editList = true,
         )
@@ -247,16 +256,16 @@ internal class Messages(private val c: Copy) {
         val now = Platforms.handle(slot.platform, slot.current!!)
         val title = accountsTitle(single)
         val intro = c.say("accounts.declared_inline", "account" to now)
-        val keep = c.say("accounts.keep")
+        val back = c.say("common.back")
         // Used up: no other account can be declared.
         if (slot.switchesLeft == 0) {
-            return SwitchView(title, intro, null, null, c.say("accounts.row_used_up", "switches_used" to slot.switchCount), null, keep)
+            return SwitchView(title, intro, null, null, c.say("accounts.row_used_up", "switches_used" to slot.switchCount), null, back)
         }
         val cost = when {
             slot.switchesLeft == 1 -> c.say("confirm.uses_final_switch")
             else -> c.say("accounts.switch_limit", "switches_left" to slot.switchesLeft - 1)
         }
-        return SwitchView(title, intro, c.say("accounts.switch"), row(slot, daily = false, lines = false, current = ""), c.say("accounts.switch_effect", "account" to now) + cost, previewNote(single), keep)
+        return SwitchView(title, intro, c.say("accounts.switch"), row(slot, daily = false, lines = false, current = ""), c.say("accounts.switch_effect", "account" to now) + cost, previewNote(single, counted = true), back)
     }
 
     /** The lines under one row of step 4 (card-proof.md, "每一列下面的那一行"). None for a platform the app does not know: that sentence is not written yet. */
@@ -381,6 +390,9 @@ internal class Messages(private val c: Copy) {
      * A button of step 6 that opens an account's profile: it says the short [label] ("打開 Threads"), so that it fits beside
      * "複製證明連結"; a screen reader is [told] the whole of it ("打開 @alice 的 Threads 個人檔案"). [address] is the profile's.
      */
+    /** A button of step 8 that opens [platform]'s composer with the text to share. */
+    data class Share(val label: String, val platform: Presentation)
+
     data class OpensProfile(val label: String, val told: String, val address: String)
 
     /** The button that opens the profile of an account on a platform the app knows; null for one it does not. */
@@ -455,10 +467,13 @@ internal class Messages(private val c: Copy) {
         val notes: List<String>,
         /** "掛好了嗎？打開你的島民證明看看。", the line that opens the card's page. */
         val hung: String,
-        /** finish.ordinal, before the invitation to share; null when the answer had no ordinal. */
-        val ordinal: String?,
-        /** "分享到 Threads": one per platform the app knows. Each opens the system's share sheet. */
-        val shares: List<String>,
+        /**
+         * The paragraph of step 8: finish.ordinal, which thanks too, or finish.thanks alone when the answer had no ordinal; then
+         * the invitation (card-proof.md, step 8).
+         */
+        val invite: String,
+        /** "分享到 Threads": one per platform the app knows. Each opens that platform's composer. */
+        val shares: List<Share>,
         /**
          * What the share sheet gets before the card's address, on the line above it: the sentence with the card's
          * ordinal, or without a number when the answer had none.
@@ -529,9 +544,9 @@ internal class Messages(private val c: Copy) {
                 if (withdrew && !withdrawAll) c.say("done.withdrawn_link") else null,
             ) + (kinds ?: emptyList()).filter { it.kind != "withdraw" && (it.accountCards ?: 0) > 1 }.map { c.say("done.other_cards", "account" to account(it.platform, it.username)) },
             hung = c.say("done.hung", "open_proof" to openProof),
-            ordinal = d.answer.ordinal?.let { c.say("finish.ordinal", "ordinal" to thousands(it)) },
-            // The button names the platform, as the web's; it opens the system's share sheet (card-proof.md, "8. 完成和分享", app).
-            shares = Platforms.known.map { c.say("done.share", "platform" to it.name) },
+            invite = (d.answer.ordinal?.let { c.say("finish.ordinal", "ordinal" to thousands(it)) } ?: c.say("finish.thanks")) + c.say("finish.invite"),
+            // The button names the platform, as the web's, and opens its composer (card-proof.md, "8. 完成和分享", app).
+            shares = Platforms.known.map { Share(c.say("done.share", "platform" to it.name), it) },
             shareText = d.answer.ordinal?.let { c.say("done.share_text", "ordinal" to thousands(it)) } ?: c.say("done.share_text_unnumbered"),
             mismatch = if (mismatched) c.say("done.mismatch") else null,
             showRecord = mismatched,

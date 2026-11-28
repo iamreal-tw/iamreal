@@ -54,11 +54,15 @@ struct IamrealApp: App {
                     if opening {
                         SplashView(appCopy: Copy.bundled("app"))
                     } else {
-                        switch pages.pages.last {
-                        case .schedule: ScheduleView(pages: pages)
-                        case .settings: SettingsView(pages: pages)
-                        case nil: CardProofView(model: model)
+                        Group {
+                            switch pages.pages.last {
+                            case .schedule: ScheduleView(pages: pages)
+                            case .settings: SettingsView(pages: pages)
+                            case nil: CardProofView(model: model)
+                            }
                         }
+                        // The card proof, the settings and the reminder's page take each other's place at once.
+                        .transaction { $0.animation = nil }
                     }
                 }
                 // The colors are design/tokens.json's, whatever the phone's appearance.
@@ -99,7 +103,6 @@ extension CardProofModel {
             appCopy: appCopy,
             reminders: reminders,
             openSchedule: { [weak pages] in pages?.openSchedule() },
-            openNotificationSettings: openNotificationSettings,
             openSettings: { [weak pages] in pages?.openSettings() },
             site: AppEnvironment.site,
             open: { UIApplication.shared.open($0) },
@@ -108,18 +111,6 @@ extension CardProofModel {
             canReadCards: { NFCCard.available },
             minApp: { config, now in MinApp.read(config: config, build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String, now: now) },
             storePage: AppEnvironment.storePage))
-    }
-
-    /// The system's settings at this app's notifications; before iOS 16,
-    /// at this app, where the notifications are one row.
-    private static func openNotificationSettings() {
-        let address: String
-        if #available(iOS 16.0, *) {
-            address = UIApplication.openNotificationSettingsURLString
-        } else {
-            address = UIApplication.openSettingsURLString
-        }
-        if let url = URL(string: address) { UIApplication.shared.open(url) }
     }
 
     /// The system's share sheet with `text`, over what the app shows.

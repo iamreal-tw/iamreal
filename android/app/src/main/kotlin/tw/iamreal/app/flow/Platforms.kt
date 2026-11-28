@@ -18,6 +18,11 @@ class Presentation(
     val formatHint: String,
     /** The address of an account's public page, which "預覽" and step 6's "打開 @alice 的 Threads 個人檔案" open. */
     val profileUrl: (String) -> String,
+    /**
+     * A new post with the text filled in, which step 8's "分享到 Threads" opens: Threads's web intent, which opens the Threads app's
+     * composer where it is installed (design/copy/card-proof.md, step 8, app).
+     */
+    val newPostUrl: (String) -> String,
 ) {
     /** What was typed, tidied before its format is checked: one leading prefix dropped, `A` to `Z` in lower case (Threads does not distinguish case). */
     fun normalize(typed: String): String = typed.trim().removePrefix(prefix).map { if (it in 'A'..'Z') it.lowercaseChar() else it }.joinToString("")
@@ -30,7 +35,15 @@ object Platforms {
         prefix = "@",
         formatHint = "threads",
         profileUrl = { "https://www.threads.com/@$it" },
+        newPostUrl = { "https://www.threads.com/intent/post?text=" + encodeUriComponent(it) },
     )
+
+    /**
+     * [text] encoded as the web's encodeURIComponent encodes it, so both write the same address (web/src/ui/messages.ts):
+     * URLEncoder writes a space as "+" and encodes `!'()~`, which encodeURIComponent leaves as they are.
+     */
+    internal fun encodeUriComponent(text: String): String = java.net.URLEncoder.encode(text, "UTF-8")
+        .replace("+", "%20").replace("%21", "!").replace("%27", "'").replace("%28", "(").replace("%29", ")").replace("%7E", "~")
 
     /** The platforms the app knows. */
     val known: List<Presentation> = listOf(THREADS)

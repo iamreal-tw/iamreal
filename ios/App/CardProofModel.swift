@@ -20,8 +20,6 @@ final class CardProofModel: ObservableObject {
         var reminders: Reminders
         /// The screen to choose the reminder's interval and time.
         var openSchedule: () -> Void
-        /// The system's settings, at this app's notifications.
-        var openNotificationSettings: () -> Void
         var openSettings: () -> Void
         /// The site of this build: its pages are opened in the browser.
         var site: URL
@@ -116,8 +114,6 @@ final class CardProofModel: ObservableObject {
     /// What step 2 shows: how far the list is, whether a tap is under way, why it stopped.
     private var reading: (reached: Int, running: Bool, stop: CardProofFlow.Stop?) = (0, false, nil)
     private var copied = false
-    /// "開啟提醒" was pressed on step 7 and the system said no.
-    private var reminderRefused = false
     /// The app was opened from the reminder: step 1 says so until the card proof starts.
     private var fromReminder: FromReminder?
     private var reached = 0
@@ -221,7 +217,7 @@ final class CardProofModel: ObservableObject {
             if let status { confirm(Screens.listNow(status).mapValues { _ in "" }) }
         case .toSwitch: edit(.switching)
         case .editList: edit(.editing)
-        case .keep: edit(.open)
+        case .backToDeclared: edit(.open)
         case .openStore: if let page = deps.storePage { deps.open(page) }
         case .findOffice: deps.open(Self.findOffice)
         case .howToApply: deps.open(Self.moica)
@@ -239,14 +235,17 @@ final class CardProofModel: ObservableObject {
             redraw()
         case .openProof:
             if let shortID = proofShown { deps.open(proofAddress(shortID)) }
+        case .openSite: deps.open(deps.site)
         case .openProfile(let platform):
             // The account of the record sent, or the one the card declares now (step 4 on a day with 3 records).
             let accounts = finished?.done.accounts ?? status.map(Screens.hangable) ?? []
             let username = accounts.first(where: { $0.platform == platform })?.username
             if let username, let address = Platform.of(platform)?.profile(username) { deps.open(address) }
+        case .shareOn(let platform):
+            // The same text in the platform's composer (design/copy/card-proof.md, step 8, app).
+            if let finished, let address = Platform.of(platform)?.newPost(shared(finished.done)) { deps.open(address) }
         case .share:
-            // The sentence, and on the line under it the card's page (design/copy/card-proof.md, step 8, app).
-            if let finished { deps.share("\(screens.shareText(finished.done))\n\(proofAddress(finished.done.shortID).absoluteString)") }
+            if let finished { deps.share(shared(finished.done)) }
         case .preview(let platform): preview(platform)
         case .openSettings: deps.openSettings()
         case .adjustReminder: deps.openSchedule()
@@ -264,16 +263,7 @@ final class CardProofModel: ObservableObject {
         case .toRemind:
             demoPlaying = false
             show(.remind)
-            // Refused before, and maybe allowed since in the system's settings.
-            askAgain()
-        // Not while the system is being asked: what it answers would be set after "這次不要".
-        case .toFinish: if work == nil { show(.finish) }
-        case .openNotificationSettings: deps.openNotificationSettings()
-        case .turnOnReminder:
-            run {
-                // Set as the screen offered: on to the last step. Refused: step 7 says so.
-                if await self.turnOnAsOffered() { self.show(.finish) } else { self.redraw() }
-            }
+        case .toFinish: show(.finish)
         case .snoozeReminder:
             run { await self.snoozeReminder() }
         }
@@ -465,36 +455,12 @@ final class CardProofModel: ObservableObject {
         return true
     }
 
-    /// The app is in front again. Step 7 said the system does not let
-    /// the app notify, and the cardholder may have been to the system's
-    /// settings: asked again, and set as offered if it is allowed now.
+    /// The app is in front again.
     func cameBack() {
         // The system does not run the app's clock while it is held in the background.
         if dropPINIfItsTimeIsUp() { return }
-        askAgain()
         // The operator may have stopped card proofs, or resumed them, meanwhile.
         if flow == nil, screen.step <= 1 { askConfigAgain() }
-    }
-
-    /// Step 7 is up and says the system does not let the app notify: the
-    /// system is asked again (it shows nothing once it was refused), and
-    /// the reminder is set as offered if it is allowed now. Not when a
-    /// reminder was set meanwhile, from the settings: that one stays.
-    private func askAgain() {
-        guard finished != nil, after == .remind, reminderRefused, deps.reminders.settings == nil else { return }
-        run {
-            _ = await self.turnOnAsOffered()
-            self.redraw()
-        }
-    }
-
-    /// Turns the reminder on as step 7 offers it, from today. False when
-    /// the system does not let the app notify: nothing is kept.
-    private func turnOnAsOffered() async -> Bool {
-        let offered = deps.reminders.offered
-        let allowed = await deps.reminders.turnOn(interval: offered.interval, time: offered.time)
-        reminderRefused = !allowed
-        return allowed
     }
 
     /// Step 2 as it is now, with its demonstration.
@@ -539,8 +505,6 @@ final class CardProofModel: ObservableObject {
             let reminder: DoneReminder
             if let settings = reminders.settings {
                 reminder = .on(settings, counted: reminders.countedFromToday)
-            } else if reminderRefused {
-                reminder = .refused
             } else {
                 reminder = .ask(reminders.offered)
             }
@@ -602,7 +566,6 @@ final class CardProofModel: ObservableObject {
         sensePlaying = false
         sensePlayed = false
         copied = false
-        reminderRefused = false
         reached = 0
     }
 
@@ -638,15 +601,18 @@ final class CardProofModel: ObservableObject {
             redraw()
         // After the record was sent nothing touches the card: back one step.
         case 7: show(.hang)
-        case 8:
-            show(.remind)
-            askAgain()
+        case 8: show(.remind)
         default: break
         }
     }
 
     private func proofAddress(_ shortID: String) -> URL {
         deps.site.appendingPathComponent("p").appendingPathComponent(shortID)
+    }
+
+    /// What step 8 shares: the sentence, and on the line under it the card's page (design/copy/card-proof.md, step 8).
+    private func shared(_ done: CardProofFlow.Done) -> String {
+        "\(screens.shareText(done))\n\(proofAddress(done.shortID).absoluteString)"
     }
 
     /// The card whose page the screen links to: the record's, or on step 4 the card's whose state was read.
@@ -862,7 +828,7 @@ final class CardProofModel: ObservableObject {
     }
 
     /// Another of step 4's screens: "改成別的帳號" with an empty field,
-    /// "修改帳號清單" and "不改了" with the list as it is.
+    /// "修改帳號清單" and its 上一步 with the list as it is.
     private func edit(_ mode: Screens.AccountsMode) {
         guard screen.step == 4, let status, !status.dailyLimit else { return }
         self.mode = mode

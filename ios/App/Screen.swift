@@ -20,15 +20,21 @@ struct Screen: Equatable {
     /// there are more than two, the way on on top (design/DESIGN.md, the
     /// components: buttons).
     var buttons: [Button] = []
+    /// The screen's main button alone above `buttons`, as wide as the
+    /// screen: step 8's sharing, with 上一步 and 完成 side by side under
+    /// it (design/DESIGN.md, the components: buttons).
+    var top: Button?
+    /// Beside `top`, a small square button drawn as the system's share
+    /// symbol; its label is only spoken (step 8's share sheet).
+    var beside: Button?
     /// Under the buttons: what is not to read before the way on (step 2's
     /// list, all still to do, before the card is read).
     var under: [Block] = []
     /// The last of `buttons` is the screen's main button (design/DESIGN.md,
     /// the components: one main button on a screen).
     var mainButton = true
-    /// Under the buttons, as links, in their order: the way back to the
-    /// screen this one was opened from ("不改了" of step 4), what else can
-    /// be done on step 7.
+    /// Under the buttons, as links, in their order: what else can be done
+    /// on step 7.
     var links: [Button] = []
     /// The way out at the very bottom: drops the PIN and goes back to step 1.
     var cancel: Button?
@@ -41,10 +47,31 @@ struct Screen: Equatable {
     /// On the right of the header: the settings (steps 1 and 8).
     var settings: Button?
 
+    /// Step 4 after "改成別的帳號" or "修改帳號清單": another page under
+    /// the same title as what the card declares. Nil for the others.
+    var accountsMode: Screens.AccountsMode?
+
+    /// Which page a screen is: its step, its title, and on step 4 which
+    /// of its pages. Another page is drawn anew, from its top (ScreenView);
+    /// a change on the same page (typing, the progress, 已複製, the
+    /// reminder set from step 7) is not.
+    struct Page: Hashable {
+        var step: Int
+        var inSteps: Bool
+        var title: String
+        var accountsMode: Screens.AccountsMode?
+    }
+
+    var page: Page {
+        var title = ""
+        for case .title(let text) in blocks { title = text; break }
+        return Page(step: step, inSteps: inSteps, title: title, accountsMode: accountsMode)
+    }
+
     /// Every sentence on the screen, in its order: for tests. The
     /// header's are not among them: they are not card-proof.md's.
     var texts: [String] {
-        warnings.flatMap(\.texts) + (notice?.texts ?? []) + blocks.flatMap(\.texts) + buttons.map(\.label) + under.flatMap(\.texts) + links.map(\.label) + (cancel.map { [$0.label] } ?? [])
+        warnings.flatMap(\.texts) + (notice?.texts ?? []) + blocks.flatMap(\.texts) + (top.map { [$0.label] } ?? []) + (beside.map { [$0.label] } ?? []) + buttons.map(\.label) + under.flatMap(\.texts) + links.map(\.label) + (cancel.map { [$0.label] } ?? [])
     }
 }
 
@@ -282,8 +309,8 @@ enum Action: Equatable {
     case toSwitch
     /// "修改帳號清單" of step 4: a row for each platform.
     case editList
-    /// "不改了": back to what the card declares.
-    case keep
+    /// 上一步 of the screens opened from step 4: back to what the card declares.
+    case backToDeclared
     /// The app's page in the store, to update it.
     case openStore
     /// The phone's map, searching for household registration offices (step 1).
@@ -303,8 +330,12 @@ enum Action: Equatable {
     case copyLink
     /// The card's page, in the browser.
     case openProof
+    /// The site of this build, in the browser: a phone that cannot read a card.
+    case openSite
     /// The platform's app or the browser, at the account the card declares there.
     case openProfile(String)
+    /// The platform's composer, the sentence and the card's page filled in.
+    case shareOn(String)
     /// The system's share sheet, with the sentence and the card's page.
     case share
     /// The page of the account typed on a platform.
@@ -319,8 +350,6 @@ enum Action: Equatable {
     case toRemind
     /// From step 7 to step 8.
     case toFinish
-    /// The system's settings, at this app's notifications.
-    case openNotificationSettings
     /// The picture of step 6's demonstration has come onto the screen: it
     /// plays, the first time in a card proof.
     case showDemo
@@ -328,8 +357,6 @@ enum Action: Equatable {
     case playDemo
     /// The demonstration at its last frame: its button, or its end.
     case stopDemo
-    /// The reminder, as step 7 offers it.
-    case turnOnReminder
     /// The screen to choose the reminder's interval and time.
     case adjustReminder
     /// "一週後再提醒我", on step 1 opened from the notification.
