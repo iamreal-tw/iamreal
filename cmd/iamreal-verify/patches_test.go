@@ -21,6 +21,7 @@ import (
 	"net/http/httptest"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -260,6 +261,13 @@ func TestDataCRLOriginals(t *testing.T) {
 	}{
 		{"not there", func(f map[string][]byte) { delete(f, target) }, exitInvalid, "the index lists a file the archive does not have", true},
 		{"of another length", func(f map[string][]byte) { f[target] = append(slices.Clone(f[target]), 0) }, exitInvalid, "is not the SHA-256 of its content", false},
+		// Its ETag, the MD5 of what is there, is not that of the file the
+		// patch gives.
+		{"of the same length, other bytes", func(f map[string][]byte) {
+			b := slices.Clone(f[target])
+			b[len(b)/2] ^= 1
+			f[target] = b
+		}, exitInvalid, "is not the SHA-256 of its content", false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			files := maps.Clone(a.files)
@@ -286,6 +294,10 @@ func TestDataCRLOriginals(t *testing.T) {
 	}{
 		{"a HEAD that fails", func(w http.ResponseWriter) { http.Error(w, "down", http.StatusInternalServerError) }, "500"},
 		{"a HEAD without a length", func(w http.ResponseWriter) { w.Header().Set("Transfer-Encoding", "chunked"); w.(http.Flusher).Flush() }, "no Content-Length"},
+		{"an ETag that is not the MD5 of the file", func(w http.ResponseWriter) {
+			w.Header().Set("Content-Length", strconv.Itoa(len(a.files[target])))
+			w.Header().Set("ETag", `"00000000000000000000000000000000"`)
+		}, "ETag"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			served := serveData(t, a.files)
@@ -307,6 +319,38 @@ func TestDataCRLOriginals(t *testing.T) {
 			if code != exitAllValid || len(said) != 1 || !strings.Contains(said[0], target) || !strings.Contains(said[0], c.why) ||
 				!strings.Contains(errOut, "downloading "+srv.URL+"/"+target+"\n") {
 				t.Errorf("exit %d, said %q\n%s", code, said, errOut)
+			}
+		})
+	}
+}
+
+// An ETag that is not 32 hex digits in quotes (a file put in several
+// parts, a weak one, a server's own) says nothing of the content: only the
+// length is checked, and the CRL is given by its patch without a line.
+func TestDataCRLOtherETags(t *testing.T) {
+	a := newPatchArchiveT(t)
+	for _, etag := range []string{`"5ac5c3597167ad1d7e024deb86f10571-2"`, `W/"5ac5c3597167ad1d7e024deb86f10571"`, `"abc"`, ""} {
+		t.Run(etag, func(t *testing.T) {
+			served := serveData(t, a.files)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodHead {
+					b, ok := a.files[strings.TrimPrefix(r.URL.Path, "/")]
+					if !ok {
+						http.NotFound(w, r)
+						return
+					}
+					w.Header().Set("Content-Length", strconv.Itoa(len(b)))
+					if etag != "" {
+						w.Header().Set("ETag", etag)
+					}
+					return
+				}
+				forward(t, served, w, r)
+			}))
+			t.Cleanup(srv.Close)
+			code, _, errOut := a.run(t, srv.URL+"/")
+			if code != exitAllValid || strings.Contains(errOut, "whole") || strings.Count(errOut, ".patch\n") != len(a.patches) {
+				t.Errorf("exit %d\n%s", code, errOut)
 			}
 		})
 	}

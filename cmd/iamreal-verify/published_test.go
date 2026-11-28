@@ -6,6 +6,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -25,7 +27,8 @@ import (
 
 // dataServer serves files by path, "/" between directories, at the root of
 // an HTTP server: 404 for any other path. It answers GET and HEAD, with
-// Content-Length, as the data domain does. It logs every request, as its
+// Content-Length and an ETag that is the MD5 of the file, as the data
+// domain does (R2, for a file put in one part). It logs every request, as its
 // method and path.
 type dataServer struct {
 	URL   string
@@ -47,6 +50,8 @@ func serveData(t *testing.T, files map[string][]byte) *dataServer {
 			return
 		}
 		w.Header().Set("Content-Length", strconv.Itoa(len(b)))
+		sum := md5.Sum(b)
+		w.Header().Set("ETag", `"`+hex.EncodeToString(sum[:])+`"`)
 		if r.Method == http.MethodGet {
 			w.Write(b)
 		}

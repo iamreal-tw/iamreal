@@ -8,6 +8,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -348,6 +349,7 @@ const headsAtOnce = 8
 type originalSize struct {
 	name string
 	size int64
+	md5  string // "" if the ETag does not give one
 	err  error
 	done chan struct{}
 }
@@ -374,7 +376,7 @@ func (u urlSource) askSizes(originals []*originalSize, stop <-chan struct{}) {
 	for range headsAtOnce {
 		go func() {
 			for o := range work {
-				o.size, o.err = u.size(o.name)
+				o.size, o.md5, o.err = u.size(o.name)
 				close(o.done)
 			}
 		}()
@@ -414,13 +416,15 @@ type heldCRL struct {
 // is not there (404): crl.ErrLeftOut, and the patch is not downloaded. The
 // patch gives a file of another length than the original's: nil, after one
 // line on stderr, so that the original is downloaded whole and its SHA-256
-// checked. A HEAD that fails, or gives no length: nil, after one line.
-// Only a file of the same length with other content is not seen without
-// downloading it whole (README.md, "下載").
+// checked. The same, when the ETag is the MD5 of the content (etagMD5) and
+// not that of the file the patch gives. A HEAD that fails, or gives no
+// length: nil, after one line. Without an ETag that is an MD5, a file of
+// the same length with other content is not seen without downloading it
+// whole (README.md, "下載").
 func (u urlSource) patchedOriginal(previous *heldCRL, sha string, asked *originalSize, stderr io.Writer) ([]byte, error) {
 	name := sha + ".crl"
 	<-asked.done
-	size, err := asked.size, asked.err
+	size, sum, err := asked.size, asked.md5, asked.err
 	if errors.Is(err, errNotFound) {
 		return nil, crl.ErrLeftOut
 	}
@@ -429,34 +433,55 @@ func (u urlSource) patchedOriginal(previous *heldCRL, sha string, asked *origina
 		return nil, nil
 	}
 	file := u.patched(previous, sha, stderr)
-	if file != nil && int64(len(file)) != size {
+	if file == nil {
+		return nil, nil
+	}
+	if int64(len(file)) != size {
 		fmt.Fprintf(stderr, "iamreal-verify: %s: %d bytes, not the %d its patch gives; downloading the CRL whole\n", u.url(name), size, len(file))
 		return nil, nil
+	}
+	if sum != "" {
+		if got := md5.Sum(file); hex.EncodeToString(got[:]) != sum {
+			fmt.Fprintf(stderr, "iamreal-verify: %s: ETag %s, not the MD5 of what its patch gives, %x; downloading the CRL whole\n", u.url(name), sum, got)
+			return nil, nil
+		}
 	}
 	return file, nil
 }
 
-// size returns the length of the file at p by a HEAD request;
-// errNotFound if there is no such file (404), an error for any other
-// status or if the answer has no Content-Length.
-func (u urlSource) size(p string) (int64, error) {
+// size returns the length of the file at p by a HEAD request, and the
+// MD5 of its content if the ETag is one (etagMD5); errNotFound if there is
+// no such file (404), an error for any other status or if the answer has
+// no Content-Length.
+func (u urlSource) size(p string) (int64, string, error) {
 	res, err := u.client.Head(u.url(p))
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	res.Body.Close()
 	switch res.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
-		return 0, errNotFound
+		return 0, "", errNotFound
 	default:
-		return 0, errors.New(res.Status)
+		return 0, "", errors.New(res.Status)
 	}
 	if res.ContentLength < 0 {
-		return 0, errors.New("no Content-Length")
+		return 0, "", errors.New("no Content-Length")
 	}
-	return res.ContentLength, nil
+	var sum string
+	if m := etagMD5.FindStringSubmatch(res.Header.Get("ETag")); m != nil {
+		sum = m[1]
+	}
+	return res.ContentLength, sum, nil
 }
+
+// etagMD5 is an ETag that is the MD5 of the content: 32 hex digits in
+// quotes, as R2 gives for a file put in one part (2026-11-28, every CRL of
+// test-data.iamreal.tw; README.md, "下載"). A file put in several parts has
+// "-" and the number of parts after them, and a weak ETag (W/) or a
+// server's own says nothing of the content: those are not compared.
+var etagMD5 = regexp.MustCompile(`^"([0-9a-f]{32})"$`)
 
 // patched returns the file with SHA-256 sha, given by its CRL patch from
 // previous (spec/revocation-tree.md, "CRL patches"); nil, after one line
