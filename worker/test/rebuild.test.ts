@@ -400,7 +400,7 @@ describe("what the review of the rebuild found", () => {
   });
 });
 
-describe("the operator asks for a rebuild by a setting (REBUILD_PROOF_LOG)", () => {
+describe("the maintainer asks for a rebuild by a setting (REBUILD_PROOF_LOG)", () => {
   const status = async (): Promise<unknown> => (await worker.fetch("/api/v1/rebuild")).json();
   /** The settings as the dashboard has them after a change, and the object started again with them, as a new version of the Worker starts it. */
   const set = async (name: string, more: { CARD_PROOFS_PAUSED?: string; REBUILD_PROOF_LOG?: string }): Promise<void> => {
@@ -408,7 +408,7 @@ describe("the operator asks for a rebuild by a setting (REBUILD_PROOF_LOG)", () 
     await worker.proofLog.restart();
   };
 
-  test("only while card proofs are stopped: with the name alone nothing begins; stopped, the object begins when it starts, once for the name; GET /api/v1/rebuild says how far it is and how it ended; afterwards card proofs stay stopped until the operator takes them again", async () => {
+  test("only while card proofs are stopped: with the name alone nothing begins; stopped, the object begins when it starts, once for the name; GET /api/v1/rebuild says how far it is and how it ended; afterwards card proofs stay stopped until the maintainer takes them again", async () => {
     const name = await freshProofLog(worker);
     // The rebuild's steps are this test's to make (`begin`, above, says why).
     await worker.proofLog.holdAlarm(true);
@@ -441,7 +441,7 @@ describe("the operator asks for a rebuild by a setting (REBUILD_PROOF_LOG)", () 
     await set(name, { CARD_PROOFS_PAUSED: "true", REBUILD_PROOF_LOG: "2026-11-27-2" });
     assert.deepEqual(await status(), { name: "2026-11-27-2", status: "running", records: 0, reason: null });
     assert.equal((await rebuildToItsEnd()).status, "swapped");
-    // The operator takes card proofs again, the name left as it is: nothing is rebuilt, and a record is written.
+    // The maintainer takes card proofs again, the name left as it is: nothing is rebuilt, and a record is written.
     await set(name, { CARD_PROOFS_PAUSED: "false", REBUILD_PROOF_LOG: "2026-11-27-2" });
     assert.deepEqual(await status(), { name: "2026-11-27-2", status: "swapped", records: 5, reason: null });
     await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");

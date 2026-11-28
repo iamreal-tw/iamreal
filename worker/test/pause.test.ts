@@ -1,4 +1,4 @@
-// Stopping and resuming taking card proofs (ADR-0033, #105): the operator
+// Stopping and resuming taking card proofs (ADR-0033, #105): the maintainer
 // sets CARD_PROOFS_PAUSED, and the Worker refuses challenges and records with
 // `paused` before it asks the proof log's object. Everything else goes on.
 import assert from "node:assert/strict";

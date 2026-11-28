@@ -48,7 +48,7 @@ struct TestBackend {
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 204)
     }
 
-    /// From now on the operator has stopped taking card proofs, or taken
+    /// From now on the maintainer has stopped taking card proofs, or taken
     /// them again (`CARD_PROOFS_PAUSED`; app-backend.ts, PUT /__app-test/paused).
     func setPaused(_ paused: Bool) async throws {
         var request = URLRequest(url: origin.appendingPathComponent("__app-test/paused"))

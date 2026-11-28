@@ -115,7 +115,7 @@ export async function askToStart(): Promise<{ turnedAway: Reason } | "paused" | 
 }
 
 /**
- * Whether the operator stopped taking card proofs (`config`'s `paused`), for
+ * Whether the maintainer stopped taking card proofs (`config`'s `paused`), for
  * step 1 to say so before a card is read. Null when the server did not
  * answer or its answer was not read: step 1 then goes on, and step 2 asks
  * again (CardProofFlow.readCard).

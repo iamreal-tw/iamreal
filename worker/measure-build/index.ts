@@ -16,7 +16,7 @@
 // no record of it is written to the test log or the production one: its
 // buckets and its object are the measurement's own, deleted afterwards.
 //
-// The doors open only with the key the operator made and set on the Worker
+// The doors open only with the key the maintainer made and set on the Worker
 // themselves (the secret MEASURE_KEY, sent as `Authorization: Bearer <key>`).
 // Without it, or with a key under 32 characters set, every /__measure/ path
 // is the deployed Worker's (a 404). There is no schedule: the CRL mirror
@@ -105,7 +105,7 @@ interface MeasureEnv extends Env {
 
 const json = (value: unknown, status = 200): Response => new Response(`${JSON.stringify(value)}\n`, { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
 
-/** Whether the request carries the key the operator set: compared as SHA-256 digests, in constant time. */
+/** Whether the request carries the key the maintainer set: compared as SHA-256 digests, in constant time. */
 async function opens(request: Request, env: MeasureEnv): Promise<boolean> {
   const key = env.MEASURE_KEY;
   const given = request.headers.get("Authorization");

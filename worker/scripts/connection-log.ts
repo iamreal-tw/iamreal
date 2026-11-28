@@ -1,5 +1,5 @@
-// The operator's query of the connection log (#417, ADR-0022): run on the
-// operator's computer, never by the back end, which has no way to read the
+// The maintainer's query of the connection log (#417, ADR-0022): run on the
+// maintainer's computer, never by the back end, which has no way to read the
 // log back. It takes the UTC days of a range, reads every entry of those
 // days, and prints the ones that match, one JSON line each, oldest first:
 //
@@ -15,11 +15,11 @@
 // record's seq or the error code and the body. The body is left out of the
 // lines unless asked for: it is a whole submission.
 //
-// The log is read through `Store`. On the operator's computer that is the
+// The log is read through `Store`. On the maintainer's computer that is the
 // bucket iamreal-test-logs, through R2's S3 API, with a token that can only
 // read and list the objects of that one bucket ("Object Read only"), made
 // when it is needed and deleted after (README.md, "查連線紀錄"). Its keys
-// are in a file of the operator's (`KEY_FILE`), never in the repository.
+// are in a file of the maintainer's (`KEY_FILE`), never in the repository.
 // The requests are signed here (AWS Signature Version 4, node:crypto): no
 // package is added for two kinds of GET.
 import { createHash, createHmac } from "node:crypto";
@@ -33,7 +33,7 @@ import { fileURLToPath } from "node:url";
 export const CONNECTION_LOG_PREFIX = "connection/";
 /** The bucket of the test site's connection log (wrangler.jsonc, CONNECTION_LOG). */
 export const BUCKET = "iamreal-test-logs";
-/** Where the operator keeps the token's keys: README.md, "查連線紀錄". */
+/** Where the maintainer keeps the token's keys: README.md, "查連線紀錄". */
 export const KEY_FILE = join(homedir(), ".config", "iamreal", "connection-log.env");
 /** The section of README.md that says how to make the token and the file. */
 export const README_SECTION = "worker/README.md「查連線紀錄」";
@@ -262,7 +262,7 @@ export function r2Store(keys: Keys, bucket: string = BUCKET, fetchFn: typeof fet
       for (let token: string | undefined; ; ) {
         const res = await get(`/${bucket}`, [["list-type", "2"], ["prefix", prefix], ...(token !== undefined ? [["continuation-token", token] as const] : [])]);
         const xml = await res.text();
-        // Not the answer's body: the operator reads why in the dashboard, not in the terminal's history.
+        // Not the answer's body: the maintainer reads why in the dashboard, not in the terminal's history.
         if (res.status !== 200) throw new Error(`listing ${prefix} in ${bucket}: HTTP ${res.status} (is the token's bucket ${bucket}, and is it still there? ${README_SECTION})`);
         keys.push(...[...xml.matchAll(/<Key>([^<]*)<\/Key>/g)].map((m) => unescapeXml(m[1]!)));
         if (!/<IsTruncated>true<\/IsTruncated>/.test(xml)) return keys;

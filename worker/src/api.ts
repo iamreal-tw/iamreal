@@ -162,7 +162,7 @@ async function readBody(request: Request, most: number = MAX_BODY_BYTES): Promis
 
 /** `POST /api/v1/challenges`: the proof log's object issues and stores it. The body is not read. */
 async function postChallenge(_request: Request, env: Env): Promise<Reply> {
-  // The operator stopped taking card proofs: no challenge, and the object is not asked.
+  // The maintainer stopped taking card proofs: no challenge, and the object is not asked.
   if (settings(env).cardProofsPaused) return refuse("paused");
   const issued = await askProofLog(() => proofLogOf(env).issueChallenge());
   return issued.challenge === null ? refuse("paused") : ok({ challenge: issued.challenge });
@@ -199,7 +199,7 @@ async function postRecord(request: Request, env: Env, parts: ApiParts, notes: No
   if (typeof submission === "string") return fail(400, submission);
   // The device ID stays here: what goes on to the object and into the record is `fields` alone.
   const { fields, deviceId } = submission;
-  // The operator stopped taking card proofs: before the object, as its own `paused` is, so the submission does not count.
+  // The maintainer stopped taking card proofs: before the object, as its own `paused` is, so the submission does not count.
   if (cardProofsPaused) return refuse("paused");
 
   const proofLog = proofLogOf(env);
@@ -255,7 +255,7 @@ async function postCardState(request: Request, env: Env): Promise<Reply> {
 }
 
 /**
- * `GET /api/v1/config`: whether the operator stopped taking card proofs,
+ * `GET /api/v1/config`: whether the maintainer stopped taking card proofs,
  * the CRL age bound, the platform table of this proof log, in ascending
  * order of platform ID, and the minimum app version (src/min-app.ts). The Worker answers by itself, without asking the
  * proof log's object.
@@ -286,8 +286,8 @@ async function getFingerprint(_request: Request, env: Env): Promise<Reply> {
  * from the proof log it began (src/rebuild.ts): its name, whether it is
  * running, was put in place or was refused, how many records it has applied,
  * and why it was refused. Every field null, and no record, for an object that
- * never began one. It is how the operator follows a rebuild: the Worker has no
- * entry of the operator's own.
+ * never began one. It is how the maintainer follows a rebuild: the Worker has no
+ * entry of the maintainer's own.
  */
 async function getRebuild(_request: Request, env: Env): Promise<Reply> {
   settings(env);

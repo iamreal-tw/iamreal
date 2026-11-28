@@ -231,7 +231,7 @@ describe("every other request leaves no object", () => {
     await freshProofLog(worker);
     const other = await submit(good);
     assert.deepEqual([other.status, other.body], [400, { error: "challenge_unknown" }]);
-    // The operator stopped taking card proofs.
+    // The maintainer stopped taking card proofs.
     const name = await freshProofLog(worker);
     const waiting = await sub(worker, newCard(), await publishG3(worker), "threads:alice");
     await worker.setSettings({ PROOF_LOG_KIND: "test", PROOF_LOG_OBJECT_NAME: name, CARD_PROOFS_PAUSED: "true" });

@@ -334,7 +334,7 @@ export function startApp(o: AppOptions): void {
     const link = o.appLink;
     const back = link === null ? null : secondary(COPY.common.back, () => chooseWay(link));
     const next = back ? actions(back, start) : actionsEnd(start);
-    // The operator stopped taking card proofs: said here, before a card is read, in place of common.next
+    // The maintainer stopped taking card proofs: said here, before a card is read, in place of common.next
     // (card-proof.md, step 1). No answer: common.next stays, and step 2 asks again.
     // common.back stays, under the sentence.
     const paused = (): void => next.replaceWith(pausedLine(), ...(back ? [actions(back)] : []));

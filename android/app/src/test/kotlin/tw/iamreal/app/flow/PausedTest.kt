@@ -12,7 +12,7 @@ import tw.iamreal.app.card.CardConnection
 import tw.iamreal.app.card.TapCancel
 
 /**
- * The operator stopped taking card proofs (docs/api/card-proof.md, `paused`; #394): when `config` says so on the way, step 2
+ * The maintainer stopped taking card proofs (docs/api/card-proof.md, `paused`; #394): when `config` says so on the way, step 2
  * stops before the card is read. Against a fake back end: the config the flow is given is written here.
  */
 class PausedTest {

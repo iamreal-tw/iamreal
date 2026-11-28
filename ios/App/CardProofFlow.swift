@@ -304,7 +304,7 @@ final class CardProofFlow {
 
     /// `config` is the body of GET /api/v1/config, fetched when the app
     /// opened. Throws `Stop.server` when it has no `platforms`, and with
-    /// the code `paused` when it says the operator stopped taking card
+    /// the code `paused` when it says the maintainer stopped taking card
     /// proofs (docs/api/card-proof.md): before the card is read.
     /// This card proof's counts (Counts.attempt): the screen sent its first ones.
     private let attempt: Counts.Attempt?
@@ -333,7 +333,7 @@ final class CardProofFlow {
         return body["platforms"] != nil
     }
 
-    /// `config`'s `paused` (docs/api/card-proof.md): whether the operator
+    /// `config`'s `paused` (docs/api/card-proof.md): whether the maintainer
     /// stopped taking card proofs. Absent is false; nil when it is there
     /// and is neither true nor false (spec/device-checks.md:
     /// `malformed_response`), or the body is not an object.

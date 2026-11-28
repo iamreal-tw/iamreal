@@ -192,7 +192,7 @@ private fun Before(m: Model, outside: Outside) {
     Body(c.say("before.citizens_only"))
     // With one platform nothing more: what the proof says, and that it is public, is step 5's to say.
     for (line in m.messages.beforeSeveral()) Body(line)
-    // The operator stopped taking card proofs: said here, before a card is read, in place of common.next (card-proof.md, step 1).
+    // The maintainer stopped taking card proofs: said here, before a card is read, in place of common.next (card-proof.md, step 1).
     if (m.paused) {
         Problem(c.say("before.paused"))
     } else {

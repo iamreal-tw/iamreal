@@ -1,5 +1,5 @@
 // Deploys the measurement's temporary Worker, or sets its key (README.md in
-// this directory). Run by the operator, on their computer, with a token they
+// this directory). Run by the maintainer, on their computer, with a token they
 // made that can deploy `iamreal-measure` and no other Worker:
 //
 //   node --experimental-strip-types measure/deploy.ts deploy --token-file <file>
@@ -22,7 +22,7 @@
 //
 // The flags are the deploy's (scripts/deploy.ts, `WRANGLER_ARGS`): no other
 // configuration file, wrangler reads no `.env` file, and it makes no
-// resource (the buckets are the operator's, made in the dashboard).
+// resource (the buckets are the maintainer's, made in the dashboard).
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";

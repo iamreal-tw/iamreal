@@ -46,9 +46,9 @@ export interface RuleStateAnswer {
 export interface TestSettings {
   readonly PROOF_LOG_KIND?: string;
   readonly PROOF_LOG_OBJECT_NAME?: string;
-  /** The operator stopped taking card proofs (src/settings.ts): "true" stops it. wrangler.jsonc sets "false". */
+  /** The maintainer stopped taking card proofs (src/settings.ts): "true" stops it. wrangler.jsonc sets "false". */
   readonly CARD_PROOFS_PAUSED?: string;
-  /** The name of a rebuild from the proof log the operator asks for (src/settings.ts). wrangler.jsonc sets "". */
+  /** The name of a rebuild from the proof log the maintainer asks for (src/settings.ts). wrangler.jsonc sets "". */
   readonly REBUILD_PROOF_LOG?: string;
   /** The date the test log was last cleared on (src/settings.ts), in place of wrangler.jsonc's. */
   readonly TEST_PROOF_LOG_CLEARED_ON?: string;

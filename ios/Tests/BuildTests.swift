@@ -24,7 +24,7 @@ final class BuildTests: XCTestCase {
         XCTAssertNil(AppEnvironment.pageInStore(appID: nil, app: .production))
         XCTAssertNil(AppEnvironment.pageInStore(appID: "", app: .production))
         XCTAssertNil(AppEnvironment.pageInStore(appID: "id1234567890", app: .production))
-        // The number the operator was given for tw.iamreal.app.
+        // The number the maintainer was given for tw.iamreal.app.
         XCTAssertEqual(AppEnvironment.pageInStore(appID: AppEnvironment.storeAppID, app: .production)?.absoluteString, "https://apps.apple.com/app/id6837606453")
         // This build, the development one.
         XCTAssertEqual(AppEnvironment.app, .development)

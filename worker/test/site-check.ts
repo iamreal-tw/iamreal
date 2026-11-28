@@ -43,7 +43,7 @@
 //
 // The same checks run on the local Worker in test/site-check.test.ts. Not a
 // part of `pnpm test` by itself: it is the test's to say that the check
-// checks, and an operator's or an agent's to run it on the deployed site.
+// checks, and a maintainer's or an agent's to run it on the deployed site.
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";

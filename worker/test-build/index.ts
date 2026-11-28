@@ -403,7 +403,7 @@ export class ProofLog extends DeployedProofLog {
     if (rowsWritten !== 1) throw new Error("no such row");
   }
 
-  /** Begins the rebuild from the proof log named `token`, as the object does for an operator's (src/proof-log.ts, `beginRebuild`); whether one was begun. */
+  /** Begins the rebuild from the proof log named `token`, as the object does for a maintainer's (src/proof-log.ts, `beginRebuild`); whether one was begun. */
   testBeginRebuild(token: string): Promise<boolean> {
     return this.beginRebuild(token);
   }

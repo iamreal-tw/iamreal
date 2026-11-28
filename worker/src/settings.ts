@@ -45,7 +45,7 @@ export interface ProofLogSettings {
    */
   readonly dailyLimit: number;
   /**
-   * The operator stopped taking card proofs (`CARD_PROOFS_PAUSED`, ADR-0033;
+   * The maintainer stopped taking card proofs (`CARD_PROOFS_PAUSED`, ADR-0033;
    * README.md, "停止和恢復收過卡"): `challenges` and `records` answer
    * `paused` and the proof log takes no record; `config` says so, so that a
    * device says it before it reads a card. Everything else goes on: the
@@ -55,7 +55,7 @@ export interface ProofLogSettings {
    */
   readonly cardProofsPaused: boolean;
   /**
-   * The name of the rebuild from the proof log the operator asks for
+   * The name of the rebuild from the proof log the maintainer asks for
    * (`REBUILD_PROOF_LOG`, ADR-0033; README.md, "從證明紀錄重建"), or null when
    * none is asked for: absent or the empty string, as wrangler.jsonc has it.
    * The proof log's object makes one rebuild for each name, when it starts

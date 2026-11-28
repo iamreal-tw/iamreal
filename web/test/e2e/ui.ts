@@ -2501,7 +2501,7 @@ await tryStep("Threads only: 收回對 @yui.tw 的宣告; the next day, the fiel
   await page.clickButton(C.common.cancel);
   await waitStep("before", "step 1, after 取消");
 });
-// The operator stops taking card proofs (CARD_PROOFS_PAUSED, #105) and resumes ---------
+// The maintainer stops taking card proofs (CARD_PROOFS_PAUSED, #105) and resumes ---------
 
 const pausedCard = await makeCard({ serial: "0b90567890abcdef1234567890abcdef" });
 /** Card proofs stopped or taken: the Worker's setting, laid over wrangler.jsonc's (`setSettings`). */

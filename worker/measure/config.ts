@@ -7,7 +7,7 @@
 //     never runs, nothing goes to MOICA)
 //   - the entry measure-build/index.ts, and no Static Assets (every path
 //     runs the Worker)
-//   - two buckets of its own, made by the operator for the measurement
+//   - two buckets of its own, made by the maintainer for the measurement
 //   - no per-IP limits (src/rate-limit.ts lets a request through when the
 //     binding is not there), and the site-wide limit at the most it can be
 //   - the object's name `test-measure`, card proofs stopped and a rebuild
@@ -23,7 +23,7 @@ import { WORKER_DIR } from "../scripts/deploy.ts";
 /** The only name a build of measure-build/ is deployed as. */
 export const MEASURE_WORKER = "iamreal-measure";
 
-/** The measurement's buckets, made by the operator before and deleted after (README.md in this directory). */
+/** The measurement's buckets, made by the maintainer before and deleted after (README.md in this directory). */
 export const MEASURE_BUCKETS = { DATA: "iamreal-measure-data", CONNECTION_LOG: "iamreal-measure-logs" } as const;
 
 /** The name the made-up proof log is rebuilt under (README.md, "從證明紀錄重建"). */

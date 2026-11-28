@@ -6,7 +6,7 @@
 # TestApp configuration, tw.iamreal.app.test). The job of the upload
 # workflow that has the keys (.github/workflows/upload-ios.yml for the
 # production app, upload-ios-test.yml for the test app) signs it by hand
-# with the operator's Apple Distribution certificate and the app's App
+# with the maintainer's Apple Distribution certificate and the app's App
 # Store profile, and uploads it (#143); this job has no key, so nothing
 # here signs. The identifier is the configuration's (Config/Test.xcconfig),
 # not written here.
