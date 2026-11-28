@@ -25,14 +25,15 @@ import kotlin.concurrent.thread
  *   readCard()         the server's config, asked without the mark (the
  *                      start's when that one is turned away as too many);
  *                      tap 1: the certificates, no PIN. The core checks
- *                      them; the CRL is downloaded and checked; the tree is
- *                      built in the background
+ *                      them; a challenge; the CRL is downloaded and
+ *                      checked; the tree is built in the background
  *   confirmCard(pin)   tap 2: the same card, then the PIN; the card signs
  *                      the scope string; the card's state
  *   retryCardState()   the card's state again, after the server turned it
  *                      away as too many; nothing signed again
  *   choose(entries)    what the list would do; nothing signed, nothing sent
- *   declare()          the challenge; tap 3: the same card, then the PIN;
+ *   declare()          the challenge of readCard(), or a new one
+ *                      ([HELD_CHALLENGE_MS]); tap 3: the same card, then the PIN;
  *                      the card signs the declaration code; the PIN is
  *                      dropped; the proof; the submission. After the server
  *                      turned the challenge away as too many, called again
@@ -281,6 +282,11 @@ class CardProof(
 
     private var unsent: Unsent? = null
 
+    /** The challenge asked for before the CRL's index: what came, when it was asked for ([Deps.now]) and on which date in Taiwan. */
+    private class Held(val challenge: String, val askedAt: Long, val day: String)
+
+    private var held: Held? = null
+
     @Volatile private var firstSignedAt: Long? = null
 
     /** This card proof's counts. */
@@ -301,6 +307,33 @@ class CardProof(
 
     /** Today's date in Taiwan by the phone's clock. */
     private fun today(): String = Instant.ofEpochMilli(deps.now()).atOffset(ZoneOffset.ofHours(8)).toLocalDate().toString()
+
+    /**
+     * A challenge, asked for before the CRL's index is (#553): the server accepts the root of the second newest CRL only for a
+     * challenge issued before it learned of the newest, or at most 2 minutes after (spec/revocation-tree.md, "Who checks what").
+     * A challenge asked for before the phone read the index is that, whenever the list changes after. Any failure leaves none:
+     * [declare] asks then, as it would have. The core checks it when it is used, before tap 3.
+     */
+    private fun askEarly(): Held? {
+        val askedAt = deps.now()
+        val day = today()
+        return try {
+            Held(deps.backend.challenge(), askedAt, day)
+        } catch (e: ServerException) {
+            null
+        }
+    }
+
+    /**
+     * The challenge of readCard(), taken once, if [declare] comes within [HELD_CHALLENGE_MS] of asking for it and on the same
+     * date in Taiwan; null otherwise. A new date would make it `challenge_not_today`.
+     */
+    private fun takeHeld(): String? {
+        val h = held ?: return null
+        held = null
+        val age = deps.now() - h.askedAt
+        return h.challenge.takeIf { age >= 0 && age < HELD_CHALLENGE_MS && h.day == today() }
+    }
 
     /** After every wait: a card proof that ended meanwhile goes no further, and keeps nothing. */
     private fun live() {
@@ -454,6 +487,8 @@ class CardProof(
         attempt.step("certificate")
         events.done(Item.CHECK)
 
+        held = askEarly()
+        live()
         val crlFrom = deps.elapsed()
         try {
             val index = try {
@@ -785,7 +820,7 @@ class CardProof(
         try {
             // The certificate and the CRL again, on today's date: the card may have been read before midnight.
             checkDate()
-            challenge = try {
+            challenge = takeHeld() ?: try {
                 deps.backend.challenge()
             } catch (e: ServerException) {
                 live()
@@ -937,6 +972,13 @@ class CardProof(
     companion object {
         /** The longest the PIN waits between tap 2 and tap 3: 5 minutes (issue #133), as on the web page. */
         const val IDLE_MS = 5 * 60_000L
+
+        /**
+         * The challenge asked for before the CRL's index (#553) is the one the card signs if [declare] comes less than this after
+         * it was asked for, on the same date in Taiwan; otherwise [declare] asks for a new one. The server takes a challenge for
+         * 10 minutes (spec/challenge.md): this leaves at least 5 for tap 3, the proof and the submission. As on the web page.
+         */
+        const val HELD_CHALLENGE_MS = 5 * 60_000L
 
         /**
          * Why the last tap ended the card proof, the PIN dropped with everything else: the card refused the PIN, its PIN is locked,

@@ -6,8 +6,9 @@ import Foundation
 ///
 ///   readCard()        tap 1: the certificates, no PIN. The core chooses
 ///                     and checks the certificate; then the checks that
-///                     need no signature start: the CRL (downloaded and
-///                     checked), the tree, the files a proof needs
+///                     need no signature start: a challenge, the CRL
+///                     (downloaded and checked), the tree, the files a
+///                     proof needs
 ///   revocationChecked()  returns when the CRL passed; the screen then
 ///                     asks for the PIN, while the tree is built
 ///   checksDone()      returns when every one of those passed
@@ -19,7 +20,9 @@ import Foundation
 ///                     the card would sign and what it does (the core
 ///                     computes it). No request, no signature
 ///   back()            from the consequence to the card's state again
-///   prepare()         the date conditions again; a challenge, dated today;
+///   prepare()         the date conditions again; the challenge of
+///                     readCard(), or a new one (heldChallengeSeconds),
+///                     dated today;
 ///                     the list still does what the screen said; the
 ///                     declaration code. Again after the server turned the
 ///                     challenge away as too many
@@ -299,6 +302,9 @@ final class CardProofFlow {
     /// and the screen's rows, both as the core takes them.
     private var chosen: (consequence: Consequence, accounts: Data, rows: Data)?
     private var challenge: String?
+    /// The challenge asked for before the CRL's index: what came, when it
+    /// was asked for (deps.clock) and on which date in Taiwan.
+    private var held: (challenge: String, askedAt: Date, day: String)?
     private var code: Data?
     private var submission: Data?
 
@@ -417,9 +423,47 @@ final class CardProofFlow {
         }
     }
 
+    /// The challenge asked for before the CRL's index (#553) is the one the
+    /// card signs if prepare() comes less than this after it was asked
+    /// for, on the same date in Taiwan; otherwise prepare() asks for a new
+    /// one. The server takes a challenge for 10 minutes
+    /// (spec/challenge.md): this leaves at least 5 for tap 3, the proof
+    /// and the submission. As on the web page and on Android.
+    static let heldChallengeSeconds: TimeInterval = 5 * 60
+
+    /// A challenge, asked for before the CRL's index is (#553): the server
+    /// accepts the root of the second newest CRL only for a challenge
+    /// issued before it learned of the newest, or at most 2 minutes after
+    /// (spec/revocation-tree.md, "Who checks what"). A challenge asked for
+    /// before the phone read the index is that, whenever the list changes
+    /// after. Any failure leaves none: prepare() asks then, as it would
+    /// have. The core checks it when it is used, before tap 3.
+    private func askEarly() async -> (challenge: String, askedAt: Date, day: String)? {
+        let askedAt = deps.clock()
+        let day = Self.dateInTaiwan(askedAt)
+        guard let challenge = try? await deps.backend.challenge() else { return nil }
+        return (challenge, askedAt, day)
+    }
+
+    /// The challenge of readCard(), taken once, if prepare() comes within
+    /// heldChallengeSeconds of asking for it and on the same date in
+    /// Taiwan; nil otherwise. A new date would make it
+    /// `challenge_not_today`.
+    private func takeHeld() -> String? {
+        guard let held else { return nil }
+        self.held = nil
+        let now = deps.clock()
+        let age = now.timeIntervalSince(held.askedAt)
+        guard age >= 0, age < Self.heldChallengeSeconds, held.day == Self.dateInTaiwan(now) else { return nil }
+        return held.challenge
+    }
+
     /// The first of the checks that need no signature: the CRL of the
-    /// certificate's issuer, and that the certificate is not on it.
+    /// certificate's issuer, and that the certificate is not on it. Before
+    /// it, a challenge (askEarly).
     private func checkRevocation(_ session: DeviceCore.Session, issuer: String) async throws {
+        held = await askEarly()
+        try live()
         let from = Date()
         let unavailable = Stop.revocation(problem: "crl_unavailable", days: nil)
         guard let index = try? await deps.backend.crlIndex() else { throw unavailable }
@@ -814,7 +858,11 @@ final class CardProofFlow {
         // date, and a new day only lifts the day's limit.
         do {
             try stillValid(at: deps.clock())
-            challenge = try await deps.backend.challenge()
+            if let kept = takeHeld() {
+                challenge = kept
+            } else {
+                challenge = try await deps.backend.challenge()
+            }
         } catch let failure as BackendFailure where failure.tooMany {
             // Too many people: nothing was signed, the PIN is kept, and the
             // flow is where it was; prepare() asks for a challenge again.
