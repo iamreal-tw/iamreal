@@ -30,6 +30,18 @@ struct Platform {
         URL(string: "https://www.threads.com/@\(username)")
     }
 
+    /// A new post on the platform with `text` filled in: Threads's web
+    /// intent, which opens the Threads app's composer where it is installed
+    /// (design/copy/card-proof.md, step 8, app).
+    func newPost(_ text: String) -> URL? {
+        // Encoded as the web's encodeURIComponent is, so both write the same address (web/src/ui/messages.ts).
+        guard let encoded = text.addingPercentEncoding(withAllowedCharacters: Self.unreserved) else { return nil }
+        return URL(string: "https://www.threads.com/intent/post?text=" + encoded)
+    }
+
+    /// What encodeURIComponent leaves as it is: letters, digits and `-_.!~*'()`.
+    private static let unreserved = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()")
+
     static let threads = Platform(id: "threads", name: "Threads", prefix: "@", formatHint: "formats.threads")
 
     /// The platforms the app has its own definition of.

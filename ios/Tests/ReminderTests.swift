@@ -205,7 +205,7 @@ final class ReminderTests: XCTestCase {
                 card: NoCardReader(), clock: Date.init, crlNumbers: MemoryCRLNumbers(),
                 openSession: { try DeviceCore.Session(.test) }, proofFiles: BundledFile.proofFiles(for:)),
             copy: Copy.bundled(), appCopy: Copy.bundled("app"), reminders: reminders,
-            openSchedule: {}, openNotificationSettings: {}, openSettings: {}, site: URL(string: "https://test.invalid")!,
+            openSchedule: {}, openSettings: {}, site: URL(string: "https://test.invalid")!,
             open: { _ in }, copyText: { _ in }, share: { _ in }))
         XCTAssertNil(model.screen.notice)
         model.openedFromReminder()

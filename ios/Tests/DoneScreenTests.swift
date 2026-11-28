@@ -291,7 +291,7 @@ final class DoneScreenTests: XCTestCase {
 
     private let threeMonths = ReminderSettings(interval: .weeks12, time: .evening, next: Day(2027, 2, 8))
 
-    /// Nothing kept: the question, the day the default would set, and three ways on.
+    /// Nothing kept: the question, the day the default would set; "設定提醒" opens the screen to choose, and "這次不要".
     func testStepSevenAsksWithTheDayTheDefaultWouldSet() throws {
         let screen = screens.remind(.ask(threeMonths), notAfter: nil)
         XCTAssertEqual(screen.step, 7)
@@ -299,12 +299,11 @@ final class DoneScreenTests: XCTestCase {
             "提醒我回來過卡",
             "建議定期更新島民證明，增加說服力。",
             "這支手機會在 2027-02-08（星期一）晚上 9:00 提醒你，大約三個月後。",
-            "上一步", "開啟提醒",
-            "改提醒間隔或時刻",
+            "上一步", "設定提醒",
             "這次不要",
         ])
-        XCTAssertEqual(screen.buttons.map(\.action), [.back, .turnOnReminder])
-        XCTAssertEqual(screen.links.map(\.action), [.adjustReminder, .toFinish])
+        XCTAssertEqual(screen.buttons.map(\.action), [.back, .adjustReminder])
+        XCTAssertEqual(screen.links.map(\.action), [.toFinish])
         XCTAssertTrue(screen.mainButton)
         try CopyDocument.load().check(screen)
     }
@@ -330,20 +329,6 @@ final class DoneScreenTests: XCTestCase {
         XCTAssertEqual(screens.remind(.on(oneMonth, counted: true), notAfter: nil).texts[2], "這支手機會在 2027-01-01（星期五）上午 7:05 提醒你，大約一個月後。")
     }
 
-    /// The system does not let the app notify: why nothing was set, and the way to its settings.
-    func testStepSevenWhenTheSystemSaidNo() throws {
-        let screen = screens.remind(.refused, notAfter: "270115155959")
-        XCTAssertEqual(screen.texts, [
-            "提醒我回來過卡",
-            "沒有排提醒：手機不允許這個 app 發通知。請允許通知設定，我們不會在沒有經過你同意的情況下打擾你。",
-            "上一步", "打開通知設定",
-            "這次不要",
-        ])
-        XCTAssertEqual(screen.buttons.map(\.action), [.back, .openNotificationSettings])
-        XCTAssertEqual(screen.links.map(\.action), [.toFinish])
-        try CopyDocument.load().check(screen)
-    }
-
     /// The certificate ends before the reminder's day: said under the day;
     /// the day it ends in Taiwan, from its UTC time.
     func testACertificateEndingBeforeTheReminderIsSaid() throws {
@@ -367,25 +352,33 @@ final class DoneScreenTests: XCTestCase {
         XCTAssertEqual(screen.texts, [
             "恭喜你完成島民證明",
             "島民證明", "@alice", "島民編號 7K2Q9FM4XD 開頭",
-            "這是第 128 張島民證明。", "愈多人成為島民，知道彼此都是台灣人，我們能讓台灣的網路討論變得更貼近真實、更有意義。",
-            "謝謝你加入島民，誠摯的邀請你分享島民證明。",
-            "上一步", "完成", "分享到 Threads",
+            "這是第 128 張島民證明，感謝你的參與。", "愈多人成為島民，知道彼此都是台灣人，我們能讓 Threads 上的網路聲量更貼近真實、更有意義。",
+            "分享到 Threads", "用其他 app 分享", "上一步", "完成",
         ])
-        // Three buttons, one under the other, the main one on top: sharing; then done (to step 1), and back to step 7
-        // (card-proof.md, step 8, app).
+        // The main button on top: Threads's composer, the share sheet beside it; under them back to step 7 and
+        // done (to step 1), side by side (card-proof.md, step 8, app).
         XCTAssertTrue(inline(screen).isEmpty)
-        XCTAssertTrue(screen.mainButton)
-        XCTAssertEqual(screen.buttons.map(\.action), [.back, .restart, .share])
+        XCTAssertEqual(screen.top?.action, .shareOn("threads"))
+        XCTAssertEqual(screen.beside?.action, .share)
+        XCTAssertFalse(screen.mainButton)
+        XCTAssertEqual(screen.buttons.map(\.action), [.back, .restart])
         XCTAssertEqual(screen.settings, Button(label: "設定", action: .openSettings))
         try CopyDocument.load().check(screen)
     }
 
-    /// No ordinal in the answer: the paragraph starts at the invitation.
+    /// No ordinal in the answer: the thanks on its own, then the invitation.
     func testStepEightWithoutAnOrdinal() {
         let screen = screens.finish(done([row("threads", "refresh", "alice", current: "alice")], [recorded("threads", "refresh", "alice")], ordinal: nil), single: "Threads")
-        XCTAssertTrue(screen.blocks.contains(.sentences([copy("finish.invite")])))
+        XCTAssertTrue(screen.blocks.contains(.sentences(["感謝你的參與。", copy("finish.invite")])))
         let thousands = screens.finish(done([row("threads", "refresh", "alice", current: "alice")], [recorded("threads", "refresh", "alice")], ordinal: 1284), single: "Threads")
-        XCTAssertTrue(thousands.texts.contains("這是第 1,284 張島民證明。"))
+        XCTAssertTrue(thousands.texts.contains("這是第 1,284 張島民證明，感謝你的參與。"))
+    }
+
+    /// "分享到 Threads" opens Threads's web intent, written as the web's encodeURIComponent writes it (the value from Node).
+    func testThreadsComposerAddressIsEncodedAsTheWebEncodesIt() {
+        XCTAssertEqual(
+            Platform.threads.newPost("我剛剛換了第 1,284 張島民證明。\nhttps://iamreal.tw/p/7K2Q9FM4XD (!)")?.absoluteString,
+            "https://www.threads.com/intent/post?text=%E6%88%91%E5%89%9B%E5%89%9B%E6%8F%9B%E4%BA%86%E7%AC%AC%201%2C284%20%E5%BC%B5%E5%B3%B6%E6%B0%91%E8%AD%89%E6%98%8E%E3%80%82%0Ahttps%3A%2F%2Fiamreal.tw%2Fp%2F7K2Q9FM4XD%20(!)")
     }
 
     func testTheTextSuggestedForSharingTheOrdinalWithACommaEveryThreeDigitsOrTheSentenceWithoutANumber() {

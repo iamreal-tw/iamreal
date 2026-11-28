@@ -69,6 +69,7 @@ import {
   firstNotDone,
   itemStates,
   onePlatform,
+  pinView,
   progressButtons,
   readItemOf,
   stopMessage,
@@ -459,6 +460,7 @@ export function startApp(o: AppOptions): void {
 
   function pin(f: CardProofFlow, name: string): void {
     const c = COPY.pin;
+    const pinText = pinView();
     const message = messageArea();
     const working = el("span", { class: "busy", attrs: { role: "status", "data-working": "" } });
     const field = el("input", {
@@ -493,7 +495,7 @@ export function startApp(o: AppOptions): void {
       field.disabled = true;
       back.disabled = true;
       message.show(null);
-      replace(working, c.signing);
+      replace(working, say(pinText.signing));
       f.confirmCard(value).then((status) => flow === f && accounts(f, status), stopped);
     }
 
@@ -511,7 +513,7 @@ export function startApp(o: AppOptions): void {
           again.remove();
           back.disabled = true;
           message.show(null);
-          replace(working, c.signing);
+          replace(working, say(pinText.signing));
           f.retryCardState().then((status) => flow === f && accounts(f, status), stopped);
         });
         again.dataset.retry = "";
@@ -536,7 +538,7 @@ export function startApp(o: AppOptions): void {
         el("div", { class: "pinfield" }, el("label", { attrs: { for: "pin" } }, c.label), field),
         message.node,
         // Two of the three things to say before the PIN; the third (who holds the card and the PIN can look the accounts up) is said once, on step 5.
-        el("ul", { class: "facts" }, el("li", {}, c.purpose), el("li", {}, c.stays)),
+        el("ul", { class: "facts" }, el("li", {}, say(pinText.purpose)), el("li", {}, c.stays)),
         // What the card is doing, beside the button it follows from, at the end of the row.
         actions(back, el("div", { class: "go" }, working, confirm)),
       ),
@@ -744,7 +746,7 @@ export function startApp(o: AppOptions): void {
    * account on a platform the device does not know: the card declares
    * nothing (a row filled is a new declaration), or after
    * accounts.edit_list (each row changed on its own: filled, changed,
-   * emptied). `editList`: opened with accounts.edit_list; accounts.keep goes
+   * emptied). `editList`: opened with accounts.edit_list; common.back goes
    * back to what the card declares.
    */
   function listScreen(f: CardProofFlow, status: CardStatus, view: FillView, o: { typed: Readonly<Record<string, string>> | null; editList: boolean }): void {
@@ -769,13 +771,19 @@ export function startApp(o: AppOptions): void {
     const notes = view.notes.length ? el("div", { class: "tips" }, ...view.notes.map((n) => el("p", {}, ...n.map((x) => say(x))))) : null;
     const body: (HTMLElement | null)[] = view.dailyLimit
       ? dailyLimitBody(view.dailyLimit, status)
-      : [notes, message.node, actionsEnd(primary(COPY.common.next, next)), o.editList ? actions(textButton(COPY.accounts.keep, () => accounts(f, status))) : null, cancel()];
+      : [
+          notes,
+          message.node,
+          // Opened with accounts.edit_list: common.back goes back to what the card declares, beside common.next (card-proof.md, step 4).
+          o.editList ? actions(secondary(COPY.common.back, () => accounts(f, status)), primary(COPY.common.next, next)) : actionsEnd(primary(COPY.common.next, next)),
+          cancel(),
+        ];
     const lead = view.lead.map((line, i) => el("p", { class: i === 0 ? "status" : "", attrs: i === 0 ? { "data-status": "" } : { "data-fact": "" } }, ...line.flatMap((m) => messageNodes(m))));
     showAccounts(view.dailyLimit ? "daily_limit" : view.state, o.editList ? "edit" : "fill", el("h1", {}, say(view.title)), ...lead, el("div", { class: "acctlist", attrs: { "data-list": "accounts" } }, ...rowNodes), ...body);
     queueMicrotask(() => [...fields.values()][0]?.input.focus());
   }
 
-  /** accounts.switch (one platform): the account now, a field for another, what it does and what it costs; accounts.keep goes back. */
+  /** accounts.switch (one platform): the account now, a field for another, what it does and what it costs; common.back goes back. */
   function switchScreen(f: CardProofFlow, status: CardStatus, typed: Readonly<Record<string, string>> | null): void {
     const a = COPY.accounts;
     const view = switchView(status);
@@ -796,7 +804,6 @@ export function startApp(o: AppOptions): void {
       choose(f, entries, (st) => accounts(f, st, { mode: "switch", typed: entries }), showUnder);
     }
 
-    const keep = actions(textButton(a.keep, () => accounts(f, status)));
     const lines = el("div", { class: "tips", attrs: { "data-switch-lines": "" } }, el("p", {}, ...view.lines.map((l) => say(l))), view.previewNote ? el("p", {}, say(view.previewNote)) : null);
     showAccounts(
       "declared",
@@ -807,8 +814,8 @@ export function startApp(o: AppOptions): void {
       row ? el("div", { class: "acctlist", attrs: { "data-list": "accounts" } }, rowNode(row, typed?.[row.platform] ?? "", fields, { onEnter: next, valid })) : null,
       lines,
       message.node,
-      row ? actionsEnd(primary(COPY.common.next, next)) : null,
-      keep,
+      // common.back to what the card declares, beside common.next (none when no switch is left); common.cancel ends the card proof.
+      actions(secondary(COPY.common.back, () => accounts(f, status)), row ? primary(COPY.common.next, next) : null),
       cancel(),
     );
     queueMicrotask(() => [...fields.values()][0]?.input.focus());
@@ -1128,8 +1135,8 @@ export function startApp(o: AppOptions): void {
         el("h1", {}, say(view.title)),
         card,
         // The call to share (principles: the one place of a fact page that may move the reader): the card's ordinal when the answer had it.
-        el("p", { class: "invite", attrs: { "data-invite": "" } }, view.ordinal ? say(view.ordinal) : null, f.invite),
-        el("p", { class: "invite" }, f.thanks),
+        // The thanks is in the ordinal's sentence; without an ordinal, on its own (card-proof.md, step 8).
+        el("p", { class: "invite", attrs: { "data-invite": "" } }, view.ordinal ? say(view.ordinal) : f.thanks, f.invite),
         el("div", { class: "share" }, ...view.shares.map((sh) => newTab(sh.url, { class: "btn", "data-share": "" }, say(sh.button)))),
         // The web has no reminder: when to come back, in words (the app's step 7).
         el("div", { class: "return", attrs: { "data-return": "" } }, el("h3", {}, t.return_title), el("p", {}, t.return_note)),

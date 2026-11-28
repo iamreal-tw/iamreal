@@ -771,6 +771,7 @@ async function toAccounts(o: { wrongPinFirst?: boolean; blockClicks?: boolean; s
   check((await whereText()).includes(stepLine(3)), "step 3: 第 3 步，共 7 步");
   const s3 = await page.text();
   check((await page.text("[data-card-read]")) === [C.pin.card_read, "測試用戶", C.pin.name_note].join("\n"), `step 3: the name, and that it stays here: ${JSON.stringify(await page.text("[data-card-read]"))}`);
+  // The test build knows two platforms (test-example too): step 3 does not name one (pinView, ui.test.ts has the one platform).
   for (const s of [C.pin.purpose, C.pin.stays]) check(s3.includes(s), `step 3, next to the PIN field: "${s}"`);
   await noLinkOut("step 3");
   if (o.screenshots) await screenshot(`${o.screenshots}-3-pin`);
@@ -1156,7 +1157,7 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   const card = o.single ? o.card.map(([, account]) => ["", account]) : o.card;
   check(JSON.stringify(fin.card) === JSON.stringify(card), `${o.label}: the card lists ${JSON.stringify(fin.card)}`);
   if (!o.unnumbered) check(/^[1-9][0-9,]*$/.test(d!.pageOrdinal), `${o.label}: the card's page writes its ordinal "${d!.pageOrdinal}"`);
-  const invite = [(o.unnumbered ? "" : fill(C.finish.ordinal, { ordinal: d!.pageOrdinal })) + C.finish.invite, C.finish.thanks];
+  const invite = [(o.unnumbered ? C.finish.thanks : fill(C.finish.ordinal, { ordinal: d!.pageOrdinal })) + C.finish.invite];
   check(JSON.stringify(fin.invite) === JSON.stringify(invite), `${o.label}: the call to share ${JSON.stringify(fin.invite)}`);
   const sentence = o.unnumbered ? C.done.share_text_unnumbered : fill(C.done.share_text, { ordinal: d!.pageOrdinal });
   const text = `${sentence}\nhttps://${SITE_DOMAIN}/${cardPath(sid)}`;
@@ -1356,15 +1357,15 @@ await tryStep("card proof again, nothing changed (the first submission dropped, 
   }
   check(seenConfig.length === 2 && !st.main.includes("Not "), "the server's display names are not shown; the page's own are (config asked by step 1, whether card proofs are stopped, and by step 2)");
   checkDeclared("refresh", st, [[THREADS_NAME, at("alice")]], 0);
-  // 修改帳號清單: each row with its counts, how to change the list; 不改了 goes back.
+  // 修改帳號清單: each row with its counts, how to change the list; 上一步 goes back.
   const edit = await openEdit();
   check(edit.state === "declared" && JSON.stringify(edit.lead) === JSON.stringify([A.current]), `修改帳號清單: ${edit.state} ${JSON.stringify(edit.lead)}`);
   checkRows("refresh", edit.rows, { [EXAMPLE]: [EXAMPLE_NAME, "", [A.row_unused]], [THREADS]: [THREADS_NAME, "alice", [count(0)]] });
   check(edit.main.includes(A.how_change) && edit.main.includes(A.preview_note), "修改帳號清單: how to change the list, the preview");
-  check(JSON.stringify(edit.buttons.filter((b) => b !== A.preview)) === JSON.stringify([C.common.next, A.keep, C.common.cancel]), `修改帳號清單: the buttons ${JSON.stringify(edit.buttons)}`);
+  check(JSON.stringify(edit.buttons.filter((b) => b !== A.preview)) === JSON.stringify([C.common.back, C.common.next, C.common.cancel]), `修改帳號清單: the buttons ${JSON.stringify(edit.buttons)}`);
   await screenshot("refresh-4-accounts-edit");
-  await page.clickButton(A.keep);
-  checkDeclared("refresh, 不改了", await waitAccounts(), [[THREADS_NAME, at("alice")]], 0);
+  await page.clickButton(C.common.back);
+  checkDeclared("refresh, 上一步", await waitAccounts(), [[THREADS_NAME, at("alice")]], 0);
   // 更新島民證明: the list as it is, nothing typed.
   await page.clickButton(A.refresh);
   checkConfirm("refresh", await waitConfirm(), [[THREADS, THREADS_NAME, at("alice"), [K.unchanged]]], C.confirm.button_refresh);
@@ -2382,7 +2383,7 @@ await tryStep("Threads only: a first declaration (the field alone)", async () =>
     !st.main.includes(A.switches_limited) && !st.main.includes(A.one_per_platform) && !st.main.includes(A.fill_one),
     "step 4, one platform, a first declaration: no rules of switching, not the sentences of more than one",
   );
-  check(st.main.includes(A.preview_note), "step 4, one platform: the preview");
+  check(st.main.includes(fill(A.preview_note_single, { platform: THREADS_NAME })), "step 4, one platform: the preview, with the switches a typo costs");
   check((await page.eval<string>("document.title")) === "你的 Threads 帳號", "step 4, one platform: the page's title");
   check(JSON.stringify(st.buttons) === JSON.stringify([A.preview, C.common.next, C.common.cancel]), `step 4, one platform: the buttons ${JSON.stringify(st.buttons)}`);
   await screenshot("single-4-accounts");
@@ -2412,7 +2413,7 @@ await tryStep("Threads only: a first declaration (the field alone)", async () =>
   await waitStep("done", "the last step");
   check((await page.text("[data-step=\"done\"] h1")) === "恭喜你完成島民證明", "the last step: 恭喜你完成島民證明");
   const invite = await page.text("[data-invite]");
-  check(/^這是第 [1-9][0-9,]* 張島民證明。愈多人成為島民，知道彼此都是台灣人，我們能讓台灣的網路討論變得更貼近真實、更有意義。$/.test(invite), `the last step: "${invite}"`);
+  check(/^這是第 [1-9][0-9,]* 張島民證明，感謝你的參與。愈多人成為島民，知道彼此都是台灣人，我們能讓 Threads 上的網路聲量更貼近真實、更有意義。$/.test(invite), `the last step: "${invite}"`);
   check((await page.text()).includes("越久沒過卡，說服力越低。每次過卡，島民證明上的日期就會更新成今天。"), "the last step: why come back");
 });
 
@@ -2437,7 +2438,7 @@ await tryStep("Threads only, declared: 更新島民證明 (the list as it is), �
   await finish({ label: "one platform, 更新島民證明", button: C.confirm.button_refresh, title: C.done.refresh, card: [[THREADS_NAME, at("yui")]], record: [[THREADS_NAME, at("yui"), [K.unchanged]]], single: THREADS_NAME, short: true, screenshots: "single-refresh" });
 });
 
-await tryStep("Threads only: 改成別的帳號 (@yui to @yui.tw): the limit said only then; 不改了; an empty field; 上一步", async () => {
+await tryStep("Threads only: 改成別的帳號 (@yui to @yui.tw): the limit said only then; 上一步; an empty field; 上一步", async () => {
   const st = await toAccountsThreadsOnly();
   checkDeclared("one platform, declared today", st, [["", at("yui")]], 0);
   await page.clickButton(A.switch);
@@ -2446,17 +2447,17 @@ await tryStep("Threads only: 改成別的帳號 (@yui to @yui.tw): the limit sai
   check(JSON.stringify(sw.lead) === JSON.stringify([fill(A.declared_inline, { account: at("yui") })]), `改成別的帳號: ${JSON.stringify(sw.lead)}`);
   checkRows("改成別的帳號", sw.rows, { [THREADS]: [THREADS_NAME, "", []] });
   const lines = await page.eval<string[]>(`[...document.querySelectorAll('[data-switch-lines] p')].map((e) => e.innerText)`);
-  check(JSON.stringify(lines) === JSON.stringify([fill(A.switch_effect, { account: at("yui") }) + fill(A.switch_limit, { switches_left: 4 }), A.preview_note]), `改成別的帳號: what it does, the switches left after it ${JSON.stringify(lines)}`);
-  check(JSON.stringify(sw.buttons) === JSON.stringify([A.preview, C.common.next, A.keep, C.common.cancel]), `改成別的帳號: the buttons ${JSON.stringify(sw.buttons)}`);
+  check(JSON.stringify(lines) === JSON.stringify([fill(A.switch_effect, { account: at("yui") }) + fill(A.switch_limit, { switches_left: 4 }), fill(A.preview_note_single_counted, { platform: THREADS_NAME })]), `改成別的帳號: what it does, the switches left after it ${JSON.stringify(lines)}`);
+  check(JSON.stringify(sw.buttons) === JSON.stringify([A.preview, C.common.back, C.common.next, C.common.cancel]), `改成別的帳號: the buttons ${JSON.stringify(sw.buttons)}`);
   await page.eval(`document.activeElement?.blur()`);
   await screenshot("single-4-accounts-switch");
   // An empty field: nowhere (withdrawing is the other button).
   await page.clickButton(C.common.next);
   const why = (await rowsOnScreen()).find((r) => r.platform === THREADS)?.why;
   check(why === A.need_one && (await page.eval<boolean>(`!!${step("accounts")}`)), `改成別的帳號, empty: "${why}"`);
-  // 不改了: back to what the card declares.
-  await page.clickButton(A.keep);
-  checkDeclared("不改了", await waitAccounts(), [["", at("yui")]], 0);
+  // 上一步: back to what the card declares.
+  await page.clickButton(C.common.back);
+  checkDeclared("上一步", await waitAccounts(), [["", at("yui")]], 0);
   await page.clickButton(A.switch);
   await waitAccounts();
   await typeRows({ [THREADS]: "yui.tw" });

@@ -32,6 +32,7 @@ import {
   firstNotDone,
   itemStates,
   onePlatform,
+  pinView,
   progressButtons,
   readItemOf,
   rowLines,
@@ -284,7 +285,7 @@ describe("your accounts (step 4)", () => {
     );
     assert.deepEqual(
       v.notes.map((n) => n.map(t).join("")),
-      ["預覽會在新分頁開這個帳號的頁面，讓你小心確認沒有打錯帳號。"],
+      ["請預覽你的 Threads 個人檔案，避免打錯帳號。一張卡終身最多只能更換 5 次。"],
     );
     assert.equal(v.dailyLimit, null);
   });
@@ -296,7 +297,7 @@ describe("your accounts (step 4)", () => {
     assert.deepEqual(v.rows[0]!.lines.map(t), ["上一次宣告的是 @bob，已經收回。填回 @bob 不算更換。", "更換過 1 次，還可以更換 4 次。"]);
     assert.deepEqual(
       v.notes.map((n) => n.map(t).join("")),
-      ["預覽會在新分頁開這個帳號的頁面，讓你小心確認沒有打錯帳號。"],
+      ["請預覽你的 Threads 個人檔案，避免打錯帳號。"],
     );
   });
 
@@ -374,7 +375,7 @@ describe("your accounts (step 4)", () => {
     assert.equal(t(v.intro), "這張卡片目前宣告 @alice。");
     assert.deepEqual([v.row!.platform, v.row!.current, v.row!.editable, v.row!.preview, v.row!.lines], ["threads", "", true, true, []]);
     assert.deepEqual(v.lines.map(t), ["改了之後，@alice 不再是這張卡片宣告的帳號。", "一張卡終身最多更換 5 次，這次之後還可以更換 3 次。"]);
-    assert.equal(t(v.previewNote!), "預覽會在新分頁開這個帳號的頁面，讓你小心確認沒有打錯帳號。");
+    assert.equal(t(v.previewNote!), "請預覽你的 Threads 個人檔案，避免打錯帳號。");
     // The last one.
     assert.deepEqual(switchView(status([declared("alice", { switchCount: 4 })])).lines.map(t)[1], "用掉最後一次更換。這次之後，這個平台不能再更換。");
     // Used up: no field, the reason only.
@@ -442,6 +443,13 @@ describe("your accounts (step 4)", () => {
     assert.equal(more.listedTogether, true);
   });
 
+  test("step 3: by the platforms the device knows, as step 1; one names it in what the card's signature looks up", () => {
+    const one = pinView();
+    assert.deepEqual([t(one.purpose), t(one.signing)], ["按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的 Threads 帳號。", "卡片簽章中，接著查這張卡片目前宣告的 Threads 帳號……"]);
+    const more = pinView(new Set(["test-example", "threads"]));
+    assert.deepEqual([t(more.purpose), t(more.signing)], ["按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的帳號。", "卡片簽章中，接著查這張卡片目前宣告的帳號……"]);
+  });
+
   test("the choice of a way, before step 1: the platform named when the device knows one; the site's own page for a reader", () => {
     // The production build knows Threads only, and its site is iamreal.tw.
     const one = chooseView();
@@ -481,7 +489,7 @@ describe("confirm (step 5)", () => {
     ]);
     assert.deepEqual(rowsOf(cq), [
       [EXAMPLE_NAME, "test-example", "a-b", ["新宣告"]],
-      ["Threads", "threads", "@carol.tw", ["更換，原本是 @alice。", "用掉一次更換，不會恢復。之後還可以更換 1 次。"]],
+      ["Threads", "threads", "@carol.tw", ["更換，原本是 @alice。", "用掉一次更換，之後還可以更換 1 次。"]],
     ]);
     const v = confirmView(cq, null, ["Example", "Threads"]);
     assert.equal(v.intro, "按下後，證明紀錄會公開記下這張卡片的帳號清單：");
@@ -508,10 +516,10 @@ describe("confirm (step 5)", () => {
     assert.deepEqual(one(crow({ kind: "refresh", username: "bob", current: null })), ["再次宣告，不算更換"]);
     assert.deepEqual(one(crow({ kind: "withdraw", username: "alice", current: "alice" })), ["收回"]);
     // Withdrawn before, another account: a switch from the account withdrawn.
-    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: null, previous: "bob", switchesLeftAfter: 4 })), ["更換，原本是 @bob。", "用掉一次更換，不會恢復。之後還可以更換 4 次。"]);
+    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: null, previous: "bob", switchesLeftAfter: 4 })), ["更換，原本是 @bob。", "用掉一次更換，之後還可以更換 4 次。"]);
     // The third and the fourth: the switches left of the 5.
-    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: "bob", previous: "bob", switchesLeftAfter: 2 })), ["更換，原本是 @bob。", "用掉一次更換，不會恢復。之後還可以更換 2 次。"]);
-    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: "bob", previous: "bob", switchesLeftAfter: 1 })), ["更換，原本是 @bob。", "用掉一次更換，不會恢復。之後還可以更換 1 次。"]);
+    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: "bob", previous: "bob", switchesLeftAfter: 2 })), ["更換，原本是 @bob。", "用掉一次更換，之後還可以更換 2 次。"]);
+    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: "bob", previous: "bob", switchesLeftAfter: 1 })), ["更換，原本是 @bob。", "用掉一次更換，之後還可以更換 1 次。"]);
     // The fifth.
     assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: "bob", previous: "bob", switchesLeftAfter: 0 })), ["更換，原本是 @bob。", "用掉最後一次更換。這次之後，這個平台不能再更換。"]);
     // A platform the device does not know: the account as the server sent it, unchanged.
@@ -626,7 +634,7 @@ describe("after the submission: hang it (step 6), done and share (the last step)
 
   test("the last step: the card's ordinal, then the invitation to share; without an ordinal, the invitation alone", () => {
     const expected = [crow({ kind: "first", username: "alice" })];
-    assert.equal(t(doneView(done(expected, [k("threads", "first", "alice")], { ordinal: 1284 })).ordinal!), "這是第 1,284 張島民證明。");
+    assert.equal(t(doneView(done(expected, [k("threads", "first", "alice")], { ordinal: 1284 })).ordinal!), "這是第 1,284 張島民證明，感謝你的參與。");
     assert.equal(doneView(done(expected, [k("threads", "first", "alice")], { ordinal: null })).ordinal, null);
   });
 
