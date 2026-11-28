@@ -347,9 +347,9 @@ export const ANDROID_JOB = "android";
  */
 export const GRADLE_RETRY_SCRIPT = "gradle-retry.sh";
 /** How a job runs the Gradle wrapper of the repository, with the runner's JDK 17, through GRADLE_RETRY_SCRIPT, with these arguments after --no-daemon. */
-export const gradle = (args: string): string => `JAVA_HOME="$JAVA_HOME_17_X64" bash ../.github/workflows/${GRADLE_RETRY_SCRIPT} ./gradlew --no-daemon ${args}`;
+export const gradlewThroughRetry = (args: string): string => `JAVA_HOME="$JAVA_HOME_17_X64" bash ../.github/workflows/${GRADLE_RETRY_SCRIPT} ./gradlew --no-daemon ${args}`;
 /** The one line of that job that runs Gradle. */
-export const GRADLE_BUILD = gradle("build");
+export const GRADLE_BUILD = gradlewThroughRetry("build");
 /** How that job gets the NDK, the platform and the build tools android/app/build.gradle.kts names, with the SDK manager the runner has. */
 export const ANDROID_SDK_PARTS = '$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.0.0" > /dev/null';
 /**
@@ -1052,7 +1052,7 @@ function androidUploadJobs(app: AndroidApp): YamlMap {
           name: app.buildStep,
           "working-directory": "android",
           env: { VERSION_NAME: "${{ steps.version.outputs.name }}", VERSION_CODE: "${{ steps.version.outputs.code }}" },
-          run: gradle(`${task} -Piamreal.versionName="$VERSION_NAME" -Piamreal.versionCode="$VERSION_CODE"`),
+          run: gradlewThroughRetry(`${task} -Piamreal.versionName="$VERSION_NAME" -Piamreal.versionCode="$VERSION_CODE"`),
         },
         { uses: uses("actions/upload-artifact"), with: { ...unsigned, "if-no-files-found": "error" } },
       ],

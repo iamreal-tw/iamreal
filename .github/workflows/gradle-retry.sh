@@ -6,12 +6,15 @@
 # jobs of upload-android.yml and upload-android-test.yml run Gradle through
 # it, from android/.
 #
-# Why: on GitHub's runners Gradle, resolving from nothing, sometimes did not
-# get an answer from Maven Central or Google's repository for a few seconds
-# (three times on 2026-11-27 and 11-28, each passing when run again;
-# .github/README.md). Only the messages Gradle prints for that are retried
-# (RESOLVING, below); any other failure ends the step at once, with Gradle's
-# exit status, and so does a failed dependency verification
+# Why: on GitHub's runners Gradle, resolving from nothing, three times
+# found the Kotlin plugin in none of its repositories, and passed when run
+# again (2026-11-27 and 11-28; the plugin was on Maven Central, and judged a
+# passing problem of the runner reaching it; .github/README.md). Only the
+# messages Gradle prints for that are retried (RESOLVING, below), and only
+# in its account of the failure, from its first "* What went wrong:" on, so
+# that a line of the build's own output (a compiler's, a test's) does not
+# count. Any other failure ends the step at once, with Gradle's exit status,
+# and so does a failed dependency verification
 # (android/gradle/verification-metadata.xml), which is not a network's
 # failure and must not look like one.
 #
@@ -47,10 +50,12 @@ while :; do
   status="${PIPESTATUS[0]}"
   [ "$status" -eq 0 ] && exit 0
 
+  # Gradle's account of the failure: from its first "* What went wrong:" to the end.
+  summary="$(sed -n '/^\* What went wrong:$/,$p' "$output")"
   reason=""
-  if ! grep -qF -- "$NOT_RETRIED" "$output"; then
+  if [ -n "$summary" ] && ! grep -qF -- "$NOT_RETRIED" <<<"$summary"; then
     for message in "${RESOLVING[@]}"; do
-      if grep -qF -- "$message" "$output"; then
+      if grep -qF -- "$message" <<<"$summary"; then
         reason="$message"
         break
       fi

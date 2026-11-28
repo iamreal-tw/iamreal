@@ -36,6 +36,12 @@ Execution failed for task ':app:checkDebugAarMetadata'.
          > Could not GET 'https://dl.google.com/dl/android/maven2/androidx/core/core-ktx/1.17.0/core-ktx-1.17.0.pom'.
             > Connection reset
 `;
+/** What Gradle prints when a library's file could not be fetched, with no "Could not resolve" above it. */
+const failedTo = (verb: string): string => `* What went wrong:
+Execution failed for task ':app:mergeDebugNativeLibs'.
+> ${verb} 'https://repo.maven.apache.org/maven2/net/java/dev/jna/jna/5.18.1/jna-5.18.1.aar'.
+   > Connection reset
+`;
 const COMPILE_ERROR = `e: file:///home/runner/work/iamreal/iamreal/android/app/src/main/kotlin/tw/iamreal/app/Main.kt:3:5 Unresolved reference 'x'.
 
 FAILURE: Build failed with an exception.
@@ -73,7 +79,7 @@ function retry(runs: readonly Run[], args: readonly string[] = ["--no-daemon", "
       `#!/usr/bin/env bash
 n=$(( $(cat "${dir}/count" 2>/dev/null || echo 0) + 1 ))
 echo "$n" > "${dir}/count"
-printf '%s\\n' "$*" >> "${dir}/args"
+{ printf '%s' "$#"; printf '|%s' "$@"; echo; } >> "${dir}/args"
 last=${runs.length}
 i=$(( n < last ? n : last ))
 echo "> Task :app:preBuild (run $n)"
@@ -109,11 +115,32 @@ test("gradle-retry.sh: a plugin Gradle could not find runs Gradle again, after a
   assert.match(r.stdout, /^::warning::gradle-retry: attempt 1 of 3 failed resolving a plugin or a library \(Gradle printed "was not found in any of the following sources"\); running it again in 30 seconds$/m);
 });
 
-test("gradle-retry.sh: a library Gradle could not GET is retried too", () => {
+test("gradle-retry.sh: a library Gradle could not resolve is retried too", () => {
   const r = retry([{ stderr: COULD_NOT_RESOLVE, status: 1 }, ok]);
   assert.equal(r.status, 0);
   assert.equal(r.args.length, 2);
   assert.match(r.stdout, /^::warning::gradle-retry: attempt 1 of 3 failed resolving a plugin or a library \(Gradle printed "Could not resolve"\); running it again in 30 seconds$/m);
+});
+
+test("gradle-retry.sh: a file Gradle could not GET, HEAD or download is retried, each on its own", () => {
+  for (const verb of ["Could not GET", "Could not HEAD", "Could not download"]) {
+    const r = retry([{ stderr: failedTo(verb), status: 1 }, ok]);
+    assert.equal(r.status, 0, verb);
+    assert.equal(r.args.length, 2, verb);
+    assert.ok(r.stdout.includes(`(Gradle printed "${verb}"); running it again in 30 seconds\n`), verb);
+  }
+});
+
+test("gradle-retry.sh: the messages count only in Gradle's account of the failure, not in the build's own output above it", () => {
+  // A unit test that printed the words, then a compile error: not retried.
+  const r = retry([{ stderr: `Could not resolve host: example.invalid\nwas not found in any of the following sources\n${COMPILE_ERROR}`, status: 1 }, ok]);
+  assert.equal(r.status, 1);
+  assert.equal(r.args.length, 1);
+  assert.deepEqual(r.slept, []);
+  // Gradle stopped with no account at all (killed, or out of memory): not retried either.
+  const killed = retry([{ stderr: "Could not resolve all files for configuration ':app:debugRuntimeClasspath'.\n", status: 137 }, ok]);
+  assert.equal(killed.status, 137);
+  assert.equal(killed.args.length, 1);
 });
 
 test("gradle-retry.sh: three runs at most, waiting 30 seconds and then 60; the last failure ends it with Gradle's exit status", () => {
@@ -145,10 +172,18 @@ test("gradle-retry.sh: a failed dependency verification is not retried, though G
 test("gradle-retry.sh: Gradle is run with the arguments given, each run, and its output is shown as it was", () => {
   const args = ["--no-daemon", "bundleRelease", "-Piamreal.versionName=2026.11.28", "-Piamreal.versionCode=7", "a b"];
   const r = retry([{ stderr: PLUGIN_NOT_FOUND, status: 1 }, ok], args);
-  assert.deepEqual(r.args, [args.join(" "), args.join(" ")]);
+  // The number of arguments, then each: "a b" stays one argument.
+  assert.deepEqual(r.args, ["5|--no-daemon|bundleRelease|-Piamreal.versionName=2026.11.28|-Piamreal.versionCode=7|a b", "5|--no-daemon|bundleRelease|-Piamreal.versionName=2026.11.28|-Piamreal.versionCode=7|a b"]);
   assert.ok(r.stdout.includes(`> Task :app:preBuild (run 1)\n${PLUGIN_NOT_FOUND}`));
   assert.ok(r.stdout.includes("> Task :app:preBuild (run 2)\n"));
   assert.equal(r.stderr, "");
+});
+
+test("gradle-retry.sh: with no command it says how to use it and runs nothing", () => {
+  const r = spawnSync("bash", [SCRIPT], { encoding: "utf8", env: { PATH: process.env.PATH ?? "" } });
+  assert.equal(r.status, 2);
+  assert.equal(r.stdout, "");
+  assert.match(r.stderr, /^usage: gradle-retry\.sh <command>/);
 });
 
 test("gradle-retry.sh: a run that succeeds at once is run once, with no wait", () => {

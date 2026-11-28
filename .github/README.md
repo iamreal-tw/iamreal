@@ -205,7 +205,7 @@ gh cache list --repo iamreal-tw/iamreal --ref refs/heads/main --limit 100 --sort
 跑 Gradle 的四個工作（`checks.yml` 的 `android`、`cache.yml` 的 `cache-android`、`upload-android.yml` 和 `upload-android-test.yml` 的 `build`）都經過 [`workflows/gradle-retry.sh`](workflows/gradle-retry.sh) 跑 `./gradlew`。Gradle 因為拿不到外掛或程式庫而失敗時，腳本等一下再跑一次，最多跑三次（第一次失敗後等 30 秒，第二次後等 60 秒）；其他的失敗馬上結束，結束碼是 Gradle 的。
 
 - **為什麼。** 2026-11-27 到 11-28，Gradle 從頭解析依賴時三次失敗在同一個地方，重跑就過：合併佇列裡 #539 的 `android`（run 46045709756、46045982912）和 `upload-android`（run 46050893904）。錯誤都是 `android/build.gradle.kts` 第 2 行的 `org.jetbrains.kotlin.android` 2.4.21「was not found in any of the following sources」，在 Gradle 啟動後十幾秒內。外掛在 Maven Central 上都在，本機空快取從頭解析也成功，判斷是 runner 連 Maven Central 暫時的問題。改到快取的鍵裡的檔的 PR，在佇列裡一定從頭下載，最容易碰到；上傳的工作流程碰到時要人工重跑。
-- **認哪些訊息。** Gradle 的輸出（stdout 和 stderr）裡有其中一句才重跑：`was not found in any of the following sources`、`Could not resolve`、`Could not GET`、`Could not HEAD`、`Could not download`。輸出裡有 `Dependency verification failed` 時不重跑：那是下載到的檔和 `android/gradle/verification-metadata.xml` 對不上，不是網路的問題，要馬上看到。`Could not resolve` 也包括重跑也不會過的失敗（例如版本寫錯），這時多跑兩次、多等 90 秒才失敗；`build-native.sh` 裡的 cargo 或下載腳本連不上主機時印的 `Could not resolve host` 也算，那也是暫時的網路問題。
+- **認哪些訊息。** 只看 Gradle 對這次失敗的說明，也就是輸出（stdout 和 stderr）裡第一個 `* What went wrong:` 之後的部分；建置過程裡編譯器、測試印出來的字不算，沒有這段說明（例如 Gradle 被砍掉）就不重跑。說明裡有其中一句才重跑：`was not found in any of the following sources`、`Could not resolve`、`Could not GET`、`Could not HEAD`、`Could not download`。有 `Dependency verification failed` 時不重跑：那是下載到的檔和 `android/gradle/verification-metadata.xml` 對不上，不是網路的問題，要馬上看到。`Could not resolve` 也包括重跑也不會過的失敗（例如版本寫錯），這時多跑兩次、多等 90 秒才失敗。
 - **重跑時印什麼。** 每次重跑前印一行 GitHub 的警告（`::warning::`，執行的摘要頁看得到），寫第幾次、Gradle 印了哪一句，例如 `gradle-retry: attempt 1 of 3 failed resolving a plugin or a library (Gradle printed "was not found in any of the following sources"); running it again in 30 seconds`；第三次還是這樣失敗時，同一行的結尾是 `not running it again`。
 - **重跑什麼。** 同一行指令、同一個目錄，什麼都不清：前一次編好的（`device-core/target/`、Gradle 的建置目錄）不重做。四個工作的 `timeout-minutes` 沒改，三次加起來超過就照舊逾時失敗。
 
@@ -393,7 +393,7 @@ node --experimental-strip-types --test test/workflows.test.ts
 
 `upload-android.yml`、`upload-android-test.yml` 的三個腳本的測試在 `worker/test/upload-android.test.ts`：版本號（台灣的日期、`versionCode` 的範圍、測試 app 加的 1,000,000）、用測試當場產生的上傳金鑰簽章並驗證、對 Google Play 的每一個呼叫（`curl` 換成一個照 API 的文件回答的替身，核對 JWT 的簽章和內容、呼叫的順序、token 沒有出現在命令列、上傳失敗時不提交、傳到工作流程給的那一個 app、不像套件名稱的不送出）。簽章的測試要有 JDK（`JAVA_HOME`，或 Mac 上 `java_home` 找得到的）；沒有時跳過，設了 `CI` 時是失敗。
 
-`gradle-retry.sh` 的測試在 `worker/test/gradle-retry.test.ts`：Gradle 換成一個照指定的訊息失敗的替身，`sleep` 換成只記下等幾秒的替身，核對哪些失敗重跑、跑幾次、等多久、印的警告、結束碼、參數原樣傳下去。
+`gradle-retry.sh` 的測試在 `worker/test/gradle-retry.test.ts`：Gradle 換成一個照指定的訊息失敗的替身，`sleep` 換成只記下等幾秒的替身，核對哪些失敗重跑（只看 `* What went wrong:` 之後）、跑幾次、等多久、印的警告、結束碼、參數原樣傳下去（個數和每一個）、沒給指令時不跑。
 
 `worker/` 的 `pnpm test` 也包括它們。`changed-paths.sh` 的測試要有 `bash` 和 `git`。`paths` 清單的測試要有 `go` 才完整：沒有 `go` 時，檢查 Go 套件的那一項跳過，其他照查；設了 `CI`（GitHub Actions 會設）或 `IAMREAL_BB` 時沒有 `go`，那一項是失敗，不是跳過。這些規則防手誤和明顯的改動，不能代替逐行看（`CONTRIBUTING.md`「部署會執行到的東西」）。
 
