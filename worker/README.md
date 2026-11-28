@@ -10,19 +10,19 @@
 |---|---|
 | 清冊鏡像（[排程做什麼](#排程做什麼)）：每小時抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl`，驗章、建樹，寫清冊存檔的索引 `crl/index.jsonl`，寫清冊差異檔 `crl/patches/`。`crl/testdata/` 的每一案和 Go 的 `crl/` 比對過 | |
 | 證明紀錄的 Durable Object：題目表、紀錄、卡片狀態表、證明紀錄的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期，以及每份第一次交來的時間 | |
-| 限流（[限流](#限流)）：照 IP 的上限，題目、卡片現況、送出、公開的讀取、計數、頁面六類分開算，IPv4 照單一位址、IPv6 照 /64，超過回 `429` 和 `Retry-After`，訪客頁面回一頁說明；全站的總量上限，只數開始過卡的那一次 `config?start`；Durable Object 撐不住時介面回 `503` `busy`、頁面回人太多的那一頁。第二層的 WAF 限流規則（整個 zone，照 IP 每 10 秒 100 次）開著，緊急時的挑戰頁做好、關著，2026-11-27 在測試網站設好、實際打過一次（[營運者的說明](#營運者的說明)，[#423](https://github.com/iamreal-tw/iamreal/issues/423)） | 正式上線時挑戰頁的規則要加 `iamreal.tw`；資料網域多一個目錄時，WAF 的規則要加進排除；兩層的上限照量測再調（[#52](https://github.com/iamreal-tw/iamreal/issues/52)） |
+| 限流（[限流](#限流)）：照 IP 的上限，題目、卡片現況、送出、公開的讀取、計數、頁面六類分開算，IPv4 照單一位址、IPv6 照 /64，超過回 `429` 和 `Retry-After`，訪客頁面回一頁說明；全站的總量上限，只數開始過卡的那一次 `config?start`；Durable Object 撐不住時介面回 `503` `busy`、頁面回人太多的那一頁。第二層的 WAF 限流規則（整個 zone，照 IP 每 10 秒 100 次）開著，緊急時的挑戰頁做好、關著，2026-11-27 在測試網站設好、實際打過一次（[維護者的說明](#維護者的說明)，[#423](https://github.com/iamreal-tw/iamreal/issues/423)） | 正式上線時挑戰頁的規則要加 `iamreal.tw`；資料網域多一個目錄時，WAF 的規則要加進排除；兩層的上限照量測再調（[#52](https://github.com/iamreal-tw/iamreal/issues/52)） |
 | 收計數（[計數](#計數)，ADR-0032、ADR-0039）：`POST /api/v1/counts` 照 `spec/counts.md` 的表收，不合的整筆丟掉；收下的交給專門收計數的 Durable Object，每分鐘寫成不公開的儲存桶裡 `count-events/` 底下的一個檔，裡面沒有 IP，留 31 天；每分鐘的明細有上限；每小時公布最舊一檔的日期。送計數的客戶端有網頁版的過卡和訪客頁面（[頁面和檔案](#頁面和檔案)「訪客頁面送計數」）。加總（[計數的加總](#計數的加總)）：每天的、每月的、每張島民證明每月一筆、每月送出好幾張卡片的裝置，永久存在 `count-totals/`，裡面沒有 IP 和編號；每小時公布最早一天的加總的日期，外部檢查每小時讀它（[#435](https://github.com/iamreal-tw/iamreal/issues/435)，2026-11-27 打開）。維護者在自己的電腦上產生看數字的那一頁（[維護者看數字的那一頁](#維護者看數字的那一頁)） | 兩個 app 送計數（[#433](https://github.com/iamreal-tw/iamreal/issues/433)、[#434](https://github.com/iamreal-tw/iamreal/issues/434)）；島民證明的「下載 app」和商店的來源參數（[#457](https://github.com/iamreal-tw/iamreal/issues/457)）；這個物件一秒收得了多少還沒量；手機型號的加總（表上還沒有這個欄位） |
-| 連線紀錄（[連線紀錄](#連線紀錄)）：被算了一次的送出一筆各記一個 R2 物件（請求編號、時間、結果、IP、國家代碼、網路業者的編號、過卡裝置編號；成功的加第幾筆，沒成功的加錯誤代碼和內文），留 31 天，靠儲存桶的生命週期規則；每小時公布最舊一筆的日期，讓外面看得出規則有沒有在刪；外部檢查每小時讀它（[#53](https://github.com/iamreal-tw/iamreal/issues/53)，2026-11-27 打開）。其他的請求不記。營運者查詢的指令和收到查詢、刪除請求時的做法（[查連線紀錄](#查連線紀錄)） | 帶過卡裝置編號的客戶端現在只有網頁版，兩個 app 還沒有 |
-| API 的七個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`、`GET /api/v1/rebuild`、`POST /api/v1/counts`；存著的規則版本和程式不同時、營運者停止收過卡時（[停止和恢復收過卡](#停止和恢復收過卡)），`challenges` 和 `records` 回 `paused` | 限流見上面那一列 |
+| 連線紀錄（[連線紀錄](#連線紀錄)）：被算了一次的送出一筆各記一個 R2 物件（請求編號、時間、結果、IP、國家代碼、網路業者的編號、過卡裝置編號；成功的加第幾筆，沒成功的加錯誤代碼和內文），留 31 天，靠儲存桶的生命週期規則；每小時公布最舊一筆的日期，讓外面看得出規則有沒有在刪；外部檢查每小時讀它（[#53](https://github.com/iamreal-tw/iamreal/issues/53)，2026-11-27 打開）。其他的請求不記。維護者查詢的指令和收到查詢、刪除請求時的做法（[查連線紀錄](#查連線紀錄)） | 帶過卡裝置編號的客戶端現在只有網頁版，兩個 app 還沒有 |
+| API 的七個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`、`GET /api/v1/rebuild`、`POST /api/v1/counts`；存著的規則版本和程式不同時、維護者停止收過卡時（[停止和恢復收過卡](#停止和恢復收過卡)），`challenges` 和 `records` 回 `paused` | 限流見上面那一列 |
 | 寫滿 1,000 筆的紀錄檔和它的雜湊清單搬到 R2，讀回來核對過才刪掉 Durable Object 裡的那 1,000 筆（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)） | |
-| 每天台灣時間換日公布證明紀錄：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布證明紀錄](#每天換日公布證明紀錄)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的證明紀錄），重驗通過（[部署後要營運者做的](#每天換日公布證明紀錄)）；清空之後，2026-11-22 公布了營運者用真卡片過卡的那一筆，重驗通過（[#71](https://github.com/iamreal-tw/iamreal/issues/71)） | |
+| 每天台灣時間換日公布證明紀錄：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布證明紀錄](#每天換日公布證明紀錄)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的證明紀錄），重驗通過（[部署後要維護者做的](#每天換日公布證明紀錄)）；清空之後，2026-11-22 公布了維護者用真卡片過卡的那一筆，重驗通過（[#71](https://github.com/iamreal-tw/iamreal/issues/71)） | |
 | 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過；送出一筆時用它驗證 | |
 | 每一種訪客頁面：首頁 `/`、島民證明 `/p/<短編號>`、查詢頁、證明紀錄頁、常見問題、如何驗證證明紀錄、過卡需要什麼、掛上去、複製按鈕的程式、計數的程式，過卡的頁面 `/proof`，和頁面用的衍生表（[頁面和檔案](#頁面和檔案)） | |
 | app 網域 `test-app.iamreal.tw`（[app 網域](#app-網域)，ADR-0040）：照主機分流，送 `assetlinks.json`、`apple-app-site-association` 和沒裝 app 時的那一頁，兩個檔從環境設定產生；部署前的檢查核對它認的 app（[#530](https://github.com/iamreal-tw/iamreal/issues/530)） | 測試 app 的 Android 簽章金鑰（測試 app 還沒建在 Play Console，[#479](https://github.com/iamreal-tw/iamreal/issues/479)）；iPhone 的 TestFlight 連結（[#535](https://github.com/iamreal-tw/iamreal/issues/535)）；正式網站的 app 網域 `app.iamreal.tw`，上線時做 |
 | 測試專用的建置和測試的工具；本機用真卡片過卡的指令（[在本機用真卡片過卡](#在本機用真卡片過卡)） | |
 | 部署測試環境的指令。2026-11-19 用它第一次部署到 `test.iamreal.tw`（[第一次部署量到的](#第一次部署量到的)） | 推版本標籤時部署正式環境的工作流程 |
 | 合併到 `main` 時部署測試環境的工作流程（[從 GitHub Actions 部署](#從-github-actions-部署)） | |
-| 清空測試的證明紀錄的步驟（[清空測試的證明紀錄](#清空測試的證明紀錄)），在本機照著做過；部署之後不插卡的檢查（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）；營運者手動設的東西的清單（[營運者在 Cloudflare 和 GitHub 上設的](#營運者在-cloudflare-和-github-上設的)）。2026-11-21 在測試網站上清空過一次（[#37](https://github.com/iamreal-tw/iamreal/issues/37)） | |
+| 清空測試的證明紀錄的步驟（[清空測試的證明紀錄](#清空測試的證明紀錄)），在本機照著做過；部署之後不插卡的檢查（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）；維護者手動設的東西的清單（[維護者在 Cloudflare 和 GitHub 上設的](#維護者在-cloudflare-和-github-上設的)）。2026-11-21 在測試網站上清空過一次（[#37](https://github.com/iamreal-tw/iamreal/issues/37)） | |
 
 ## 單獨執行
 
@@ -136,7 +136,7 @@ pnpm local                       # 可加 --port 8080、--data <目錄>
 | `records` | 一筆還沒搬到 R2 的紀錄：還沒寫滿的最後一檔的每一筆，和寫滿了、還沒搬完的那一檔 | `seq`、`line`（它在紀錄檔裡的那一行，含結尾的換行；照序號接起來就是紀錄檔）、`record_hash`、`fingerprint`（加上這一筆之後的指紋） |
 | `published` | 指紋檔的一行：證明紀錄公布過的一天 | `date`（台灣日期）、`count`（那一刻的筆數）、`fingerprint`（那一刻的指紋）、`in_bucket`（這一行是不是已經在儲存桶的指紋檔裡） |
 | `first_day` | 只有一列：證明紀錄從哪一天之後開始公布 | `date`（物件第一次用會公布的程式啟動那一天的台灣日期） |
-| `rebuild_state` | 只有一列：上一次從證明紀錄重建是哪一次、做到哪裡（[從證明紀錄重建](#從證明紀錄重建)） | `token`（營運者取的名稱）、`status`（`running`、`swapped`、`refused`）、`source`（從物件自己記的讀，還是只從儲存桶讀）、`records` 和 `fingerprint`（做到第幾筆、那時的指紋）、`published_count`、`published_fingerprint`、`published_date`（要對上的那一行）、`reason`（沒換的原因）。重建進行中另有一組 `rebuild_` 開頭的暫存表，做完就刪 |
+| `rebuild_state` | 只有一列：上一次從證明紀錄重建是哪一次、做到哪裡（[從證明紀錄重建](#從證明紀錄重建)） | `token`（維護者取的名稱）、`status`（`running`、`swapped`、`refused`）、`source`（從物件自己記的讀，還是只從儲存桶讀）、`records` 和 `fingerprint`（做到第幾筆、那時的指紋）、`published_count`、`published_fingerprint`、`published_date`（要對上的那一行）、`reason`（沒換的原因）。重建進行中另有一組 `rebuild_` 開頭的暫存表，做完就刪 |
 | `full_files` | 一個已經搬到 R2 的寫滿的紀錄檔 | `records_before`（這一檔之前的筆數，就是檔名裡的數字）、`fingerprint_after`（這一檔結尾的指紋）、`file_sha256`（寫進 R2、讀回來核對過的那一檔的 SHA-256） |
 | `cards` | 一張有過有效紀錄的卡片 | `scope_string`、`scoped_id`、`last_card_proof`、`proofs_on_last_date`、`slots`、`last_seq`（這張卡片最後一筆有效紀錄的序號） |
 | `cards_copy` | 公布途中才有：卡片狀態表在公布那一刻的複本，欄位和 `cards` 相同 | 同 `cards` |
@@ -200,11 +200,11 @@ pnpm local                       # 可加 --port 8080、--data <目錄>
 | 搬檔、每天公布 | 1 小時 | 1、2、4、8、16、32 分鐘，然後每次 1 小時 | 1、3、7、15、31、63，之後每小時 | 約 24 次 |
 | 重建衍生表 | 5 分鐘 | 1、2、4 分鐘，然後每次 5 分鐘 | 1、3、7、12，之後每 5 分鐘 | 約 288 次 |
 
-- **衍生表的上限比較短**：衍生表沒跟上的時候，首頁、島民證明和送出都回 `500`（[頁面用的衍生表](#頁面用的衍生表)），而營運者排除原因之後，手上沒有辦法叫它馬上再試。上限就是排除原因之後最長還要等多久：衍生表 5 分鐘，搬檔和每天公布 1 小時（這兩件晚一點沒有人看得到）。代價是要有人處理的失敗一天約 288 次嘗試、288 行 `views_not_filled`，每一次都從 R2 重讀到失敗的那一檔為止。
+- **衍生表的上限比較短**：衍生表沒跟上的時候，首頁、島民證明和送出都回 `500`（[頁面用的衍生表](#頁面用的衍生表)），而維護者排除原因之後，手上沒有辦法叫它馬上再試。上限就是排除原因之後最長還要等多久：衍生表 5 分鐘，搬檔和每天公布 1 小時（這兩件晚一點沒有人看得到）。代價是要有人處理的失敗一天約 288 次嘗試、288 行 `views_not_filled`，每一次都從 R2 重讀到失敗的那一檔為止。
 
 - 第一次等 1 分鐘，是為了避開 R2 一秒只能寫同一個物件一次的限制（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)）。
 - 會自己好的失敗（R2 逾時、暫時的錯誤）幾分鐘內就恢復，不必重啟物件：原因持續了 2 分鐘的，第 3 分鐘那一次就成功；持續了 10 分鐘的，第 15 分鐘那一次。在等的時間到上限之前，原因消失之後最晚再等大約它已經持續的那麼久。
-- 要有人處理的失敗（R2 上的紀錄檔不見或被改過、這一版讀不懂的一筆、儲存桶的指紋檔不是物件的）不會每分鐘整個重做一次：搬檔和每天公布約一小時之後變成每小時一次，衍生表約十分鐘之後變成每 5 分鐘一次，每次照樣寫一行即時輸出（`views_not_filled`、`full_file_not_moved`、`proof_log_not_published`、`fingerprint_file_differs`）。這些失敗後台不另外往外送（[#413](https://github.com/iamreal-tw/iamreal/issues/413)「通知」）：公布不成的後果是資料網域上沒有今天的那一行和卡片狀態檔，[從外面定時檢查](../.github/README.md#從外面定時檢查53)每小時看一次，沒有就失敗，營運者收到 GitHub 的通知信（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）。衍生表、搬檔的失敗，這個檢查看不到，只有這一行即時輸出。
+- 要有人處理的失敗（R2 上的紀錄檔不見或被改過、這一版讀不懂的一筆、儲存桶的指紋檔不是物件的）不會每分鐘整個重做一次：搬檔和每天公布約一小時之後變成每小時一次，衍生表約十分鐘之後變成每 5 分鐘一次，每次照樣寫一行即時輸出（`views_not_filled`、`full_file_not_moved`、`proof_log_not_published`、`fingerprint_file_differs`）。這些失敗後台不另外往外送（[#413](https://github.com/iamreal-tw/iamreal/issues/413)「通知」）：公布不成的後果是資料網域上沒有今天的那一行和卡片狀態檔，[從外面定時檢查](../.github/README.md#從外面定時檢查53)每小時看一次，沒有就失敗，維護者收到 GitHub 的通知信（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）。衍生表、搬檔的失敗，這個檢查看不到，只有這一行即時輸出。
 - **失敗的次數和下一次的時間存在物件的儲存裡**（`retries` 表），不是記憶體：Cloudflare 上的物件沒事做大約 10 秒就休眠，記憶體裡的東西丟掉，alarm 響時建構子重跑（[Lifecycle of a Durable Object](https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/)：「After 10 seconds of no incoming request or event, and all the above conditions satisfied, the Durable Object will transition into the hibernated state」「When hibernated, the in-memory state is discarded, so ensure you persist all important information in the Durable Object's storage」，2026-11-21 讀的）。等的時間最短 1 分鐘，記在記憶體的話，沒人用的物件每一次失敗都會是第一次。所以物件重新啟動（休眠後被叫醒、部署、被換掉）之後，照存著的時間繼續等，不會馬上再試；衍生表的重建也一樣，啟動時還沒到時間就不在啟動當下做，等 alarm（[頁面用的衍生表](#頁面用的衍生表)）。測試的 workerd 不會讓物件休眠，所以測試用「兩次嘗試之間讓物件重啟」代替（`test/publication.test.ts`、`test/proof-log-files.test.ts`）。
 - 代價：原因排除後（例如把 R2 的檔放回去、部署了讀得懂那一筆的程式），重新部署也不會讓它馬上再試，最晚要等到下一次的時間：衍生表最長 5 分鐘，搬檔和每天公布最長 1 小時。
 - **存著的時間不會比「現在加上限」更晚**：時鐘曾經跑快時存下的時間，讀的時候拉回到現在加上限，也照這樣存回去；不會卡到時鐘走到那個時間才再試。
@@ -268,7 +268,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 
 寫滿的檔和它的清單之後不會再變，所以標一年；資料網域的快取只照物件上的標頭，沒標的不快取。唯一會讓同一個網址換內容的是清空測試的證明紀錄，那時要另外清快取（[清空測試的證明紀錄](#清空測試的證明紀錄)第 4 步、「清不到的快取」）。
 
-`Content-Type` 寫入時一起設（營運者 2026-11-20 決定，[#149](https://github.com/iamreal-tw/iamreal/issues/149)），兩個字串定義在 `src/proof-log-files.ts` 一處，之後紀錄目錄裡其他 `.jsonl` 的檔用同一個：
+`Content-Type` 寫入時一起設（維護者 2026-11-20 決定，[#149](https://github.com/iamreal-tw/iamreal/issues/149)），兩個字串定義在 `src/proof-log-files.ts` 一處，之後紀錄目錄裡其他 `.jsonl` 的檔用同一個：
 
 - 雜湊清單是給人拿來核對的文字，標 `text/plain; charset=utf-8`，瀏覽器點開就直接顯示。
 - 紀錄檔標 `application/x-ndjson`。這不是 IANA 註冊的型別，只是這種一行一個 JSON 的檔常見的寫法；`iamreal-verify` 和照規格讀證明紀錄的人都不看它。
@@ -336,11 +336,11 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
   - 為什麼整個不做、不是只跳過第 3 步：儲存桶裡的指紋檔不是這個物件的，最可能的原因是整個紀錄目錄是另一個物件寫的；那時連最後一檔和卡片狀態檔也不該蓋。
   - 那一列寫了、指紋檔還沒寫成的時候（上一條）也是同一個檢查：儲存桶的檔不是開頭就不寫，每次嘗試一行。
   - **只蓋掉剛看過的那一份。** 看完到寫入之間儲存桶的檔如果又變了，寫入不會發生：寫入帶著條件，只有儲存桶裡還是剛才讀到的那一版（照 ETag），或讀的時候沒有、現在也還沒有，才寫得進去（[R2 的條件式操作](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/#conditional-operations)，同一頁 `put` 的說明：「In the event that a precondition specified in `options` fails, `put()` returns `null`, and the object will not be stored.」，2026-11-20 讀的；清冊鏡像寫索引用的是同一個做法）。沒寫成算一般的失敗（`proof_log_not_published`），一分鐘後重新讀、重新比：是開頭就補，不是就 `fingerprint_file_differs`。本機 workerd 的 R2 模擬上，「有檔、ETag 不同了」「讀的時候有、現在沒有」「讀的時候沒有、現在有」三種都不會寫入（`test/publication.test.ts`）；Cloudflare 上沒有另外確認。
-  - **會碰到的兩種情況，和營運者要做的**：(1) 清空測試的證明紀錄時換了 `PROOF_LOG_OBJECT_NAME`、沒有清空儲存桶：新的物件表是空的，儲存桶裡還有舊的證明紀錄的指紋檔。照清空的步驟把儲存桶的 `proof-log/` 清掉（[清空測試的證明紀錄](#清空測試的證明紀錄)第 3 步），下一次重試就會公布。(2) 之後從證明紀錄重建物件（ADR-0033）：重建出來的物件要先把 `published` 表從公開的指紋檔灌回來，不然它的表比公開的檔短，會停在這裡。正式的證明紀錄裡看到這一行事件，表示公開的指紋檔和物件記的不一樣，要先查出是哪一邊，不要為了讓它公布而刪掉儲存桶的檔。
+  - **會碰到的兩種情況，和維護者要做的**：(1) 清空測試的證明紀錄時換了 `PROOF_LOG_OBJECT_NAME`、沒有清空儲存桶：新的物件表是空的，儲存桶裡還有舊的證明紀錄的指紋檔。照清空的步驟把儲存桶的 `proof-log/` 清掉（[清空測試的證明紀錄](#清空測試的證明紀錄)第 3 步），下一次重試就會公布。(2) 之後從證明紀錄重建物件（ADR-0033）：重建出來的物件要先把 `published` 表從公開的指紋檔灌回來，不然它的表比公開的檔短，會停在這裡。正式的證明紀錄裡看到這一行事件，表示公開的指紋檔和物件記的不一樣，要先查出是哪一邊，不要為了讓它公布而刪掉儲存桶的檔。
   - 這個檢查擋的只有每天公布寫的四樣。寫滿的紀錄檔照搬：換了物件名稱沒清儲存桶時，新的證明紀錄寫滿的檔會蓋掉舊的證明紀錄同名的檔。
 - **寫入那一行之前再看一次日期**：寫 R2 的時候剛好跨過午夜的話，這一次不算，一分鐘後照新的日期重做。一行的日期是它寫入那天的台灣日期。
 - **失敗**：寫一行 `{"event":"proof_log_not_published","error":"Error"}`（儲存桶的指紋檔不是物件的那一種是 `fingerprint_file_differs`，見上面），一分鐘後重做；連續失敗時等得更久，兩種失敗算在一起（[過期的題目怎麼刪](#過期的題目怎麼刪)的「失敗後多久再試」）。一件失敗不擋別的定時工作，各自算各自的等待（[過期的題目怎麼刪](#過期的題目怎麼刪)）。上面寫「一分鐘後」的地方，都是指連續失敗的第一次。
-- **有一張卡片存著的狀態寫不成一列時，整個公布不成**（例如存著的名額不是 JSON、平台不在平台表裡）：那一天沒有新的一行，每次嘗試一行 `proof_log_not_published`（間隔照上一條拉長）。每一列在寫的時候檢查格式、而且卡片比前一列大（`cardStateFileWriter`）；複本讀第一遍時就全部檢查過，有一列不對就在寫出卡片狀態檔的任何位元組之前停。那時最後一檔和雜湊清單已經寫了，下一次公布會蓋掉。狀態只是不合規則、但寫得成一列的，照寫出去：卡片狀態檔就是要讓重驗的人看到錯的狀態。營運者知道「今天沒有公布」，是靠[從外面定時檢查](../.github/README.md#從外面定時檢查53)：台灣時間 01:00 之後，資料網域的指紋檔沒有今天那一行、或沒有今天的卡片狀態檔，那一個整點後的檢查就失敗，GitHub 寄通知信（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）。
+- **有一張卡片存著的狀態寫不成一列時，整個公布不成**（例如存著的名額不是 JSON、平台不在平台表裡）：那一天沒有新的一行，每次嘗試一行 `proof_log_not_published`（間隔照上一條拉長）。每一列在寫的時候檢查格式、而且卡片比前一列大（`cardStateFileWriter`）；複本讀第一遍時就全部檢查過，有一列不對就在寫出卡片狀態檔的任何位元組之前停。那時最後一檔和雜湊清單已經寫了，下一次公布會蓋掉。狀態只是不合規則、但寫得成一列的，照寫出去：卡片狀態檔就是要讓重驗的人看到錯的狀態。維護者知道「今天沒有公布」，是靠[從外面定時檢查](../.github/README.md#從外面定時檢查53)：台灣時間 01:00 之後，資料網域的指紋檔沒有今天那一行、或沒有今天的卡片狀態檔，那一個整點後的檢查就失敗，GitHub 寄通知信（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）。
 
 **什麼時候公布**
 
@@ -374,9 +374,9 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 
 - **指紋檔**一天多一行，一行 110 個位元組上下：一年約 40 KB，一次公布讀它三次（開始前看一次、寫之前再看一次、寫完讀回核對一次）、整個重寫一次。
 
-**部署後要營運者做的**
+**部署後要維護者做的**
 
-- 儲存桶的生命週期規則：刪掉 `proof-log/card-state/` 底下超過 7 天的物件（ADR-0027「留多久」）。這是儲存桶的設定，程式不刪卡片狀態檔；沒設的話每天多一個檔，一直留著。測試的儲存桶 `iamreal-test-data` 已經有這條規則：名稱 `card-state-7-days`，物件建立 7 天後刪除（2026-11-20 在儀表板確認，[#185](https://github.com/iamreal-tw/iamreal/issues/185)）；它的前綴當時是改名之前的目錄，[#277](https://github.com/iamreal-tw/iamreal/issues/277) 部署之後由營運者改成 `proof-log/card-state/`。正式的儲存桶建立時同樣要設（[#111](https://github.com/iamreal-tw/iamreal/issues/111)）。
+- 儲存桶的生命週期規則：刪掉 `proof-log/card-state/` 底下超過 7 天的物件（ADR-0027「留多久」）。這是儲存桶的設定，程式不刪卡片狀態檔；沒設的話每天多一個檔，一直留著。測試的儲存桶 `iamreal-test-data` 已經有這條規則：名稱 `card-state-7-days`，物件建立 7 天後刪除（2026-11-20 在儀表板確認，[#185](https://github.com/iamreal-tw/iamreal/issues/185)）；它的前綴當時是改名之前的目錄，[#277](https://github.com/iamreal-tw/iamreal/issues/277) 部署之後由維護者改成 `proof-log/card-state/`。正式的儲存桶建立時同樣要設（[#111](https://github.com/iamreal-tw/iamreal/issues/111)）。
 - 部署後第一個台灣午夜過後，看 `https://test-data.iamreal.tw/proof-log/fingerprints.jsonl` 有沒有那一天的一行、`proof-log/card-state/<那一天>.jsonl` 在不在、兩個的 `Cache-Control` 是不是 `public, max-age=60`；`wrangler tail` 有沒有 `proof_log_not_published`。然後用 `iamreal-verify -proof-log test -data https://test-data.iamreal.tw/` 重驗一次。
 - **第一次公布看過了**（2026-11-21 03:30 UTC 看的；這一版是 2026-11-20 13:40 UTC 前後部署的）：
   - 指紋檔在 2026-11-20 16:00:03 UTC 寫出（`Last-Modified`），一行：`{"date":"2026-11-21","count":0,"fingerprint":"000…0"}`（64 個 0）。`GET /api/v1/fingerprint` 回同一行。
@@ -519,7 +519,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 - **頁面只有自己網域的程式**：沒有行內的程式、沒有行內樣式、沒有事件屬性，不設 cookie。回 `200` 的每一頁載入計數的程式 `/count.js`（下一點）；常見問題、如何驗證證明紀錄和帶著島民證明的掛上去另外載入 `/copy.js`（`<script src="/copy.js" defer>`），掛上去的兩頁（`/hang`、`/hang/<短編號>`）載入示範的播放程式 `/demo.js`（再下一點）。這些頁的 CSP 多 `script-src 'self'` 和 `connect-src 'self'`（[頁面送的標頭](#頁面送的標頭)）。「找不到」的 `404`、人太多的 `429`、轉址、`405`、`500` 沒有程式。程式只讓「複製」的按鈕出現、按了複製；沒有程式時按鈕藏著，要複製的字照樣在頁面上選得起來。常見問題上，程式只做一件事：網址指到某一題（`/faq#<id>`）時，打開那一題的 `<details>`（頁面打開時，和 `#` 後面改變時）。每一題本身是 `<details>`，瀏覽器捲到它但不會打開它（瀏覽器只打開包著目標的 `<details>`）；沒有程式時題目照樣點得開，連到某一題時捲到那一題的題目，只是不自動展開。只收 `GET` 和 `HEAD`，其他方法回 `405`。產生頁面時只讀請求的方法和路徑，證明紀錄頁另外讀網址的查詢（`q`、`after`）。
 - **訪客頁面送計數**（ADR-0032、ADR-0039，[#275](https://github.com/iamreal-tw/iamreal/issues/275)）：回 `200` 的每一頁在 `<head>` 載入 `<script src="/count.js" defer data-page="…">`，`data-page` 是 `spec/counts.md`「Pages」的代碼；島民證明那一頁多一個 `data-short-id`，是網址裡那張證明的短編號（標準寫法）。HTML 是頁面的種類和網址決定的，每個人看到的仍然相同，快取不受影響（ADR-0023）。程式做的事：
   - 頁面打開時送一筆 `page`：頁面的種類，島民證明的短編號，`source`。按上一頁、下一頁從瀏覽器的快取回來時不再送。`source` 是 `document.referrer` 的主機名稱，合 `spec/counts.md` 的格式才帶。完整的 `Referer`、網址的查詢和 `#` 後面都不送、不讀
-  - 按了標了 `data-count` 的元素時送那個動作：每一個連到 `/proof` 的連結標 `start_card_proof`，帶著島民證明的掛上去那一頁的「複製連結」標 `copy_proof_link`（`test/pages.ts` 的 `getPage` 檢查每一頁每一個 `/proof` 的連結都有標）。在島民證明那一頁按的，計數也帶短編號，營運者才數得出每張證明帶來幾次開始過卡（#275 2026-11-27 的留言）。「下載 app」的連結還沒有（[#457](https://github.com/iamreal-tw/iamreal/issues/457)）；展開了哪一題常見問題不在表上，不送
+  - 按了標了 `data-count` 的元素時送那個動作：每一個連到 `/proof` 的連結標 `start_card_proof`，帶著島民證明的掛上去那一頁的「複製連結」標 `copy_proof_link`（`test/pages.ts` 的 `getPage` 檢查每一頁每一個 `/proof` 的連結都有標）。在島民證明那一頁按的，計數也帶短編號，維護者才數得出每張證明帶來幾次開始過卡（#275 2026-11-27 的留言）。「下載 app」的連結還沒有（[#457](https://github.com/iamreal-tw/iamreal/issues/457)）；展開了哪一題常見問題不在表上，不送
   - 每一筆帶造訪編號、瀏覽器和作業系統的大類（`protocol/src/families.ts`，和過卡的頁面同一份），沒有別的。造訪編號是 16 個隨機位元組，存在分頁的 `sessionStorage`（`iamreal.visit_id`），每次送都重新讀：分頁關掉就沒了；過卡的頁面打開時把它刪掉、不讀（`web/src/counts.ts` 的 `endVisit`），之後再打開的訪客頁面換一個新的。這支程式不讀 `localStorage`，讀不到過卡裝置編號。Do Not Track、Global Privacy Control 照樣送
   - 請求是 `POST /api/v1/counts`，`credentials: "omit"`、`referrerPolicy: "no-referrer"`、`keepalive`：點了連結離開頁面時也送得出去；不等回應、失敗不重送。頁面本來就是 `Referrer-Policy: no-referrer`，計數的請求不帶這一頁的網址
   - 擋掉這支程式時頁面照常顯示，只是數不到（`web/test/worker-card-proof.ts` 擋掉它看過）
@@ -539,7 +539,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - 播放程式不向任何地方要資料、不寫 cookie、不改網址，也不在元素上寫樣式：會動的部分是它把時間表每一秒六十個時刻的狀態交給瀏覽器的 `Element.animate`。`test/site-pages.test.ts` 檢查程式裡沒有那些字
   - 後台的程式不引用 `worker/`、`protocol/` 以外的檔，所以時間表有一份拷貝 `src/pages/hang-timeline.ts`，同一支腳本寫出，同一個測試核對
   - 在瀏覽器裡的行為（播到最後一格、停止、再看一次、標出現在的一步、沒有程式時是靜態圖）由 `web/test/worker-card-proof.ts` 檢查
-- **快取**：Worker 產生的每一頁都帶 `Cache-Control: public, max-age=60`，查不到的 `404` 和轉址（`301`、`302`、`303`）也一樣（ADR-0026：Workers 的快取打開時，沒帶的話它會把 `404` 放更久；現在沒有打開，見這一點的最後）；常見問題、如何驗證證明紀錄、`/hang` 不問證明紀錄，也用同一個值，不分兩種。所以一筆紀錄寫入後，頁面最慢 60 秒後跟上；Worker 自己不另外存一份，每個跑到 Worker 的請求都問當下的證明紀錄。**這個標頭現在只對瀏覽器和中間的代理有用：Cloudflare 上 Worker 前面沒有快取**，每一個跑到 Worker 的頁面請求都跑一次 Worker（量到的和文件：[營運者的說明](#營運者的說明)「三」第 2 題；要不要打開在 [#472](https://github.com/iamreal-tw/iamreal/issues/472)）。舊後台把證明紀錄頁的兩個數字在記憶體裡留 60 秒、頁面帶 `no-cache`；這裡數字每次都問，快取靠回應的標頭。樣式表和 `/copy.js` 帶 `no-cache`，靠 `ETag` 重新確認（寫在 `site/_headers`）。`/api/` 的回應是 `no-store`，`405` 和 `500` 也是。
+- **快取**：Worker 產生的每一頁都帶 `Cache-Control: public, max-age=60`，查不到的 `404` 和轉址（`301`、`302`、`303`）也一樣（ADR-0026：Workers 的快取打開時，沒帶的話它會把 `404` 放更久；現在沒有打開，見這一點的最後）；常見問題、如何驗證證明紀錄、`/hang` 不問證明紀錄，也用同一個值，不分兩種。所以一筆紀錄寫入後，頁面最慢 60 秒後跟上；Worker 自己不另外存一份，每個跑到 Worker 的請求都問當下的證明紀錄。**這個標頭現在只對瀏覽器和中間的代理有用：Cloudflare 上 Worker 前面沒有快取**，每一個跑到 Worker 的頁面請求都跑一次 Worker（量到的和文件：[維護者的說明](#維護者的說明)「三」第 2 題；要不要打開在 [#472](https://github.com/iamreal-tw/iamreal/issues/472)）。舊後台把證明紀錄頁的兩個數字在記憶體裡留 60 秒、頁面帶 `no-cache`；這裡數字每次都問，快取靠回應的標頭。樣式表和 `/copy.js` 帶 `no-cache`，靠 `ETag` 重新確認（寫在 `site/_headers`）。`/api/` 的回應是 `no-store`，`405` 和 `500` 也是。
 - **首頁的兩個數字**：現在把 Threads 的名額給了某個帳號的卡片有幾張；其中上次過卡日在今天往回 90 天以內（含第 90 天）的有幾張，今天照台灣的日期。一個查詢、一個索引（`src/views.ts` 的 `counts`）。
 - **頁面只列 Threads**（`src/pages/proof.ts` 的 `PLATFORM`）：測試的證明紀錄另一個平台 `test-example` 的帳號不出現在頁面上。
 
@@ -580,7 +580,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 - `TEST_PROOF_LOG_CLEARED_ON` 不是日期時，測試環境的介面和 Worker 產生的頁面都回 `500`（設定在同一處讀，`src/settings.ts`）：寧可不出頁面，也不出一行沒有日期的標示。樣式表、`/copy.js` 和 `/proof` 的檔案不跑 Worker，照常送。`wrangler.jsonc` 裡的這個值在部署前就核對過是日曆上有的日期（`checkClearedOn`，`2026-11-31` 過不了），所以這種情況只會出在沒經過檢查的設定。
 - **島民證明上寫的網址用測試網站的網域。** 個人檔案上要有的連結那一行、和短編號對不到時的那一句，測試的證明紀錄寫 `test.iamreal.tw/p/<短編號>`，正式的證明紀錄寫 `iamreal.tw/p/<短編號>`（`design/copy/test-site.md`「寫出島民證明網址的地方」）。掛上去的 `/hang/<短編號>` 寫的連結、「複製連結」複製的和示意圖裡的網址也是同一個網域（`/hang` 的示意圖寫例子的短編號，網域一樣）：`design/copy/hang.md` 第 2 部分說那一行「和島民證明頁面上的寫法相同」。舊後台沒有測試網站，那裡一律寫 `iamreal.tw`。網域跟著 `PROOF_LOG_KIND` 走，寫在 `src/settings.ts` 的 `SITE_HOSTS`（ADR-0028 定的兩個網域），不是另一個設定值，也不從請求的 `Host` 取：`Host` 是訪客的瀏覽器送的。導覽列、頁尾、分頁標題、連結預覽裡的 `iamreal.tw` 不變。
 - **過卡的頁面上的這一行不是 Worker 加的。** `/proof` 是 `web/` 建置出來的檔案，原樣送出，只有標頭是另外加的；標示由 `web/` 測試網站的建置自己寫在頁面最上面（`web/README.md`「三種用真元件的建置」），句子同樣來自 `design/copy/test-site.md`，日期是建置時從 `wrangler.jsonc` 的 `TEST_PROOF_LOG_CLEARED_ON` 帶進去的。所以改這個日期要重新部署才會兩邊一致；部署前的檢查核對頁面裡的日期就是設定裡的那一個（`scripts/proof-page.ts`）。`web/test/e2e/ui.ts` 在本機的 workerd 上比過：過卡頁面上的那一行和 Worker 產生的首頁上的相同。
-- **清空測試的證明紀錄時**一起改 `PROOF_LOG_OBJECT_NAME` 和 `TEST_PROOF_LOG_CLEARED_ON`，部署之後營運者刪掉測試的儲存桶裡的 `proof-log/`。順序和每一步之後怎麼確認在[清空測試的證明紀錄](#清空測試的證明紀錄)。過卡的頁面上的日期是建置時從 `wrangler.jsonc` 讀的，所以同一次部署就跟著變。
+- **清空測試的證明紀錄時**一起改 `PROOF_LOG_OBJECT_NAME` 和 `TEST_PROOF_LOG_CLEARED_ON`，部署之後維護者刪掉測試的儲存桶裡的 `proof-log/`。順序和每一步之後怎麼確認在[清空測試的證明紀錄](#清空測試的證明紀錄)。過卡的頁面上的日期是建置時從 `wrangler.jsonc` 讀的，所以同一次部署就跟著變。
 
 ### 頁面送的標頭
 
@@ -737,18 +737,18 @@ Worker 產生的頁面回 `200` 時（每一頁都載入計數的程式 `/count.
 | `POST /proof`、`POST` 和 `DELETE /proof/assets/<程式>.js` | `405`，內容是空的，沒有 `Allow`，帶 `/proof` 的那一組標頭 | 相同 |
 | `POST /proof/`（不跟著轉） | `301` 到 `/proof` | 相同 |
 | `POST /proof/nothing.js` | 空的 `404` | 相同 |
-| `POST /api/v1/challenges` | `200`（經營運者同意送的一次）：證明紀錄不是 `paused` | |
+| `POST /api/v1/challenges` | `200`（經維護者同意送的一次）：證明紀錄不是 `paused` | |
 
 所以上面那張「和 Worker 自己送的時候不同的地方」的表，除了「設定讀不出來時」那一列（線上的設定是對的，看不到），每一列線上都和本機相同；`_headers` 的規則在 `200`、`301`、`304`、`307`、`404`、`405` 上都有套。
 
-**線上的頁面被 Cloudflare 加了一個別的網域的 `<script>`**（2026-11-21 看到的，當天營運者關掉了：[#240](https://github.com/iamreal-tw/iamreal/issues/240)）。
+**線上的頁面被 Cloudflare 加了一個別的網域的 `<script>`**（2026-11-21 看到的，當天維護者關掉了：[#240](https://github.com/iamreal-tw/iamreal/issues/240)）。
 
 - **看到什麼**：請求帶 `Accept: text/html` 時（瀏覽器都帶），Worker 產生的每一種頁面和 `/proof`、`/proof/help.html` 回來的 HTML 都多一個 `<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/…" integrity="…" data-cf-beacon="…">`。不帶這個標頭（`curl` 和 Node 的 `fetch` 的預設）就沒有，所以上面用 `curl` 看到的 `/proof` 還是 495 位元組。
 - **怎麼重現**：`curl -s --compressed -H 'Accept: text/html' https://test.iamreal.tw/faq | grep -c cloudflareinsights` 印 1，拿掉 `-H` 印 0；或跑 `test/site-check.ts`（[部署之後不插卡的檢查](#部署之後不插卡的檢查)），「沒有一頁有不是自己網站的 script」那一項不過。
 - **不是這個程式庫加的**：Worker 的頁面沒有這一段，`web/` 的建置也沒有；是 Cloudflare 在回應送出去的路上加的。
 - **瀏覽器沒有執行它**：兩種頁面的 CSP 都不准它載入（訪客的頁面是 `default-src 'none'`，過卡的頁面是 `script-src 'self' 'wasm-unsafe-eval'`）。過卡的頁面上，無頭的 Chrome 記了一筆 CSP 違規、沒有載入它；訪客的頁面沒有另外用瀏覽器看。但送到瀏覽器的頁面因此不是建置出來的那一份，訪客的頁面也不再是沒有 `<script>`。
 - **是什麼**：Cloudflare 的 Real User Measurements（RUM，儀表板上的標題是 Web Analytics）。這個 zone 的 RUM 從來沒有設定過，頁面裡就已經被加了它。Cloudflare 的文件寫，經過 Cloudflare 的網站加進 Web Analytics 之後「is now using Web Analytics through the automatic setup, which is enabled by default」（[Get started](https://developers.cloudflare.com/web-analytics/get-started/)「Sites proxied through Cloudflare」）；自動安裝「will inject the JS snippet on all pages (sub-domains) under the zone」、加的 `<script>` 帶 `type="module"` 和 `integrity`（[FAQ](https://developers.cloudflare.com/web-analytics/faq/)）。都是 2026-11-21 讀的。
-- **怎麼關的**：文件寫的是在 Web Analytics 那個網站的 **Manage site** 把自動安裝改成 **Disable**，但帳號層的 Web Analytics 清單裡沒有 `iamreal.tw`，沒有那個 Manage site。實際關的地方在 zone：`iamreal.tw` → Speed → Real user monitoring（網址結尾 `/iamreal.tw/speed/rum`）。畫面有 Enable Globally、Exclude EU 兩個按鈕和一行 Disable completely；按 Disable completely，確認視窗按 Disable RUM，之後畫面寫「RUM is currently disabled for this zone.」。只有營運者能做（[營運者在 Cloudflare 和 GitHub 上設的](#營運者在-cloudflare-和-github-上設的)）。這和 ADR-0032「沒有第三方的程式」有關：不關的話，要靠每一頁的 CSP 一直擋著它。
+- **怎麼關的**：文件寫的是在 Web Analytics 那個網站的 **Manage site** 把自動安裝改成 **Disable**，但帳號層的 Web Analytics 清單裡沒有 `iamreal.tw`，沒有那個 Manage site。實際關的地方在 zone：`iamreal.tw` → Speed → Real user monitoring（網址結尾 `/iamreal.tw/speed/rum`）。畫面有 Enable Globally、Exclude EU 兩個按鈕和一行 Disable completely；按 Disable completely，確認視窗按 Disable RUM，之後畫面寫「RUM is currently disabled for this zone.」。只有維護者能做（[維護者在 Cloudflare 和 GitHub 上設的](#維護者在-cloudflare-和-github-上設的)）。這和 ADR-0032「沒有第三方的程式」有關：不關的話，要靠每一頁的 CSP 一直擋著它。
 - **關掉之後**（等過訪客頁面 60 秒的快取）：上面的 `curl` 帶 `-H` 也印 0，`test/site-check.ts` 21 項全過。
 
 **Cloudflare 上還沒確認的**：
@@ -793,7 +793,7 @@ ADR-0040，`GLOSSARY.md`「app 網域」。測試網站的 app 網域 `test-app.
 - 只收 `GET`、`HEAD`，其他的方法回 `405`。不轉址，不看 User-Agent，不設 cookie。快取一小時（`Cache-Control: public, max-age=3600`）；Apple 的 CDN 和手機自己還會再留更久（[Supporting associated domains](https://developer.apple.com/documentation/xcode/supporting-associated-domains)）。測試網站上每個回應帶 `X-Robots-Tag: noindex`。
 - **其他主機（`test.iamreal.tw`、本機的 `localhost`）照舊**：兩個檔是找不到的頁面，`404`。所以 `test.iamreal.tw` 上的連結（第 6 步的 `/hang/<短編號>`）照舊在瀏覽器裡打開。
 - **兩個檔不放 Static Assets**：Static Assets 不分主機，放了 `test.iamreal.tw` 也會送。反過來，Static Assets 的檔案在 app 網域上照樣由 Cloudflare 直接送、不跑 Worker：沒裝 app 時的那一頁用的 `/pages.css`、`/fonts/…`、`/favicon.ico` 靠這一點；`/proof` 在 app 網域上打開的也是過卡的頁面，但它問 `/api/` 拿到的是沒裝 app 時的那一頁，走不下去；`site/_redirects` 的轉址（`/proof/` 等）也照樣轉。所以「其他路徑都是沒裝 app 時的那一頁」不包括這些檔的路徑（`wrangler.jsonc` 的 `run_worker_first` 列的那些）：要讓它們也分主機，Worker 得先跑、再讀 Static Assets 的檔，那就要給 Worker 讀檔的 binding，這是 [Static Assets](#static-assets) 刻意不給的。QR code 和按鈕都只連 `/`。
-- **不問任何 Durable Object，不算照 IP 的上限**：這裡的回答不讀證明紀錄，Apple 的 CDN 和 Google 的驗證從少數幾個 IP 來抓。整個 zone 的 WAF 限流規則照樣算（[營運者的說明](#營運者的說明)）。不送計數（#527）。
+- **不問任何 Durable Object，不算照 IP 的上限**：這裡的回答不讀證明紀錄，Apple 的 CDN 和 Google 的驗證從少數幾個 IP 來抓。整個 zone 的 WAF 限流規則照樣算（[維護者的說明](#維護者的說明)）。不送計數（#527）。
 - 設定格式不對時，app 網域的每個請求回 `500`，即時的輸出寫一行 `{"event":"internal_error","page":"app_domain","where":"settings",…}`；網站照常。沒有設定 `APP_DOMAIN` 時，這個主機只是網站的另一個名字。
 
 ### 設定和部署前的檢查
@@ -971,8 +971,8 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 | `vars.PROOF_LOG_OBJECT_NAME` | `test-4` | 證明紀錄那個 Durable Object 的名稱。清空測試的證明紀錄時換成下一個號碼，用過的名稱不再用（[清空測試的證明紀錄](#清空測試的證明紀錄)）；維持 `test-` 開頭（[證明紀錄和物件的名稱要對得上](#證明紀錄和物件的名稱要對得上)） |
 | `vars.PROOF_LOG_KIND` | `test` | 這個環境用哪一份證明紀錄，`test` 或 `production`。它決定接受哪個場合字串、平台表是哪一張（ADR-0028）；兩者的內容寫在 `protocol/`，不在設定裡。不是這兩個值、或和 `PROOF_LOG_OBJECT_NAME` 對不上時，五個介面和 Worker 產生的每個頁面都回 `500`（Static Assets 的檔案不跑 Worker，照常送） |
 | `vars.TEST_PROOF_LOG_CLEARED_ON` | `2026-11-27` | 測試的證明紀錄上次清空的日期，每一頁的標示旁寫它（[測試的證明紀錄的標示](#測試的證明紀錄的標示)）。第一次清空是 2026-11-21（紀錄規則的版本從 1 加到 2，[#120](https://github.com/iamreal-tw/iamreal/issues/120)）；第二次是 2026-11-23（Durable Object 的類別改名，migration `v2` 刪掉舊的類別，[#277](https://github.com/iamreal-tw/iamreal/issues/277)）；第三次是 2026-11-27（紀錄規則的版本從 2 加到 3，拿掉當天的更正，[#509](https://github.com/iamreal-tw/iamreal/issues/509)）；在那之前寫的是測試網站第一次部署的日期 2026-11-19。清空時和 `PROOF_LOG_OBJECT_NAME` 一起改（[清空測試的證明紀錄](#清空測試的證明紀錄)） |
-| `vars.CARD_PROOFS_PAUSED` | `false` | `"true"` 停止收過卡，`"false"` 收（[停止和恢復收過卡](#停止和恢復收過卡)）。營運者在儀表板改；下一次部署寫回這裡的值。不是這兩個值時，API 回 `500` |
-| `vars.REBUILD_PROOF_LOG` | 空字串 | 營運者要的一次重建的名稱，空字串是沒有（[從證明紀錄重建](#從證明紀錄重建)）。1 到 40 個 `A-Za-z0-9._-`；不是的話 API 回 `500`。營運者在儀表板改；下一次部署寫回這裡的值 |
+| `vars.CARD_PROOFS_PAUSED` | `false` | `"true"` 停止收過卡，`"false"` 收（[停止和恢復收過卡](#停止和恢復收過卡)）。維護者在儀表板改；下一次部署寫回這裡的值。不是這兩個值時，API 回 `500` |
+| `vars.REBUILD_PROOF_LOG` | 空字串 | 維護者要的一次重建的名稱，空字串是沒有（[從證明紀錄重建](#從證明紀錄重建)）。1 到 40 個 `A-Za-z0-9._-`；不是的話 API 回 `500`。維護者在儀表板改；下一次部署寫回這裡的值 |
 | `vars.APP_DOMAIN` | `test-app.iamreal.tw`、團隊代號、兩個 app | app 網域和它認的 app，兩個給系統讀的檔從它產生（[app 網域](#app-網域)）。格式不對時 app 網域回 `500`，網站照常；部署前的檢查擋下格式不對、網域不對、多一個或少一個 app |
 | `assets`（最上層，每個環境共用） | `./site`，沒有 binding | 樣式表、複製按鈕的程式和過卡頁面的檔案，Cloudflare 直接送，不跑 Worker（[Static Assets](#static-assets)） |
 
@@ -982,7 +982,7 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 - **它不只管排程。** 這是每一次呼叫的上限：每個 HTTP 請求一樣是 300,000 毫秒；證明紀錄的 Durable Object 也是，它的每次呼叫和 alarm 用同一個設定（[Durable Objects limits](https://developers.cloudflare.com/durable-objects/platform/limits/)：「Durable Objects are Worker scripts, and have the same per invocation CPU limits as any Workers do」，2026-11-20 讀的）。所以一個請求能讓後台算多久，現在是程式擋，不是這個上限擋。
 - **現在可以接受的理由**：請求的內容最多讀 64 KiB（`src/api.ts` 的 `MAX_BODY_BYTES`），超過就拒絕；五個介面做的事和內容的大小無關或只和這 64 KiB 有關。送出一筆（[送出一筆](#送出一筆)）每次驗一筆證明，工作量是固定的，本機約 15 ms（[量到的](#量到的)），而且一個題目最多驗 5 次。Durable Object 裡沒有照請求內容放大的計算：寫入一筆和頁面的每個查詢各走索引；一個短編號對到的卡片通常只有一張，島民證明要讀的是那張卡片的全部紀錄，一張卡片一天最多 3 筆。頁面只收 `GET`，不讀請求的內容。之後加的介面要守住這一點：有哪個請求能讓後台算上幾秒，這個上限就不再是它的保護。
 
-之後加正式環境，是在 `env` 底下多一段；Worker 的程式不用改，但 Static Assets 的檔案要分開：兩種證明紀錄的 `_headers` 不同，共用同一個 `site/` 過不了部署前的檢查（[Static Assets](#static-assets)「加正式環境時」），`test/environments.test.ts` 也要加對應的一段。正式的儲存桶要有和測試的同樣的生命週期規則（[每天換日公布證明紀錄](#每天換日公布證明紀錄)「部署後要營運者做的」）。最上層沒有 `name`，也沒有 binding：指令沒帶 `--env` 時，wrangler 拿套件名稱 `iamreal-worker` 當 Worker 的名稱，不會是 `iamreal-test`。
+之後加正式環境，是在 `env` 底下多一段；Worker 的程式不用改，但 Static Assets 的檔案要分開：兩種證明紀錄的 `_headers` 不同，共用同一個 `site/` 過不了部署前的檢查（[Static Assets](#static-assets)「加正式環境時」），`test/environments.test.ts` 也要加對應的一段。正式的儲存桶要有和測試的同樣的生命週期規則（[每天換日公布證明紀錄](#每天換日公布證明紀錄)「部署後要維護者做的」）。最上層沒有 `name`，也沒有 binding：指令沒帶 `--env` 時，wrangler 拿套件名稱 `iamreal-worker` 當 Worker 的名稱，不會是 `iamreal-test`。
 
 ## 排程做什麼
 
@@ -1239,7 +1239,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的檢查（樹根�
 
 - `User-Agent` 是一般的 `Mozilla/5.0 (compatible)`，不帶專案名稱。
 - `If-None-Match` 或 `If-Modified-Since`：值是內政部自己上一次回的 `ETag` 或 `Last-Modified`（[排程做什麼](#排程做什麼)）。
-- Cloudflare 會在 Worker 送出的每個請求加上 `CF-Worker` 標頭，值是這個 Worker 所在 zone 的名稱（[Cloudflare HTTP headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/)），照這份文件會是 `iamreal.tw`；沒有實際看過送到內政部的請求。這一項不是程式決定的；營運者知道並接受，`CONTRIBUTING.md`「工作時對外的請求」把它列為例外。本機的 workerd 會模仿它，值是 Worker 的名稱加 `.example.com`。
+- Cloudflare 會在 Worker 送出的每個請求加上 `CF-Worker` 標頭，值是這個 Worker 所在 zone 的名稱（[Cloudflare HTTP headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/)），照這份文件會是 `iamreal.tw`；沒有實際看過送到內政部的請求。這一項不是程式決定的；維護者知道並接受，`CONTRIBUTING.md`「工作時對外的請求」把它列為例外。本機的 workerd 會模仿它，值是 Worker 的名稱加 `.example.com`。
 
 ## 測試的工具
 
@@ -1349,7 +1349,7 @@ pnpm run deploy:test
 
 ## 第一次部署量到的
 
-2026-11-19，從營運者的電腦用 `.env.local` 那把只有 `iamreal-test` 的 `Editor` 的權杖部署（wrangler 4.160.1），版本 `12ae49e5-228c-4122-b1e7-335e47392499`。時間都是 UTC。經過記在 [#63](https://github.com/iamreal-tw/iamreal/issues/63)。這一節是 [#26](https://github.com/iamreal-tw/iamreal/issues/26) 和 ADR-0029 留下「部署時確認」的那兩件事的出處。
+2026-11-19，從維護者的電腦用 `.env.local` 那把只有 `iamreal-test` 的 `Editor` 的權杖部署（wrangler 4.160.1），版本 `12ae49e5-228c-4122-b1e7-335e47392499`。時間都是 UTC。經過記在 [#63](https://github.com/iamreal-tw/iamreal/issues/63)。這一節是 [#26](https://github.com/iamreal-tw/iamreal/issues/26) 和 ADR-0029 留下「部署時確認」的那兩件事的出處。
 
 ### 只有 `Editor` 權限的權杖也跑得了 Durable Object 的 migration
 
@@ -1381,7 +1381,7 @@ pnpm run deploy:test
 - 它是 wrangler 4.160.1 的隱藏參數，每個指令都收，`wrangler deploy --help` 不列；預設是 `true`，別名 `x-provision`。升級 wrangler 時要確認它還在。
 - 設成 `false` 只是跳過「資源在不在、要不要建」那一步，上傳的內容不變。
 - 什麼時候非帶不可：Worker 上還沒有這個 binding 的時候，也就是第一次部署和之後新增 binding。照 wrangler 的程式讀，已部署的 Worker 上有同名、同 `bucket_name` 的 binding 時它不會去問 R2，所以之後不帶應該也過；這一點沒有試過。
-- 儲存桶是營運者在儀表板建的（ADR-0029），部署不該建任何資源，所以指令一律帶著。
+- 儲存桶是維護者在儀表板建的（ADR-0029），部署不該建任何資源，所以指令一律帶著。
 
 部署沒有動到儀表板上設的自訂網域。從本機 `curl` `https://test.iamreal.tw/`：部署前（14:29）回 `200`、`content-length: 12`，是部署前就在那個 Worker 上的程式；部署後（14:30）每個網址都回 `404`、沒有內容，就是骨架那時的行為。
 
@@ -1424,7 +1424,7 @@ pnpm run deploy:test
 
 ## 限流
 
-ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限（[#418](https://github.com/iamreal-tw/iamreal/issues/418)）。第一層（Cloudflare 自動的防護）不用設定；第二層（WAF 的一條限流規則）和緊急時的挑戰頁由營運者在儀表板設，見下面「營運者的說明」。全站的總量上限和 Durable Object 撐不住時的 `busy` 在這一節的後面（[#32](https://github.com/iamreal-tw/iamreal/issues/32)）。
+ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限（[#418](https://github.com/iamreal-tw/iamreal/issues/418)）。第一層（Cloudflare 自動的防護）不用設定；第二層（WAF 的一條限流規則）和緊急時的挑戰頁由維護者在儀表板設，見下面「維護者的說明」。全站的總量上限和 Durable Object 撐不住時的 `busy` 在這一節的後面（[#32](https://github.com/iamreal-tw/iamreal/issues/32)）。
 
 程式在 [`src/rate-limit.ts`](src/rate-limit.ts)，用的是 Workers 的 [Rate Limiting binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)。
 
@@ -1441,7 +1441,7 @@ ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限
 
 全站的總量上限不照 IP，也不是綁定，見[下面](#全站的總量上限)。
 
-- **擋得住的是在同一條連線上連發的來源**：綁定的計數在 Cloudflare 的每台機器各一份（下面「這個綁定的性質」）。每次開新連線的來源，請求散到很多台機器，每一台都沒到上限，這一層擋不住，要靠第二層的 WAF 規則（[營運者的說明](#營運者的說明)）。
+- **擋得住的是在同一條連線上連發的來源**：綁定的計數在 Cloudflare 的每台機器各一份（下面「這個綁定的性質」）。每次開新連線的來源，請求散到很多台機器，每一台都沒到上限，這一層擋不住，要靠第二層的 WAF 規則（[維護者的說明](#維護者的說明)）。
 
 - **一類被擋不影響另一類**：看了很多頁面的網路，過卡的三個介面照樣回答。
 - **不算的**：Static Assets 直接送的檔（過卡的頁面 `/proof`、樣式、字型，不跑 Worker）；方法不對的請求（`405`）；`/api/` 底下不是介面的路徑（`404`）。這幾種都不問 Durable Object。
@@ -1470,7 +1470,7 @@ ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限
 - 文件寫「It is not recommended to use IP addresses or locations (regions or countries)」當鍵，理由是很多人可能共用一個 IP。這裡照 ADR-0026 用 IP：上限訂成共用 IP 的家庭或辦公室也用不完的量，擋的是單一來源的大量請求；之後查詢介面發金鑰時，帶金鑰的請求改用金鑰當鍵
 - `namespace_id` 是帳號裡自己取的正整數，「unique within your Cloudflare account」：兩個綁定用同一個就會算在一起。測試環境用 1001 到 1006；正式環境要另外六個。1007 用過（2026-11-26 到 11-27 的全站總量上限），不再用
 
-**改上限**：改 `wrangler.jsonc` 那一行的 `limit`，合併到 `main`，部署後生效。這是「部署會執行到的東西」，營運者看過才合併（`CONTRIBUTING.md`）。照 Cloudflare 的分析裡被擋的量調；被擋的請求後台自己不留紀錄。
+**改上限**：改 `wrangler.jsonc` 那一行的 `limit`，合併到 `main`，部署後生效。這是「部署會執行到的東西」，維護者看過才合併（`CONTRIBUTING.md`）。照 Cloudflare 的分析裡被擋的量調；被擋的請求後台自己不留紀錄。
 
 **本機的 workerd 模擬得了這個綁定**（[bindings per environment](https://developers.cloudflare.com/workers/development-testing/bindings-per-env/) 的表：Rate Limiting，local simulations ✅），所以測試直接用它，沒有另外做假的計次。[`test/rate-limit.test.ts`](test/rate-limit.test.ts) 啟動一個上限只有幾次的 Worker（測試工具把設定檔的副本裡那幾個數字換掉，`startWorker` 的 `rateLimits`），來源用 `CF-Connecting-IP` 標頭給。
 
@@ -1486,7 +1486,7 @@ ADR-0026 的「全站的總量上限」：不照 IP，數的是**每分鐘開始
 - **為什麼是另一個物件**：不是證明紀錄的物件，也不是收計數的物件（[計數](#計數)）。計數只受照 IP 的上限，很多網路一起送計數時那個物件可能撐不住，開始過卡不該跟著停；證明紀錄的物件撐不住時，照下一節回 `busy`。
 - **為什麼不用綁定**：原本用的是 Rate Limiting binding，整個網站一個鍵（綁定 `RATE_STARTS`）。綁定的計數在每台機器各一份，實際的上限是 60 乘上收到請求的機器數：測試網站上 2 秒內 80 次 `config?start` 全部回 `200`（2026-11-27，[#466](https://github.com/iamreal-tw/iamreal/issues/466)）。
 - 物件出錯或不在、或設定不是 0 到 100000 的整數時放行，即時的輸出寫一行 `{"event":"rate_limit_unavailable","class":"starts",…}`，和每一類被綁定放行時相同。物件撐不住（`overloaded`）也一樣放行：接著問的證明紀錄的物件撐不住時，自己會回 `busy`。
-- **改上限**：改 `wrangler.jsonc` 的 `CARD_PROOF_STARTS_PER_MINUTE`，合併到 `main`，部署後生效。這是「部署會執行到的東西」，營運者看過才合併（`CONTRIBUTING.md`）。
+- **改上限**：改 `wrangler.jsonc` 的 `CARD_PROOF_STARTS_PER_MINUTE`，合併到 `main`，部署後生效。這是「部署會執行到的東西」，維護者看過才合併（`CONTRIBUTING.md`）。
 
 ### Durable Object 撐不住時
 
@@ -1497,9 +1497,9 @@ Durable Object 回 `overloaded`（錯誤帶著 `overloaded: true`，文件說不
 - 不問 Durable Object 的（`config`、常見問題這類頁面）照常回答。
 - 本機測不到真的 `overloaded`：測試用的建置有一個開關（`PUT /__test/proof-log-overloaded`），打開後每一次問證明紀錄的物件都照 Cloudflare 的樣子失敗（[`test/busy.test.ts`](test/busy.test.ts)）。
 
-### 營運者的說明
+### 維護者的說明
 
-第二層和緊急時的挑戰頁都在 Cloudflare 的儀表板設（ADR-0029：後台以外的設定由營運者做）。測試網站的這兩樣 2026-11-27 設好、實際打過一次（[#423](https://github.com/iamreal-tw/iamreal/issues/423)，設定的原文在那張票）；下面寫的是設好的樣子、和原本的步驟不同的地方、量到的。zone `iamreal.tw` 是 Free 方案。
+第二層和緊急時的挑戰頁都在 Cloudflare 的儀表板設（ADR-0029：後台以外的設定由維護者做）。測試網站的這兩樣 2026-11-27 設好、實際打過一次（[#423](https://github.com/iamreal-tw/iamreal/issues/423)，設定的原文在那張票）；下面寫的是設好的樣子、和原本的步驟不同的地方、量到的。zone `iamreal.tw` 是 Free 方案。
 
 **一、WAF 的那一條限流規則（平時開著）**
 
@@ -1595,7 +1595,7 @@ Durable Object 回 `overloaded`（錯誤帶著 `overloaded: true`，文件說不
 
 **過卡裝置編號**（`device_id`）是送出一筆的請求多的一個欄位，可以不帶：32 個小寫十六進位數字。`src/submission.ts` 讀出來之後只交給連線紀錄；交給 Durable Object、寫進證明紀錄的是紀錄的欄位，裡面沒有它。格式不對的（任何型別）當成沒帶：過卡照常處理，那一筆的 `device_id` 是 `null`，送來的值不存；這個欄位只進連線紀錄，不因為它擋住一次已經輸過 PIN 的過卡。沒成功的送出內文是原樣存的，所以那種請求送來的值會在 `body` 裡。客戶端現在都還沒有帶（計數的規格做）。
 
-**存在哪裡**：R2 的儲存桶 `iamreal-test-logs`（綁定 `CONNECTION_LOG`），和公開資料的 `iamreal-test-data` 分開，沒有公開網域。鍵是 `connection/<日期>/<時間>-<請求編號>.json`，日期和時間是 UTC。之後別的東西（計數的明細）可以放在同一個儲存桶的別的目錄，各自有自己的生命週期規則。只有營運者讀得到，靠的是 Cloudflare 帳號只有營運者一個成員（ADR-0029）；後台沒有讀它的介面。
+**存在哪裡**：R2 的儲存桶 `iamreal-test-logs`（綁定 `CONNECTION_LOG`），和公開資料的 `iamreal-test-data` 分開，沒有公開網域。鍵是 `connection/<日期>/<時間>-<請求編號>.json`，日期和時間是 UTC。之後別的東西（計數的明細）可以放在同一個儲存桶的別的目錄，各自有自己的生命週期規則。只有維護者讀得到，靠的是 Cloudflare 帳號只有維護者一個成員（ADR-0029）；後台沒有讀它的介面。
 
 **留 31 天，靠儲存桶的生命週期規則**：前綴 `connection/`，物件建立 31 天後刪除。程式自己不刪。文件寫到期的物件「Objects will typically be removed from a bucket within 24 hours of the `x-amz-expiration` value」（[Object lifecycles](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)，2026-11-26 讀的），所以實際是 31 到 32 天。
 
@@ -1612,7 +1612,7 @@ Durable Object 回 `overloaded`（錯誤帶著 `overloaded: true`，文件說不
 - **這個檔為什麼可以公開**：裡面只有這兩個時間。沒有筆數、沒有鍵、沒有任何一筆紀錄的內容（請求編號、IP、過卡裝置編號、內文都沒有）。長期看這個檔的人看得出的是：哪幾天有被算了一次的送出。成功的那些天從證明紀錄本來就看得出來；多出來的是只有失敗的送出的日子
 - 判斷留給外面的檢查（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）：`oldest` 比今天早超過 33 天，就是規則沒有在刪（31 天，加上文件寫的 24 小時內移除，加上日期是 UTC 的進位）；`checked` 超過兩小時沒變，就是後台沒有在看（排程沒跑、儲存桶列不出來、或這個檔寫不進去）。外面的檢查照這個檔自己算。後台看到 `oldest` 超過 33 天時，另外在即時的輸出寫一行 `{"event":"connection_log_overdue","oldest":"2026-10-17"}`（沒有開保存，要當下在看才看得到）
 - 列不出來、第一個鍵不是日期開頭、或檔寫不進去時，這個檔留著上一次的時間，即時的輸出多一行 `{"event":"connection_log_oldest_not_published","error":"Error"}`；清冊鏡像照常做
-- 規則本身由營運者在儲存桶上設（[營運者在 Cloudflare 和 GitHub 上設的](#營運者在-cloudflare-和-github-上設的)）：`connection-31-days`，前綴 `connection/`，31 天後刪除。新的儲存桶在第一筆滿 31 天之前，這個檢查看不出規則設錯；營運者設的時候看一次
+- 規則本身由維護者在儲存桶上設（[維護者在 Cloudflare 和 GitHub 上設的](#維護者在-cloudflare-和-github-上設的)）：`connection-31-days`，前綴 `connection/`，31 天後刪除。新的儲存桶在第一筆滿 31 天之前，這個檢查看不出規則設錯；維護者設的時候看一次
 
 **刪掉的物件救不救得回來**。規格要求確認 R2 沒有把刪掉的物件救回來的機制（救得回來的話，對外說的 31 天就不成立）。2026-11-26 讀 Cloudflare 的文件，結果是「文件上沒有這種機制」，不是「文件保證沒有」：
 
@@ -1631,13 +1631,13 @@ Durable Object 回 `overloaded`（錯誤帶著 `overloaded: true`，文件說不
 
 **還有兩種時候，算了一次的送出沒有紀錄**：Durable Object 已經把次數加上去、回應卻沒有回到 Worker（那個請求回 `500`）；Worker 這一次執行在算了之後被平台結束（例如用完 CPU 時間）。後一種為了不讓「送出後馬上斷線」躲掉紀錄，寫入是在算了一次的那一刻就向執行環境登記的（`waitUntil`），不是等回應準備好才登記；客戶端斷線後請求是不是照樣跑完，沒有在 Cloudflare 上看過。
 
-**Cloudflare 上看過的**：寫得進去，每小時的排程列得出最舊的一筆（2026-11-27，[上線前的量測](#不用營運者就量得到的)）。
+**Cloudflare 上看過的**：寫得進去，每小時的排程列得出最舊的一筆（2026-11-27，[上線前的量測](#不用維護者就量得到的)）。
 
 **還沒在 Cloudflare 上看過的**：`CF-Connecting-IP`、`request.cf` 的 `country` 和 `asn` 實際的值（本機的 workerd 裡 IP 是測試自己帶的標頭）；滿 32 天後 `oldest.json` 的日期有沒有跟著往後移（2026-12-30 看，[滿 32 天後看的](#滿-32-天後看的)）。
 
 ### 查連線紀錄
 
-營運者在自己的電腦上查，後台沒有讀連線紀錄的介面（[#417](https://github.com/iamreal-tw/iamreal/issues/417)、[#413](https://github.com/iamreal-tw/iamreal/issues/413)）。指令是 [`scripts/connection-log.ts`](scripts/connection-log.ts)：給一段 UTC 的日期，下載那幾天的每一筆，印出符合條件的，一筆一行 JSON，舊的在前。
+維護者在自己的電腦上查，後台沒有讀連線紀錄的介面（[#417](https://github.com/iamreal-tw/iamreal/issues/417)、[#413](https://github.com/iamreal-tw/iamreal/issues/413)）。指令是 [`scripts/connection-log.ts`](scripts/connection-log.ts)：給一段 UTC 的日期，下載那幾天的每一筆，印出符合條件的，一筆一行 JSON，舊的在前。
 
 ```sh
 cd worker
@@ -1661,7 +1661,7 @@ node --experimental-strip-types scripts/connection-log.ts --from 2026-11-20 --to
 
 **不要用**讀得到整個帳號的權杖：`Workers R2 Storage Read`、Admin 的兩種權限，都讀得到每一個儲存桶。理由見上面「規則有沒有在刪，從外面看得到」。
 
-權杖平常不存在。營運者要查的時候：
+權杖平常不存在。維護者要查的時候：
 
 1. **建權杖。** 在 Cloudflare 的儀表板，R2 → 管理 R2 的 API 權杖 → 建一把新的（儀表板上的字可能改過，照下面的意思找）：
    - 權限選 **Object Read only**。文件寫這種權限「Allows the ability to read and list objects in specific buckets」（[R2 API tokens](https://developers.cloudflare.com/r2/api/tokens/)，2026-11-26 讀）。
@@ -1688,13 +1688,13 @@ node --experimental-strip-types scripts/connection-log.ts --from 2026-11-20 --to
 3. **跑上面的指令。**
 4. **查完刪掉：** 在儀表板的 R2 權杖列表刪掉這一把，再刪掉金鑰檔：`rm ~/.config/iamreal/connection-log.env`。
 
-**這把權杖讀得到 IP 位址**：它讀得到 31 天內每一筆被算過的送出（ADR-0022）的 IP、過卡裝置編號，和沒有成功的送出的內文。所以要當成敏感的東西保管：只放在營運者自己的電腦，不傳給別人，不放進 GitHub 的 secret，不在別的機器上建。
+**這把權杖讀得到 IP 位址**：它讀得到 31 天內每一筆被算過的送出（ADR-0022）的 IP、過卡裝置編號，和沒有成功的送出的內文。所以要當成敏感的東西保管：只放在維護者自己的電腦，不傳給別人，不放進 GitHub 的 secret，不在別的機器上建。
 
 正式網站有了之後，它的連線紀錄在另一個儲存桶，要另建一把只限那一個的權杖。指令的 `BUCKET` 到時候一起改。
 
 ### 收到查詢或刪除連線紀錄的請求時
 
-隱私權說明寫了：想查連線紀錄裡和自己有關的部分，或依法要求刪除，請寫信給營運者，營運者個別處理（`design/copy/privacy.md` 第 14 段）。這一節是營運者收到信之後怎麼做。
+隱私權說明寫了：想查連線紀錄裡和自己有關的部分，或依法要求刪除，請寫信給維護者，維護者個別處理（`design/copy/privacy.md` 第 14 段）。這一節是維護者收到信之後怎麼做。
 
 **對出是哪幾筆。** 連線紀錄裡沒有姓名、沒有卡片，對得上請求的人的只有：
 
@@ -1719,7 +1719,7 @@ node --experimental-strip-types scripts/connection-log.ts --from 2026-11-20 --to
 - 對外怎麼回覆：查詢的結果給請求的人哪些欄位（IP、國家、網路業者的編號、過卡裝置編號、內文）、用什麼格式，刪除完成時寫什麼。
 - 多久內回。
 - 怎麼確認寫信來的人就是那些送出的人。只有時間和 IP，任何知道某人 IP 的人都能來問。
-- 收到的請求和處理的經過要不要留紀錄、留在哪裡、留多久（信本身在營運者的信箱裡，隱私權說明第 12 段）。
+- 收到的請求和處理的經過要不要留紀錄、留在哪裡、留多久（信本身在維護者的信箱裡，隱私權說明第 12 段）。
 - 對不出來（沒有 IP、時間太模糊、已經超過 31 天）時怎麼回覆。
 
 ## 計數
@@ -1747,10 +1747,10 @@ node --experimental-strip-types scripts/connection-log.ts --from 2026-11-20 --to
   `counts` 照收到的順序，每一筆的成員照 `spec/counts.md` 的順序。沒有收下任何一筆的那一分鐘不寫檔
 - 寫檔靠物件裡的一個計時器（`setTimeout`，設在這一分鐘結束後一秒）。用計時器是為了讓物件留在記憶體：Cloudflare 會把閒置的 Durable Object 收掉，能休眠的 10 秒就收，記憶體裡的東西跟著沒了；還有計時器沒跑完的物件不會被收（[Lifecycle of a Durable Object](https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/)，2026-11-26 讀的：休眠的條件之一是「No setTimeout/setInterval scheduled callbacks are set」）。另外設一個 alarm（存在物件的儲存裡）當備用；下一分鐘第一筆計數進來時，上一分鐘還沒寫也會先寫掉
 - **每分鐘最多留 `COUNT_EVENTS_PER_MINUTE` 筆**（[設定檔](#設定檔)，現在 600）。超過的不留，只在那個檔的 `dropped` 記這一分鐘另外來了幾筆：明細的量不由送的人決定。這個數字由 Worker 每次帶給物件，物件自己不讀設定
-- 寫檔失敗時，即時的輸出寫一行 `{"event":"count_events_not_written","minute":"…","error":"Error"}`，那一分鐘的計數就沒了。物件被重啟或換版（部署）時，還在記憶體裡的那一分鐘也沒了。計數只供營運者參考，不補
+- 寫檔失敗時，即時的輸出寫一行 `{"event":"count_events_not_written","minute":"…","error":"Error"}`，那一分鐘的計數就沒了。物件被重啟或換版（部署）時，還在記憶體裡的那一分鐘也沒了。計數只供維護者參考，不補
 - 儲存桶裡三個前綴互不重疊：`connection/`（連線紀錄）、`count-events/`（計數的明細，31 天）、`count-totals/`（加總，永久，[計數的加總](#計數的加總)）
 
-**31 天後刪除**靠儲存桶的生命週期規則（[營運者在 Cloudflare 和 GitHub 上設的](#營運者在-cloudflare-和-github-上設的)），程式不刪明細。（加總為了每月的裝置數寫在同一個目錄的 `devices.json`，程式自己在 31 天時刪，規則是備援：[計數的加總](#計數的加總)。）規則有沒有在刪，和連線紀錄同一種看法（[連線紀錄](#連線紀錄)）：每小時的排程用後台自己的綁定列出 `count-events/` 底下的第一個鍵，把它的日期寫成公開資料的 `count-events/oldest.json`（`{"checked":"<UTC 的時間>","oldest":"<UTC 的日期>"}`，一檔都沒有時 `oldest` 是 `null`）。比今天早超過 33 天時，即時的輸出寫一行 `count_events_overdue`，外部的檢查（`test/outside-check.ts`）也會失敗。不在部署前讀回規則，不用讀 R2 的權杖。外部檢查的那一行 2026-11-27 打開了（`COUNT_EVENTS_CHECKED`）：測試網站上已經有這個檔。
+**31 天後刪除**靠儲存桶的生命週期規則（[維護者在 Cloudflare 和 GitHub 上設的](#維護者在-cloudflare-和-github-上設的)），程式不刪明細。（加總為了每月的裝置數寫在同一個目錄的 `devices.json`，程式自己在 31 天時刪，規則是備援：[計數的加總](#計數的加總)。）規則有沒有在刪，和連線紀錄同一種看法（[連線紀錄](#連線紀錄)）：每小時的排程用後台自己的綁定列出 `count-events/` 底下的第一個鍵，把它的日期寫成公開資料的 `count-events/oldest.json`（`{"checked":"<UTC 的時間>","oldest":"<UTC 的日期>"}`，一檔都沒有時 `oldest` 是 `null`）。比今天早超過 33 天時，即時的輸出寫一行 `count_events_overdue`，外部的檢查（`test/outside-check.ts`）也會失敗。不在部署前讀回規則，不用讀 R2 的權杖。外部檢查的那一行 2026-11-27 打開了（`COUNT_EVENTS_CHECKED`）：測試網站上已經有這個檔。
 
 **測試**：[`test/counts.test.ts`](test/counts.test.ts) 對本機 workerd 上的整個 Worker 送請求，移動時鐘、讓物件的 alarm 響一次，讀 R2 模擬裡的檔。`spec/vectors/counts.json` 的每一案都送一次，檔裡只有表收的那些；檔裡沒有 IP、標頭、請求編號；沒有多出連線紀錄；超過每分鐘上限時明細停在上限、多的記成次數；證明紀錄的 Durable Object 什麼都不回答時計數照收；放一個 34 天前的檔，公布的日期、即時的輸出和外部檢查都看得到。超過照 IP 的上限回 `429` 在 `test/rate-limit.test.ts`。
 
@@ -1842,7 +1842,7 @@ node --experimental-strip-types scripts/maintainer-page.ts [--days 30] [--out <�
 - **要哪一種權限**：只要讀不公開的儲存桶裡的 `count-totals/`。用的是[查連線紀錄](#查連線紀錄)的同一把權杖、同一個金鑰檔（`~/.config/iamreal/connection-log.env`）：R2 的「Object Read only」，只限 `iamreal-test-logs` 一個儲存桶。不要為這一頁建別的權杖，也不要用讀得到整個帳號的。照那一節的做法，要看的時候才建、看完刪。這把權杖也讀得到連線紀錄（有 IP），一樣當敏感的東西保管；這支指令只列出、讀取 `count-totals/day/` 和 `count-totals/month/` 底下的檔
 - 營運的狀況讀公開的東西，不用權杖：公開資料網域的 `proof-log/fingerprints.jsonl`（最後 14 行）、`crl/index.jsonl`（兩把發證金鑰各自最新的一行），和 GitHub 公開的 API 上 `reverify.yml`、`watch-test.yml` 在 `main` 最近一次跑完的結果。這兩個請求不登入，帶一般的 `User-Agent`；GitHub 對沒登入的請求照 IP 算，「The primary rate limit for unauthenticated requests is 60 requests per hour」（[Rate limits for the REST API](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api)，2026-11-27 讀的），一次跑用兩個
 
-頁面上有什麼（第一版，營運者看了再調）：
+頁面上有什麼（第一版，維護者看了再調）：
 
 | 段落 | 內容 |
 |---|---|
@@ -1862,7 +1862,7 @@ node --experimental-strip-types scripts/maintainer-page.ts [--days 30] [--out <�
 
 ## 停止和恢復收過卡
 
-營運者改 Worker 的一個設定值 `CARD_PROOFS_PAUSED`，就停止或恢復收過卡（ADR-0033，[#105](https://github.com/iamreal-tw/iamreal/issues/105)）：`"true"` 停止，`"false"` 收。在 Cloudflare 的儀表板改，不經過 Actions；Worker 沒有營運者專用的入口。
+維護者改 Worker 的一個設定值 `CARD_PROOFS_PAUSED`，就停止或恢復收過卡（ADR-0033，[#105](https://github.com/iamreal-tw/iamreal/issues/105)）：`"true"` 停止，`"false"` 收。在 Cloudflare 的儀表板改，不經過 Actions；Worker 沒有維護者專用的入口。
 
 停止的時候：
 
@@ -1886,13 +1886,13 @@ node --experimental-strip-types scripts/maintainer-page.ts [--days 30] [--out <�
 
 把 Durable Object 裡所有從證明紀錄算得出來的東西重算一遍（ADR-0033「從證明紀錄重建」，[#107](https://github.com/iamreal-tw/iamreal/issues/107)）：每張卡片的狀態和最晚的有效日期、頁面的衍生表、用過的題目、筆數和指紋。卡片狀態檔和 Go 的重驗比出不同、紀錄規則的版本號加了一號、物件的資料沒了，都走這一條；沒有只重建其中一樣的做法。程式在 [`src/rebuild.ts`](src/rebuild.ts)，什麼時候開始、什麼時候做下一步在 `src/proof-log.ts`。
 
-**怎麼開始。** 營運者先停止收過卡（[停止和恢復收過卡](#停止和恢復收過卡)），再把設定值 `REBUILD_PROOF_LOG` 改成一個自己取的名稱（例如 `2026-11-27-1`），做法和改 `CARD_PROOFS_PAUSED` 相同：在儀表板改，存下去就是 Worker 的一個新版本，物件下一次啟動時帶著新的值。
+**怎麼開始。** 維護者先停止收過卡（[停止和恢復收過卡](#停止和恢復收過卡)），再把設定值 `REBUILD_PROOF_LOG` 改成一個自己取的名稱（例如 `2026-11-27-1`），做法和改 `CARD_PROOFS_PAUSED` 相同：在儀表板改，存下去就是 Worker 的一個新版本，物件下一次啟動時帶著新的值。
 
 - 物件啟動時看：有名稱、正在停止收過卡、這個名稱它還沒做過，就開始。沒有停止收過卡時不開始，寫一行 `{event: "rebuild_not_begun", reason: "card proofs are not stopped"}`。
 - **一個名稱只做一次**，不論結果是換了還是沒換；要再做一次就換一個名稱。物件沒事做幾秒就休眠、被叫醒時重新啟動，所以不能是「設定值在就做」。
 - 名稱會出現在即時輸出和 `GET /api/v1/rebuild` 的回應裡，不要拿不能公開的字當名稱。
 - 和 `CARD_PROOFS_PAUSED` 一樣，下一次部署會把設定檔裡的值（空字串）寫回去；已經做完的那一次不受影響。
-- **重建完不會自己恢復收過卡**：營運者照 ADR-0033 的兩個條件確認後，自己把 `CARD_PROOFS_PAUSED` 改回 `false`。
+- **重建完不會自己恢復收過卡**：維護者照 ADR-0033 的兩個條件確認後，自己把 `CARD_PROOFS_PAUSED` 改回 `false`。
 
 **怎麼做。**
 
@@ -1905,7 +1905,7 @@ node --experimental-strip-types scripts/maintainer-page.ts [--days 30] [--out <�
   - 物件記著的每一個寫滿的檔結尾的指紋、自己留著的最後一筆的指紋，和重算的相同
   - 算到指紋檔最後一行的筆數那一刻，指紋和那一行相同；紀錄的總數不少於那個筆數
   - 沒有一筆是這一版規則對那張卡片的狀態不接受的（空的清單、更換超過上限、同一天超過上限：`applyList` 的檢查 5、6）。遇到的話停在那裡，原因裡寫第幾筆和規則的代碼；不把它當成無效的紀錄跳過。證明、題目、清冊、日期先後那四項檢查（1 到 4）這裡不重做，和重建衍生表相同：那是寫入時過了的，重做要清冊存檔；整份從第 1 筆重驗是 Go 的 `iamreal-verify` 的事。後台只寫入規則接受的紀錄，所以會遇到只有兩種情況：規則改得比原本嚴（ADR-0031 說這時要照日期切換版本，那段程式第一次需要時才加），或紀錄檔不是後台寫的那一份
-- **重建期間不發題目、不收紀錄**（回 `paused`）：營運者已經停止收過卡，這是物件自己多擋的一層。
+- **重建期間不發題目、不收紀錄**（回 `paused`）：維護者已經停止收過卡，這是物件自己多擋的一層。
 - **重建期間不公布證明紀錄**：換日時那一天的那一行和卡片狀態檔等重建做完才寫，不從快要被換掉的表寫。寫滿的檔照常搬到 R2。重建也不會在一次公布進行到一半時開始。
 - **套用紀錄時出的錯一律算沒換**（`refused`），原因裡只寫錯誤的種類：那一段不等任何東西，同樣的錯每次都會再發生，不讓重建一直停在進行中、擋著收過卡。只有 R2 沒有回應會等一下再試。
 - **題目**：還沒用掉的題目全部丟掉，持卡人重拿一個。用過的題目只留日期是今天和昨天的紀錄的（題目十分鐘就過期，再早的不可能還有效），再送一次照舊是 `challenge_used`。
@@ -1919,7 +1919,7 @@ node --experimental-strip-types scripts/maintainer-page.ts [--days 30] [--out <�
 - **最後一次公布之後的紀錄不在 R2 上，補不回來**（ADR-0033 的 Consequences）
 - 重建完，物件要等清冊鏡像下一輪（每小時）告訴它最新的清冊，在那之前 `records` 回 `crl_stale`：最新的清冊不是從證明紀錄算得出來的
 
-**看進度和結果。** `GET /api/v1/rebuild`（`docs/api/card-proof.md`）：名稱、狀態（`running`、`swapped`、`refused`）、做到第幾筆、沒換的原因。它是公開的，沒有營運者專用的入口；每一種裝置都不讀它。它每次都問物件（讀 `rebuild_state` 的那一列），回應和 API 的其他回應一樣帶 `Cache-Control: no-store`，沒有快取：和 `GET /api/v1/fingerprint` 是同一種請求，物件做的事是讀一列。ADR-0026 的 60 秒快取是訪客頁面的；會打到物件的 API 路徑靠的是那份 ADR 的限流（WAF 那一條規則把這些路徑合起來算，Worker 裡的 Rate Limiting binding），照 IP 的那一層有了（[限流](#限流)）：這個路徑和 `fingerprint`、`config` 算在同一類。沒有替它另外加快取：營運者要看的是當下做到第幾筆，而且重建進行中的回應每一步都在變。即時輸出（`wrangler tail` 或儀表板的即時紀錄，沒有開保存）每一步一行：
+**看進度和結果。** `GET /api/v1/rebuild`（`docs/api/card-proof.md`）：名稱、狀態（`running`、`swapped`、`refused`）、做到第幾筆、沒換的原因。它是公開的，沒有維護者專用的入口；每一種裝置都不讀它。它每次都問物件（讀 `rebuild_state` 的那一列），回應和 API 的其他回應一樣帶 `Cache-Control: no-store`，沒有快取：和 `GET /api/v1/fingerprint` 是同一種請求，物件做的事是讀一列。ADR-0026 的 60 秒快取是訪客頁面的；會打到物件的 API 路徑靠的是那份 ADR 的限流（WAF 那一條規則把這些路徑合起來算，Worker 裡的 Rate Limiting binding），照 IP 的那一層有了（[限流](#限流)）：這個路徑和 `fingerprint`、`config` 算在同一類。沒有替它另外加快取：維護者要看的是當下做到第幾筆，而且重建進行中的回應每一步都在變。即時輸出（`wrangler tail` 或儀表板的即時紀錄，沒有開保存）每一步一行：
 
 | 事件 | 什麼時候 |
 |---|---|
@@ -1930,7 +1930,7 @@ node --experimental-strip-types scripts/maintainer-page.ts [--days 30] [--out <�
 | `rebuild_step_failed` | 這一步沒做成但重建還在（R2 沒有回應；檔案不在、不是物件寫的那一份則是 `rebuild_refused`）：等一分鐘再試，連續失敗時等得更久，最長一小時（[過期的題目怎麼刪](#過期的題目怎麼刪)的「失敗後多久再試」） |
 | `rebuild_not_begun` | 有名稱但沒有開始：沒有停止收過卡，或開始時出錯 |
 
-**之後營運者要做的**（ADR-0033）：看 `GET /api/v1/rebuild` 是 `swapped`；手動觸發一次重驗的工作流程，Go 逐張比過卡片狀態檔；兩個都過才恢復收過卡。完整的步驟寫成 playbook 是 [#109](https://github.com/iamreal-tw/iamreal/issues/109)。
+**之後維護者要做的**（ADR-0033）：看 `GET /api/v1/rebuild` 是 `swapped`；手動觸發一次重驗的工作流程，Go 逐張比過卡片狀態檔；兩個都過才恢復收過卡。完整的步驟寫成 playbook 是 [#109](https://github.com/iamreal-tw/iamreal/issues/109)。
 
 **沒有做、沒有量的：**
 
@@ -1938,24 +1938,24 @@ node --experimental-strip-types scripts/maintainer-page.ts [--days 30] [--out <�
 - **指紋檔最後一行之後的紀錄**只用規則重算，沒有東西可以對：它們要到下一次每天的公布、下一次重驗才被比到。
 - **清空測試的證明紀錄時**不要留著 `REBUILD_PROOF_LOG` 的名稱和停止收過卡：新的空物件會把儲存桶裡還沒清掉的舊檔讀進來（[清空測試的證明紀錄](#清空測試的證明紀錄)的步驟本來就先清儲存桶）。
 - **沒有另外留一份每筆紀錄的精簡內容**（#107 的留言提過）：先只做從紀錄檔讀的這一條，物件的資料沒了時本來就只能這樣讀；太慢再加。
-- **沒有在 Cloudflare 上跑過**：本機的 workerd 測過的寫在 `test/rebuild.test.ts`；在測試網站從儀表板觸發一次是營運者做的（[#110](https://github.com/iamreal-tw/iamreal/issues/110)）。
+- **沒有在 Cloudflare 上跑過**：本機的 workerd 測過的寫在 `test/rebuild.test.ts`；在測試網站從儀表板觸發一次是維護者做的（[#110](https://github.com/iamreal-tw/iamreal/issues/110)）。
 - **照日期切換規則版本**（ADR-0031）還沒有：現在只有一版規則在用。
 
 ## 清空測試的證明紀錄
 
-測試的證明紀錄不定期清空（ADR-0028）：規則或紀錄的格式改了、測試的證明紀錄裡舊的紀錄照新規則讀不懂的時候，或要從空的證明紀錄試某種狀況的時候。這份說明裡碰到這兩種情況要清空的地方：存著的規則版本和程式的不同（`paused`）、表的版本和程式的不同（[兩個版本號](#兩個版本號)）。只有營運者能清；Worker 裡沒有任何清空證明紀錄的介面，正式網站上也就沒有這樣的程式。
+測試的證明紀錄不定期清空（ADR-0028）：規則或紀錄的格式改了、測試的證明紀錄裡舊的紀錄照新規則讀不懂的時候，或要從空的證明紀錄試某種狀況的時候。這份說明裡碰到這兩種情況要清空的地方：存著的規則版本和程式的不同（`paused`）、表的版本和程式的不同（[兩個版本號](#兩個版本號)）。只有維護者能清；Worker 裡沒有任何清空證明紀錄的介面，正式網站上也就沒有這樣的程式。
 
-**清空是換一個物件，不是刪掉資料。** `PROOF_LOG_OBJECT_NAME` 換成新的名稱之後，後台問的是一個新的、空的 Durable Object；資料儲存桶裡 `proof-log/` 底下的檔由營運者刪掉。原本的那個物件還在 Cloudflare 上，連同它存的紀錄；這些步驟不刪它，之後也沒有請求會到它那裡。
+**清空是換一個物件，不是刪掉資料。** `PROOF_LOG_OBJECT_NAME` 換成新的名稱之後，後台問的是一個新的、空的 Durable Object；資料儲存桶裡 `proof-log/` 底下的檔由維護者刪掉。原本的那個物件還在 Cloudflare 上，連同它存的紀錄；這些步驟不刪它，之後也沒有請求會到它那裡。
 
 - **被換掉的物件不再做任何定時的工作。** 物件啟動時比對自己是不是設定指的那一個（`ctx.id.equals(env.PROOF_LOG.idFromName(env.PROOF_LOG_OBJECT_NAME))`，[Durable Object ID](https://developers.cloudflare.com/durable-objects/api/id/)：「`equals` is used to compare equality between two instances of `DurableObjectId`」，2026-11-21 讀的）；不是的話，alarm 響了什麼都不做，也不再設下一次（`src/proof-log.ts` 的 `#replaced`）。沒有這一條的話，它的 alarm 是還當著證明紀錄的時候設的，下一個台灣午夜照樣會響，把舊的證明紀錄的最後一檔、雜湊清單、卡片狀態檔和整份舊的指紋檔寫回同一個儲存桶：在本機照下面的步驟做的時候看到的就是這樣（`test/clearing.test.ts`，拿掉這一條就不過）。那之後新的物件要公布時，儲存桶裡的指紋檔不是它的，照[每天換日公布證明紀錄](#每天換日公布證明紀錄)會停在 `fingerprint_file_differs`。這個比對在 Cloudflare 上還沒看過：下面第 5 步的確認就是在看它。
 - **被換掉的物件每次啟動寫一行即時輸出** `{"event":"proof_log_object_replaced","object":"<它的名稱>"}`（`wrangler tail` 或儀表板的即時紀錄，沒有開保存；名稱是 `ctx.id.name`，拿不到時是 `null`）。真的被換掉的物件最多寫一次：部署之後它的 alarm 響的那一次，啟動時就把 alarm 刪了，之後沒有東西會再叫醒它。兩種例外：部署傳到每個地方的那幾秒，還跑著舊設定的 Worker 可能再問到它，每叫醒它一次多一行；被換掉時本來就沒有 alarm 的物件（表的版本和程式不同的那種）不會被叫醒，一行都不寫。**現任的物件不該寫這一行**；每隔一陣子就看到它，表示比對把現任的物件當成被換掉的了，那時不公布、不搬寫滿的檔、不刪過期的題目，而過卡照收。不看即時輸出也看得出來：指紋檔不再每天多一行，`test/site-check.ts` 有一項看這個（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）。
 - **名稱不重複使用。** 把名稱改回用過的，後台問的就是那個舊物件，它存的紀錄都還在，也會重新開始公布。新的名稱用下一個號碼（`test-1` 之後是 `test-2`），維持 `test-` 開頭（[證明紀錄和物件的名稱要對得上](#證明紀錄和物件的名稱要對得上)）。
-- **營運者刪儲存桶的檔，依據是 ADR-0028 和 ADR-0029。** 儲存桶只有 Worker 透過 binding 寫（ADR-0027、ADR-0029），例外有兩個，都寫在 ADR-0029：從副本換回一個檔（ADR-0033），和清空測試的證明紀錄時營運者在儀表板刪掉測試的儲存桶裡證明紀錄的目錄（ADR-0028「清空」）。正式的儲存桶沒有後面這個步驟。
+- **維護者刪儲存桶的檔，依據是 ADR-0028 和 ADR-0029。** 儲存桶只有 Worker 透過 binding 寫（ADR-0027、ADR-0029），例外有兩個，都寫在 ADR-0029：從副本換回一個檔（ADR-0033），和清空測試的證明紀錄時維護者在儀表板刪掉測試的儲存桶裡證明紀錄的目錄（ADR-0028「清空」）。正式的儲存桶沒有後面這個步驟。
 - **`crl/` 不清。** 清冊存檔和證明紀錄無關，檔名是內容的雜湊。留著的話，過卡的頁面一直下載得到清冊，鏡像也不必重抓、重建每一棵樹。
 
 ### 步驟
 
-照順序做。第 1、2 步 agent 可以做到開 PR 為止；第 3、4 步只有營運者能做。
+照順序做。第 1、2 步 agent 可以做到開 PR 為止；第 3、4 步只有維護者能做。
 
 1. **改設定，開 PR。** `wrangler.jsonc` 的 `env.test.vars`：
    - `PROOF_LOG_OBJECT_NAME`：下一個號碼
@@ -1963,16 +1963,16 @@ node --experimental-strip-types scripts/maintainer-page.ts [--days 30] [--out <�
 
    [設定檔](#設定檔)表格裡的這兩個值跟著改。要改的只有這兩個檔：測試的工具從 `wrangler.jsonc` 讀物件的名稱，看頁面上日期的測試各自設自己的日期，沒有測試寫死這兩個值（把這兩個值換成 `test-2`、`2026-11-20` 跑過 `worker/` 整套，都過）。
    - 測試擋得到的：名稱是 `test-` 開頭、日期是日曆上有的日期（[`test/environments.test.ts`](test/environments.test.ts)）；日期不在今天（台灣日期）之後（[`test/clearing.test.ts`](test/clearing.test.ts)）。
-   - **測試擋不到的：只改了名稱、忘了改日期，或日期填成更早的某一天。** 兩個值各自都合法，測試看不到上一次的值。看 PR 的人要看這兩行是不是一起改的；部署之後首頁最上面那一行的日期是另一次機會。`wrangler.jsonc` 是「部署會執行到的東西」（`CONTRIBUTING.md`），這個 PR 由營運者看過才合併。清空是因為程式改了的時候（規則的版本加了一號），這兩行和那個修改放在同一個 PR，或緊接著合併：改名稱的部署先出去的話，新的物件第一次啟動時記下的是舊程式的版本號，程式一換又是 `paused`。
-2. **部署。** 合併到 `main`，由 GitHub Actions 部署（[從 GitHub Actions 部署](#從-github-actions-部署)）；或營運者在自己的電腦上 `pnpm run deploy:test`。部署完成之後：
+   - **測試擋不到的：只改了名稱、忘了改日期，或日期填成更早的某一天。** 兩個值各自都合法，測試看不到上一次的值。看 PR 的人要看這兩行是不是一起改的；部署之後首頁最上面那一行的日期是另一次機會。`wrangler.jsonc` 是「部署會執行到的東西」（`CONTRIBUTING.md`），這個 PR 由維護者看過才合併。清空是因為程式改了的時候（規則的版本加了一號），這兩行和那個修改放在同一個 PR，或緊接著合併：改名稱的部署先出去的話，新的物件第一次啟動時記下的是舊程式的版本號，程式一換又是 `paused`。
+2. **部署。** 合併到 `main`，由 GitHub Actions 部署（[從 GitHub Actions 部署](#從-github-actions-部署)）；或維護者在自己的電腦上 `pnpm run deploy:test`。部署完成之後：
    - `curl -s https://test.iamreal.tw/api/v1/fingerprint` 回 `{"date":null,"count":0,"fingerprint":"000…0"}`（64 個 0）：後台問的是新的物件，它還沒公布過
    - 首頁最上面那一行的日期是新的日期，兩個數字都是 0。頁面最多被快取 60 秒，剛部署完看到舊的，過一兩分鐘再看
    - **從這時候到鏡像的下一輪（整點，最長一小時），過卡送出會回 `crl_stale`**：新的物件不知道任何一份清冊，鏡像每一輪一開始把索引列著的最新清冊交給證明紀錄的物件（[排程做什麼](#排程做什麼)第三步）。發題目、查卡片現況照常
-3. **營運者清空儲存桶的 `proof-log/`。** 在 Cloudflare 的儀表板：R2 → `iamreal-test-data` → 勾「View prefixes as directories」→ 選 `proof-log/` 這個目錄 → Delete（[Delete objects](https://developers.cloudflare.com/r2/objects/delete-objects/)：「Select the objects or folders you want to delete」，2026-11-21 讀的）。`crl/` 不要選。部署的權杖做不到這一步：它沒有 R2 的權限，連讀儲存桶的資料都被拒絕（[第一次部署量到的](#第一次部署量到的)），這個專案也沒有 R2 的 API 權杖（ADR-0029）。
+3. **維護者清空儲存桶的 `proof-log/`。** 在 Cloudflare 的儀表板：R2 → `iamreal-test-data` → 勾「View prefixes as directories」→ 選 `proof-log/` 這個目錄 → Delete（[Delete objects](https://developers.cloudflare.com/r2/objects/delete-objects/)：「Select the objects or folders you want to delete」，2026-11-21 讀的）。`crl/` 不要選。部署的權杖做不到這一步：它沒有 R2 的權限，連讀儲存桶的資料都被拒絕（[第一次部署量到的](#第一次部署量到的)），這個專案也沒有 R2 的 API 權杖（ADR-0029）。
    - **在部署之後做，不要在之前。** 部署之前，舊的物件還是證明紀錄的物件：台灣午夜一到它會把剛刪掉的檔再寫出來。
    - **在部署後的第一個台灣午夜之前做完最好。** 新的物件在它第一次啟動那天不公布，隔天的台灣午夜才第一次公布。那時 `proof-log/fingerprints.jsonl` 還是舊的證明紀錄的那一份的話，這一次公布整個不做（`fingerprint_file_differs`），之後每隔一段時間再看一次（最長一小時），到 `proof-log/` 清掉為止；清掉之後的下一次嘗試就公布，不用再部署（`test/clearing.test.ts` 的第二項）。舊的證明紀錄從來沒有公布過（沒有指紋檔）的話不會停，但舊的卡片狀態檔會留到生命週期規則刪掉它。
    - 清完之後：`curl -sI https://test-data.iamreal.tw/proof-log/fingerprints.jsonl` 回 `404`。`-I` 送的是 `HEAD`，這個網域上 `HEAD` 不經過 Cloudflare 的快取（回應是 `cf-cache-status: DYNAMIC`，2026-11-21 看到的），所以刪了馬上就是 `404`；用 `GET` 下載的人最多 60 秒內還會拿到快取著的舊檔
-4. **營運者清資料網域上 `proof-log/` 的快取。** 舊的證明紀錄有寫滿的紀錄檔（滿 1,000 筆）時才需要；沒有的話 `proof-log/` 底下每個檔都只快取 60 秒，等一分鐘就好，做了也無妨。在 Cloudflare 的儀表板：`iamreal.tw` 這個 zone → Caching → Configuration → Purge Cache → Custom Purge → Purge by 選 Prefix → 填 `test-data.iamreal.tw/proof-log` → Purge（[Purge cache by prefix](https://developers.cloudflare.com/cache/how-to/purge-cache/purge_by_prefix/)，2026-11-21 讀的；每一種方案都能用，[Purge cache](https://developers.cloudflare.com/cache/how-to/purge-cache/)「Availability and limits」）。部署的權杖只有一個 Worker 的權限（ADR-0029），做不到這一步。
+4. **維護者清資料網域上 `proof-log/` 的快取。** 舊的證明紀錄有寫滿的紀錄檔（滿 1,000 筆）時才需要；沒有的話 `proof-log/` 底下每個檔都只快取 60 秒，等一分鐘就好，做了也無妨。在 Cloudflare 的儀表板：`iamreal.tw` 這個 zone → Caching → Configuration → Purge Cache → Custom Purge → Purge by 選 Prefix → 填 `test-data.iamreal.tw/proof-log` → Purge（[Purge cache by prefix](https://developers.cloudflare.com/cache/how-to/purge-cache/purge_by_prefix/)，2026-11-21 讀的；每一種方案都能用，[Purge cache](https://developers.cloudflare.com/cache/how-to/purge-cache/)「Availability and limits」）。部署的權杖只有一個 Worker 的權限（ADR-0029），做不到這一步。
    - **為什麼要清**：寫滿的紀錄檔和它的雜湊清單標的是 `public, max-age=31536000, immutable`（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)），那是照「同一個網址的內容不會再變」標的。清空之後新的證明紀錄從 0 筆開始，寫滿第一檔時用的是同一個網址 `proof-log/0000000000000000.jsonl`，內容不同。不清的話，Cloudflare 上快取著舊檔的地方最長一年照樣送舊檔。
    - **在第 3 步之後做。** 先清快取、後刪檔的話，中間有人下載，舊檔又被快取一年。
    - **用 Prefix，不用 Single-file（URL）。** 資料網域的回應帶 `Vary: Origin`（2026-11-21 線上看到的）；Cloudflare 的文件寫，從儀表板照網址清，清不掉請求帶 `Origin` 的那一份（[Purge by single-file](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-by-single-file/)「Resources with special headers」：「A single-file purge performed through your Cloudflare dashboard does not clear objects that contain any of the following: Origin header…」，2026-11-21 讀的）。照前綴清的文件寫的是那個目錄底下的每一個網址都清（Purge cache by prefix：「any URI for a resource within the purged directory is purged」），沒有另外講帶 `Origin` 的那一份，所以下面確認時兩種都問。
@@ -1993,7 +1993,7 @@ node --experimental-strip-types scripts/maintainer-page.ts [--days 30] [--out <�
      - 這個指令問到的應該只是回答這一次請求的那個 Cloudflare 機房：這是從文件推的，沒有實測。文件寫清掉的檔之後是在「the specific Cloudflare data center that served the request」重新放進快取（[Purge by single-file](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-by-single-file/)），也就是每個機房各有自己的一份；其他機房沒辦法從外面一個一個問。
 5. **確認。**
    - `node --experimental-strip-types test/site-check.ts`（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）全過。新的證明紀錄還沒公布過，所以指紋檔那兩項比的是「沒有檔、介面回的日期是 `null`」。**它全過不表示可以過卡**：它只送 `GET`，看不到證明紀錄是不是 `paused`，也看不到新的物件知不知道清冊，這兩種狀態下每個 `GET` 的回答都和平常一樣
-   - **證明紀錄收不收過卡**：送一次 `curl -s -X POST https://test.iamreal.tw/api/v1/challenges`。這是唯一會寫入的確認：後台存一個題目，10 分鐘後不認得，之後定時刪掉（[過期的題目怎麼刪](#過期的題目怎麼刪)），證明紀錄裡不留任何東西。agent 送之前要營運者同意。
+   - **證明紀錄收不收過卡**：送一次 `curl -s -X POST https://test.iamreal.tw/api/v1/challenges`。這是唯一會寫入的確認：後台存一個題目，10 分鐘後不認得，之後定時刪掉（[過期的題目怎麼刪](#過期的題目怎麼刪)），證明紀錄裡不留任何東西。agent 送之前要維護者同意。
 
      | 回應 | 意思 |
      |---|---|
@@ -2001,7 +2001,7 @@ node --experimental-strip-types scripts/maintainer-page.ts [--days 30] [--out <�
      | `503`、`{"error":"paused"}` | 不收：物件存著的規則版本和程式的不同（[兩個版本號](#兩個版本號)）。剛清空就看到這個，表示後台問的還是舊的物件（設定沒有部署出去），或新的物件是在程式換掉之前第一次啟動的（第 1 步講的順序） |
      | `500` | 設定對不上（`PROOF_LOG_KIND` 和名稱、`TEST_PROOF_LOG_CLEARED_ON` 不是日期），或表的版本和程式的不同 |
 
-   - **新的物件知不知道清冊，沒有不過卡就能確認的方法。** 發題目不看清冊，`200` 不表示送出不會回 `crl_stale`。靠的是時間：部署後的第一個整點那一輪鏡像交給它（第 2 步）。那一輪有沒有成功，看儀表板上排程的那一次是不是成功的，或 `wrangler tail` 那一輪沒有以例外結束（[排程做什麼](#排程做什麼)：沒交給 Durable Object 的一輪以例外結束）。整點過後第一次真的過卡（營運者用真卡片）才是最後的確認
+   - **新的物件知不知道清冊，沒有不過卡就能確認的方法。** 發題目不看清冊，`200` 不表示送出不會回 `crl_stale`。靠的是時間：部署後的第一個整點那一輪鏡像交給它（第 2 步）。那一輪有沒有成功，看儀表板上排程的那一次是不是成功的，或 `wrangler tail` 那一輪沒有以例外結束（[排程做什麼](#排程做什麼)：沒交給 Durable Object 的一輪以例外結束）。整點過後第一次真的過卡（維護者用真卡片）才是最後的確認
    - 部署後的第一個台灣午夜過後：`https://test-data.iamreal.tw/proof-log/fingerprints.jsonl` 恰好一行，日期是那一天，筆數是新的證明紀錄的筆數；`proof-log/card-state/` 只有那一天的檔。這一行多於一行、或筆數是舊的證明紀錄的筆數，表示被換掉的物件還在寫（上面「被換掉的物件」那一條在 Cloudflare 上沒有成立），那時回報，不要再刪一次了事
    - 然後 `iamreal-verify -proof-log test -data https://test-data.iamreal.tw/` 重驗一次（[`cmd/iamreal-verify/README.md`](../cmd/iamreal-verify/README.md)）
 
@@ -2033,7 +2033,7 @@ node --experimental-strip-types scripts/maintainer-page.ts [--days 30] [--out <�
 - 紀錄檔和雜湊清單一新一舊：`<檔名> is not the record hash list of the proof log`
 - 卡片狀態檔和從舊紀錄算出來的卡片逐張不同
 
-這幾種結束碼都是 1（[`cmd/iamreal-verify/README.md`](../cmd/iamreal-verify/README.md)「紀錄目錄」）。在測試的證明紀錄裡看到這些，先看拿到的紀錄檔是不是清空之前的：頁面最上面寫著上次清空的日期，紀錄檔裡的紀錄比它早就是。那時先分是哪一層的快取：檔是用瀏覽器下載的，清掉瀏覽器的快取，或改讓 `iamreal-verify` 自己下載（`-data https://test-data.iamreal.tw/`），就不經過瀏覽器的那一層；`iamreal-verify` 自己下載的還是舊檔，最可能是 Cloudflare 的快取沒清到（第 4 步沒做，或回答你的那個機房還留著），也可能是你和 Cloudflare 之間的代理存著舊檔；從外面分不出是哪一種。換一個網路再下載一次；還是舊檔就在這個程式庫開 issue，請營運者再做一次第 4 步。正式的證明紀錄不清空，同一個網址的內容不會變，沒有這個問題。
+這幾種結束碼都是 1（[`cmd/iamreal-verify/README.md`](../cmd/iamreal-verify/README.md)「紀錄目錄」）。在測試的證明紀錄裡看到這些，先看拿到的紀錄檔是不是清空之前的：頁面最上面寫著上次清空的日期，紀錄檔裡的紀錄比它早就是。那時先分是哪一層的快取：檔是用瀏覽器下載的，清掉瀏覽器的快取，或改讓 `iamreal-verify` 自己下載（`-data https://test-data.iamreal.tw/`），就不經過瀏覽器的那一層；`iamreal-verify` 自己下載的還是舊檔，最可能是 Cloudflare 的快取沒清到（第 4 步沒做，或回答你的那個機房還留著），也可能是你和 Cloudflare 之間的代理存著舊檔；從外面分不出是哪一種。換一個網路再下載一次；還是舊檔就在這個程式庫開 issue，請維護者再做一次第 4 步。正式的證明紀錄不清空，同一個網址的內容不會變，沒有這個問題。
 
 ### 在本機照著做
 
@@ -2061,19 +2061,19 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 - 證明紀錄每天有在公布：`GET /api/v1/fingerprint` 回的日期是今天或昨天（台灣日期）。公布在台灣午夜之後 alarm 響的時候做，所以午夜剛過、還沒公布時最後一行是昨天的，照樣過；要到整整一天沒有公布才不過。`paused` 的證明紀錄不公布，隔一天起這一項不過，那是對的。日期是 `null`（還沒公布過）只在今天不晚於 `wrangler.jsonc` 的上次清空日期加 2 天時算過：清空當天物件第一次啟動，隔天午夜公布第一行；部署剛好壓在午夜前、物件隔天才第一次啟動的話再晚一天。過了這兩天還是 `null`，就是新的物件沒有在公布（啟動時就是 `paused`，或把自己當成被換掉的），不過
 - 資料網域的 CORS：帶 `Origin: https://test.iamreal.tw` 問 `crl/index.jsonl`，回應的 `Access-Control-Allow-Origin` 是它；帶別的來源問，沒有這個標頭。過卡的頁面在瀏覽器裡下載清冊存檔靠的是這個（ADR-0027）
 
-[`test/site-check.test.ts`](test/site-check.test.ts) 在本機的 Worker 上跑同一段檢查：照部署的樣子全過（隔天、午夜的 alarm 還沒響時也過）；下面每一樣各自只讓它的那一行不過：清冊舊於 3 天、少一把發證金鑰的清冊；一頁的狀態碼不對、少一個標頭、設了 cookie、頁面裡沒有 `noindex`、標示旁的日期不對；沒有過卡的頁面、樣式表的 `Cache-Control` 不對；頁面在送給瀏覽器的路上被加了別的網域的 script 或寫在頁面裡的 script；`config` 的平台表不是測試的證明紀錄的、`crl_max_age_days` 不是 3、回應可以被快取；指紋檔最後一行和介面回的不同、介面說公布過卻沒有指紋檔；最後一行的日期比昨天早、清空超過兩天還沒公布過；過卡的頁面被加了 script、不在，說明頁的舊網址還回 `200`；資料網域不讓測試網站讀、或讓別的網站讀。資料網域在測試裡是儲存桶的模擬加上營運者設的那條 CORS 規則。`local` 時少那兩行，資料網域沒有 CORS 的標頭、清空很久還沒公布過也全過，清冊太舊照樣不過。
+[`test/site-check.test.ts`](test/site-check.test.ts) 在本機的 Worker 上跑同一段檢查：照部署的樣子全過（隔天、午夜的 alarm 還沒響時也過）；下面每一樣各自只讓它的那一行不過：清冊舊於 3 天、少一把發證金鑰的清冊；一頁的狀態碼不對、少一個標頭、設了 cookie、頁面裡沒有 `noindex`、標示旁的日期不對；沒有過卡的頁面、樣式表的 `Cache-Control` 不對；頁面在送給瀏覽器的路上被加了別的網域的 script 或寫在頁面裡的 script；`config` 的平台表不是測試的證明紀錄的、`crl_max_age_days` 不是 3、回應可以被快取；指紋檔最後一行和介面回的不同、介面說公布過卻沒有指紋檔；最後一行的日期比昨天早、清空超過兩天還沒公布過；過卡的頁面被加了 script、不在，說明頁的舊網址還回 `200`；資料網域不讓測試網站讀、或讓別的網站讀。資料網域在測試裡是儲存桶的模擬加上維護者設的那條 CORS 規則。`local` 時少那兩行，資料網域沒有 CORS 的標頭、清空很久還沒公布過也全過，清冊太舊照樣不過。
 
 **它只送 `GET`，所以回答不了「現在能不能過卡」。** 證明紀錄 `paused`（存著的規則版本和程式的不同）時、清空之後新的物件還不知道清冊時（送出回 `503` `crl_stale`），每個 `GET` 的回答都和平常一樣，這支程式照樣全過。要知道證明紀錄收不收過卡，送一次 `POST /api/v1/challenges`（[清空測試的證明紀錄](#清空測試的證明紀錄)第 5 步有每一種回應的意思）；那是寫入的請求，不在這支程式裡。
 
 **它不開瀏覽器，所以過卡的頁面只看在不在。** 頁面在瀏覽器裡的那一半（標頭、跨來源隔離、證明引擎啟動、沒有違反 CSP、沒有連到別的網域，開到第一個畫面為止、不按「讀取卡片」）是 `web/` 的 [`test/e2e/smoke.ts`](../web/test/e2e/smoke.ts)（`web/README.md`）；它對線上跑的結果在 [Static Assets](#static-assets)「Cloudflare 上還沒確認的」。
 
-**2026-11-21 對 `main` 的 `1400e11` 部署出去的版本**：21 項過 20 項。不過的是「沒有一頁有不是自己網站的 script」，十個頁面都列在那一行：Cloudflare 在每一個 HTML 頁面加了一個別的網域的 script（[Static Assets](#static-assets)「Cloudflare 上看過的」最後一段），營運者當天關掉（[#240](https://github.com/iamreal-tw/iamreal/issues/240)）之後重跑，21 項全過。改成照瀏覽器的送法之後，其他各項的結果沒有變。
+**2026-11-21 對 `main` 的 `1400e11` 部署出去的版本**：21 項過 20 項。不過的是「沒有一頁有不是自己網站的 script」，十個頁面都列在那一行：Cloudflare 在每一個 HTML 頁面加了一個別的網域的 script（[Static Assets](#static-assets)「Cloudflare 上看過的」最後一段），維護者當天關掉（[#240](https://github.com/iamreal-tw/iamreal/issues/240)）之後重跑，21 項全過。改成照瀏覽器的送法之後，其他各項的結果沒有變。
 
 ## 上線前的量測
 
-[#52](https://github.com/iamreal-tw/iamreal/issues/52) 要量的數字，連同 [#196](https://github.com/iamreal-tw/iamreal/issues/196) 的十萬張卡片。分成四種：不用營運者就量得到的（這一節第一段，量了）、營運者用真卡片過卡時看的、要臨時的 Worker 和負載的、滿 32 天後看的；加上 Threads 的 app 送什麼標頭。已經量過、不再量的：從 Cloudflare 抓得到內政部的兩個清冊網址（[從 Cloudflare 抓得到內政部的兩個清冊網址](#從-cloudflare-抓得到內政部的兩個清冊網址)）、清冊鏡像一輪的 CPU 時間和記憶體（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)）、Rate Limiting binding 的計數每台機器各一份（[#466](https://github.com/iamreal-tw/iamreal/issues/466)）。
+[#52](https://github.com/iamreal-tw/iamreal/issues/52) 要量的數字，連同 [#196](https://github.com/iamreal-tw/iamreal/issues/196) 的十萬張卡片。分成四種：不用維護者就量得到的（這一節第一段，量了）、維護者用真卡片過卡時看的、要臨時的 Worker 和負載的、滿 32 天後看的；加上 Threads 的 app 送什麼標頭。已經量過、不再量的：從 Cloudflare 抓得到內政部的兩個清冊網址（[從 Cloudflare 抓得到內政部的兩個清冊網址](#從-cloudflare-抓得到內政部的兩個清冊網址)）、清冊鏡像一輪的 CPU 時間和記憶體（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)）、Rate Limiting binding 的計數每台機器各一份（[#466](https://github.com/iamreal-tw/iamreal/issues/466)）。
 
-### 不用營運者就量得到的
+### 不用維護者就量得到的
 
 2026-11-27 量的，時間都是 UTC。
 
@@ -2084,7 +2084,7 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 | 紀錄檔的一行（`proof-log/0000000000000000.jsonl`，2 行 39,918 個位元組） | 19,959 個位元組。`proof` 一個欄位是 19,544 個字元（base64，14,658 個位元組），其他欄位合起來約 400 | 一檔 1,000 筆約 20 MB；十萬筆的證明紀錄約 2 GB |
 | 卡片狀態檔的一行（`proof-log/card-state/2026-11-27.jsonl`） | 302 個位元組，一個 Threads 名額 | 十萬張約 30 MB。本機量的 20 萬張是 68.7 MB（三張有一張多一個名額，[每天換日公布證明紀錄](#每天換日公布證明紀錄)「大小的上限」），對得上 |
 
-**一筆連線紀錄的物件**（照 `src/connection-log.ts` 的格式算，請求編號 16 個十六進位數字）：成功的約 190 個位元組（IPv4，帶過卡裝置編號）、約 215（IPv6），沒帶過卡裝置編號少 30；沒成功的多一份內文，一次送出的內文約 20 KB，最多 64 KiB。Cloudflare 上實際的大小在下面「營運者用真卡片過卡時看的」第 8 步看。
+**一筆連線紀錄的物件**（照 `src/connection-log.ts` 的格式算，請求編號 16 個十六進位數字）：成功的約 190 個位元組（IPv4，帶過卡裝置編號）、約 215（IPv6），沒帶過卡裝置編號少 30；沒成功的多一份內文，一次送出的內文約 20 KB，最多 64 KiB。Cloudflare 上實際的大小在下面「維護者用真卡片過卡時看的」第 8 步看。
 
 **Cloudflare 文件寫的上限**（2026-11-27 讀的）：
 
@@ -2096,7 +2096,7 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 
 **連線紀錄在 Cloudflare 上寫得進去**：01:23 送了一筆題目是後台發的、證明是隨機位元組的送出（帳號是 `test-example` 的 `alice`，匿名編號是 `spec/vectors/` 裡的那一個），回 `400` `proof`，往返 703 ms。這一筆被算了一次，照規則有一筆連線紀錄；裡面的 IP 是送出的那台電腦的，31 天後由規則刪掉。02:00 的排程之後 `connection-log/oldest.json` 從 `{"checked":"2026-11-27T01:00:13.139Z","oldest":null}` 變成 `{"checked":"2026-11-27T02:00:13.158Z","oldest":"2026-11-27"}`：Cloudflare 上連線紀錄寫得進去、排程列得出來，這是第一次看到。
 
-### 營運者用真卡片過卡時看的
+### 維護者用真卡片過卡時看的
 
 [#177](https://github.com/iamreal-tw/iamreal/issues/177) 過卡的那一天一起看。**後台不為這個加量測的紀錄**：Worker 裡讀不到自己用了多少 CPU 時間，`Date.now()` 在計算時不走（[排程做什麼](#排程做什麼)），驗證的時間從裡面量不到；寫入動到幾列在物件裡數得到（cursor 的 `rowsWritten`），但寫入那段程式分在 `src/proof-log.ts`、`src/card-table.ts`、`src/views.ts`，要每一處都包，換來的數字儀表板本來就有。
 
@@ -2121,7 +2121,7 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 
 ### 要臨時的 Worker 和負載的
 
-同一個 Durable Object 一秒回答幾個頁面讀取、一秒寫得了幾筆（物件那一側）、收計數的物件一秒收多少、從證明紀錄重建十萬筆要多久、每張卡片佔多少位元組，和 #196 的十萬張卡片換日公布，在一個臨時的 Worker 和兩個臨時的儲存桶上一次量。假卡片不進測試的證明紀錄（ADR-0028）。設定、負載的程式和營運者的步驟在 [`measure/README.md`](measure/README.md)：那個建置寫入沒有驗證過的紀錄，為什麼不違反 ADR-0028、怎麼確保它只部署成那一個臨時的 Worker，也寫在那裡。在本機的 workerd 上跑過一次小的（2,000 筆），數字只說明每一步走得通。
+同一個 Durable Object 一秒回答幾個頁面讀取、一秒寫得了幾筆（物件那一側）、收計數的物件一秒收多少、從證明紀錄重建十萬筆要多久、每張卡片佔多少位元組，和 #196 的十萬張卡片換日公布，在一個臨時的 Worker 和兩個臨時的儲存桶上一次量。假卡片不進測試的證明紀錄（ADR-0028）。設定、負載的程式和維護者的步驟在 [`measure/README.md`](measure/README.md)：那個建置寫入沒有驗證過的紀錄，為什麼不違反 ADR-0028、怎麼確保它只部署成那一個臨時的 Worker，也寫在那裡。在本機的 workerd 上跑過一次小的（2,000 筆），數字只說明每一步走得通。
 
 ### 滿 32 天後看的
 
@@ -2136,7 +2136,7 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 
 ### Threads 的 app 開連結時送的標頭
 
-訪客頁面的計數收的是 `document.referrer` 的網域和瀏覽器的大類（`spec/counts.md`「Sources」「Browsers」），看不到完整的 `User-Agent` 和其他標頭（例如 `X-Requested-With`，有的 app 裡的瀏覽器會帶）。完整的標頭只在即時紀錄看得到，不保存。[#275](https://github.com/iamreal-tw/iamreal/issues/275) 要照看到的定來源的分類。營運者用手機，iOS、Android 各做一次：
+訪客頁面的計數收的是 `document.referrer` 的網域和瀏覽器的大類（`spec/counts.md`「Sources」「Browsers」），看不到完整的 `User-Agent` 和其他標頭（例如 `X-Requested-With`，有的 app 裡的瀏覽器會帶）。完整的標頭只在即時紀錄看得到，不保存。[#275](https://github.com/iamreal-tw/iamreal/issues/275) 要照看到的定來源的分類。維護者用手機，iOS、Android 各做一次：
 
 1. 電腦上打開即時紀錄（上面第 2 步）。點開一行看不到請求的標頭的話，改在自己的電腦跑 `wrangler tail --env test --format json`，用部署測試網站的那把權杖：它印的每個請求有 `event.request.headers`，裡面有 IP，不要貼出去
 2. 在 Threads 發一則只有自己看得到的貼文，或私訊給自己，內容是 `https://test.iamreal.tw/faq`（每一種訪客頁面都跑 Worker；這一頁不問證明紀錄）
@@ -2146,9 +2146,9 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 
 三種請求各自的這三樣原文（不含 IP、`CF-Connecting-IP`、cookie）貼在 #52。
 
-## 營運者在 Cloudflare 和 GitHub 上設的
+## 維護者在 Cloudflare 和 GitHub 上設的
 
-部署的權杖做不到、由營運者在儀表板手動做的事（ADR-0029）。測試網站的這幾項是 2026-11-19 做的（[#58](https://github.com/iamreal-tw/iamreal/issues/58)，那裡有做的時候和原本計畫不同的地方）；之後加正式環境時照同一份做，名稱換成正式的。程式和部署靠的是右邊那一欄。
+部署的權杖做不到、由維護者在儀表板手動做的事（ADR-0029）。測試網站的這幾項是 2026-11-19 做的（[#58](https://github.com/iamreal-tw/iamreal/issues/58)，那裡有做的時候和原本計畫不同的地方）；之後加正式環境時照同一份做，名稱換成正式的。程式和部署靠的是右邊那一欄。
 
 | 在哪裡 | 設了什麼 | 程式和部署靠它的地方 |
 |---|---|---|
@@ -2157,17 +2157,17 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 | Workers | Worker `iamreal-test`，從 Hello World 範本建的（儀表板不能建空的）；自訂網域 `test.iamreal.tw`，和 app 網域 `test-app.iamreal.tw`（2026-11-28，[#528](https://github.com/iamreal-tw/iamreal/issues/528)） | 部署的權杖建不了 Worker、改不了自訂網域。`workers.dev` 的網址由 `wrangler.jsonc` 的 `workers_dev: false` 關掉 |
 | R2 | 儲存桶 `iamreal-test-data`，位置 Automatic、存放等級 Standard；自訂網域 `test-data.iamreal.tw` | `wrangler.jsonc` 的 `r2_buckets`；部署不建任何資源（`--experimental-provision=false`，[第一次部署量到的](#第一次部署量到的)） |
 | R2 儲存桶的 CORS | 只允許 `https://test.iamreal.tw` 用 `GET` | 過卡的頁面從資料網域下載清冊存檔（ADR-0027） |
-| R2 儲存桶的生命週期規則 | `card-state-7-days`：前綴 `proof-log/card-state/`（[#277](https://github.com/iamreal-tw/iamreal/issues/277) 之前是改名之前的目錄），物件建立 7 天後刪除（[#185](https://github.com/iamreal-tw/iamreal/issues/185)） | 程式不刪卡片狀態檔（[每天換日公布證明紀錄](#每天換日公布證明紀錄)「部署後要營運者做的」） |
+| R2 儲存桶的生命週期規則 | `card-state-7-days`：前綴 `proof-log/card-state/`（[#277](https://github.com/iamreal-tw/iamreal/issues/277) 之前是改名之前的目錄），物件建立 7 天後刪除（[#185](https://github.com/iamreal-tw/iamreal/issues/185)） | 程式不刪卡片狀態檔（[每天換日公布證明紀錄](#每天換日公布證明紀錄)「部署後要維護者做的」） |
 | 連線紀錄的儲存桶 `iamreal-test-logs`（[#415](https://github.com/iamreal-tw/iamreal/issues/415)） | Public Access 關著，沒有網域、沒有 CORS。生命週期規則 `connection-31-days`：前綴 `connection/`，物件建立 31 天後刪除。計數的明細在同一個儲存桶：規則 `count-events-31-days`，前綴 `count-events/`，31 天後刪除（2026-11-26，[#54](https://github.com/iamreal-tw/iamreal/issues/54)）；`count-totals/` 不設規則（[計數](#計數)）。不設 bucket lock | 後台存 IP 的地方，留 31 天（ADR-0022，[連線紀錄](#連線紀錄)）。規則沒有在刪時，公開的 `connection-log/oldest.json` 看得出來 |
 | `test-data.iamreal.tw` 的快取規則 | 可以快取；Edge TTL 選「有 `Cache-Control` 就照它，沒有就不快取」，Browser TTL 照物件的標頭。儀表板沒有「沒有就用 60 秒」這個選項 | 所以後台寫進儲存桶的每個物件都自己設 `Cache-Control`：會變的 60 秒，不會變的一年（[排程做什麼](#排程做什麼)、[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)、[每天換日公布證明紀錄](#每天換日公布證明紀錄)）；沒設的物件不會被快取 |
 | Real User Measurements（Web Analytics） | `iamreal.tw` → Speed → Real user monitoring 選 **Disable completely**（2026-11-21，[#240](https://github.com/iamreal-tw/iamreal/issues/240)）。沒設定過時是開著的：每個 HTML 頁面會被加一個 `static.cloudflareinsights.com` 的 `<script>`（[Static Assets](#static-assets)「Cloudflare 上看過的」最後一段）。正式的網域在第一次部署之前同樣關掉 | 頁面只載入自己網域的資源（`CONTRIBUTING.md`「頁面」）、沒有第三方的程式（ADR-0032）。`test/site-check.ts` 的「沒有一頁有不是自己網站的 script」檢查它 |
-| WAF 的限流規則 | `Per IP: Worker paths (API and pages)`，開著：整個 zone 會跑到 Worker 的路徑，照 IP 每 10 秒 100 次，Block 10 秒（2026-11-27，[#423](https://github.com/iamreal-tw/iamreal/issues/423)） | 每次開新連線的洪水只有它擋得住；什麼時候要改排除，見[營運者的說明](#營運者的說明)「一」 |
-| WAF 的自訂規則 | `Emergency: challenge visitor pages (keep off)`，Managed Challenge，關著：只套 `test.iamreal.tw` 的訪客頁面（2026-11-27，[#423](https://github.com/iamreal-tw/iamreal/issues/423)） | 緊急時才打開；正式上線時要改的，見[營運者的說明](#營運者的說明)「二」 |
+| WAF 的限流規則 | `Per IP: Worker paths (API and pages)`，開著：整個 zone 會跑到 Worker 的路徑，照 IP 每 10 秒 100 次，Block 10 秒（2026-11-27，[#423](https://github.com/iamreal-tw/iamreal/issues/423)） | 每次開新連線的洪水只有它擋得住；什麼時候要改排除，見[維護者的說明](#維護者的說明)「一」 |
+| WAF 的自訂規則 | `Emergency: challenge visitor pages (keep off)`，Managed Challenge，關著：只套 `test.iamreal.tw` 的訪客頁面（2026-11-27，[#423](https://github.com/iamreal-tw/iamreal/issues/423)） | 緊急時才打開；正式上線時要改的，見[維護者的說明](#維護者的說明)「二」 |
 | `iamreal.tw` 這個 zone | 新增網域時關掉「Bot Preference Sync」：它會在網站的 `robots.txt` 前面插入 Cloudflare 的設定；AI 爬蟲的政策留預設 | `robots.txt` 由程式決定 |
-| Cloudflare 的 API 權杖 | 兩把 Account API token：範圍「Specified Workers → `iamreal-test`」，權限「Individual Workers: Editor」。`iamreal-test-ci` 放在程式庫的 Actions secrets（`CLOUDFLARE_API_TOKEN_TEST`，帳號編號是 `CLOUDFLARE_ACCOUNT_ID`），`iamreal-test-local` 放在營運者電腦的 `.env.local`，同樣兩個名稱 | [部署測試環境](#部署測試環境)。這把權杖做得到和做不到的事在[第一次部署量到的](#第一次部署量到的) |
+| Cloudflare 的 API 權杖 | 兩把 Account API token：範圍「Specified Workers → `iamreal-test`」，權限「Individual Workers: Editor」。`iamreal-test-ci` 放在程式庫的 Actions secrets（`CLOUDFLARE_API_TOKEN_TEST`，帳號編號是 `CLOUDFLARE_ACCOUNT_ID`），`iamreal-test-local` 放在維護者電腦的 `.env.local`，同樣兩個名稱 | [部署測試環境](#部署測試環境)。這把權杖做得到和做不到的事在[第一次部署量到的](#第一次部署量到的) |
 | GitHub 組織的 Actions 設定 | 所有外部貢獻者的工作流程都要先核准才跑 | ADR-0029「外人的 PR」 |
 
-平常要營運者動手的只有三件：看過並合併動到「部署會執行到的東西」的 PR（`CONTRIBUTING.md`）、清空測試的證明紀錄時清儲存桶和資料網域的快取（[清空測試的證明紀錄](#清空測試的證明紀錄)第 3、4 步）、用真卡片過卡。從營運者的電腦部署測試網站是 `pnpm run deploy:test`（[部署測試環境](#部署測試環境)）。
+平常要維護者動手的只有三件：看過並合併動到「部署會執行到的東西」的 PR（`CONTRIBUTING.md`）、清空測試的證明紀錄時清儲存桶和資料網域的快取（[清空測試的證明紀錄](#清空測試的證明紀錄)第 3、4 步）、用真卡片過卡。從維護者的電腦部署測試網站是 `pnpm run deploy:test`（[部署測試環境](#部署測試環境)）。
 
 ## 套件
 

@@ -107,7 +107,7 @@ iPhone 有三種 app（ADR-0040），識別碼不同，可以同時裝在一支 
 | app 網域（「app 網域」） | 上線前：`test-app.iamreal.tw`。上線起：`app.iamreal.tw` | `test-app.iamreal.tw`，上線後也是 | 沒有 |
 | 卡片簽的場合字串 | 上線前：`iamreal-test:public:0`（核心的 `IDC_PROOF_LOG_TEST`） | `iamreal-test:public:0`，上線後也是 | `iamreal-test:public:0`，上線後也是 |
 | build 號碼 | 1 到 999,999：`upload-ios.yml` 的執行編號 | 1,000,000 到 1,999,999：`upload-ios-test.yml` 的執行編號加 1,000,000 | 固定 2,000,000 |
-| 怎麼裝 | TestFlight，上線起也從 App Store（從 GitHub Actions 上傳：「上傳到 TestFlight」） | TestFlight，永遠不上 App Store；上線前只給營運者（ADR-0040） | 用線裝（「怎麼用線裝到手機」） |
+| 怎麼裝 | TestFlight，上線起也從 App Store（從 GitHub Actions 上傳：「上傳到 TestFlight」） | TestFlight，永遠不上 App Store；上線前只給維護者（ADR-0040） | 用線裝（「怎麼用線裝到手機」） |
 | 「到 App Store 更新」的按鈕 | 有 | 沒有 | 沒有 |
 
 三個組態都以 `Config/Test.xcconfig` 為底：這個檔照組態定識別碼，並定一個編譯條件 `IAMREAL_ENV_TEST`；`App/AppEnvironment.swift` 照編譯條件給網址和哪一份證明紀錄，沒有條件就編不過。是哪一種 app 也由編譯條件定：Debug 有 `DEBUG`，TestApp 有 `IAMREAL_TEST_APP`（`AppEnvironment.app`）。名稱和專案檔裡的 build 號碼照組態寫在專案檔（`INFOPLIST_KEY_CFBundleDisplayName`、`CURRENT_PROJECT_VERSION`）。app 裡沒有切換環境的設定，後台也不能叫 app 換環境。上線那天用一個 PR 讓 Release 改用正式網站的設定檔；TestApp 和 Debug 留在 `Config/Test.xcconfig`，那個 PR 不碰它們。正式網站的設定現在還沒有。
@@ -287,7 +287,7 @@ App Store 要 app 帶一份 privacy manifest，申報用到的 required reason A
   | `NSPrivacyCollectedDataTypeOtherDiagnosticData` 多一個 Analytics | 第 7、9 列：停下來的原因代碼；手機型號、系統版本、app 版本 |
   | `NSPrivacyCollectedDataTypePerformanceData`（Analytics） | 第 8 列：花了多久的分級 |
 
-  第 2、4 列（後台的連線紀錄，[#20](https://github.com/iamreal-tw/iamreal/issues/20)）用的類別已經在上面。Apple：Xcode 把 app 和各 SDK 的 manifest 彙整成一份 privacy report，在 App Store Connect 填隱私標示時參考它；標示本身還是要營運者在後台填（[#161](https://github.com/iamreal-tw/iamreal/issues/161)）。
+  第 2、4 列（後台的連線紀錄，[#20](https://github.com/iamreal-tw/iamreal/issues/20)）用的類別已經在上面。Apple：Xcode 把 app 和各 SDK 的 manifest 彙整成一份 privacy report，在 App Store Connect 填隱私標示時參考它；標示本身還是要維護者在後台填（[#161](https://github.com/iamreal-tw/iamreal/issues/161)）。
 
 ## 建置時的檢查（`check-app.sh`）
 
@@ -331,7 +331,7 @@ xcrun devicectl device install app --device <手機的識別碼> build/Build/Pro
 
 ## 用真卡片測試
 
-agent 不碰卡片；這一節由營運者用自己的卡片和 iPhone 照著做，結果記在 PR（[#174](https://github.com/iamreal-tw/iamreal/issues/174)）。用「怎麼用線裝到手機」裝開發用 build：它連測試網站、簽測試的證明紀錄的場合字串，可以重複過卡。
+agent 不碰卡片；這一節由維護者用自己的卡片和 iPhone 照著做，結果記在 PR（[#174](https://github.com/iamreal-tw/iamreal/issues/174)）。用「怎麼用線裝到手機」裝開發用 build：它連測試網站、簽測試的證明紀錄的場合字串，可以重複過卡。
 
 記下來的：iPhone 的機型和 iOS 版本、卡片是第幾代、每一項照預期或不照預期（不照預期時，畫面上的代碼和停在哪一項）。PIN 不寫下來；截圖裡有姓名的不附。
 
@@ -356,14 +356,14 @@ agent 不碰卡片；這一節由營運者用自己的卡片和 iPhone 照著做
 
 ## 上傳到 TestFlight
 
-正式 app（Release，`tw.iamreal.app`）和測試 app（TestApp，`tw.iamreal.app.test`）只從 GitHub Actions 上傳（ADR-0036、ADR-0040），各一個工作流程：`.github/workflows/upload-ios.yml` 和 `upload-ios-test.yml`。兩個一樣只能手動觸發，營運者或營運者電腦上的 coding agent 在 `main` 上觸發：
+正式 app（Release，`tw.iamreal.app`）和測試 app（TestApp，`tw.iamreal.app.test`）只從 GitHub Actions 上傳（ADR-0036、ADR-0040），各一個工作流程：`.github/workflows/upload-ios.yml` 和 `upload-ios-test.yml`。兩個一樣只能手動觸發，維護者或維護者電腦上的 coding agent 在 `main` 上觸發：
 
 ```
 gh workflow run upload-ios.yml --repo iamreal-tw/iamreal --ref main        # 正式 app
 gh workflow run upload-ios-test.yml --repo iamreal-tw/iamreal --ref main   # 測試 app
 ```
 
-合併到 `main` 不會上傳。上傳成功之後，App Store Connect 處理完那個 build，TestFlight 的內部群組「營運者」自動收到（[#161](https://github.com/iamreal-tw/iamreal/issues/161)；測試 app 的 App Store Connect 那一筆和它的群組是 #485）。兩個工作流程只差在 archive 的那一步（`archive.sh` 帶不帶 `--test-app`、build 號碼），用同一個 environment `app-test`、同一把金鑰。識別碼來自組態（`Config/Test.xcconfig`），工作流程和 `archive.sh` 都不給；檢查的腳本（`check-app.sh`、`check-archive.sh`）照組態核對它是不是那一個。
+合併到 `main` 不會上傳。上傳成功之後，App Store Connect 處理完那個 build，TestFlight 的內部群組「維護者」自動收到（[#161](https://github.com/iamreal-tw/iamreal/issues/161)；測試 app 的 App Store Connect 那一筆和它的群組是 #485）。兩個工作流程只差在 archive 的那一步（`archive.sh` 帶不帶 `--test-app`、build 號碼），用同一個 environment `app-test`、同一把金鑰。識別碼來自組態（`Config/Test.xcconfig`），工作流程和 `archive.sh` 都不給；檢查的腳本（`check-app.sh`、`check-archive.sh`）照組態核對它是不是那一個。
 
 ### 兩個工作
 
@@ -376,7 +376,7 @@ gh workflow run upload-ios-test.yml --repo iamreal-tw/iamreal --ref main   # 測
 - **`archive.sh`** 做 Release（帶 `--test-app` 時 TestApp）的 archive，不簽章（`CODE_SIGNING_ALLOWED=NO`；這個工作沒有能簽章的東西），最後跑 `check-archive.sh`。建置時 `check-app.sh` 照常當最後一個建置階段跑。
 - **archive 之後用 entitlement 檔簽一個 ad hoc 的章。** 沒有簽章的 archive 裡沒有 entitlement，Xcode 匯出時只用它在 app 上找得到的：第一次手動簽章（[run 46001796708](https://github.com/iamreal-tw/iamreal/actions/runs/46001796708)，#143）簽出來的 app 沒有 NFC，`upload` 的檢查擋下了。所以 `build` 在 `archive.sh` 之後跑 `codesign --sign -`（ad hoc：不用金鑰、不用團隊）帶 `Config/IamrealApp.entitlements`，交下去的 app 就帶著 entitlement；`upload` 的匯出再用發布憑證重簽。
 - **`check-archive.sh`** 確認要上傳的就是那一個 app：識別碼 `tw.iamreal.app`（帶 `--test-app` 時 `tw.iamreal.app.test`）；版本和 build 是給它的那兩個數字，app 裡和 archive 自己的紀錄都是；app 有圖示（App Store Connect 不收沒有圖示的 build）；app 裡只有執行檔、Xcode 放的 `Info.plist`、`PkgInfo`、編好的圖示（`Assets.car` 和給舊版 iOS、給 iPad 相容模式的兩張 PNG）和「包進 app 的檔案」那張表的每一個（privacy manifest 也在裡面），沒有測試（`PlugIns/`，假卡片在裡面）、沒有別的檔，執行檔裡沒有 `FakeCard`；再以那個組態跑一次 `check-app.sh`（build 號碼在那個 app 的範圍裡、連測試網站、沒有正式網站的網址、沒有測試用的函式庫 `idc_testing_session_open`、內建的檔和程式庫的相同）。卡片簽哪一份證明紀錄的場合字串，執行檔裡看不出來（兩條都寫死在核心）；它跟著網址走：`App/AppEnvironment.swift` 在同一個編譯條件底下定網址和證明紀錄，執行檔裡是測試網站的網址，所以編進去的是測試那一支，而 `Tests/BuildTests.swift` 確認那一支簽 `iamreal-test:public:0`。
-- **簽章用營運者做的發布憑證，手動簽章**（[#143](https://github.com/iamreal-tw/iamreal/issues/143)）。開發者角色的 API 金鑰用不了 Apple 代管的發布憑證（第一次執行 [run 45933174888](https://github.com/iamreal-tw/iamreal/actions/runs/45933174888)：「You haven't been given access to cloud-managed distribution certificates」），API 金鑰也沒有地方另外給這個權限；它也不能建發布用的描述檔（[Roles](https://developer.apple.com/help/account/access/roles/)：「Create and delete distribution provisioning profiles」開發者那一欄是空的）。所以照 ADR-0036 的備案，營運者做一張 Apple Distribution 憑證和兩份 App Store 描述檔（兩個 app 各一份），放進 `app-test`，`ExportOptions.plist` 寫 `signingStyle` `manual`、`signingCertificate` `Apple Distribution`，描述檔在 `upload` 裡照識別碼寫進 `provisioningProfiles`。API 金鑰只用來上傳。不改用 App Manager 或 Admin 角色的金鑰：兩個都能送審（同一頁的「Submit apps」）。
+- **簽章用維護者做的發布憑證，手動簽章**（[#143](https://github.com/iamreal-tw/iamreal/issues/143)）。開發者角色的 API 金鑰用不了 Apple 代管的發布憑證（第一次執行 [run 45933174888](https://github.com/iamreal-tw/iamreal/actions/runs/45933174888)：「You haven't been given access to cloud-managed distribution certificates」），API 金鑰也沒有地方另外給這個權限；它也不能建發布用的描述檔（[Roles](https://developer.apple.com/help/account/access/roles/)：「Create and delete distribution provisioning profiles」開發者那一欄是空的）。所以照 ADR-0036 的備案，維護者做一張 Apple Distribution 憑證和兩份 App Store 描述檔（兩個 app 各一份），放進 `app-test`，`ExportOptions.plist` 寫 `signingStyle` `manual`、`signingCertificate` `Apple Distribution`，描述檔在 `upload` 裡照識別碼寫進 `provisioningProfiles`。API 金鑰只用來上傳。不改用 App Manager 或 Admin 角色的金鑰：兩個都能送審（同一頁的「Submit apps」）。
 - **`app-test` 裡簽章用的 secret**：
 
   | 名稱 | 內容 | 哪個工作流程用 |
@@ -387,7 +387,7 @@ gh workflow run upload-ios-test.yml --repo iamreal-tw/iamreal --ref main   # 測
   | `IOS_TEST_APPSTORE_PROFILE_BASE64` | `tw.iamreal.app.test` 的 App Store 描述檔，base64 | `upload-ios-test.yml` |
 
   描述檔要包含 NFC Tag Reading 和 Associated Domains：`upload` 檢查描述檔是這個 app、這個團隊，允許 NFC 的 `TAG`，而且有 Associated Domains，不是就停。App ID 的能力改了，描述檔就失效要重做（[Enable app capabilities](https://developer.apple.com/help/account/identifiers/enable-app-capabilities/)：「Provisioning profiles that contain a modified App ID become invalid.」）。
-- **憑證和描述檔有到期日，到期前要換。** 到期日在 Apple Developer 網站的 Certificates、Profiles 頁上看得到；換的時候營運者重做、換掉上面的 secret。`.p12` 用「鑰匙圈存取」匯出：OpenSSL 3 預設的加密方式做的 `.p12`，`security import` 可能讀不了。撤銷憑證時，App Store 上的 app 不受影響，但已經上傳、還沒送審的 build 可能變成無效（[Certificates overview](https://developer.apple.com/help/account/certificates/certificates-overview/)）。
+- **憑證和描述檔有到期日，到期前要換。** 到期日在 Apple Developer 網站的 Certificates、Profiles 頁上看得到；換的時候維護者重做、換掉上面的 secret。`.p12` 用「鑰匙圈存取」匯出：OpenSSL 3 預設的加密方式做的 `.p12`，`security import` 可能讀不了。撤銷憑證時，App Store 上的 app 不受影響，但已經上傳、還沒送審的 build 可能變成無效（[Certificates overview](https://developer.apple.com/help/account/certificates/certificates-overview/)）。
 - **先簽一次、不上傳，檢查 entitlement。** Xcode 簽出來的 entitlement 要到這裡才看得到；`upload` 先用 `destination` `export` 簽一次，從簽好的 app 讀出 entitlement，要和 `Config/IamrealApp.entitlements` 相同，不多不少：`com.apple.developer.nfc.readersession.formats` 剛好是 `TAG` 一個，`com.apple.developer.associated-domains` 剛好是 `applinks:test-app.iamreal.tw` 一個（「app 網域」）；識別碼要對，才往下簽章上傳。
 - **團隊代號**是 environment `app-test` 的 variable `APPLE_TEAM_ID`（不是 secret：每個簽過的 app 裡都看得到它）。archive 只有 ad hoc 的章、沒有團隊，匯出要知道用哪個團隊（`xcodebuild -help`：`teamID`「Defaults to the team used to build the archive」）。沒有設這個 variable，`upload` 在拿到金鑰之前就失敗。團隊代號不寫進程式庫（「怎麼用線裝到手機」）。
 - **`manageAppVersionAndBuildNumber` 是 `false`**：版本和 build 用 `archive.sh` 給的，Xcode 不另外改。`uploadSymbols` 是 `true`：Apple 收到當機報告時能還原成函式名稱（[#94](https://github.com/iamreal-tw/iamreal/issues/94)：當機只看商店自己的報告）。
@@ -414,11 +414,11 @@ gh workflow run upload-ios-test.yml --repo iamreal-tw/iamreal --ref main   # 測
 - app 網域的 entitlement（#532）：Xcode 用重發的描述檔重簽時帶不帶上 `applinks:test-app.iamreal.tw`，要等 entitlement 進了 `main` 之後兩個工作流程各跑一次才看得到；`upload` 先簽一次的那一步會看
 - 讀卡的 entitlement（`Config/IamrealApp.entitlements`，[#174](https://github.com/iamreal-tw/iamreal/issues/174)）：沒有 ad hoc 簽章時，Xcode 簽出來的 app 沒有 NFC（run 46001796708）。有了 ad hoc 簽章之後，Xcode 重簽時會不會照它帶上 NFC，`upload` 先簽一次的那一步會看；不會的話那一步失敗，不會上傳
 
-### 上傳之後營運者做的
+### 上傳之後維護者做的
 
 - **第一次觸發之前**：在 environment `app-test` 加 variable `APPLE_TEAM_ID`（團隊代號，2026-11-27 加了），和上面「簽章用的 secret」那張表的 secret（測試 app 的描述檔要等它的 App ID 註冊，#485）。
 
-- **出口管制的加密問題：已經寫在 `Config/Info.plist`，不用每個 build 回答。** App Store Connect 問「App 會使用哪種加密演算法？」，營運者 2026-11-27 對 build 3 選「未使用上方提及的任一種演算法」：app 拿來保密的加密只有連伺服器的 HTTPS（`URLSession`）和卡片安全通道的 AES-128、AES-CMAC（`App/CardChannel.swift` 經由系統的 CommonCrypto），都是系統的加密；`device-core/` 執行的只有雜湊、驗簽章和零知識證明。連結進來的零知識證明程式庫裡有 AES 的實作（Noir 的求解器依賴的 `aes`、`cbc` 套件，Barretenberg 的 `AES128Constraint`），但我們的電路沒有用 AES，這段程式不會執行，也不拿來保護任何資料；營運者知道這一點，仍然選上面那個答案（2026-11-28）。所以 `ITSAppUsesNonExemptEncryption` 是 `NO`：Apple 寫 `NO` 表示 app「including any third-party libraries you link against—either uses no encryption, or only uses encryption that’s exempt from export compliance requirements」（[ITSAppUsesNonExemptEncryption](https://developer.apple.com/documentation/bundleresources/information-property-list/itsappusesnonexemptencryption)）。app 改用別的加密、或電路用到 AES 時，回頭重看這一項。
+- **出口管制的加密問題：已經寫在 `Config/Info.plist`，不用每個 build 回答。** App Store Connect 問「App 會使用哪種加密演算法？」，維護者 2026-11-27 對 build 3 選「未使用上方提及的任一種演算法」：app 拿來保密的加密只有連伺服器的 HTTPS（`URLSession`）和卡片安全通道的 AES-128、AES-CMAC（`App/CardChannel.swift` 經由系統的 CommonCrypto），都是系統的加密；`device-core/` 執行的只有雜湊、驗簽章和零知識證明。連結進來的零知識證明程式庫裡有 AES 的實作（Noir 的求解器依賴的 `aes`、`cbc` 套件，Barretenberg 的 `AES128Constraint`），但我們的電路沒有用 AES，這段程式不會執行，也不拿來保護任何資料；維護者知道這一點，仍然選上面那個答案（2026-11-28）。所以 `ITSAppUsesNonExemptEncryption` 是 `NO`：Apple 寫 `NO` 表示 app「including any third-party libraries you link against—either uses no encryption, or only uses encryption that’s exempt from export compliance requirements」（[ITSAppUsesNonExemptEncryption](https://developer.apple.com/documentation/bundleresources/information-property-list/itsappusesnonexemptencryption)）。app 改用別的加密、或電路用到 AES 時，回頭重看這一項。
 - **對外測試的群組**：第一個 build 上傳之後才能建，關掉截圖回饋（#161）。
 
 ## 工具和版本

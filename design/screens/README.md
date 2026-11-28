@@ -82,7 +82,7 @@ Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts
 | 截圖 | 畫面 | 版本 |
 |---|---|---|
 | `card-proof-app-1-before-phone.png` | 第 1 步：開始之前 | 實作版（Android） |
-| `card-proof-app-1-paused-phone.png` | 第 1 步：營運者停止收過卡時，那一句在「下一步」的位置 | 實作版（Android） |
+| `card-proof-app-1-paused-phone.png` | 第 1 步：維護者停止收過卡時，那一句在「下一步」的位置 | 實作版（Android） |
 | `card-proof-app-1-busy-phone.png` | 第 1 步：按「下一步」時人太多（`config?start` 回 `503` `busy`），那一句在「下一步」上面 | 實作版（Android） |
 | `card-proof-app-2-read-iphone-phone.png` | 第 2 步：讀取卡片，iPhone 感應位置的示範（停在卡片貼好的那一格） | 實作版（iOS） |
 | `card-proof-app-2-read-android-phone.png` | 第 2 步：讀取卡片，Android，感應位置的示範停在卡片貼好的那一格 | 實作版（Android） |
