@@ -325,13 +325,13 @@ class CardProof(
     }
 
     /**
-     * The challenge of readCard(), taken once, if [declare] comes within [HELD_CHALLENGE_MS] of asking for it and on the same
-     * date in Taiwan; null otherwise. A new date would make it `challenge_not_today`.
+     * The challenge of readCard(), if tap 2 was made within [HELD_CHALLENGE_MS] of asking for it and today is the date in
+     * Taiwan it was asked on; null otherwise. A new date would make it `challenge_not_today`. [declare] called again (the last
+     * tap made again) signs the same one.
      */
-    private fun takeHeld(): String? {
+    private fun usableHeld(): String? {
         val h = held ?: return null
-        held = null
-        val age = deps.now() - h.askedAt
+        val age = (firstSignedAt ?: return null) - h.askedAt
         return h.challenge.takeIf { age >= 0 && age < HELD_CHALLENGE_MS && h.day == today() }
     }
 
@@ -820,7 +820,7 @@ class CardProof(
         try {
             // The certificate and the CRL again, on today's date: the card may have been read before midnight.
             checkDate()
-            challenge = takeHeld() ?: try {
+            challenge = usableHeld() ?: try {
                 deps.backend.challenge()
             } catch (e: ServerException) {
                 live()
@@ -974,11 +974,12 @@ class CardProof(
         const val IDLE_MS = 5 * 60_000L
 
         /**
-         * The challenge asked for before the CRL's index (#553) is the one the card signs if [declare] comes less than this after
-         * it was asked for, on the same date in Taiwan; otherwise [declare] asks for a new one. The server takes a challenge for
-         * 10 minutes (spec/challenge.md): this leaves at least 5 for tap 3, the proof and the submission. As on the web page.
+         * The challenge asked for before the CRL's index (#553) is the one the card signs if tap 2 was made less than this after
+         * it was asked for, and [declare] comes on the same date in Taiwan; otherwise [declare] asks for a new one. Tap 3 comes
+         * at most [IDLE_MS] after tap 2, so the challenge is at most 8 minutes old when the card signs it, of the 10 the server
+         * takes it for (spec/challenge.md): at least 2 are left for the proof and the submission. As on the web page.
          */
-        const val HELD_CHALLENGE_MS = 5 * 60_000L
+        const val HELD_CHALLENGE_MS = 3 * 60_000L
 
         /**
          * Why the last tap ended the card proof, the PIN dropped with everything else: the card refused the PIN, its PIN is locked,

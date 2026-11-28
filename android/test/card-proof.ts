@@ -2017,7 +2017,7 @@ async function stoppedTakingCardProofs(): Promise<void> {
   // turned away, so that step 5 asks for its own.
   away("POST /api/v1/challenges", 503, "busy");
   await toDeclare();
-  check((turnAway.get("POST /api/v1/challenges") ?? []).length === 0, "the reading asked for a challenge, and was turned away");
+  check((turnAway.get("POST /api/v1/challenges") ?? []).length === 0, "a challenge was asked for by step 4 (the reading's), and was turned away");
   await setPaused(true);
   const handed = pinsHanded;
   press(say("confirm.button_declare_single"));

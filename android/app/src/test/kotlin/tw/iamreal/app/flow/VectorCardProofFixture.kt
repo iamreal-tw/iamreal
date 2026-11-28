@@ -25,7 +25,7 @@ import kotlin.concurrent.thread
  * does, and a card of spec/vectors/ (test keys) held to the phone. The core is the library of the tests, so a card proof here
  * goes as far as the record sent.
  */
-abstract class VectorCardProofTest {
+abstract class VectorCardProofFixture {
     protected fun vectors(name: String) = JSONObject(File(System.getProperty("iamreal.vectors"), name).readText())
 
     protected fun bundled(name: String): ByteArray = System.getProperty("iamreal.bundled").split(File.pathSeparator)
@@ -170,7 +170,7 @@ abstract class VectorCardProofTest {
             override val card = card
             override fun config() = backend.config()
             override fun openSession() = TestingCore.sessionOpen(issuers.toString().toByteArray())
-            override fun bundled(name: String) = this@VectorCardProofTest.bundled(name)
+            override fun bundled(name: String) = this@VectorCardProofFixture.bundled(name)
             override fun now() = clock()
             override val appBuild = 1
             override val crlNumbers = object : CardProof.CrlNumbers {

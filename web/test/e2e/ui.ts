@@ -2584,10 +2584,6 @@ await tryStep("card proofs stopped: step 1 says so before a card is read; stoppe
 
 // Too many people (ADR-0026, #32) ---------------------------------------------------
 
-/**
- * The next `n` requests the page sends to `pattern` answered here as the server answers too many people:
- * `status`, `{"error":code}`, `Retry-After: 60`; the ones after go on to the Worker. `answered()` counts them.
- */
 /** Answers the paused request `p` (Fetch.requestPaused) as the Worker answers one it turns away as too many. */
 async function tooMany(p: { requestId: string }, status: 429 | 503, code: "rate_limited" | "busy"): Promise<void> {
   await page.send("Fetch.fulfillRequest", {
@@ -2602,6 +2598,10 @@ async function tooMany(p: { requestId: string }, status: 429 | 503, code: "rate_
   });
 }
 
+/**
+ * The next `n` requests the page sends to `pattern` answered here as the server answers too many people:
+ * `status`, `{"error":code}`, `Retry-After: 60`; the ones after go on to the Worker. `answered()` counts them.
+ */
 async function tooManyOn(pattern: string, status: 429 | 503, code: "rate_limited" | "busy", n = 1, counts?: Record<string, unknown>[]): Promise<{ undo: () => Promise<void>; answered: () => number }> {
   let answered = 0;
   // With `counts`: every request of the API is seen (one pattern a page), the counts' bodies kept, and only `pattern`'s turned away.

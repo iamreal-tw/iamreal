@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
  *   - The card's state, the challenge and the submission turned away: each is asked again, and the card is not held to the
  *     phone again for it.
  */
-class BusyTest : VectorCardProofTest() {
+class BusyTest : VectorCardProofFixture() {
     @Test
     fun `the start turned away as too many - no card is read`() {
         for ((status, code) in listOf(503 to "busy", 429 to "rate_limited")) {

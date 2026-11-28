@@ -1449,8 +1449,9 @@ describe("cancel() while a step waits: nothing is written, nothing is sent", () 
 // the root of the second newest CRL only for a challenge issued before it
 // learned of the newest, or at most 2 minutes after
 // (spec/revocation-tree.md, "Who checks what"). proceed() signs that
-// challenge if it comes within HELD_CHALLENGE_MS and on the same date in
-// Taiwan, and asks for a new one otherwise.
+// challenge if the first signature came within HELD_CHALLENGE_MS of asking
+// for it and the date in Taiwan is the same, and asks for a new one
+// otherwise.
 describe("the challenge, asked for before the CRL", () => {
   /** A challenge of 2026-11-16 the fake server issues, in its one spelling. */
   const fresh = () => `2026-11-16.${encodeBase32(crypto.getRandomValues(new Uint8Array(16)))}`;
@@ -1493,10 +1494,11 @@ describe("the challenge, asked for before the CRL", () => {
     const s = await setup({ echoPublicInputs: true, backend: c.backend });
     await s.flow.readCard();
     await s.flow.checksDone();
-    // The mirror hands the server a newer CRL, and the cardholder takes 3 minutes over the PIN and the list.
+    // The mirror hands the server a newer CRL, and the cardholder takes 2 minutes over the PIN and one more over the list.
     c.change();
-    s.advance(3 * 60_000);
+    s.advance(2 * 60_000);
     const cq = s.flow.choose(listOf(await s.flow.confirmCard(PIN), { threads: "alice" }));
+    s.advance(60_000);
     const done = await s.flow.proceed(cq.accounts);
     assert.equal(done.seq, 1);
     assert.equal(c.issued.length, 1, "one challenge");
@@ -1504,7 +1506,7 @@ describe("the challenge, asked for before the CRL", () => {
     assert.ok(s.progress.includes("challenge"), "the challenge is checked at proceed()");
   });
 
-  test("just under HELD_CHALLENGE_MS after it was asked for: the same challenge; at it, a new one, which is the one signed", async () => {
+  test("the first signature just under HELD_CHALLENGE_MS after it was asked for: the same challenge; at it, a new one, which is the one signed", async () => {
     for (const [after, requests] of [
       [HELD_CHALLENGE_MS - 1, 1],
       [HELD_CHALLENGE_MS, 2],
@@ -1522,6 +1524,27 @@ describe("the challenge, asked for before the CRL", () => {
       const code = await declarationCode(SCOPE, cq.accounts, issued.at(-1)!);
       assert.deepEqual(s.card.signed[1], code, `${after}: the card signed the challenge sent`);
     }
+  });
+
+  test("the first signature 3 minutes before the challenge was asked for, by a clock that went back: a new one", async () => {
+    const s = await setup({ echoPublicInputs: true });
+    await s.flow.readCard();
+    await s.flow.checksDone();
+    s.advance(-3 * 60_000);
+    const cq = s.flow.choose(listOf(await s.flow.confirmCard(PIN), { threads: "alice" }));
+    assert.equal((await s.flow.proceed(cq.accounts)).seq, 1);
+    assert.equal(requestsOn(s, "/api/v1/challenges"), 2);
+  });
+
+  test("the first signature in time, proceed() almost 5 minutes after it: still the reading's challenge, at most 8 minutes old when the card signs", async () => {
+    const s = await setup({ echoPublicInputs: true });
+    await s.flow.readCard();
+    await s.flow.checksDone();
+    s.advance(HELD_CHALLENGE_MS - 1);
+    const cq = s.flow.choose(listOf(await s.flow.confirmCard(PIN), { threads: "alice" }));
+    s.advance(IDLE_MS - 1);
+    assert.equal((await s.flow.proceed(cq.accounts)).seq, 1);
+    assert.equal(requestsOn(s, "/api/v1/challenges"), 1);
   });
 
   test("a clock that went back since the challenge was asked for: a new one", async () => {
@@ -1567,14 +1590,13 @@ describe("the challenge, asked for before the CRL", () => {
     assert.equal((await s.flow.proceed(cq.accounts)).seq, 1);
   });
 
-  test("the reading's challenge is used once: after a blocked window at the second signature, proceed() asks for a new one", async () => {
+  test("after a blocked window at the second signature, proceed() again signs the reading's challenge again", async () => {
     const s = await setup({ echoPublicInputs: true });
     const cq = await toChosen(s);
     blockWindows(s.card, "sign", 1);
     assert.equal((await stopOf(s.flow.proceed(cq.accounts))).code, "card");
-    assert.equal(requestsOn(s, "/api/v1/challenges"), 1);
     assert.equal((await s.flow.proceed(cq.accounts)).seq, 1);
-    assert.equal(requestsOn(s, "/api/v1/challenges"), 2);
+    assert.equal(requestsOn(s, "/api/v1/challenges"), 1);
   });
 });
 
@@ -1629,7 +1651,7 @@ describe("a card proof that crosses midnight", () => {
     const s = await setup({
       echoPublicInputs: true,
       // proceed() at 23:59:45 in Taiwan.
-      start: Date.UTC(2026, 10, 16, 15, 54, 45),
+      start: Date.UTC(2026, 10, 16, 15, 56, 45),
       backend: {
         challenge: () => "2026-11-17.000G40R40M30E209185GR38E1W",
         cardState: cardState({ last_card_proof: "2026-11-16", platforms: { threads: has("alice") } }),

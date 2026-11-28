@@ -304,7 +304,15 @@ final class CardProofFlow {
     private var challenge: String?
     /// The challenge asked for before the CRL's index: what came, when it
     /// was asked for (deps.clock) and on which date in Taiwan.
-    private var held: (challenge: String, askedAt: Date, day: String)?
+    private struct Held {
+        let challenge: String
+        let askedAt: Date
+        let day: String
+    }
+
+    private var held: Held?
+    /// When the card signed the scope string (tap 2), by deps.clock.
+    private var firstSignedAt: Date?
     private var code: Data?
     private var submission: Data?
 
@@ -424,12 +432,14 @@ final class CardProofFlow {
     }
 
     /// The challenge asked for before the CRL's index (#553) is the one the
-    /// card signs if prepare() comes less than this after it was asked
-    /// for, on the same date in Taiwan; otherwise prepare() asks for a new
-    /// one. The server takes a challenge for 10 minutes
-    /// (spec/challenge.md): this leaves at least 5 for tap 3, the proof
-    /// and the submission. As on the web page and on Android.
-    static let heldChallengeSeconds: TimeInterval = 5 * 60
+    /// card signs if tap 2 was made less than this after it was asked for,
+    /// and prepare() comes on the same date in Taiwan; otherwise prepare()
+    /// asks for a new one. Tap 3 starts at most five minutes after the PIN
+    /// was typed, before tap 2 (CardProofModel.pinLifetime), so the challenge is at most
+    /// 8 minutes old when the card signs it, of the 10 the server takes it
+    /// for (spec/challenge.md): at least 2 are left for the proof and the
+    /// submission. As on the web page and on Android.
+    static let heldChallengeSeconds: TimeInterval = 3 * 60
 
     /// A challenge, asked for before the CRL's index is (#553): the server
     /// accepts the root of the second newest CRL only for a challenge
@@ -438,23 +448,21 @@ final class CardProofFlow {
     /// before the phone read the index is that, whenever the list changes
     /// after. Any failure leaves none: prepare() asks then, as it would
     /// have. The core checks it when it is used, before tap 3.
-    private func askEarly() async -> (challenge: String, askedAt: Date, day: String)? {
+    private func askEarly() async -> Held? {
         let askedAt = deps.clock()
         let day = Self.dateInTaiwan(askedAt)
         guard let challenge = try? await deps.backend.challenge() else { return nil }
-        return (challenge, askedAt, day)
+        return Held(challenge: challenge, askedAt: askedAt, day: day)
     }
 
-    /// The challenge of readCard(), taken once, if prepare() comes within
-    /// heldChallengeSeconds of asking for it and on the same date in
-    /// Taiwan; nil otherwise. A new date would make it
+    /// The challenge of readCard(), if tap 2 was made within
+    /// heldChallengeSeconds of asking for it and today is the date in
+    /// Taiwan it was asked on; nil otherwise. A new date would make it
     /// `challenge_not_today`.
-    private func takeHeld() -> String? {
-        guard let held else { return nil }
-        self.held = nil
-        let now = deps.clock()
-        let age = now.timeIntervalSince(held.askedAt)
-        guard age >= 0, age < Self.heldChallengeSeconds, held.day == Self.dateInTaiwan(now) else { return nil }
+    private func usableHeld() -> String? {
+        guard let held, let firstSignedAt else { return nil }
+        let age = firstSignedAt.timeIntervalSince(held.askedAt)
+        guard age >= 0, age < Self.heldChallengeSeconds, held.day == Self.dateInTaiwan(deps.clock()) else { return nil }
         return held.challenge
     }
 
@@ -608,6 +616,7 @@ final class CardProofFlow {
             pin.accepted = true
             self.pin = pin
             scopeSignature = Secret(signature)
+            firstSignedAt = deps.clock()
             Self.wipe(&signature)
             guard let scopedID = try Self.object(body)["scoped_id"] as? String else { throw Stop.core(IDC_ERR_INTERNAL) }
             shortID = try DeviceCore.shortID(of: scopedID)
@@ -858,7 +867,7 @@ final class CardProofFlow {
         // date, and a new day only lifts the day's limit.
         do {
             try stillValid(at: deps.clock())
-            if let kept = takeHeld() {
+            if let kept = usableHeld() {
                 challenge = kept
             } else {
                 challenge = try await deps.backend.challenge()
