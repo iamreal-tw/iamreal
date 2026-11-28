@@ -122,9 +122,26 @@ Issues a challenge ([`spec/challenge.md`](../../spec/challenge.md)).
 - Errors: `429` `rate_limited`, `503` `busy` ("Rules for every endpoint");
   `503` `paused` (under `records`, below): no challenge is issued.
 
-What the device does with it: checks the format in its one spelling; checks
-that the date is today in Taiwan by the device's own clock, and stops
-otherwise.
+When the device asks for it: once the card is read and its certificate
+passed, after `config` and before it downloads the CRL's index. The server
+accepts the root of the second newest CRL only for a challenge issued
+before it learned of the newest, or at most 2 minutes after
+([`spec/revocation-tree.md`](../../spec/revocation-tree.md), "Who checks
+what"): a challenge issued before the device read the index is one, so a
+CRL that changes during the card proof does not make it `root`. The card
+signs that challenge if the cardholder confirms the list less than 5
+minutes after the device asked for it, by the device's clock, and on the
+same date in Taiwan; this leaves at least 5 of the challenge's 10 minutes
+for the last signature, the proof and the submission. Otherwise, and when
+that request got no challenge (any failure: it is not a stop, and it is not
+counted), the device asks for a new one when the cardholder confirms. The
+early one is used once at most. A card proof that asks for its challenge
+then can still meet a CRL that changed more than 2 minutes before, and stop
+at `root`.
+
+What the device does with it, before the card signs it: checks the format
+in its one spelling; checks that the date is today in Taiwan by the
+device's own clock, and stops otherwise.
 
 ## `POST /api/v1/card-state`
 

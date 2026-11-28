@@ -585,6 +585,12 @@ final class CardProofTests: XCTestCase {
         let model = makeModel()
         try await toAccounts(model)
         XCTAssertEqual(Array(model.screen.texts.prefix(4)), ["你的 Threads 帳號", "這張卡片目前宣告：", "@carol.tw", "上次過卡是今天"])
+        // The CRL changes after the phone downloaded it (#553): the mirror hands the Worker a newer one, and the cardholder
+        // takes 3 minutes more. The Worker takes the root of the second newest only for a challenge issued before it learned
+        // of the newest, or at most 2 minutes after; the phone signs the challenge it asked for before the CRL's index.
+        try await backend.newCRL("G3")
+        now = now.addingTimeInterval(3 * 60)
+        try await backend.setClock(now)
         // Changed today, and changing it again today is another switch all the same (rules version 3: no correction).
         try await press("改成別的帳號", in: model)
         XCTAssertTrue(model.screen.texts.contains("一張卡終身最多更換 5 次，這次之後還可以更換 3 次。"))
@@ -709,7 +715,7 @@ final class CardProofTests: XCTestCase {
         try await press("回到開頭", in: model)
         XCTAssertEqual(model.screen.step, 1)
         XCTAssertEqual(card.signatures, 1, "the card signed the scope string only")
-        XCTAssertEqual(asked.asked["challenges"] ?? 0, 0)
+        XCTAssertEqual(asked.asked["challenges"] ?? 0, 1, "the challenge the reading asked for, and no other (#553)")
         XCTAssertEqual(asked.submitted, [])
     }
 
@@ -1383,8 +1389,10 @@ final class CardProofTests: XCTestCase {
         }
 
         // The start goes through; the config the reading asks again (asked as step 2 comes up, and once more if that one
-        // has failed by the tap) is turned away, and the card is read all the same, with the start's.
+        // has failed by the tap) is turned away, and the card is read all the same, with the start's. The challenge the reading
+        // asks for is turned away too: that is no stop, and step 5 asks for its own (tooManyAtStepFive; #553).
         asked.turnAway["config"] = [CountingBackend.rateLimited, CountingBackend.rateLimited]
+        asked.turnAway["challenges"] = [CountingBackend.busy]
         let plain = asked.asked["config", default: 0]
         try await press("下一步", in: model)
         XCTAssertEqual(model.screen.step, 2)
@@ -1394,6 +1402,7 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(asked.asked["config", default: 0] - plain, turned, "every config the reading asked was turned away (\(turned))")
         XCTAssertGreaterThan(turned, 0)
         asked.turnAway["config"] = []
+        XCTAssertEqual(asked.turnAway["challenges"], [], "the reading asked for a challenge, and it was turned away")
         XCTAssertEqual(model.screen.buttons.map(\.label), ["下一步"], "the card was read with the start's config")
         try await press("下一步", in: model)
 
@@ -1508,7 +1517,9 @@ final class CardProofTests: XCTestCase {
         try await until("card proofs taken again: 下一步") { model.screen.buttons.map(\.label) == ["下一步"] }
         XCTAssertFalse(model.screen.texts.contains(say("before.paused")))
 
-        // Stopped after step 1: challenges answers paused. The card signs nothing more.
+        // Stopped after step 1: challenges answers paused. The card signs nothing more. The challenge the reading asks for is
+        // turned away, so that step 5 asks for its own (#553).
+        asked.turnAway["challenges"] = [CountingBackend.busy]
         try await toAccounts(model)
         try await typeBob(in: model)
         try await backend.setPaused(true)

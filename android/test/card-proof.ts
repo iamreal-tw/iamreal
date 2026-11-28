@@ -650,10 +650,14 @@ async function cardProof(p: Proof): Promise<string> {
     // Where on its back differs from one Android phone to another: nothing here says the middle, or not to move the card.
     check(!s.some((t) => t.includes(say("app_read.spot_iphone")) || t === say("app_read.how", { spot: say("app_read.spot_iphone") })), "step 2 does not say where on the phone's back, nor the iPhone's sentence that says not to move the card");
   }
+  // The challenge the reading asks for, before the CRL's index (#553), turned away: that is no stop, and step 5 asks for its own.
+  const challengesAtReading = asked.get("POST /api/v1/challenges") ?? 0;
+  if (p.turnedAway) away("POST /api/v1/challenges", 429, "rate_limited");
   press(say("app_read.tap_card"));
   if (p.thorough) await tapWithPanel({ signs: false, store: "phone-1-read.png" });
   else await tap();
   await waitText(say("app_read.lift"), "step 2's list to end", 120_000);
+  if (p.turnedAway) check((asked.get("POST /api/v1/challenges") ?? 0) - challengesAtReading === 1 && (turnAway.get("POST /api/v1/challenges") ?? []).length === 0, "step 2: the reading asked for a challenge, and was turned away");
   {
     if (p.thorough) shot("step-2-read");
     const s = wholeScreen();
@@ -1828,7 +1832,7 @@ try {
   await setClocks(new Date(`${tomorrow}T12:00:00+08:00`));
 
   // 改成別的帳號: @alice gives way to @bob.
-  // The first request for this card proof's challenge gets no answer: the app asks once more by itself, and the card proof goes on (#404).
+  // The first request for this card proof's challenge, the reading's (#553), gets no answer: the app asks once more by itself, and the card proof goes on (#404).
   const challengesBefore = challengesAsked;
   dropNextChallenge = true;
   const switched = await cardProof({
@@ -1853,7 +1857,7 @@ try {
     after: 6,
     date: tomorrow,
   });
-  check(!dropNextChallenge && challengesAsked - challengesBefore === 2, `step 5: the challenge that got no answer was asked for once more, and the card proof went on (${challengesAsked - challengesBefore} requests)`);
+  check(!dropNextChallenge && challengesAsked - challengesBefore === 2, `step 2: the challenge that got no answer was asked for once more, and the card proof went on (${challengesAsked - challengesBefore} requests)`);
   // Another account: the whole step 6 (not a new card), the reminder from the new day, and step 8 names the account.
   await hangStep({ name: "switch", shortId: switched, account: HANDLE.bob, date: tomorrow, short: false, newCard: false });
   press(say("common.next"));
@@ -2009,8 +2013,11 @@ async function stoppedTakingCardProofs(): Promise<void> {
   await waitText(say("common.next"), "step 1's 下一步, card proofs taken again", 20_000);
   check(!textsOf(visible()).includes(say("before.paused")), "card proofs taken again: step 1 no longer says they are stopped");
 
-  // Stopped after step 1: challenges answers paused. The card has signed nothing.
+  // Stopped after step 1: challenges answers paused. The card has signed nothing. The challenge the reading asks for (#553) is
+  // turned away, so that step 5 asks for its own.
+  away("POST /api/v1/challenges", 503, "busy");
   await toDeclare();
+  check((turnAway.get("POST /api/v1/challenges") ?? []).length === 0, "the reading asked for a challenge, and was turned away");
   await setPaused(true);
   const handed = pinsHanded;
   press(say("confirm.button_declare_single"));

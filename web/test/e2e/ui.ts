@@ -2017,12 +2017,7 @@ await tryStep("a card's state the page cannot read (no platforms): stopped under
 });
 
 await tryStep("a challenge dated another day: stopped under 連上島民證明的伺服器", async () => {
-  await toPin(fresh.spec());
-  await confirmPin(PIN);
-  await waitAccounts();
-  await typeRows({ [THREADS]: "alice" });
-  await waitConfirm();
-  const signs = componentCount("MakeSignature");
+  // From the reading on: the page asks for the challenge before the CRL's index (#553), and signs it at step 5.
   const undo = await intercept("*/api/v1/challenges", (p) =>
     page.send("Fetch.fulfillRequest", {
       requestId: p.requestId,
@@ -2031,6 +2026,12 @@ await tryStep("a challenge dated another day: stopped under 連上島民證明�
       body: Buffer.from(JSON.stringify({ challenge: "2026-01-01.000G40R40M30E209185GR38E1W" })).toString("base64"),
     }),
   );
+  await toPin(fresh.spec());
+  await confirmPin(PIN);
+  await waitAccounts();
+  await typeRows({ [THREADS]: "alice" });
+  await waitConfirm();
+  const signs = componentCount("MakeSignature");
   await page.clickButton(C.confirm.button_declare);
   const d = await waitDoneOrMessage();
   await undo();
@@ -2544,9 +2545,16 @@ await tryStep("card proofs stopped: step 1 says so before a card is read; stoppe
     check(!(await page.eval<boolean>(`!!document.querySelector('#pin')`)), "step 2, stopped: no PIN field");
     await screenshot("paused-2-read");
 
-    // Stopped between step 4 and the last click: no challenge, its sentence under 連上島民證明的伺服器, 回到開頭 only.
+    // Stopped between step 4 and the last click: no challenge, its sentence under 連上島民證明的伺服器, 回到開頭 only. The
+    // challenge the reading asks for (#553) is turned away, so that step 5 asks for its own.
     await setPaused(false);
-    await toAccounts();
+    const early = await tooManyOn("*/api/v1/challenges", 503, "busy");
+    try {
+      await toAccounts();
+    } finally {
+      await early.undo();
+    }
+    check(early.answered() === 1, "the reading asked for a challenge, and was turned away");
     await typeRows({ [THREADS]: "pia" });
     await waitConfirm();
     await setPaused(true);
@@ -2580,6 +2588,20 @@ await tryStep("card proofs stopped: step 1 says so before a card is read; stoppe
  * The next `n` requests the page sends to `pattern` answered here as the server answers too many people:
  * `status`, `{"error":code}`, `Retry-After: 60`; the ones after go on to the Worker. `answered()` counts them.
  */
+/** Answers the paused request `p` (Fetch.requestPaused) as the Worker answers one it turns away as too many. */
+async function tooMany(p: { requestId: string }, status: 429 | 503, code: "rate_limited" | "busy"): Promise<void> {
+  await page.send("Fetch.fulfillRequest", {
+    requestId: p.requestId,
+    responseCode: status,
+    responseHeaders: [
+      { name: "Content-Type", value: "application/json" },
+      { name: "Cache-Control", value: "no-store" },
+      { name: "Retry-After", value: "60" },
+    ],
+    body: Buffer.from(JSON.stringify({ error: code })).toString("base64"),
+  });
+}
+
 async function tooManyOn(pattern: string, status: 429 | 503, code: "rate_limited" | "busy", n = 1, counts?: Record<string, unknown>[]): Promise<{ undo: () => Promise<void>; answered: () => number }> {
   let answered = 0;
   // With `counts`: every request of the API is seen (one pattern a page), the counts' bodies kept, and only `pattern`'s turned away.
@@ -2589,16 +2611,7 @@ async function tooManyOn(pattern: string, status: 429 | 503, code: "rate_limited
     if (counts && url.endsWith("/api/v1/counts") && typeof p.request.postData === "string") counts.push(JSON.parse(p.request.postData));
     if (answered < n && (!counts || url.includes(part))) {
       answered++;
-      await page.send("Fetch.fulfillRequest", {
-        requestId: p.requestId,
-        responseCode: status,
-        responseHeaders: [
-          { name: "Content-Type", value: "application/json" },
-          { name: "Cache-Control", value: "no-store" },
-          { name: "Retry-After", value: "60" },
-        ],
-        body: Buffer.from(JSON.stringify({ error: code })).toString("base64"),
-      });
+      await tooMany(p, status, code);
     } else await page.send("Fetch.continueRequest", { requestId: p.requestId });
   });
   return { undo, answered: () => answered };
@@ -2632,17 +2645,30 @@ await tryStep("too many people: the start turned away before a card is read; the
     }
   }
 
-  // Let through; the config the reading asks (without the mark) rate limited: the card proof goes on with the start's.
-  const reading = await tooManyOn("*/api/v1/config", 429, "rate_limited", 5);
+  // Let through; the config the reading asks (without the mark) rate limited: the card proof goes on with the start's. The
+  // challenge the reading asks for (#553) rate limited too: that is no stop, and step 5 asks for its own (below).
+  let configs = 0;
+  let challenges = 0;
+  const reading = await intercept("*/api/v1/*", async (p) => {
+    const url: string = p.request.url;
+    if (url.endsWith("/api/v1/config") && configs < 5) {
+      configs++;
+      await tooMany(p, 429, "rate_limited");
+    } else if (url.endsWith("/api/v1/challenges") && challenges < 1) {
+      challenges++;
+      await tooMany(p, 429, "rate_limited");
+    } else await page.send("Fetch.continueRequest", { requestId: p.requestId });
+  });
   try {
     await page.clickButton(C.common.next);
     await waitStep("read", "step 2");
     check(!(await page.eval<boolean>(`!!document.querySelector('[data-busy]')`)), "step 2: no sentence of too many people");
     const r = await readCard();
-    check(reading.answered() >= 1, `step 2: the reading asked config without the mark, and was turned away (${reading.answered()})`);
+    check(configs >= 1, `step 2: the reading asked config without the mark, and was turned away (${configs})`);
+    check(challenges === 1, "step 2: the reading asked for a challenge, and was turned away");
     check(r.done, `step 2: the card read, every item done, on the start's config (${r.item} ${r.why})`);
   } finally {
-    await reading.undo();
+    await reading();
   }
 
   // The card's state turned away as busy: 再試一次 under the PIN field asks it again, nothing signed again.
