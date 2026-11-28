@@ -1211,6 +1211,11 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的檢查（樹根�
 
 同一個名字重寫成小的之後，已經在快取裡的那一份大概會一直送到被淘汰。還原照樣對，只是下載的人拿到大的。要讓大家拿到新的，得照網址或前綴清掉 `test-data.iamreal.tw/crl/patches/` 的快取。換掉找段落的方法之後，同一對清冊的差異檔位元組會變，這一步每次都要做。原檔沒有這個問題：同一個名字的內容永遠一樣。
 
+2026-11-28 13:30 清了一次（[#545 的留言](https://github.com/iamreal-tw/iamreal/issues/545#issuecomment-7234737473)）：
+
+- 做法：zone `iamreal.tw` → Caching → Configuration → Custom Purge → URL，貼這 68 個網址。免費方案一次最多 30 個，所以分三次（30、30、8）。
+- 清完之後，不帶查詢字串的 `GET` 68 個都是 `MISS`，內容和儲存桶裡的逐位元組相同，合計 518,210 位元組。再要一次是 `HIT`，大小是新的。
+
 ### Cloudflare 上第一次建樹
 
 2026-11-20，時間都是 UTC（[#128](https://github.com/iamreal-tw/iamreal/issues/128)）。
