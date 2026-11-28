@@ -17,7 +17,7 @@
 //   is not kept: the file only says how many there were. How much is
 //   stored is not up to whoever sends counts.
 // - The minute in memory is lost when the object is stopped (a deploy, or
-//   Cloudflare moving it). The counts are for the operator to look at and
+//   Cloudflare moving it). The counts are for the maintainer to look at and
 //   decide nothing: none is made up for.
 // - Cloudflare takes an object that is idle out of memory, after 10 seconds
 //   for one that can hibernate, and what it held in memory is then gone; a

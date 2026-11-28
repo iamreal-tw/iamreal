@@ -409,7 +409,7 @@ class CardProof(
         live()
         // Without a platform table there is nothing to offer (docs/api/card-proof.md).
         platformsJson = RawJson.member(config, "platforms") ?: fail(Stop("server", mapOf("code" to "malformed_response")))
-        // The operator stopped taking card proofs since step 1 asked (docs/api/card-proof.md, `paused`): before the card is read.
+        // The maintainer stopped taking card proofs since step 1 asked (docs/api/card-proof.md, `paused`): before the card is read.
         when (pausedIn(config)) {
             true -> fail(Stop("server", mapOf("code" to "paused")))
             null -> fail(Stop("server", mapOf("code" to "malformed_response")))
@@ -962,7 +962,7 @@ class CardProof(
         }
 
         /**
-         * `config`'s `paused` (docs/api/card-proof.md): whether the operator stopped taking card proofs. Absent is false; null when
+         * `config`'s `paused` (docs/api/card-proof.md): whether the maintainer stopped taking card proofs. Absent is false; null when
          * it is there and is neither true nor false (spec/device-checks.md: `malformed_response`).
          */
         fun pausedIn(config: ByteArray): Boolean? = when (RawJson.member(config, "paused")?.toString(Charsets.UTF_8)) {

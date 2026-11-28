@@ -4,5 +4,5 @@ crs/
 # Test runs: fixtures, proofs, browser profiles.
 test-output/
 # Where the Go back end's `pnpm local` kept its proof log and CRL mirror, before
-# it was deleted (#74): an operator's computer can still have it.
+# it was deleted (#74): a maintainer's computer can still have it.
 local/

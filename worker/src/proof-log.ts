@@ -337,7 +337,7 @@ const FIRST_RETRY_MS = 60 * 1000;
 const LONGEST_RETRY_MS = 60 * 60 * 1000;
 /**
  * The longest wait of filling the views: five minutes. While they are
- * behind, the pages and submissions answer 500, and the operator who has
+ * behind, the pages and submissions answer 500, and the maintainer who has
  * mended the cause has no way to have them tried at once: this is the
  * longest they then wait. A failure that needs somebody is tried some 288
  * times a day, not 24.
@@ -536,8 +536,8 @@ export class ProofLog extends DurableObject<Env> {
       // An object that starts has its alarm set, once the constructor has returned (`timedWork` is a subclass's to
       // override): the daily publication is due at a time of day, whether or not anything is asked of the object.
       ctx.waitUntil(Promise.resolve().then(() => this.#setAlarmWithoutFailing()));
-      // A rebuild from the proof log the operator asks for by a name this object has made none for (settings.ts,
-      // `rebuildName`), and only while the operator has stopped taking card proofs: begun once the constructor has
+      // A rebuild from the proof log the maintainer asks for by a name this object has made none for (settings.ts,
+      // `rebuildName`), and only while the maintainer has stopped taking card proofs: begun once the constructor has
       // returned (`bucket` is a subclass's to override). It is the object's start that looks: on Cloudflare a changed
       // setting is a new version of the Worker, and the object starts again with it.
       const { rebuildName, cardProofsPaused } = this.settings;

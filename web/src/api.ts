@@ -167,7 +167,7 @@ export async function requestChallenge(fetchFn: Fetch): Promise<unknown> {
 export type { PlatformRow };
 
 export interface Config {
-  /** `paused`: the operator stopped taking card proofs (ADR-0033). Absent from an older server's answer: false. */
+  /** `paused`: the maintainer stopped taking card proofs (ADR-0033). Absent from an older server's answer: false. */
   paused: boolean;
   /** `crl_max_age_days`; the caller takes the smaller of it and the built-in 7 (crl/revocation.ts). */
   crlMaxAgeDays: number;

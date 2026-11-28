@@ -216,8 +216,8 @@ export function checkNothingOfTheTestBuild(b: BuildContents): void {
  * The test environment's only settings are the proof log's object, the data
  * bucket, the object's name, which proof log it is, the date it was last
  * cleared on, whether card proofs are taken (`CARD_PROOFS_PAUSED`, which
- * the operator changes on the dashboard: README.md, "停止和恢復收過卡") and the
- * name of a rebuild from the proof log the operator asks for
+ * the maintainer changes on the dashboard: README.md, "停止和恢復收過卡") and the
+ * name of a rebuild from the proof log the maintainer asks for
  * (`REBUILD_PROOF_LOG`, changed the same way: README.md, "從證明紀錄重建"), the
  * object that takes the counts and how many a minute holds (README.md, "計數"),
  * the per-IP limits and the object that keeps the site-wide limit with its

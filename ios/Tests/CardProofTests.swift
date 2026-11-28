@@ -1459,7 +1459,7 @@ final class CardProofTests: XCTestCase {
 
     // Card proofs stopped -----------------------------------------------------------
 
-    /// The operator stops taking card proofs, and takes them again
+    /// The maintainer stops taking card proofs, and takes them again
     /// (app-backend.ts, PUT /__app-test/paused; #394, #402): the app opened
     /// while they are stopped says so at step 1, in place of 下一步, and
     /// asks again as it comes back; stopped after step 1, `challenges`, then

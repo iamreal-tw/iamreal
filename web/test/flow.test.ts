@@ -377,7 +377,7 @@ async function readAndWait(s: Setup): Promise<Stop | null> {
 
 const MALFORMED: Stop = { code: "server", server: "malformed_response", status: 200 };
 
-describe("the operator stopped taking card proofs (config's paused, #105)", () => {
+describe("the maintainer stopped taking card proofs (config's paused, #105)", () => {
   const THREADS_ROW = { platform: "threads", display_name: "Threads", username_format: "[a-z0-9._]{1,30}" };
   test("config says paused while the card is read: stopped before the PIN, under the server's item; nothing signed, no card-state", async () => {
     const s = await setup({ backend: { config: { paused: true, crl_max_age_days: 3, platforms: [THREADS_ROW] } } });
@@ -562,7 +562,7 @@ describe("the flow, with a server that gives values the device must not accept",
     assert.deepEqual(await stopOf(s.flow.proceed(cq.accounts)), { code: "server", server: "crl_stale", status: 503 });
     assert.notEqual(s.flow.stop, null, "crl_stale ends the flow");
 
-    // The server takes no card proof until the operator resumes (#105, #131): not "submit_failed", no 再試一次.
+    // The server takes no card proof until the maintainer resumes (#105, #131): not "submit_failed", no 再試一次.
     answer = { status: 503, body: { error: "paused" } };
     const p = await setup({ echoPublicInputs: true, backend: { submit: () => answer } });
     const cqp = await toChosen(p);

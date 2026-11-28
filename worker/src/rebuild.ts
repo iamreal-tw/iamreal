@@ -95,7 +95,7 @@ function staged(sql: SqlStorage): SqlStorage {
  * The one table of this file that stays: what the last rebuild was and how
  * far it is. A new table, so SCHEMA_VERSION is unchanged (proof-log.ts).
  *
- * `token` names the rebuild (the operator's, proof-log.ts); `status` is
+ * `token` names the rebuild (the maintainer's, proof-log.ts); `status` is
  * `running`, `swapped` or `refused`; `source` is where the records are read
  * from, `object` (the files this object moved and the records it keeps) or
  * `bucket` (the files of the data bucket alone); `records` how many records
@@ -146,7 +146,7 @@ export interface RebuildProgress {
   readonly reason: string | null;
 }
 
-/** Why a rebuild ends without putting anything in place. The message is the reason, as the operator reads it. */
+/** Why a rebuild ends without putting anything in place. The message is the reason, as the maintainer reads it. */
 export class RebuildRefused extends Error {}
 
 interface StateRow extends Record<string, SqlStorageValue> {
@@ -284,7 +284,7 @@ async function nextRun(sql: SqlStorage, bucket: FileBucket, source: string, appl
   const file = sql.exec<{ file_sha256: string; fingerprint_after: string }>("SELECT file_sha256, fingerprint_after FROM full_files WHERE records_before = ?", applied).toArray()[0];
   if (file !== undefined) {
     // A bucket that does not answer throws here, and the step is tried again; a file that is not the one this object
-    // wrote ends the rebuild, with what the operator has to look at.
+    // wrote ends the rebuild, with what the maintainer has to look at.
     const stored = await fileOfBucket(bucket, applied);
     const key = PROOF_LOG_DIRECTORY + proofLogFileName(applied);
     if (stored === null) throw new RebuildRefused(`${key} is not in the bucket`);

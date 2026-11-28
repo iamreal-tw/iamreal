@@ -29,7 +29,7 @@ record is or how it is verified. It can change without invalidating records.
   A request that is answered `429` was not read: it does not count towards
   a challenge's five submissions, and nothing is kept of it. The limits
   are more than a household or an office behind one address uses; they
-  are the operator's settings and not part of this document. A request
+  are the maintainer's settings and not part of this document. A request
   that was answered `429` can be sent again as it was once the time has
   passed: the card does not have to be read or sign again for it. The web
   page and the two apps offer to send again after a `429` to
@@ -382,7 +382,7 @@ Submits one card proof: the card's whole list of accounts.
   **`paused`**: the server accepts no card proof for now, and issues no
   challenge. Two causes:
 
-  - The operator stopped taking card proofs (ADR-0033; `CARD_PROOFS_PAUSED`,
+  - The maintainer stopped taking card proofs (ADR-0033; `CARD_PROOFS_PAUSED`,
     `worker/README.md`, "停止和恢復收過卡"). `config` says so (`paused`).
     The Worker refuses before it asks the proof log's object; the daily
     publication goes on.
@@ -399,7 +399,7 @@ Submits one card proof: the card's whole list of accounts.
   sentence for the cardholder (`design/copy/card-proof.md`: the card proof
   is not recorded, come back later) and the request ID. Sending the same
   record again is not offered: it would be `paused` again until the
-  operator resumes, so the device offers only going back to the beginning.
+  maintainer resumes, so the device offers only going back to the beginning.
 
   A server that cannot run its proof verifier answers `500` `internal`. That
   is not a verdict on the proof: the record is not written.
@@ -437,7 +437,7 @@ Submits one card proof: the card's whole list of accounts.
   {"paused":false,"crl_max_age_days":3,"platforms":[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}],"min_app":{"android":{"build":12,"from":"2027-03-01"},"ios":{"build":9,"from":"2027-03-01"}}}
   ```
 
-  - `paused` is `true` while the operator has stopped taking card proofs
+  - `paused` is `true` while the maintainer has stopped taking card proofs
     (ADR-0033; `CARD_PROOFS_PAUSED`, `worker/README.md`): `challenges` and
     `records` then answer `paused`. It says nothing of the other cause of
     `paused` (the record rules' version, under `records`), which only those
@@ -527,12 +527,12 @@ What the device does with what it cannot read:
 
 ## `GET /api/v1/rebuild`
 
-For the operator, and for anyone who wants to see it: how far the last
+For the maintainer, and for anyone who wants to see it: how far the last
 rebuild from the proof log is (ADR-0033; `worker/README.md`, "從證明紀錄重建").
 No device reads it.
 
 - Response `200`: `{"name":"2026-11-27-1","status":"running","records":3000,"reason":null}`
-  - `name`: the name the operator gave the rebuild (`REBUILD_PROOF_LOG`), 1 to
+  - `name`: the name the maintainer gave the rebuild (`REBUILD_PROOF_LOG`), 1 to
     40 of `A-Za-z0-9._-`.
   - `status`: `running`; `swapped`, when what was computed was put in place
     of what the server had; `refused`, when it ended without changing
@@ -544,7 +544,7 @@ No device reads it.
 - A server that never began a rebuild:
   `{"name":null,"status":null,"records":0,"reason":null}`.
 - It says what the last rebuild begun was, not whether one is asked for: a
-  name the operator set while card proofs were not stopped begins nothing,
+  name the maintainer set while card proofs were not stopped begins nothing,
   and the answer stays what it was.
 - While a rebuild is `running`, `challenges` and `records` answer `paused`.
 - Errors: `429` `rate_limited`, `503` `busy` ("Rules for every endpoint").
@@ -575,13 +575,13 @@ members of a count and which counts are taken are in
   it failed and nothing of the count.
 - The counts of one minute are written as one file, in a place that is not
   public, where they are deleted after 31 days. A minute holds a set number
-  of counts at most (the operator's setting); more than that in one minute
+  of counts at most (the maintainer's setting); more than that in one minute
   are not kept, and the file only says how many there were.
 - The part of the server that takes counts does not ask the part that
   writes the proof log, so counts never wait on a card proof, nor a card
   proof on them.
 - Counts can be sent by anyone, with any values the table has. They are for
-  the operator to see where card proofs stop, and decide nothing about any
+  the maintainer to see where card proofs stop, and decide nothing about any
   record (ADR-0005).
 - Errors, each with the JSON body of any error: `429` `rate_limited`
   ("Rules for every endpoint"), and the count is then not read; `405` for

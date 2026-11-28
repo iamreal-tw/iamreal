@@ -59,7 +59,7 @@ final class CardProofModel: ObservableObject {
     /// The body of GET /api/v1/config, asked for when the app opens.
     private var config: Data?
     private var configuring: Task<Data, Error>?
-    /// The operator stopped taking card proofs, as the config last said
+    /// The maintainer stopped taking card proofs, as the config last said
     /// (docs/api/card-proof.md, `paused`): step 1 says so in place of its
     /// button. Until the config answers, and when it does not: false, and
     /// step 2 asks again.
@@ -167,7 +167,7 @@ final class CardProofModel: ObservableObject {
     }
 
     /// Step 1 asks the server for its config each time it opens, as the
-    /// web page does (card-proof.md, step 1: the operator stopping card
+    /// web page does (card-proof.md, step 1: the maintainer stopping card
     /// proofs is said before a card is read); the card proof that follows
     /// uses that answer. Not while an answer is still to come.
     private func askConfigAgain() {
@@ -459,7 +459,7 @@ final class CardProofModel: ObservableObject {
     func cameBack() {
         // The system does not run the app's clock while it is held in the background.
         if dropPINIfItsTimeIsUp() { return }
-        // The operator may have stopped card proofs, or resumed them, meanwhile.
+        // The maintainer may have stopped card proofs, or resumed them, meanwhile.
         if flow == nil, screen.step <= 1 { askConfigAgain() }
     }
 
@@ -645,7 +645,7 @@ final class CardProofModel: ObservableObject {
             guard let known = try await askedConfig() else { return }
             config = known
             if CardProofFlow.paused(config) == true {
-                // An answer that said card proofs are stopped is asked again: the operator may have resumed since.
+                // An answer that said card proofs are stopped is asked again: the maintainer may have resumed since.
                 self.config = nil
                 configuring = nil
                 guard let again = try await askedConfig() else { return }

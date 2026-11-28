@@ -20,7 +20,7 @@ const key = randomBytes(32).toString("hex");
 let status = 1;
 try {
   prepareEngineFiles();
-  // Only here is the key a plain setting: on Cloudflare it is the secret the operator sets (deploy.ts, `secret`).
+  // Only here is the key a plain setting: on Cloudflare it is the secret the maintainer sets (deploy.ts, `secret`).
   const config = writeMeasureConfig(join(dir, "config"), { MEASURE_KEY: key });
   // wrangler compares the configuration with worker-configuration.d.ts of its working directory, made for the test environment.
   process.chdir(dir);

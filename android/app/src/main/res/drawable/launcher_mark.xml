@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The launcher's icon (mipmap-anydpi/ic_launcher.xml): the mark
      (web/src/ui/logo.ts, its 64 x 64 units, as splash_mark.xml draws it) on
-     the page's white, the direction the operator chose in #490. An adaptive
+     the page's white, the direction the maintainer chose in #490. An adaptive
      icon's layer is 108dp: the system shows the 72dp in the middle and masks
      it to its own shape, and keeps whatever is in the circle of 66dp. The
      mark is 0.76dp a unit, its middle (30.5, 31) at the layer's (54, 54), so

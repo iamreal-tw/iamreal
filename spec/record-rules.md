@@ -37,7 +37,7 @@ from a broken file.
 An invalid record stays in the proof log and is listed, but changes nothing
 ("What an invalid record changes").
 The server does not append records that would be invalid. Any invalid record
-a re-verifier finds therefore shows the operator appended something it should
+a re-verifier finds therefore shows the maintainer appended something it should
 not have.
 
 ## Words
@@ -279,11 +279,11 @@ bound lets it date a record back to then; and a card's first record has no
 proof log stops both (ADR-0024).
 
 A card whose record is dated ahead cannot make a card proof with an earlier
-date until that date comes. Dating a record ahead takes the operator and a
+date until that date comes. Dating a record ahead takes the maintainer and a
 modified device together, and it holds back only that card, by at most 3
 days (check 3).
 
-Within the bounds, an operator working with a modified device can make a
+Within the bounds, a maintainer working with a modified device can make a
 card's `last_card_proof` look up to 3 days more recent than it is.
 `last_card_proof` belongs to the card, so this covers the card's accounts
 on every platform; the bound is the same 3 days. Checks 3 and 4 compare
@@ -664,7 +664,7 @@ these rules.
   After the deploy, the re-verification from the first record that a new
   version number of these rules starts (ADR-0025) is the last check. If a
   record written between that proof log and the deploy gets a different
-  result, the operator stops accepting card proofs, goes back to the code
+  result, the maintainer stops accepting card proofs, goes back to the code
   of the old version, and makes the change again with an effective date.
 
 These rules do not have a table of versions yet (which version applies from
@@ -751,9 +751,9 @@ circuit, or all the records, may then be voided:
 - **The condition can be computed from public data only.** For now it is
   either "the records of this circuit" (every record carries its own
   `circuit`) or "all the records". Never a range of dates, because nobody
-  knows from which day the flaw was used. Never single records the operator
+  knows from which day the flaw was used. Never single records the maintainer
   judges to be forged, because a re-verifier cannot check that judgement.
-- The operator first stops accepting card proofs (ADR-0025). Whether to
+- The maintainer first stops accepting card proofs (ADR-0025). Whether to
   void records in bulk and keep the scoped IDs, or to start over with a new
   scope string ([`scope.md`](scope.md), "Starting over"), depends on the
   flaw, and is decided in an ADR of its own.

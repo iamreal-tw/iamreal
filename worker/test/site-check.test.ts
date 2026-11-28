@@ -1,7 +1,7 @@
 // The check of a deployed site that needs no card (test/site-check.ts), run
 // on the local Worker: it passes on a Worker as it is deployed, and each
 // thing it is for makes it fail. The data domain is the simulated R2 bucket,
-// with the CORS rule the operator set on the real one.
+// with the CORS rule the maintainer set on the real one.
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

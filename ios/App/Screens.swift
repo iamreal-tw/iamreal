@@ -74,7 +74,7 @@ struct Screens {
     }
 
     /// `notice`: on top, when the app was opened from the reminder.
-    /// `paused`: the operator stopped taking card proofs, as the server's
+    /// `paused`: the maintainer stopped taking card proofs, as the server's
     /// config said: said in place of common.next (card-proof.md, step 1).
     /// `updateFrom`: the day from which this version can no longer do a
     /// card proof, for a build older than the server's lowest: said above

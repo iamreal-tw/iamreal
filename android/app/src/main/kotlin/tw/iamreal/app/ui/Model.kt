@@ -199,7 +199,7 @@ internal class Model(
         private set
 
     /**
-     * The operator stopped taking card proofs, as the server's config last said (docs/api/card-proof.md, `paused`): step 1
+     * The maintainer stopped taking card proofs, as the server's config last said (docs/api/card-proof.md, `paused`): step 1
      * says so in place of its button. Until the config answers, and when it does not: false, and step 2 asks again. Written on
      * the main thread only; the Model is made there, so the first answer finds [config] set.
      */
@@ -405,7 +405,7 @@ internal class Model(
 
     /**
      * The config, once the server answered. An answer that did not come is asked for again the next time; one that said card
-     * proofs are stopped is asked for again now, once: the operator may have resumed since.
+     * proofs are stopped is asked for again now, once: the maintainer may have resumed since.
      */
     private fun awaitConfig(): ByteArray {
         val kept = answerOf(synchronized(this) { config })
@@ -549,7 +549,7 @@ internal class Model(
 
     /**
      * Step 1 asks the server for its config each time it opens, as the web page does (design/copy/card-proof.md, step 1: the
-     * operator stopping card proofs is said before a card is read); the card proof that follows uses that answer. Not while an
+     * maintainer stopping card proofs is said before a card is read); the card proof that follows uses that answer. Not while an
      * answer is still to come.
      */
     private fun askConfigAgain() {

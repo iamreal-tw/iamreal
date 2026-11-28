@@ -1,4 +1,4 @@
-// The operator's query of the connection log (scripts/connection-log.ts,
+// The maintainer's query of the connection log (scripts/connection-log.ts,
 // #417) against the local Worker's connection log bucket: made-up entries,
 // in the back end's form (src/connection-log.ts, entryOf and keyOf; that
 // file needs the Workers runtime's types, so the form is written again here)

@@ -63,7 +63,7 @@
 //    (the sentence above step 1 before its start date, the screen in place
 //    of step 1 from it on, a field that cannot be read, a config that does
 //    not come) and a phone without NFC.
-// 7. The operator stops taking card proofs, and takes them again (#394, #402;
+// 7. The maintainer stops taking card proofs, and takes them again (#394, #402;
 //    app-backend.ts's PUT /__app-test/paused), before the first declaration:
 //    the app opened while stopped (step 1's sentence in place of 下一步);
 //    stopped after step 1, so that challenges answers paused, then records
@@ -1936,7 +1936,7 @@ process.exit(failures === 0 ? 0 : 1);
 // 7. Card proofs stopped ---------------------------------------------------------------
 // (Called in section 4, before the first declaration.)
 
-/** The operator stops taking card proofs, or takes them again: the back end's setting (app-backend.ts, PUT /__app-test/paused). */
+/** The maintainer stops taking card proofs, or takes them again: the back end's setting (app-backend.ts, PUT /__app-test/paused). */
 async function setPaused(paused: boolean): Promise<void> {
   const res = await fetch(`${backend.origin}/__app-test/paused`, { method: "PUT", body: String(paused) });
   if (res.status !== 204) throw new Error(`stopping or taking card proofs: HTTP ${res.status}`);
@@ -1994,7 +1994,7 @@ async function stepFiveStopped(item: string, where: string): Promise<void> {
 }
 
 async function stoppedTakingCardProofs(): Promise<void> {
-  console.log("\ncard proofs stopped by the operator, and taken again");
+  console.log("\ncard proofs stopped by the maintainer, and taken again");
   // The app opened while card proofs are stopped.
   await setPaused(true);
   emulator.shell(`am force-stop ${APP}`);

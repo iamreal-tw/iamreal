@@ -1,8 +1,8 @@
 // The measurement's temporary Worker (measure/README.md) is deployed as
-// `iamreal-measure` and nothing else, by the operator's command alone: its
+// `iamreal-measure` and nothing else, by the maintainer's command alone: its
 // configuration names no deployed Worker and none of their buckets, no
 // workflow and no script of package.json runs measure/, and its doors stay
-// closed without the key the operator set. The load itself (measure/load.ts)
+// closed without the key the maintainer set. The load itself (measure/load.ts)
 // is not run here.
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
@@ -29,7 +29,7 @@ test("the measurement's configuration is the temporary Worker's: its own name an
   const vars = config["vars"] as Record<string, string>;
   assert.equal(vars["PROOF_LOG_KIND"], "test");
   assert.equal(vars["PROOF_LOG_OBJECT_NAME"], "test-measure");
-  assert.equal(vars["MEASURE_KEY"], undefined, "the key is the operator's secret, never a setting of the configuration");
+  assert.equal(vars["MEASURE_KEY"], undefined, "the key is the maintainer's secret, never a setting of the configuration");
 });
 
 test("a configuration that names another Worker, a schedule or another bucket is refused", () => {
@@ -61,7 +61,7 @@ test("no workflow and no script of package.json runs the measurement", () => {
   for (const [name, command] of Object.entries(scripts)) assert.ok(!/measure/i.test(`${name} ${command}`), `the script ${name} runs the measurement`);
 });
 
-test("the measurement's doors are closed without the key the operator set, with a wrong one and with a short one", async () => {
+test("the measurement's doors are closed without the key the maintainer set, with a wrong one and with a short one", async () => {
   prepareEngineFiles();
   mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
   const dir = mkdtempSync(join(WORKER_DIR, "test-output", "measure-doors-"));

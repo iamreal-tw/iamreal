@@ -53,7 +53,7 @@ Example: `2026-11-16.000G40R40M30E209185GR38E1W`.
 | Fixed length | Easy to check; no question of where the challenge ends |
 | Only digits, uppercase letters, `-` and `.` | Contains no line feed, so it can be the last line of the declaration code without ambiguity |
 | 128 random bits | Cannot be guessed, and two issued challenges do not collide |
-| No server signature or MAC | It would not constrain the operator, who holds the key. Single use already requires the server to store the challenges it issued |
+| No server signature or MAC | It would not constrain the maintainer, who holds the key. Single use already requires the server to store the challenges it issued |
 | Years 2000 to 2049 | `current_time` keeps only two year digits, and the circuit reads only `UTCTime`, whose years `00` to `49` mean 2000 to 2049 (ADR-0008) |
 
 ## The date and `current_time`

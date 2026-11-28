@@ -27,7 +27,7 @@ import javax.imageio.ImageIO;
  * - the feature graphic of that page, 1024 by 500, a 24-bit PNG: the mark and the app's name in the typeface of the
  *   headings (design/fonts/), in ink: feature-graphic.png
  *
- * The two store images go to the directory it is given; the operator puts them on the store's page by hand. Nothing but
+ * The two store images go to the directory it is given; the maintainer puts them on the store's page by hand. Nothing but
  * the JDK, which builds the app too. Run it from the repository's root after the mark or the launcher's icon changes:
  *
  *   java android/test/AppIcon.java <directory for the store's images>

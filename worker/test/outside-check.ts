@@ -1,7 +1,7 @@
 // The check from outside Cloudflare (#53, #413 "通知"): a scheduled workflow
 // (.github/workflows/watch-test.yml) runs it every hour against the test
 // site and its data domain, and fails when any line fails; the email GitHub
-// sends for a failed run is the operator's notification (.github/README.md).
+// sends for a failed run is the maintainer's notification (.github/README.md).
 // It only sends GET requests, and prints a line for each thing checked:
 //
 //   node --experimental-strip-types test/outside-check.ts

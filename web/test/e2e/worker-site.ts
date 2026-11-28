@@ -12,7 +12,7 @@
 // answers /crl/… and /proof-log/… from the bucket, read-only, and hands every
 // other request to the Worker as it is. A test that serves a page of its
 // own (the engine's test page, run.ts) or has paths of its own (the apps'
-// clock and the operator's stop, app-backend.ts) answers those requests
+// clock and the maintainer's stop, app-backend.ts) answers those requests
 // before either (`own`).
 //
 // The Worker's test clock shows the time it was last set to and does not

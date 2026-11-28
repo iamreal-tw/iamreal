@@ -1,5 +1,5 @@
 // The load of the measurement (README.md in this directory), run by the
-// operator against the temporary Worker. Not a test: `pnpm test` runs
+// maintainer against the temporary Worker. Not a test: `pnpm test` runs
 // test/*.test.ts only, and this sends many requests.
 //
 //   MEASURE_KEY=<key> node --experimental-strip-types measure/load.ts <url> <step> [--records N] [--quick] [--any-colo]

@@ -166,10 +166,10 @@ fingerprint(n) = SHA-256("iamreal-fingerprint-v1" LF fingerprint(n − 1) LF rec
   day before and the new records.
 
 What the fingerprint does: once someone has kept `fingerprint(n)`, the
-operator cannot drop or reorder any of the first n records, or show
+maintainer cannot drop or reorder any of the first n records, or show
 someone else a different proof log up to n, without the kept fingerprint
 failing to match. What it does not do: records not yet published are not
-covered; if nobody kept an old fingerprint, the operator can recompute all
+covered; if nobody kept an old fingerprint, the maintainer can recompute all
 of them; and someone holding only a record hash cannot tell whether the
 records before it changed. Forging or altering a record is already
 prevented by the proof (ADR-0004); the fingerprint is about omission, order

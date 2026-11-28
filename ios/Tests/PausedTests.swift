@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import IamrealApp
 
-/// The operator stopped taking card proofs (docs/api/card-proof.md,
+/// The maintainer stopped taking card proofs (docs/api/card-proof.md,
 /// `paused`; #394): step 1 says so in place of common.next; a `config` that
 /// says so on the way stops step 2 before the card is read; `challenges`
 /// and `records` answered `paused` stop with stops.paused and only a new
@@ -102,7 +102,7 @@ final class PausedTests: XCTestCase {
         model.open()
         try await until("the config answered") { backend.configs == 1 }
         XCTAssertEqual(model.screen.buttons.map(\.action), [.start])
-        // The operator stops card proofs; the cardholder presses 下一步, whose config (with the mark of a start) says so.
+        // The maintainer stops card proofs; the cardholder presses 下一步, whose config (with the mark of a start) says so.
         backend.paused = true
         model.perform(.start)
         await model.work?.value
