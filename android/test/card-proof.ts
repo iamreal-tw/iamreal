@@ -440,6 +440,22 @@ async function waitText(text: string, what: string, ms = 60_000): Promise<Node> 
   throw new Error(`${what}: the screen never showed "${text}". It shows: ${JSON.stringify(textsOf(last))}`);
 }
 
+/**
+ * Step 5 under way, after its button: 進行中, or at once the panel of the last tap over it, when the card signs the challenge
+ * the reading asked for and nothing is asked of the server first (#553).
+ */
+async function stepFiveStarted(): Promise<void> {
+  const titles = [say("progress.title"), say("app_panel.android_wait_title")];
+  const until = Date.now() + 60_000;
+  let last: Node[] = [];
+  while (Date.now() < until) {
+    last = visible();
+    if (last.some((n) => titles.includes(n.text))) return;
+    await sleep(300);
+  }
+  throw new Error(`step 5, in progress: the screen never showed ${JSON.stringify(titles)}. It shows: ${JSON.stringify(textsOf(last))}`);
+}
+
 /** Every text of the step on the screen, from its top to its bottom. The screen is left at the bottom. */
 function wholeScreen(): string[] {
   const seen = new Set<string>();
@@ -810,7 +826,7 @@ async function cardProof(p: Proof): Promise<string> {
     away("POST /api/v1/records", 503, "busy");
   }
   press(p.confirm.button);
-  await waitText(say("progress.title"), "step 5, in progress");
+  await stepFiveStarted();
   if (p.turnedAway) await turnedAwayAtStepFive(say("progress.server"), "the challenge");
   if (p.otherCardAtLastTap) {
     // Not the card that was read: it gets no PIN, and the same tap is offered again.
@@ -824,9 +840,10 @@ async function cardProof(p: Proof): Promise<string> {
     await waitText(say("app_panel.android_wait_title"), "the panel again", 20_000);
   }
   if (p.thorough) {
-    shows(textsOf(visible()), "step 5, in progress,", [step(5), say("app_progress.keep_open"), ...PROGRESS_ITEMS]);
     await tapWithPanel({ signs: true });
     await waitText(say("app_read.lift"), "step 5: the card can be taken away", 20_000);
+    // The panel came over it at once (#553): the step is looked at once the panel is gone.
+    shows(textsOf(visible()), "step 5, in progress,", [step(5), say("app_progress.keep_open"), ...PROGRESS_ITEMS]);
     shot("step-5-in-progress");
     await designShot("card-proof-app-5-progress-phone.png");
     const s = textsOf(visible());
@@ -1115,7 +1132,7 @@ async function noSecureChannel(): Promise<void> {
   await waitText(say("confirm.title"), "step 5");
   const handedBefore = pinsHanded;
   press(say("confirm.button_declare_single"));
-  await waitText(say("progress.title"), "step 5, in progress");
+  await stepFiveStarted();
   await hold(cardWithoutChannel);
   await waitText(channel, "step 5: the sentence for a card without a secure channel", 20_000);
   {
@@ -1237,7 +1254,7 @@ async function interruptions(): Promise<void> {
   press(say("common.next"));
   await waitText(say("confirm.title"), "step 5");
   press(say("confirm.button_declare_single"));
-  await waitText(say("progress.title"), "step 5, in progress");
+  await stepFiveStarted();
   await hold(leaving("signing"));
   await waitText(say("app_stops.dropped"), "step 5: the sentence for a card that left", 20_000);
   shows(wholeScreen(), "step 5, the card left,", [step(5), say("common.halted"), again, say("common.cancel")]);
@@ -1316,7 +1333,7 @@ async function interruptions(): Promise<void> {
   // The last tap, with a card that does not take this PIN (its PIN was changed since the second tap): the card proof is over.
   handed = pinsHanded;
   press(say("confirm.button_declare_single"));
-  await waitText(say("progress.title"), "step 5, in progress");
+  await stepFiveStarted();
   await hold(JSON.stringify({ certificates: backend.certificates, key, pin: WRONG_PIN, pause_ms: 0 }));
   await waitText(say("pin.pin_incorrect"), "step 5: the sentence for a PIN the card refuses", 20_000);
   {
@@ -2029,7 +2046,7 @@ async function stoppedTakingCardProofs(): Promise<void> {
   bringBack();
   await toDeclare();
   press(say("confirm.button_declare_single"));
-  await waitText(say("progress.title"), "step 5, in progress");
+  await stepFiveStarted();
   // The app waits for the card once it has the challenge.
   for (let i = 0; i < 300 && waitingTaps.length === 0; i++) await sleep(100);
   check(waitingTaps.length > 0, "records paused: the app got the challenge and waits for the card");
