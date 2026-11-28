@@ -118,6 +118,8 @@ struct ScheduleView: View {
         .background(Theme.bg.color.ignoresSafeArea())
         .foregroundColor(Theme.text.color)
         .environment(\.colorScheme, .light)
+        // Drawn at once, as the card proof's screens (ScreenView).
+        .transaction { $0.animation = nil }
         .sheet(isPresented: $pickingDay) {
             let range = pages.pickable
             DatePicker("", selection: Binding(get: { pages.next.date }, set: { pages.pick(Day($0)); pickingDay = false }), in: range.lowerBound.date...range.upperBound.date, displayedComponents: .date)
@@ -235,6 +237,8 @@ struct SettingsView: View {
         .background(Theme.bg.color.ignoresSafeArea())
         .foregroundColor(Theme.text.color)
         .environment(\.colorScheme, .light)
+        // Drawn at once, as the card proof's screens (ScreenView).
+        .transaction { $0.animation = nil }
         .onAppear { pages.refreshSettings() }
     }
 

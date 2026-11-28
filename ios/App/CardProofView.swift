@@ -41,16 +41,22 @@ struct ScreenView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            // Another page is another view, from its top: nothing of the page before (a button at the same
+            // place, how far it was scrolled) carries over to it.
             if unscrolled {
-                content
+                content.id(screen.page)
                 Spacer(minLength: 0)
             } else {
-                ScrollView { content }
+                ScrollView { content }.id(screen.page)
             }
         }
         .background(Theme.bg.color.ignoresSafeArea())
         .foregroundColor(Theme.text.color)
         .environment(\.colorScheme, .light)
+        // One page to the next, or a change on the page, is drawn at once: nothing on the screen slides, fades or
+        // grows into something else, whatever the system animates a button's action with. What moves on purpose
+        // (the mark, the demonstrations) sets its own animation.
+        .transaction { $0.animation = nil }
     }
 
     private var header: some View {
@@ -101,9 +107,6 @@ struct ScreenView: View {
         .padding(.horizontal, Theme.gutter.value)
         .padding(.top, 24)
         .padding(.bottom, 48)
-        // One step to the next, or the keyboard going away as it does, is drawn at once: nothing on the screen slides
-        // or grows into something else. What moves on purpose (the mark, the demonstrations) sets its own animation.
-        .transaction { $0.animation = nil }
     }
 
     /// The box above the step: the note of the reminder the app was opened from.

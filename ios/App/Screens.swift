@@ -325,8 +325,14 @@ struct Screens {
         if status.dailyLimit { return declaredNow(status, message: whole) }
         switch mode {
         case .open: return declaredNow(status, message: whole)
-        case .switching: return switching(status, typed: typed, errors: errors, message: message)
-        case .editing: return editing(status, typed: typed, errors: errors, message: message)
+        case .switching:
+            var screen = switching(status, typed: typed, errors: errors, message: message)
+            screen.part = "switching"
+            return screen
+        case .editing:
+            var screen = editing(status, typed: typed, errors: errors, message: message)
+            screen.part = "editing"
+            return screen
         }
     }
 

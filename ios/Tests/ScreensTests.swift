@@ -116,6 +116,32 @@ final class ScreensTests: XCTestCase {
         ]
     }
 
+    /// Each screen a button leads to is another page, drawn anew from its
+    /// top: nothing of the screen before (a button at the same place) is
+    /// carried over to it (ScreenView). A change on the same page is not
+    /// another page: the keyboard stays up while typing, the reminder set
+    /// from step 7 comes back to it.
+    func testAButtonLeadsToAnotherPageAndAChangeOnThePageDoesNot() {
+        // A card's first declaration, from step 1 to step 8: each screen another page.
+        let pages = firstDeclaration().map(\.1.page)
+        XCTAssertEqual(Set(pages).count, pages.count, pages.joined(separator: "\n"))
+        // Step 4: what the card declares, changing the account, changing the list (上一步 goes from one to the other).
+        let open = screens.accounts(card(), typed: ["threads": "alice"], errors: [:], message: nil)
+        let switching = screens.accounts(card(), mode: .switching, typed: ["threads": "carol.tw"], errors: [:], message: nil)
+        let editing = screens.accounts(card(), mode: .editing, typed: ["threads": "carol.tw"], errors: [:], message: nil)
+        XCTAssertEqual(Set([open.page, switching.page, editing.page]).count, 3)
+        // Typing, and what is wrong with it, stay on the page.
+        XCTAssertEqual(screens.accounts(card(), mode: .switching, typed: ["threads": "c"], errors: ["threads": "x"], message: nil).page, switching.page)
+        // Step 6: the short one and the whole one; copying the link stays on it.
+        let short = screens.hang(recorded("refresh", "alice"), single: "Threads", copied: false)
+        XCTAssertNotEqual(screens.hang(recorded("refresh", "alice"), single: "Threads", copied: false, whole: true).page, short.page)
+        XCTAssertEqual(screens.hang(recorded("refresh", "alice"), single: "Threads", copied: true).page, short.page)
+        // Step 7 with the reminder set is the same page.
+        XCTAssertEqual(screens.remind(.on(threeMonths, counted: true), notAfter: nil).page, screens.remind(.ask(threeMonths), notAfter: nil).page)
+        // Step 3 while the card signs.
+        XCTAssertEqual(screens.pin(name: "王小明", state: .waiting("x")).page, screens.pin(name: "王小明", state: .waiting(nil)).page)
+    }
+
     /// Step 1 as card-proof.md writes it for the app: what to prepare, the
     /// two questions, and under the second the two ways out.
     func testStepOneSaysWhatToPrepareAndWhereToGetACard() {

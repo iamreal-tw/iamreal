@@ -47,6 +47,20 @@ struct Screen: Equatable {
     /// On the right of the header: the settings (steps 1 and 8).
     var settings: Button?
 
+    /// Which of a step's pages under the same title it is: step 4's
+    /// changing an account and changing the list; empty for the others.
+    var part = ""
+
+    /// Which page it is: the step, its title and `part`. Another page is
+    /// drawn anew, from its top (ScreenView), as the Android app keys each
+    /// step; a change on the same page (typing, the progress, 已複製, the
+    /// reminder set from step 7) is not.
+    var page: String {
+        var title = ""
+        for case .title(let text) in blocks { title = text; break }
+        return "\(step) \(inSteps) \(part) \(title)"
+    }
+
     /// Every sentence on the screen, in its order: for tests. The
     /// header's are not among them: they are not card-proof.md's.
     var texts: [String] {

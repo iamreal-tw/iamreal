@@ -54,11 +54,15 @@ struct IamrealApp: App {
                     if opening {
                         SplashView(appCopy: Copy.bundled("app"))
                     } else {
-                        switch pages.pages.last {
-                        case .schedule: ScheduleView(pages: pages)
-                        case .settings: SettingsView(pages: pages)
-                        case nil: CardProofView(model: model)
+                        Group {
+                            switch pages.pages.last {
+                            case .schedule: ScheduleView(pages: pages)
+                            case .settings: SettingsView(pages: pages)
+                            case nil: CardProofView(model: model)
+                            }
                         }
+                        // The card proof, the settings and the reminder's page take each other's place at once.
+                        .transaction { $0.animation = nil }
                     }
                 }
                 // The colors are design/tokens.json's, whatever the phone's appearance.
