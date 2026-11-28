@@ -1,10 +1,10 @@
-// A fixed set of the files the operator's page reads (scripts/operator-page.ts,
+// A fixed set of the files the maintainer's page reads (scripts/maintainer-page.ts,
 // #436): a week of days' totals and their month in the form
 // src/count-totals.ts writes, the data domain's fingerprint file and CRL
 // index, and the last runs of two workflows. Made up, and the same each
-// time: test/operator-page.test.ts checks the page's numbers against them,
-// and scripts/operator-page-screenshot.ts draws the page from them.
-import type { Cell, DayTotals, MonthTotals, Run, Sources } from "../scripts/operator-page.ts";
+// time: test/maintainer-page.test.ts checks the page's numbers against them,
+// and test/maintainer-page-browser.ts draws the page from them.
+import type { Cell, DayTotals, MonthTotals, Run, Sources } from "../scripts/maintainer-page.ts";
 
 export const FIXTURE_DAYS = ["2026-11-20", "2026-11-21", "2026-11-22", "2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26"];
 const STEPS = ["open", "read", "component", "certificates", "certificate", "config", "circuit", "engine", "crl", "tree", "checked", "pin", "scope_signed", "state", "chosen", "confirmed", "challenge", "code_signed", "proved", "done"];
