@@ -56,12 +56,20 @@ struct Screens {
         return Screen(step: 0, blocks: blocks, settings: settingsButton)
     }
 
+    /// The way left on a phone that cannot read a card, with the site's
+    /// name as a link to it: the app cannot go on, so this screen links out
+    /// (card-proof.md, step 1, "app").
+    private var reader: Block {
+        let parts = copy("app_before.no_nfc_reader").components(separatedBy: "{domain}")
+        return .linked(parts.first ?? "", Button(label: host, action: .openSite), parts.dropFirst().first ?? "")
+    }
+
     /// In the place of step 1 on a phone that cannot read a card
     /// (card-proof.md, step 1, "app"): nothing leads to a tap.
     func noNFC() -> Screen {
         Screen(
             step: 0,
-            blocks: [.title(copy("app_before.no_nfc_title")), .text(copy("app_before.no_nfc")), .text(copy("app_before.no_nfc_reader", ["domain": host]))],
+            blocks: [.title(copy("app_before.no_nfc_title")), .text(copy("app_before.no_nfc")), reader],
             settings: settingsButton)
     }
 
@@ -92,8 +100,8 @@ struct Screens {
         if Platform.known.count != 1 {
             blocks += [.text(copy("before.one_proof")), .strong(copy("before.listed_together"))]
         }
-        let questions = blocks.count
-        blocks += [
+        // Under common.next, as on the web and Android (card-proof.md, step 1): they can be skipped.
+        let questions: [Block] = [
             .question(copy("before.why_physical"), [.text(copy("before.why_physical_card")), .text(copy("before.why_physical_mobile"))]),
             // The two ways out of the card proof's screens: a person without a card cannot go on (card-proof.md, step 1).
             .question(copy("before.how_to_get"), [
@@ -102,9 +110,9 @@ struct Screens {
                 .action(Button(label: copy("before.how_to_get_moica"), action: .howToApply)),
             ]),
         ]
-        if paused { return Screen(step: 1, blocks: Array(blocks[..<questions]) + [.message(copy("before.paused"))] + blocks[questions...], warnings: warnings, notice: notice, settings: settingsButton) }
+        if paused { return Screen(step: 1, blocks: blocks + [.message(copy("before.paused"))] + questions, warnings: warnings, notice: notice, settings: settingsButton) }
         if busy { blocks.append(.message(copy("before.busy"))) }
-        return Screen(step: 1, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .start, enabled: !starting)], warnings: warnings, notice: notice, settings: settingsButton)
+        return Screen(step: 1, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .start, enabled: !starting)], under: questions, warnings: warnings, notice: notice, settings: settingsButton)
     }
 
     private var settingsButton: Button { Button(label: appCopy("settings.open"), action: .openSettings) }
@@ -196,7 +204,7 @@ struct Screens {
         case .tapping:
             buttons = buttons.map { Button(label: $0.label, action: $0.action, enabled: false) }
         case .signed:
-            blocks.append(.busy(copy("app_pin.signed")))
+            blocks.append(.busy(pinSays("app_pin.signed", single: "app_pin.signed_single")))
             buttons = buttons.map { Button(label: $0.label, action: $0.action, enabled: false) }
         case .tapAgain(let message):
             blocks.append(.message(message))
@@ -209,8 +217,15 @@ struct Screens {
             blocks += why.map(Block.message)
             buttons = [Button(label: copy("app_read.restart"), action: .readAgain)]
         }
-        blocks.append(.points([copy("pin.purpose"), copy("app_pin.stays")]))
+        blocks.append(.points([pinSays("pin.purpose", single: "pin.purpose_single"), copy("app_pin.stays")]))
         return Screen(step: 3, blocks: blocks, buttons: buttons)
+    }
+
+    /// Step 3's sentences that speak of the card's accounts: as on step 1,
+    /// by the platforms the app knows; with one, they name it (card-proof.md, step 3).
+    private func pinSays(_ key: String, single: String) -> String {
+        guard Platform.known.count == 1, let only = Platform.known.first else { return copy(key) }
+        return copy(single, ["platform": only.name])
     }
 
     // Step 4: the card's accounts ------------------------------------------------------------------
@@ -237,7 +252,7 @@ struct Screens {
     }
 
     /// Which of step 4's screens is up.
-    enum AccountsMode: Equatable {
+    enum AccountsMode: Hashable {
         /// As the step opens: the rows to fill when the card declares
         /// nothing; what it declares and what can be done when it does.
         case open
@@ -281,13 +296,20 @@ struct Screens {
             error: errors[row.platform]))
     }
 
-    private func previewNote(_ single: String?) -> [Block] {
+    /// The sentence under the fields about the preview, naming the
+    /// platform (the app knows Threads alone). With the switches a typo
+    /// costs, unless the screen already says how many are left
+    /// (`counted`; card-proof.md, step 4).
+    private func previewNote(_ single: String?, counted: Bool) -> [Block] {
         guard let name = single ?? Platform.known.first?.name else { return [] }
-        return [.text(copy("app_accounts.preview_note", ["platform": name]))]
+        return [.text(copy(counted ? "accounts.preview_note_single_counted" : "accounts.preview_note_single", ["platform": name]))]
     }
 
     private var cancel: Button { Button(label: copy("common.cancel"), action: .restart) }
-    private var keep: Button { Button(label: copy("accounts.keep"), action: .keep) }
+    /// 上一步 of step 4's screens opened from it: back to what the card
+    /// declares, beside 下一步 as on the other steps; 取消 ends the card
+    /// proof (card-proof.md, step 4).
+    private var backToDeclared: Button { Button(label: copy("common.back"), action: .backToDeclared) }
 
     /// Step 4 (design/copy/card-proof.md, step 4, and its "app"), by what
     /// the card declares and by `mode`; the same choices as accountsView,
@@ -331,7 +353,8 @@ struct Screens {
         if single == nil {
             blocks.append(.text((never ? copy("accounts.one_per_platform") : copy("accounts.how_change")) + copy("accounts.switches_limited")))
         }
-        blocks += previewNote(single)
+        // A row never declared on one platform says no count: the full sentence.
+        blocks += previewNote(single, counted: single == nil || !never)
         return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toConfirm)], cancel: cancel)
     }
 
@@ -416,7 +439,7 @@ struct Screens {
         if row.switchesLeft == 0 {
             blocks.append(.text(copy("accounts.row_used_up", ["switches_used": String(row.switchCount)])))
             if let whole = message ?? errors[row.platform] { blocks.append(.message(whole)) }
-            return Screen(step: 4, blocks: blocks, links: [keep], cancel: cancel)
+            return Screen(step: 4, blocks: blocks, buttons: [backToDeclared], mainButton: false, cancel: cancel, accountsMode: .switching)
         }
         let cost = row.switchesLeft == 1
             ? copy("confirm.uses_final_switch")
@@ -427,8 +450,8 @@ struct Screens {
         ]
         if let message { blocks.append(.message(message)) }
         blocks.append(.sentences([copy("accounts.switch_effect", ["account": now]), cost]))
-        blocks += previewNote(single)
-        return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toConfirm)], links: [keep], cancel: cancel)
+        blocks += previewNote(single, counted: true)
+        return Screen(step: 4, blocks: blocks, buttons: [backToDeclared, Button(label: copy("common.next"), action: .toConfirm)], cancel: cancel, accountsMode: .switching)
     }
 
     /// After "修改帳號清單": a row for each platform, each changed on its own.
@@ -438,8 +461,8 @@ struct Screens {
         blocks += fields(status, typed: typed, errors: errors, lines: true)
         if let message { blocks.append(.message(message)) }
         blocks.append(.text(copy("accounts.how_change") + copy("accounts.switches_limited")))
-        blocks += previewNote(single)
-        return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toConfirm)], links: [keep], cancel: cancel)
+        blocks += previewNote(single, counted: true)
+        return Screen(step: 4, blocks: blocks, buttons: [backToDeclared, Button(label: copy("common.next"), action: .toConfirm)], cancel: cancel, accountsMode: .editing)
     }
 
     // Step 5: confirming ----------------------------------------------------------------------
@@ -786,12 +809,6 @@ struct Screens {
         let settings: ReminderSettings
         let counted: Bool
         switch reminder {
-        case .refused:
-            blocks.append(.text(copy("app_reminder.denied")))
-            return Screen(
-                step: 7, blocks: blocks,
-                buttons: [back, Button(label: copy("app_reminder.settings"), action: .openNotificationSettings)],
-                links: [skip])
         case .ask(let asked):
             settings = asked
             counted = true
@@ -809,11 +826,13 @@ struct Screens {
         if let validUntil = notAfter.flatMap(Self.dateOfCertificateTime), validUntil < settings.next.iso {
             blocks.append(.text(copy("app_done.reminder_expires", ["valid_until": validUntil])))
         }
+        // Nothing kept: "設定提醒" opens the screen to choose the interval and time, where "開啟提醒" asks the system
+        // and sets it; back here it is on, and 下一步 is the cardholder's to press (card-proof.md, step 7).
         if case .ask = reminder {
             return Screen(
                 step: 7, blocks: blocks,
-                buttons: [back, Button(label: copy("app_done.reminder_turn_on"), action: .turnOnReminder)],
-                links: [adjust, skip])
+                buttons: [back, Button(label: copy("app_done.reminder_set"), action: .adjustReminder)],
+                links: [skip])
         }
         // On already: turned off from the settings, not here.
         return Screen(step: 7, blocks: blocks, buttons: [back, Button(label: copy("common.next"), action: .toFinish)], links: [adjust])
@@ -858,16 +877,18 @@ struct Screens {
         var blocks: [Block] = [
             .title(finishTitle(done, single: single)),
             .proofCard(card),
-            .sentences(ordinal + [copy("finish.invite")]),
-            .text(copy("finish.thanks")),
+            // The thanks is in the ordinal's sentence; without an ordinal, on its own (card-proof.md, step 8).
+            .sentences((ordinal.isEmpty ? [copy("finish.thanks")] : ordinal) + [copy("finish.invite")]),
         ]
-        // One share sheet, whichever platform: the button names the one the app knows. The main button, on top of
-        // the three, one under the other (design/DESIGN.md, the components: buttons).
-        let share = Platform.known.first.map { Button(label: copy("done.share", ["platform": $0.name]), action: .share) }
+        // The main button on top: the composer of the platform the app knows, with the share sheet beside it as a
+        // small button of the system's symbol; 上一步 and 完成 side by side under them (design/DESIGN.md, the
+        // components: buttons).
+        let share = Platform.known.first.map { Button(label: copy("done.share", ["platform": $0.name]), action: .shareOn($0.id)) }
         return Screen(
             step: 8, blocks: blocks,
-            buttons: [Button(label: copy("common.back"), action: .back), end] + (share.map { [$0] } ?? []),
-            mainButton: share != nil, settings: settingsButton)
+            buttons: [Button(label: copy("common.back"), action: .back), end], top: share,
+            beside: share.map { _ in Button(label: copy("app_done.share_other"), action: .share) },
+            mainButton: false, settings: settingsButton)
     }
 
     /// The tap ended in a way that leaves it to be made again as it is:

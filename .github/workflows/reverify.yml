@@ -1,8 +1,8 @@
-# The operator's daily re-verification of the published proof logs
+# The maintainer's daily re-verification of the published proof logs
 # (ADR-0025; the test proof log too, ADR-0028): every day after the proof
 # log is published at the change of day in Taiwan, and by hand. Each run
 # starts from record 1: there is no progress file, and no cache.
-# .github/README.md has what the operator does when it does not pass;
+# .github/README.md has what the maintainer does when it does not pass;
 # worker/test/workflows.ts holds this file's jobs, exactly, and
 # worker/test/workflows.test.ts checks this file against them.
 #
@@ -11,7 +11,7 @@
 # package @aztec-foundation/bb.js (pnpm-lock.yaml) after checking its
 # SHA-256, and reverify.sh, beside this file, runs iamreal-verify against
 # the public address of the proof log. It holds no key of the back end and
-# cannot stop card proofs: the operator does that by hand (ADR-0025).
+# cannot stop card proofs: the maintainer does that by hand (ADR-0025).
 #
 # Nothing here refers to a secret, the token can only read, no cache is
 # restored or saved, and every action is pinned to a commit. The packages

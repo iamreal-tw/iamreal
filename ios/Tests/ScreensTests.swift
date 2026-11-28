@@ -111,10 +111,54 @@ final class ScreensTests: XCTestCase {
             ("card-proof-app-5-confirm-withdraw-phone", screens.confirm(card(), consequence("withdraw", "alice"))),
             ("card-proof-app-6-hang-short-phone", screens.hang(recorded("refresh", "alice"), single: "Threads", copied: false)),
             ("card-proof-app-7-reminder-on-phone", screens.remind(.on(threeMonths, counted: true), notAfter: nil)),
-            ("card-proof-app-7-reminder-refused-phone", screens.remind(.refused, notAfter: nil)),
             ("card-proof-app-8-done-switch-phone", screens.finish(recorded("switch", "carol.tw"), single: "Threads")),
             ("card-proof-app-8-withdraw-phone", screens.finish(recorded("withdraw", "alice"), single: "Threads")),
         ]
+    }
+
+    /// Each screen a button leads to is another page, drawn anew from its
+    /// top: nothing of the screen before (a button at the same place) is
+    /// carried over to it (ScreenView). A change on the same page is not
+    /// another page: the keyboard stays up while typing, the reminder set
+    /// from step 7 comes back to it.
+    func testAButtonLeadsToAnotherPageAndAChangeOnThePageDoesNot() {
+        // A card's first declaration, from step 1 to step 8: each screen another page.
+        let pages = firstDeclaration().map(\.1.page)
+        XCTAssertEqual(Set(pages).count, pages.count, pages.map { "\($0)" }.joined(separator: "\n"))
+        // Step 4: what the card declares, changing the account, changing the list (上一步 goes from one to the other).
+        let open = screens.accounts(card(), typed: ["threads": "alice"], errors: [:], message: nil)
+        let switching = screens.accounts(card(), mode: .switching, typed: ["threads": "carol.tw"], errors: [:], message: nil)
+        let editing = screens.accounts(card(), mode: .editing, typed: ["threads": "carol.tw"], errors: [:], message: nil)
+        XCTAssertEqual(Set([open.page, switching.page, editing.page]).count, 3)
+        // Typing, and what is wrong with it, stay on the page.
+        XCTAssertEqual(screens.accounts(card(), mode: .switching, typed: ["threads": "c"], errors: ["threads": "x"], message: nil).page, switching.page)
+        // Step 6: the short one and the whole one; copying the link stays on it.
+        let short = screens.hang(recorded("refresh", "alice"), single: "Threads", copied: false)
+        XCTAssertNotEqual(screens.hang(recorded("refresh", "alice"), single: "Threads", copied: false, whole: true).page, short.page)
+        XCTAssertEqual(screens.hang(recorded("refresh", "alice"), single: "Threads", copied: true).page, short.page)
+        // 3 records today: step 4 and the whole step 6 its 重新掛上連結 shows, and back with 上一步.
+        let limit = card(dailyLimit: true)
+        XCTAssertNotEqual(screens.accounts(limit, typed: [:], errors: [:], message: nil).page, screens.hangFromLimit(limit, copied: false).page)
+        XCTAssertEqual(screens.hangFromLimit(limit, copied: true).page, screens.hangFromLimit(limit, copied: false).page)
+        // Step 7 with the reminder set is the same page.
+        XCTAssertEqual(screens.remind(.on(threeMonths, counted: true), notAfter: nil).page, screens.remind(.ask(threeMonths), notAfter: nil).page)
+        // Step 3 while the card signs.
+        XCTAssertEqual(screens.pin(name: "王小明", state: .waiting("x")).page, screens.pin(name: "王小明", state: .waiting(nil)).page)
+        // When the card declares no account the app knows, switching shows what the card declares: that page.
+        let elsewhere = Flow.CardStatus(
+            shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-04", daysSince: 12, dailyLimit: false, knownPlatforms: ["threads"],
+            rows: [Flow.StatusRow(platform: "test-example", known: false, current: "alice-b", lastDeclared: "alice-b", switchCount: 0, switchesLeft: 5)])
+        let none = screens.accounts(elsewhere, mode: .switching, typed: [:], errors: [:], message: nil)
+        XCTAssertEqual(none.page, screens.accounts(elsewhere, typed: [:], errors: [:], message: nil).page)
+    }
+
+    /// ScreenView knows the buttons under the blocks by their words: no
+    /// screen has two with the same words.
+    func testNoScreenHasTwoButtonsWithTheSameWords() {
+        for (name, screen) in firstDeclaration() + laterCardProofs() {
+            let labels = screen.buttons.map(\.label)
+            XCTAssertEqual(Set(labels).count, labels.count, name)
+        }
     }
 
     /// Step 1 as card-proof.md writes it for the app: what to prepare, the
@@ -125,19 +169,21 @@ final class ScreensTests: XCTestCase {
             "開始之前",
             "請準備好你的實體自然人憑證卡片。",
             "非本國國民持有的自然人憑證無法用於島民證明。",
+            "下一步",
             "為什麼一定要實體的卡片？",
             "實體卡片簽章在卡片裡完成，卡片效期約 5 ~ 8 年。",
             "行動自然人憑證簽章依賴內政部伺服器，而且每年會更換金鑰，不適合作為島民證明使用。",
             "還沒有自然人憑證，怎麼申辦？",
             "滿 18 歲，未受監護宣告，本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
             "找附近的戶政事務所",
-            "內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）",
-            "下一步",
+            "內政部憑證管理中心：怎麼申辦自然人憑證（moica.nat.gov.tw）",
         ])
-        guard case .question(_, let answer)? = screen.blocks.last else { return XCTFail("no question at the end: \(screen.blocks)") }
+        // The way on above the two questions, which can be skipped (card-proof.md, step 1).
+        XCTAssertEqual(screen.buttons.map(\.label), ["下一步"])
+        guard case .question(_, let answer)? = screen.under.last else { return XCTFail("no question at the end: \(screen.under)") }
         XCTAssertEqual(Array(answer.dropFirst()), [
             .button(Button(label: "找附近的戶政事務所", action: .findOffice), main: false),
-            .action(Button(label: "內政部憑證管理中心：申辦資格、時間地點、攜帶項目（moica.nat.gov.tw）", action: .howToApply)),
+            .action(Button(label: "內政部憑證管理中心：怎麼申辦自然人憑證（moica.nat.gov.tw）", action: .howToApply)),
         ])
         // The phone's map searches for the word; the app sends no place of its own.
         XCTAssertEqual(CardProofModel.findOffice.absoluteString.removingPercentEncoding, "https://maps.apple.com/?q=戶政事務所")
@@ -147,7 +193,7 @@ final class ScreensTests: XCTestCase {
     /// Step 3 says two things under the field; who holds the card and the PIN is step 5's to say.
     func testStepThreeSaysTwoThingsUnderTheField() {
         XCTAssertEqual(Array(screens.pin(name: "王小明", state: .waiting(nil)).texts.suffix(4)), [
-            "按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的帳號。",
+            "按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的 Threads 帳號。",
             "PIN、姓名和憑證、卡片的簽章不會離開這支手機。",
             "上一步", "確認卡片",
         ])
@@ -162,7 +208,7 @@ final class ScreensTests: XCTestCase {
             "這張卡片還沒有宣告過帳號。",
             "填上你要宣告的 Threads 帳號。",
             "Threads", "預覽",
-            "預覽會在 Threads 或瀏覽器打開個人檔案，讓你小心確認沒有打錯帳號。",
+            "請預覽你的 Threads 個人檔案，避免打錯帳號。一張卡終身最多只能更換 5 次。",
             "下一步",
             "取消",
         ])
@@ -182,7 +228,7 @@ final class ScreensTests: XCTestCase {
             "Threads", "預覽",
             "上一次宣告的是 @bob，已經收回。填回 @bob 不算更換。",
             "更換過 1 次，還可以更換 4 次。",
-            "預覽會在 Threads 或瀏覽器打開個人檔案，讓你小心確認沒有打錯帳號。",
+            "請預覽你的 Threads 個人檔案，避免打錯帳號。",
             "下一步",
             "取消",
         ])
@@ -223,12 +269,12 @@ final class ScreensTests: XCTestCase {
             "改成別的帳號",
             "Threads", "預覽",
             "改了之後，@alice 不再是這張卡片宣告的帳號。", "一張卡終身最多更換 5 次，這次之後還可以更換 3 次。",
-            "預覽會在 Threads 或瀏覽器打開個人檔案，讓你小心確認沒有打錯帳號。",
-            "下一步",
-            "不改了",
+            "請預覽你的 Threads 個人檔案，避免打錯帳號。",
+            "上一步", "下一步",
             "取消",
         ])
-        XCTAssertEqual(screen.links, [Button(label: "不改了", action: .keep)])
+        XCTAssertEqual(screen.buttons, [Button(label: "上一步", action: .backToDeclared), Button(label: "下一步", action: .toConfirm)])
+        XCTAssertEqual(screen.links, [])
         // What it costs, by the switches left.
         func cost(_ status: Flow.CardStatus) -> String? {
             for case .sentences(let sentences) in screens.accounts(status, mode: .switching, typed: [:], errors: [:], message: nil).blocks { return sentences.last }
@@ -237,7 +283,7 @@ final class ScreensTests: XCTestCase {
         XCTAssertEqual(cost(card(used: 4)), "用掉最後一次更換。這次之後，這個平台不能再更換。")
         // None left: no field, and the only ways are back.
         let usedUp = screens.accounts(card(used: 5), mode: .switching, typed: [:], errors: [:], message: nil)
-        XCTAssertEqual(usedUp.texts, ["你的 Threads 帳號", "這張卡片目前宣告 @alice。", "已經更換 5 次，這個平台不能再更換。", "不改了", "取消"])
+        XCTAssertEqual(usedUp.texts, ["你的 Threads 帳號", "這張卡片目前宣告 @alice。", "已經更換 5 次，這個平台不能再更換。", "上一步", "取消"])
         for status in [card(used: 4), card(used: 5)] {
             document.check(screens.accounts(status, mode: .switching, typed: [:], errors: [:], message: nil))
         }
@@ -341,9 +387,8 @@ final class ScreensTests: XCTestCase {
             "test-example", "alice-b", "這一頁還不認得這個平台。這個帳號會原樣保留，在這裡不能修改。",
             "Threads", "預覽", "更換過 1 次，還可以更換 4 次。",
             "填上空白的是新宣告，清空是收回，改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。",
-            "預覽會在 Threads 或瀏覽器打開個人檔案，讓你小心確認沒有打錯帳號。",
-            "下一步",
-            "不改了",
+            "請預覽你的 Threads 個人檔案，避免打錯帳號。",
+            "上一步", "下一步",
             "取消",
         ])
         document.check(declared)
@@ -374,7 +419,7 @@ final class ScreensTests: XCTestCase {
         XCTAssertEqual(screens.confirm(newCard, declaration().0).buttons.last?.label, "宣告這個帳號")
         let switching = screens.confirm(card(), consequence("switch", "carol.tw", switchesLeft: 3))
         XCTAssertEqual(switching.buttons.last?.label, "宣告這個帳號")
-        XCTAssertTrue(switching.texts.contains("用掉一次更換，不會恢復。之後還可以更換 3 次。"))
+        XCTAssertTrue(switching.texts.contains("用掉一次更換，之後還可以更換 3 次。"))
         XCTAssertTrue(switching.texts.contains("按下後，證明紀錄會記下新的證明並公開給所有人："))
         let withdrawing = screens.confirm(card(), consequence("withdraw", "alice"))
         XCTAssertEqual(withdrawing.texts, [
@@ -409,8 +454,8 @@ final class ScreensTests: XCTestCase {
         XCTAssertEqual(pages.schedule.texts, [
             "提醒我回來過卡", "從今天起算，落在同一個星期幾。",
             "多久提醒一次", "一個月（4 週）", "三個月（12 週）", "建議", "六個月（26 週）", "選日期",
-            "什麼時候提醒", "時刻", "晚上 9:00", "更改",
-            "下次提醒：2027-02-08（星期一）晚上 9:00", "自然人憑證多半放在家裡，所以預設在晚上。",
+            "什麼時候提醒，卡片比較容易在手邊", "時刻", "晚上 9:00", "更改",
+            "下次提醒：2027-02-08（星期一）晚上 9:00",
             "開啟提醒", "取消",
         ])
         XCTAssertEqual(pages.schedule.options.map(\.selected), [false, true, false, false])
@@ -445,10 +490,9 @@ final class ScreensTests: XCTestCase {
     func testTheSettingsSayWhatAppMDWrites() async throws {
         let (reminders, pages) = reminderPages()
         XCTAssertEqual(pages.settings.texts, [
-            "返回", "設定", "過卡提醒", "提醒我回來過卡", appCopy("settings.stored"),
+            "返回", "設定", "過卡提醒", "提醒我回來過卡",
             "關於", "版本", "dev", "常見問題", "隱私權說明", "原始碼（GitHub）",
         ])
-        XCTAssertTrue(try Repository.text("design/copy/app.md").contains("\n" + appCopy("settings.stored") + "\n"))
         await reminders.turnOn(interval: .weeks12, time: .evening)
         XCTAssertEqual(pages.settings.rows, [
             SettingsScreen.Row(label: "多久一次", value: "三個月", change: "更改"),
@@ -503,7 +547,7 @@ final class ScreensTests: XCTestCase {
             "從 2027-03-01 起，這一版的島民證明 app 不能過卡。請更新到最新的版本。",
             "卡片還沒有被讀取，沒有任何東西送出去。",
             "到 App Store 更新",
-            "也可以用電腦和讀卡機，在 iamreal.tw 過卡。",
+            "也可以用電腦和讀卡機，打開 iamreal.tw 過卡。",
         ])
         XCTAssertEqual(stop.buttons, [])
         XCTAssertNil(stop.cancel)
@@ -517,7 +561,9 @@ final class ScreensTests: XCTestCase {
     func testAPhoneWithoutNFC() {
         let screen = screens.noNFC()
         XCTAssertEqual(screen.step, 0)
-        XCTAssertEqual(screen.texts, ["這支手機不能感應卡片", "這支手機沒有 NFC，不能用 app 過卡。", "可以用電腦和讀卡機，在 iamreal.tw 過卡。"])
+        XCTAssertEqual(screen.texts, ["這支手機不能感應卡片", "這支手機沒有 NFC，不能用 app 過卡。", "可以用電腦和讀卡機，打開 iamreal.tw 過卡。"])
+        // The site's name is the link to it: the one way left.
+        XCTAssertEqual(screen.blocks.last, .linked("可以用電腦和讀卡機，打開 ", Button(label: "iamreal.tw", action: .openSite), " 過卡。"))
         XCTAssertEqual(screen.buttons, [])
         document.check(screen)
     }

@@ -176,7 +176,7 @@ func TestHashListWithoutAProofLogFile(t *testing.T) {
 }
 
 // forward answers r with what served answers it: the same method, status,
-// Content-Length and body.
+// Content-Length, ETag and body.
 func forward(t *testing.T, served *dataServer, w http.ResponseWriter, r *http.Request) {
 	req, err := http.NewRequest(r.Method, strings.TrimSuffix(served.URL, "/")+r.URL.Path, nil)
 	if err != nil {
@@ -189,8 +189,10 @@ func forward(t *testing.T, served *dataServer, w http.ResponseWriter, r *http.Re
 		return
 	}
 	defer res.Body.Close()
-	if l := res.Header.Get("Content-Length"); l != "" {
-		w.Header().Set("Content-Length", l)
+	for _, h := range []string{"Content-Length", "ETag"} {
+		if v := res.Header.Get(h); v != "" {
+			w.Header().Set(h, v)
+		}
 	}
 	w.WriteHeader(res.StatusCode)
 	var b bytes.Buffer

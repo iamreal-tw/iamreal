@@ -63,7 +63,7 @@ Durable Object 回 `overloaded` 時（文件說這個錯誤不要重試，[error
 
 ## 緊急時的挑戰頁
 
-限流和總量上限都開著，頁面還是撐不住時，營運者手動打開 Cloudflare 的挑戰頁，事後關掉，並公告開了多久。
+限流和總量上限都開著，頁面還是撐不住時，維護者手動打開 Cloudflare 的挑戰頁，事後關掉，並公告開了多久。
 
 - **事先做好**：一條 WAF 的自訂規則，動作是 Managed Challenge，平時關著。不用整站的 I'm Under Attack 模式。
 - **只套在訪客的頁面**（首頁、島民證明、查詢頁、證明紀錄頁）。不套在 `/api/`、`/proof` 的檔案、證明紀錄和清冊的下載：挑戰頁回的是一整頁 HTML，頁面裡的 `fetch()` 會直接失敗（[challenge pages](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/)），過卡、重驗的工具和之後的擴充功能都會壞。

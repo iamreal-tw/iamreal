@@ -118,6 +118,8 @@ struct ScheduleView: View {
         .background(Theme.bg.color.ignoresSafeArea())
         .foregroundColor(Theme.text.color)
         .environment(\.colorScheme, .light)
+        // Drawn at once, as the card proof's screens (ScreenView).
+        .transaction { $0.animation = nil }
         .sheet(isPresented: $pickingDay) {
             let range = pages.pickable
             DatePicker("", selection: Binding(get: { pages.next.date }, set: { pages.pick(Day($0)); pickingDay = false }), in: range.lowerBound.date...range.upperBound.date, displayedComponents: .date)
@@ -184,9 +186,6 @@ struct ScheduleView: View {
                 .lineSpacing(Theme.spacing(Theme.leadingHeading, Theme.sizeLead))
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 28)
-            Text(screen.evening).font(Theme.body(Theme.sizeSmall)).foregroundColor(Theme.mute.color)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 8)
 
             if let message = screen.message {
                 Text(message).font(Theme.body(Theme.sizeKicker)).foregroundColor(Theme.ink.color)
@@ -238,6 +237,8 @@ struct SettingsView: View {
         .background(Theme.bg.color.ignoresSafeArea())
         .foregroundColor(Theme.text.color)
         .environment(\.colorScheme, .light)
+        // Drawn at once, as the card proof's screens (ScreenView).
+        .transaction { $0.animation = nil }
         .onAppear { pages.refreshSettings() }
     }
 
@@ -265,10 +266,6 @@ struct SettingsView: View {
                     }
                 }
             }
-            Text(screen.stored).font(Theme.body(Theme.sizeSmall)).foregroundColor(Theme.mute.color)
-                .lineSpacing(Theme.spacing(Theme.leadingSmall, Theme.sizeSmall))
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 16)
 
             Parts.label(screen.about).padding(.top, 36)
             Divider().overlay(Theme.line.color)

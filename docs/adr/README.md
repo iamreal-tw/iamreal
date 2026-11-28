@@ -46,7 +46,7 @@
 
 ## 重驗
 
-- 每一筆紀錄公布後由 Go 的重驗指令驗一次，之後只確認雜湊沒有變；營運者每天在 GitHub Actions 跑；沒有通過時手動停止收過卡。[ADR-0025](0025-each-proof-reverified-once-by-a-second-implementation.md)
+- 每一筆紀錄公布後由 Go 的重驗指令驗一次，之後只確認雜湊沒有變；維護者每天在 GitHub Actions 跑；沒有通過時手動停止收過卡。[ADR-0025](0025-each-proof-reverified-once-by-a-second-implementation.md)
 - Go 的重驗工具不設期限地留著；證明的密碼學驗證兩邊共用 Barretenberg，對外照實寫。[ADR-0030](0030-go-reverifier-kept-without-end-date.md)
 
 ## 持卡人的裝置
@@ -70,13 +70,13 @@
 - 測試網站是同一個 Worker 專案的另一個環境，只收真卡片，不定期清空。[ADR-0028](0028-test-site-is-a-second-environment.md)
 - 正式網站只從 GitHub Actions 部署，推版本標籤、核准後才部署；部署權杖一個 Worker 一把；快取只有推到 `main` 的執行能存，部署碰不到快取。[ADR-0029](0029-production-deploys-only-from-github-actions.md)
 - app 傳到商店的每一個 build 只從 GitHub Actions 建置和上傳；Android 能逐檔比對，iOS 比不了。[ADR-0036](0036-apps-built-and-uploaded-only-from-github-actions.md)（部分由 ADR-0040 取代）
-- Android、iOS 各有兩個商店的 app：正式 app `tw.iamreal.app` 上線前連測試網站、上線起連正式網站，測試 app `tw.iamreal.app.test` 永遠連測試網站；開發用 build `tw.iamreal.app.dev` 不上傳商店；Android 的簽章金鑰由 Google 產生；CI 只上傳到測試軌道，正式版由營運者在商店的後台發布。[ADR-0040](0040-test-app-and-production-app.md)（取代 [ADR-0037](0037-one-app-identifier.md)，部分取代 ADR-0036）
+- Android、iOS 各有兩個商店的 app：正式 app `tw.iamreal.app` 上線前連測試網站、上線起連正式網站，測試 app `tw.iamreal.app.test` 永遠連測試網站；開發用 build `tw.iamreal.app.dev` 不上傳商店；Android 的簽章金鑰由 Google 產生；CI 只上傳到測試軌道，正式版由維護者在商店的後台發布。[ADR-0040](0040-test-app-and-production-app.md)（取代 [ADR-0037](0037-one-app-identifier.md)，部分取代 ADR-0036）
 - 紀錄目錄和清冊存檔每天抄一份副本到 Cloudflare 以外，其他的從證明紀錄重算；重建卡片狀態走「從證明紀錄重建」一個步驟；出事時照 `docs/playbooks/` 做。[ADR-0033](0033-off-site-copy-of-proof-log-and-crl-archive.md)
 
-## 隱私和營運者看得到什麼
+## 隱私和維護者看得到什麼
 
 - 連線紀錄只記送出一筆的請求和它的 IP，留 31 天；帶著有效題目而失敗的送出連內文一起記；其他的請求不記；對外講到個人資料保護法第 8 條要求的程度。[ADR-0022](0022-connection-log-keeps-ip-for-31-days.md)
-- 分析只數事件：不放 cookie、沒有第三方的程式；計數的欄位只能從寫死的表裡選；計數不存 IP、不進連線紀錄，明細留 31 天；營運者在自己電腦上看加總。[ADR-0032](0032-analytics-counts-events-not-people.md)（部分由 ADR-0039 取代）
+- 分析只數事件：不放 cookie、沒有第三方的程式；計數的欄位只能從寫死的表裡選；計數不存 IP、不進連線紀錄，明細留 31 天；維護者在自己電腦上看加總。[ADR-0032](0032-analytics-counts-events-not-people.md)（部分由 ADR-0039 取代）
 - 計數可以帶活不過一個月的隨機編號：造訪編號（一次造訪）、過卡裝置編號（31 天換）、嘗試編號（一次過卡）；31 天後對不回證明紀錄裡的紀錄；永久保存的只有加總。[ADR-0039](0039-counts-carry-ids-that-live-under-a-month.md)
 - 過卡停在哪一步和錯誤代碼當成計數送給後台，裡面沒有匿名編號。[ADR-0032](0032-analytics-counts-events-not-people.md)、[ADR-0016](0016-device-protections-not-set-by-server.md)
 - 平常不放 cookie；唯一的例外是緊急時的挑戰頁。[ADR-0026](0026-rate-limiting-in-three-layers.md)
@@ -87,16 +87,16 @@
 
 | ADR | 程式現在還是 | 票 |
 |---|---|---|
-| 0025 | 每天的重驗有了（`.github/workflows/reverify.yml`），只跑測試的證明紀錄：正式的那一份寫好了、等正式網站才打開；每次從第 1 筆整份重驗，沒有進度檔，`iamreal-verify` 也還不能接著上次做、指定一段序號；沒通過時沒有東西通知營運者 | [#413](https://github.com/iamreal-tw/iamreal/issues/413)，通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
+| 0025 | 每天的重驗有了（`.github/workflows/reverify.yml`），只跑測試的證明紀錄：正式的那一份寫好了、等正式網站才打開；每次從第 1 筆整份重驗，沒有進度檔，`iamreal-verify` 也還不能接著上次做、指定一段序號；沒通過時沒有東西通知維護者 | [#413](https://github.com/iamreal-tw/iamreal/issues/413)，通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
 | 0026 | 後台、網頁版和兩個 app 做完了（照 IP 的上限 [#418](https://github.com/iamreal-tw/iamreal/issues/418)；全站的總量上限、Durable Object 撐不住時的 `busy`、網頁版的處理 [#32](https://github.com/iamreal-tw/iamreal/issues/32)；Android [#419](https://github.com/iamreal-tw/iamreal/issues/419)、iOS [#420](https://github.com/iamreal-tw/iamreal/issues/420)）。WAF 的限流規則和挑戰頁在測試網站設好、演練過（2026-11-27，[#423](https://github.com/iamreal-tw/iamreal/issues/423)）；照 IP 的上限擋不住每次開新連線的來源，那種只有 WAF 的規則擋得住（2026-11-27，[#466](https://github.com/iamreal-tw/iamreal/issues/466)）。訪客的頁面在 Cloudflare 上沒有快取，要不要打開見 [#472](https://github.com/iamreal-tw/iamreal/issues/472) | [#413](https://github.com/iamreal-tw/iamreal/issues/413) |
 | 0027 | 指紋檔沒有另一份；`iamreal-verify` 不用清冊差異檔（鏡像寫了，`crl/patches/`） | [#35](https://github.com/iamreal-tw/iamreal/issues/35)；差異檔 [#546](https://github.com/iamreal-tw/iamreal/issues/546) |
-| 0028 | 測試的證明紀錄每天重驗了；沒通過時還沒有東西通知營運者，要自己看執行紀錄 | [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
+| 0028 | 測試的證明紀錄每天重驗了；沒通過時還沒有東西通知維護者，要自己看執行紀錄 | [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
 | 0029 | 只有測試網站的部署（合併到 main）；沒有推版本標籤部署正式網站的工作流程、production environment、正式的權杖 | [#39](https://github.com/iamreal-tw/iamreal/issues/39) |
 | 0033 | 沒有副本、沒有抄副本的工作流程、清冊檔沒有鎖、後台沒有「從證明紀錄重建」、沒有 `docs/playbooks/` | [#102](https://github.com/iamreal-tw/iamreal/issues/102)、[#103](https://github.com/iamreal-tw/iamreal/issues/103)、[#105](https://github.com/iamreal-tw/iamreal/issues/105)、[#106](https://github.com/iamreal-tw/iamreal/issues/106)、[#107](https://github.com/iamreal-tw/iamreal/issues/107)、[#108](https://github.com/iamreal-tw/iamreal/issues/108)、[#109](https://github.com/iamreal-tw/iamreal/issues/109)、[#110](https://github.com/iamreal-tw/iamreal/issues/110)、[#111](https://github.com/iamreal-tw/iamreal/issues/111)；常見問題的那一句在 [#104](https://github.com/iamreal-tw/iamreal/issues/104) |
 | 0034 | 沒有 `device-core/`、`android/`、`ios/`；裝置上的檢查（憑證、清冊、電路輸入、建樹的路徑）還沒有寫進 `spec/` | 地圖 [#83](https://github.com/iamreal-tw/iamreal/issues/83) |
 | 0035 | `config` 沒有 `min_app`；`docs/api/`、`spec/` 沒有它的讀法；沒有放最低版本的檔案 | 地圖 [#83](https://github.com/iamreal-tw/iamreal/issues/83) |
 | 0039 | 網頁版、Android、iOS 過卡的計數帶過卡裝置編號和嘗試編號、送出一筆帶過卡裝置編號了，兩個 app 的計數帶型號和版本（[#54](https://github.com/iamreal-tw/iamreal/issues/54)、[#433](https://github.com/iamreal-tw/iamreal/issues/433)、[#434](https://github.com/iamreal-tw/iamreal/issues/434)）；訪客頁面的計數帶造訪編號，過卡的頁面打開時換掉它，島民證明上按的動作帶短編號了（[#275](https://github.com/iamreal-tw/iamreal/issues/275)）。還沒有的：島民證明帶來幾次「下載 app」還沒做（[#457](https://github.com/iamreal-tw/iamreal/issues/457)） | [#457](https://github.com/iamreal-tw/iamreal/issues/457) |
-| 0040 | `android/`、`ios/`、上傳的工作流程只有正式 app 和開發用 build，還沒有測試 app；開發用 build 的 build 號碼還是 1；`.github/README.md`、`design/copy/app.md`、`design/screens/README.md`、兩個 app 的 README 和 `worker/test/workflows.ts` 的註解還寫一個 app 的說法（ADR-0037）；`.github/README.md` 還寫 Android 的簽章金鑰由營運者保管 | 施工的票待開 |
+| 0040 | `android/`、`ios/`、上傳的工作流程只有正式 app 和開發用 build，還沒有測試 app；開發用 build 的 build 號碼還是 1；`.github/README.md`、`design/copy/app.md`、`design/screens/README.md`、兩個 app 的 README 和 `worker/test/workflows.ts` 的註解還寫一個 app 的說法（ADR-0037）；`.github/README.md` 還寫 Android 的簽章金鑰由維護者保管 | 施工的票待開 |
 
 `worker/` 還沒做完：清冊鏡像、過卡的四個介面、每一種訪客頁面、每天公布證明紀錄有了，限流還沒有（[`worker/README.md`「現在有什麼」](../../worker/README.md#現在有什麼)）。2026-11-19 第一次部署到測試網站：從 Cloudflare 抓得到內政部的兩個清冊網址，只有 `Editor` 權限的權杖也跑得了 Durable Object 的 migration（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）。測試網站跑的是 `worker/`；Go 的舊後台 `server/` 在 2026-11-22 刪掉了（[#74](https://github.com/iamreal-tw/iamreal/issues/74)）。
 
@@ -104,7 +104,7 @@
 
 施工時碰到這些，停下來問，不要自己定。
 
-- 重驗沒有通過、排程沒跑時怎麼通知營運者（ADR-0025、ADR-0027；[#53](https://github.com/iamreal-tw/iamreal/issues/53)）
+- 重驗沒有通過、排程沒跑時怎麼通知維護者（ADR-0025、ADR-0027；[#53](https://github.com/iamreal-tw/iamreal/issues/53)）
 - 頁面的資料撐不住時搬到 KV 還是 D1（ADR-0026）
 - 正式的證明紀錄開張當天，測試的證明紀錄怎麼處理（ADR-0028）
 - 其他服務的場合：格式保留了 `S` 開頭（ADR-0007），算式和整個做法還沒有設計；公開的證明紀錄和其他服務的場合之間要不要讓人自願連起來也沒有設計（ADR-0013）

@@ -148,7 +148,7 @@ final class BusyTests: XCTestCase {
                 openSession: { try DeviceCore.Session(.test) }, proofFiles: BundledFile.proofFiles(for:)),
             copy: Copy.bundled(), appCopy: Copy.bundled("app"),
             reminders: Reminders(store: MemoryReminderStore(), notifier: FakeNotifier(), clock: Date.init, calendar: .current),
-            openSchedule: {}, openNotificationSettings: {}, openSettings: {}, site: site,
+            openSchedule: {}, openSettings: {}, site: site,
             open: { _ in }, copyText: { _ in }, share: { _ in }))
     }
 
@@ -169,7 +169,8 @@ final class BusyTests: XCTestCase {
             let model = model(backend, card)
             await perform(.start, on: model)
             XCTAssertEqual(model.screen.step, 1, failure.code)
-            XCTAssertEqual(Array(model.screen.texts.suffix(2)), [copy("before.busy"), copy("common.next")], "\(failure.code): right above 下一步, which stays")
+            XCTAssertEqual(model.screen.blocks.last, .message(copy("before.busy")), "\(failure.code): right above 下一步, which stays")
+            XCTAssertEqual(model.screen.buttons.map(\.label), [copy("common.next")], failure.code)
             // Nothing on the screen reads a card: 下一步 is its one button.
             XCTAssertEqual(model.screen.buttons.map(\.action), [.start], failure.code)
             XCTAssertEqual(card.taps, 0, "\(failure.code): no card tapped")

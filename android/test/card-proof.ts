@@ -46,7 +46,7 @@
 //    (the whole of it, or for a card proof again only whether the link is
 //    still there), step 7 is the reminder, step 8 is done and the
 //    invitation to share. The withdrawal goes from step 5 to step 8.
-// 5. The reminder (issue #297): step 7 offers it (這次不要, then 開啟提醒),
+// 5. The reminder (issue #297): step 7 offers it (這次不要, then 設定提醒 and 開啟提醒 on the screen it opens),
 //    the screen of its interval and time, the card proofs after it set it
 //    again, the settings show it. The emulator's clock is moved to the day
 //    and the time of the reminder: the notification's words, "一週後再提醒我"
@@ -670,10 +670,10 @@ async function cardProof(p: Proof): Promise<string> {
     const s = wholeScreen();
     shows(s, "step 3", [NAME, say("pin.name_note")]);
     if (p.thorough) {
-      shows(s, "step 3", [say("pin.title"), say("pin.card_read"), say("pin.label"), say("pin.purpose"), say("app_pin.stays"), say("common.back"), say("pin.confirm_card")]);
+      shows(s, "step 3", [say("pin.title"), say("pin.card_read"), say("pin.label"), say("pin.purpose_single", { platform: THREADS }), say("app_pin.stays"), say("common.back"), say("pin.confirm_card")]);
       check(!s.includes(say("pin.stays")) && !s.includes(say("pin.pin_characters")), "step 3 says 這支手機, and nothing about characters a PIN may not have");
       // Who can look the card's accounts up with the card and the PIN is step 5's to say, once.
-      check(!s.some((t) => t.includes(say("pin.label")) && t !== say("pin.label") && t !== say("pin.title") && t !== say("pin.purpose") && t !== say("app_pin.stays")), "step 3 has the two points and no third");
+      check(!s.some((t) => t.includes(say("pin.label")) && t !== say("pin.label") && t !== say("pin.title") && t !== say("pin.purpose_single", { platform: THREADS }) && t !== say("app_pin.stays")), "step 3 has the two points and no third");
       // Without a PIN, no panel.
       press(say("pin.confirm_card"));
       await waitText(say("app_pin.need_pin"), "the sentence for an empty PIN", 10_000);
@@ -714,7 +714,7 @@ async function cardProof(p: Proof): Promise<string> {
     for (const a of [...p.accounts.absent, say("accounts.title"), say("accounts.edit_list"), say("accounts.switches_limited"), say("accounts.preview")]) check(!s.includes(a), `step 4 does not say "${a.slice(0, 40)}"`);
     if (p.current === "") {
       // Nothing declared: the field, and nothing of what a card with an account can do.
-      shows(s, "step 4", [THREADS, "@", say("app_accounts.preview"), say("app_accounts.preview_note", { platform: THREADS }), say("common.next")]);
+      shows(s, "step 4", [THREADS, "@", say("app_accounts.preview"), say("accounts.preview_note_single", { platform: THREADS }), say("common.next")]);
       for (const a of [say("accounts.refresh"), say("accounts.switch"), say("accounts.declared_now")]) check(!s.includes(a), `step 4, nothing declared, does not say "${a}"`);
       check(field("account-threads").text === "", "step 4: the field is empty");
     } else {
@@ -722,7 +722,7 @@ async function cardProof(p: Proof): Promise<string> {
       const account = `@${p.current}`;
       shows(s, "step 4", [say("accounts.declared_now"), account, say("accounts.refresh"), say("accounts.refresh_note"), say("accounts.switch"), say("accounts.withdraw", { account })]);
       check(field("current-threads").text === account, `step 4: the card declares ${account}`);
-      check(!s.includes(say("common.next")) && !s.includes(say("app_accounts.preview")) && !s.includes(say("accounts.keep")), "step 4, an account declared: no field, no 下一步");
+      check(!s.includes(say("common.next")) && !s.includes(say("app_accounts.preview")) && !s.includes(say("common.back")), "step 4, an account declared: no field, no 下一步, no 上一步");
     }
   }
   /** Types an account into the Threads field, which is empty. */
@@ -755,17 +755,17 @@ async function cardProof(p: Proof): Promise<string> {
     {
       shot(`step-4-${p.name}-field`);
       const s = wholeScreen();
-      shows(s, "step 4, after 改成別的帳號,", [step(4), say("accounts.title_single", { platform: THREADS }), inline, say("accounts.switch"), THREADS, "@", say("app_accounts.preview"), ...act.after, say("app_accounts.preview_note", { platform: THREADS }), say("common.next"), say("accounts.keep"), say("common.cancel")]);
+      shows(s, "step 4, after 改成別的帳號,", [step(4), say("accounts.title_single", { platform: THREADS }), inline, say("accounts.switch"), THREADS, "@", say("app_accounts.preview"), ...act.after, say("accounts.preview_note_single_counted", { platform: THREADS }), say("common.next"), say("common.back"), say("common.cancel")]);
       check(!s.includes(say("accounts.refresh")) && !s.includes(say("accounts.declared_now")), "step 4, after 改成別的帳號: no 更新島民證明");
       check(field("account-threads").text === "", "step 4, after 改成別的帳號: the field is empty");
     }
     // An empty field goes nowhere: withdrawing is the other thing to do.
     press(say("common.next"));
     await waitText(say("accounts.need_one"), "step 4: the sentence for an empty field", 10_000);
-    // 不改了: back to what the card declares; then again.
-    press(say("accounts.keep"));
-    await waitText(say("accounts.refresh"), "step 4 again, after 不改了", 10_000);
-    check(!textsOf(visible()).includes(inline), "step 4: 不改了 goes back to what the card declares");
+    // 上一步: back to what the card declares; then again.
+    press(say("common.back"));
+    await waitText(say("accounts.refresh"), "step 4 again, after 上一步", 10_000);
+    check(!textsOf(visible()).includes(inline), "step 4: 上一步 goes back to what the card declares");
     press(say("accounts.switch"));
     await waitText(inline, "step 4 after 改成別的帳號, again", 10_000);
     typeAccount(act.type);
@@ -1000,7 +1000,7 @@ async function remindOn(name: string, date: string, design?: string): Promise<vo
   const s = wholeScreen();
   shows(s, "step 7, the reminder on,", [step(7), ...reminderSays(date), say("common.next"), say("common.back"), say("app_reminder.adjust")]);
   check(!s.includes(app("settings.open")), "step 7 has no 設定 in its header");
-  for (const a of [say("app_done.reminder_turn_on"), say("app_reminder.skip"), say("app_reminder.denied"), say("app_reminder.settings")]) check(!s.includes(a), `step 7, the reminder on, does not say "${a.slice(0, 30)}"`);
+  for (const a of [say("app_done.reminder_set"), say("app_reminder.skip")]) check(!s.includes(a), `step 7, the reminder on, does not say "${a.slice(0, 30)}"`);
   check(storedDay() === weeksAfter(date, 12), `the card proof set the reminder again, 12 weeks on: ${storedDay()}`);
 }
 
@@ -1019,8 +1019,9 @@ async function finishStep(o: { name: string; shortId: string; account: string; t
   check(ordinal !== "", `step 8 writes the card's ordinal before the invitation: 第 ${ordinal} 張`);
   shows(s, "step 8", [
     step(8), o.title, say("done.proof"), o.account, `${say("confirm.short_id_label")} ${say("confirm.short_id", { short_id: o.shortId })}`,
-    say("finish.thanks"), say("done.share", { platform: THREADS }), say("common.back"), say("finish.done"),
+    say("done.share", { platform: THREADS }), say("common.back"), say("finish.done"),
   ]);
+  check(visible().some((n) => n.description === say("app_done.share_other")), "step 8: beside 分享到 Threads, the share symbol, read as 用其他 app 分享");
   for (const a of [say("hang.copy"), say("app_done.reminder_title"), say("common.next"), say("finish.unlink_single", { platform: THREADS }), ...neverAfter(o.account)]) check(!s.includes(a), `step 8 does not say "${a.slice(0, 40)}"`);
   return ordinal;
 }
@@ -1471,6 +1472,10 @@ async function oldVersionAndNoNfc(): Promise<void> {
     check(![step(1), say("before.title"), say("common.next"), say("app_read.tap_card")].some((x) => s.includes(x)), "a phone without NFC: no step, no 下一步");
   }
   shot("step-1-no-nfc");
+  // The site's name is the link to it: the one way left.
+  emulator.tap(find((n) => n.id === "open-site", "the site's name"));
+  await sleep(2_000);
+  check(onTop().includes(`dat=http://${SITE}`), "a phone without NFC: the site's name opens the site in the browser");
   phoneHasNfc = true;
   emulator.shell(`am force-stop ${APP}`);
   emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
@@ -1531,8 +1536,9 @@ const storedDay = (): string | undefined => /<string name="day">([0-9-]+)<\/stri
 
 /**
  * Step 7 of the first card proof, which offers the reminder (design/copy/card-proof.md, "7. 提醒"): 這次不要 stores nothing and goes on;
- * back from step 8, the screen of its interval and time, left without saving; 開啟提醒 sets the defaults and goes on; back again, step 7
- * shows the reminder that is on. Leaves step 7 on the screen, the reminder on.
+ * back from step 8, 設定提醒 opens the screen of its interval and time, left without saving; 設定提醒 again and 開啟提醒 there sets
+ * the defaults and comes back to step 7, which shows the reminder that is on and waits for 下一步. Leaves step 7 on the screen, the
+ * reminder on.
  */
 async function reminderOffered(shortId: string): Promise<void> {
   console.log("\nstep 7: the reminder, offered");
@@ -1541,8 +1547,8 @@ async function reminderOffered(shortId: string): Promise<void> {
     shot("step-7-first");
     await designShot("card-proof-app-7-reminder-phone.png");
     const s = wholeScreen();
-    shows(s, "step 7", [step(7), ...reminderSays(today), say("app_done.reminder_turn_on"), say("common.back"), say("app_reminder.adjust"), say("app_reminder.skip")]);
-    for (const a of [say("common.next"), say("app_reminder.denied"), say("app_reminder.settings"), say("hang.copy"), say("finish.done")]) check(!s.includes(a), `step 7 does not say "${a.slice(0, 30)}"`);
+    shows(s, "step 7", [step(7), ...reminderSays(today), say("app_done.reminder_set"), say("common.back"), say("app_reminder.skip")]);
+    for (const a of [say("common.next"), say("app_reminder.adjust"), say("hang.copy"), say("finish.done")]) check(!s.includes(a), `step 7 does not say "${a.slice(0, 30)}"`);
   }
   // 上一步: step 6 as it was left; then on again.
   press(say("common.back"));
@@ -1556,11 +1562,11 @@ async function reminderOffered(shortId: string): Promise<void> {
   check(!/<string/.test(reminderStored()), "這次不要 stores nothing of a reminder");
   // 上一步 of step 8: step 7, which offers the reminder again.
   press(say("common.back"));
-  await waitText(say("app_done.reminder_turn_on"), "step 7 again, from step 8", 10_000);
+  await waitText(say("app_done.reminder_set"), "step 7 again, from step 8", 10_000);
   check(textsOf(visible()).includes(step(7)), "step 8: 上一步 goes back to step 7");
-  press(say("app_reminder.adjust"));
+  press(say("app_done.reminder_set"));
   await waitText(app("reminder.from_today"), "the screen of the interval and the time");
-  check(!/<string/.test(reminderStored()), "before 開啟提醒 the phone stores nothing of the reminder");
+  check(!/<string/.test(reminderStored()), "設定提醒 stores nothing of the reminder: the screen of the interval and the time does, on 開啟提醒");
   const next = (weeks: number): string => app("reminder.next", { day: dayText(weeksAfter(today, weeks)), time: NINE });
   {
     shot("reminder-schedule");
@@ -1568,7 +1574,7 @@ async function reminderOffered(shortId: string): Promise<void> {
     const s = wholeScreen();
     shows(s, "the screen of the interval and the time", [
       app("reminder.title"), app("reminder.from_today"), app("reminder.how_often"), app("reminder.weeks_4"), app("reminder.weeks_12"), app("reminder.suggested"),
-      app("reminder.weeks_26"), app("reminder.pick_date"), app("reminder.when"), app("reminder.time"), NINE, app("reminder.change"), next(12), app("reminder.evening"),
+      app("reminder.weeks_26"), app("reminder.pick_date"), app("reminder.when"), app("reminder.time"), NINE, app("reminder.change"), next(12),
       app("reminder.turn_on"), app("reminder.cancel"),
     ]);
     check(!s.includes(app("reminder.save")), "the screen of the interval and the time, with the reminder off, says 開啟提醒, not 儲存");
@@ -1581,12 +1587,13 @@ async function reminderOffered(shortId: string): Promise<void> {
   check(true, "the next reminder follows the interval chosen");
   // Left without saving: step 7 as it was, nothing stored.
   press(app("reminder.cancel"));
-  await waitText(say("app_done.reminder_turn_on"), "step 7 again, from the screen of the interval and the time", 10_000);
+  await waitText(say("app_done.reminder_set"), "step 7 again, from the screen of the interval and the time", 10_000);
   check(!/<string/.test(reminderStored()), "the screen of the interval and the time, left with 取消, stores nothing");
-  // 開啟提醒: the defaults, and on to step 8 (this Android asks nothing before it lets an app notify).
-  press(say("app_done.reminder_turn_on"));
-  await waitText(step(8), "step 8, after 開啟提醒", 10_000);
-  press(say("common.back"));
+  // 設定提醒, then 開啟提醒 there as it opens: the defaults (this Android asks nothing before it lets an app notify), and back to
+  // step 7, which waits for 下一步.
+  press(say("app_done.reminder_set"));
+  await waitText(app("reminder.from_today"), "the screen of the interval and the time, again");
+  press(app("reminder.turn_on"));
   await remindOn("first-on", today, "card-proof-app-7-reminder-on-phone.png");
   check(storedDay() === weeksAfter(today, 12), `the phone stores the day of the next reminder: ${storedDay()}`);
   const kept = [...reminderStored().matchAll(/name="([a-z]+)"/g)].map((m) => m[1]).sort();
@@ -1607,7 +1614,7 @@ async function settingsFromLastStep(): Promise<void> {
     const s = wholeScreen();
     shows(s, "the settings", [
       app("settings.title"), app("settings.reminder"), app("settings.switch"), app("settings.interval"), app("interval.weeks_12"), app("settings.time"), NINE,
-      app("settings.next"), dayText(weeksAfter(today, 12)), app("settings.stored"), app("settings.about"), app("settings.version"), app("settings.faq"),
+      app("settings.next"), dayText(weeksAfter(today, 12)), app("settings.about"), app("settings.version"), app("settings.faq"),
       app("settings.privacy"), app("settings.source"),
     ]);
     check(field("version").text === "dev", `the settings show the build's version: ${field("version").text}`);
@@ -1776,12 +1783,17 @@ try {
   check(page.status === 200 && html.includes("@alice"), `the Worker's page of the card, /p/${shortId}, lists @alice`);
   // The card's ordinal as its page writes it: the proof log's, which the answer to the submission gave the app.
   check(/<p class="ordinal">第 ([0-9,]+) 張島民證明<\/p>/.exec(html)?.[1] === ordinal, `the card's page writes the same ordinal, 第 ${ordinal} 張`);
-  // The system's share sheet, with the sentence and, on the line under it, the address of the card's page (Android 10
-  // shows the text it is given at its top).
-  press(say("done.share", { platform: THREADS }));
+  // Threads's composer, the sentence and, on the line under it, the address of the card's page filled in: its web intent, opened
+  // outside the app (the emulator has no Threads, so the browser).
   const text = `${say("done.share_text", { ordinal })}\nhttp://${SITE}/p/${shortId}`;
+  press(say("done.share", { platform: THREADS }));
+  await sleep(2_000);
+  check(onTop().includes(`dat=https://www.threads.com/intent/post?text=${encodeURIComponent(text)}`), "step 8: 分享到 Threads opens Threads's composer with the text filled in");
+  await backToApp(8);
+  // The share symbol: the system's share sheet, with the same text (Android 10 shows the text it is given at its top).
+  emulator.tap(find((n) => n.description === say("app_done.share_other"), "the share symbol"));
   const shared = await waitText(text, "the share sheet with the sentence and the card's address", 20_000);
-  check(/act=android\.intent\.action\.CHOOSER/.test(emulator.shell("dumpsys activity activities")), "step 8: 分享到 Threads opens the system's share sheet");
+  check(/act=android\.intent\.action\.CHOOSER/.test(emulator.shell("dumpsys activity activities")), "step 8: the share symbol opens the system's share sheet");
   check(textsOf(visible()).filter((t) => t.includes(SITE)).length === 1 && shared.text === text, "step 8: what is shared is the sentence with the card's ordinal and the card's address");
   emulator.shell("input keyevent KEYCODE_BACK");
   await backToApp(8);

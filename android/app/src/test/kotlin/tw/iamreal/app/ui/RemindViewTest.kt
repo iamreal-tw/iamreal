@@ -18,8 +18,8 @@ class RemindViewTest {
     private val today = LocalDate.parse("2026-11-16")
     private val nine = LocalTime.of(21, 0)
 
-    private fun say(plan: Plan?, picked: Boolean = false, denied: Boolean = false, validUntil: String? = null) =
-        remindView(card, words, plan, picked, denied, validUntil?.let(LocalDate::parse), today)
+    private fun say(plan: Plan?, picked: Boolean = false, validUntil: String? = null) =
+        remindView(card, words, plan, picked, validUntil?.let(LocalDate::parse), today)
 
     @Test
     fun `nothing stored, the reminder is offered, 12 weeks on at 9 in the evening`() {
@@ -44,20 +44,6 @@ class RemindViewTest {
         assertEquals("這支手機會在 2027-01-01（星期五）晚上 9:00 提醒你。", r.lines[1])
     }
 
-    @Test
-    fun `the system did not let the app notify, why there is no reminder and nothing else`() {
-        val r = say(null, denied = true, validUntil = "2026-12-01")
-        assertEquals(RemindView.Kind.DENIED, r.kind)
-        assertEquals("提醒我回來過卡", r.title)
-        assertEquals(listOf("沒有排提醒：手機不允許這個 app 發通知。請允許通知設定，我們不會在沒有經過你同意的情況下打擾你。"), r.lines)
-        // No reminder: nothing about the certificate ending before it.
-        assertNull(r.expires)
-    }
-
-    @Test
-    fun `a reminder that is on is shown as on, whatever the system said when it was asked before`() {
-        assertEquals(RemindView.Kind.ON, say(Plan(Interval.WEEKS_12, nine, LocalDate.parse("2027-02-08")), denied = true).kind)
-    }
 
     @Test
     fun `a certificate that expires before the reminder says so`() {

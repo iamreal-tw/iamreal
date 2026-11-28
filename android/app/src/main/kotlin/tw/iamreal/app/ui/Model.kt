@@ -366,6 +366,13 @@ internal class Model(
 
     val domain: String get() = wiring.domain
 
+    /**
+     * Step 3's sentences that speak of the card's accounts: as on step 1, by the platforms the app knows; with one, they name it
+     * (card-proof.md, step 3).
+     */
+    fun pinSays(key: String, single: String): String =
+        Platforms.known.singleOrNull()?.let { copy.say(single, "platform" to it.name) } ?: copy.say(key)
+
     /** The site the app talks to, without a slash at the end: the settings' links open its pages. */
     val site: String get() = wiring.site
 
@@ -470,7 +477,7 @@ internal class Model(
                     this@Model.panel = panel
                 }
                 // Step 3: once the card has signed, the line beside the button says what comes next.
-                if (panel == CardProof.Tap.SIGNED && pinBusy != null) pinBusy = copy.say("app_pin.signed")
+                if (panel == CardProof.Tap.SIGNED && pinBusy != null) pinBusy = pinSays("app_pin.signed", "app_pin.signed_single")
             }
         }
     }
@@ -660,7 +667,7 @@ internal class Model(
         if (pinExpired()) return stopped(Stop("idle"))
         pinMessage = null
         // The card has signed: the line beside the button says what is being done.
-        pinBusy = copy.say("app_pin.signed")
+        pinBusy = pinSays("app_pin.signed", "app_pin.signed_single")
         step(f, { f.retryCardState() }, ::cardStateKnown, ::pinStopped)
     }
 
@@ -757,8 +764,8 @@ internal class Model(
     /** "修改帳號清單": the same step, with a row for each platform. */
     fun editList() = openAccounts(AccountsMode.EDIT)
 
-    /** "不改了": back to what the card declares, nothing typed kept. */
-    fun keep() = openAccounts(AccountsMode.OPEN)
+    /** 上一步 of the screens opened from step 4: back to what the card declares, nothing typed kept. */
+    fun backToDeclared() = openAccounts(AccountsMode.OPEN)
 
     /** The card's list as it is: each platform the screens offer, its account now or "". */
     private fun listNow(status: CardProof.Status): Map<String, String> = status.slots.filter { it.known }.associate { it.platform to (it.current ?: "") }

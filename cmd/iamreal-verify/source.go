@@ -8,6 +8,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -280,11 +281,11 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 	var previous *heldCRL
 	seen := map[string]bool{}
 	// The originals of the CRLs that may be given by patches, asked for
-	// with HEAD ahead of rebuilding (askSizes): those the index says are
+	// with HEAD ahead of rebuilding (askHeads): those the index says are
 	// usable, after the first usable one of their key. Rebuilding takes a
 	// patch only for one of them (previous is then of the same key); a file
 	// left out before it makes its HEAD unused, not wrong.
-	var originals []*originalSize
+	var originals []*originalHead
 	firstOfKey := map[string]bool{}
 	for _, line := range bytes.Split(index, []byte("\n")) {
 		issuer, usable := indexUsable(line)
@@ -295,9 +296,9 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 				continue
 			}
 			seen[name] = true
-			var asked *originalSize
+			var asked *originalHead
 			if usable && firstOfKey[issuer] {
-				asked = &originalSize{name: name, done: make(chan struct{})}
+				asked = &originalHead{name: name, done: make(chan struct{})}
 				originals = append(originals, asked)
 			}
 			if usable {
@@ -332,7 +333,7 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 		}
 	}
 	stop := make(chan struct{})
-	u.askSizes(originals, stop)
+	u.askHeads(originals, stop)
 	var once sync.Once
 	return out, func() {
 		once.Do(func() { close(stop) })
@@ -340,27 +341,31 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 	}, nil
 }
 
-// headsAtOnce is how many HEAD requests askSizes keeps going at once.
+// headsAtOnce is how many HEAD requests askHeads keeps going at once.
 const headsAtOnce = 8
 
-// originalSize is the HEAD request for the original name and its answer:
-// u.size's, once done is closed.
-type originalSize struct {
+// originalHead is the HEAD request for the original name and its answer
+// (u.head), once done is closed.
+type originalHead struct {
 	name string
 	size int64
+	// md5 is the MD5 of the content, 32 lowercase hex digits, when the
+	// ETag gives it (etagMD5); "" when it does not.
+	md5  string
 	err  error
 	done chan struct{}
 }
 
-// askSizes asks for the length of each of originals with HEAD (u.size), in
-// that order, headsAtOnce at a time. One HEAD takes about a third of a
-// second at the data domain (README.md, "下載"); one after another, the
-// HEADs of a year's CRLs would take as long as downloading them whole. They
-// are asked ahead of rebuilding, which waits for each answer when its CRL's
-// turn comes, and holds no CRL. Closing stop asks no more: the answers
-// not asked are never given, so nothing may wait for them after.
-func (u urlSource) askSizes(originals []*originalSize, stop <-chan struct{}) {
-	work := make(chan *originalSize)
+// askHeads asks for each of originals with HEAD (u.head): its length and,
+// when the ETag gives it, the MD5 of its content. In that order,
+// headsAtOnce at a time. One HEAD takes about a third of a second at the
+// data domain (README.md, "下載"); one after another, the HEADs of a year's
+// CRLs would take as long as downloading them whole. They are asked ahead
+// of rebuilding, which waits for each answer when its CRL's turn comes, and
+// holds no CRL. Closing stop asks no more: the answers not asked are never
+// given, so nothing may wait for them after.
+func (u urlSource) askHeads(originals []*originalHead, stop <-chan struct{}) {
+	work := make(chan *originalHead)
 	go func() {
 		defer close(work)
 		for _, o := range originals {
@@ -374,7 +379,7 @@ func (u urlSource) askSizes(originals []*originalSize, stop <-chan struct{}) {
 	for range headsAtOnce {
 		go func() {
 			for o := range work {
-				o.size, o.err = u.size(o.name)
+				u.head(o)
 				close(o.done)
 			}
 		}()
@@ -409,54 +414,82 @@ type heldCRL struct {
 
 // patchedOriginal is patched, for a CRL whose original is there: it first
 // waits for the answer to the HEAD request for the original (asked, from
-// askSizes), so that a CRL file missing from the
+// askHeads), so that a CRL file missing from the
 // archive is reported as when every file is downloaded whole. The original
 // is not there (404): crl.ErrLeftOut, and the patch is not downloaded. The
 // patch gives a file of another length than the original's: nil, after one
 // line on stderr, so that the original is downloaded whole and its SHA-256
-// checked. A HEAD that fails, or gives no length: nil, after one line.
-// Only a file of the same length with other content is not seen without
-// downloading it whole (README.md, "下載").
-func (u urlSource) patchedOriginal(previous *heldCRL, sha string, asked *originalSize, stderr io.Writer) ([]byte, error) {
+// checked. The same, when the ETag is the MD5 of the content (etagMD5) and
+// not that of the file the patch gives. A HEAD that fails, or gives no
+// length: nil, after one line. Without an ETag that is an MD5, a file of
+// the same length with other content is not seen without downloading it
+// whole (README.md, "下載").
+func (u urlSource) patchedOriginal(previous *heldCRL, sha string, asked *originalHead, stderr io.Writer) ([]byte, error) {
 	name := sha + ".crl"
 	<-asked.done
-	size, err := asked.size, asked.err
-	if errors.Is(err, errNotFound) {
+	if errors.Is(asked.err, errNotFound) {
 		return nil, crl.ErrLeftOut
 	}
-	if err != nil {
-		fmt.Fprintf(stderr, "iamreal-verify: %s: HEAD: %v; downloading the CRL whole\n", u.url(name), err)
+	if asked.err != nil {
+		fmt.Fprintf(stderr, "iamreal-verify: %s: HEAD: %v; downloading the CRL whole\n", u.url(name), asked.err)
 		return nil, nil
 	}
 	file := u.patched(previous, sha, stderr)
-	if file != nil && int64(len(file)) != size {
-		fmt.Fprintf(stderr, "iamreal-verify: %s: %d bytes, not the %d its patch gives; downloading the CRL whole\n", u.url(name), size, len(file))
+	if file == nil {
 		return nil, nil
+	}
+	if int64(len(file)) != asked.size {
+		fmt.Fprintf(stderr, "iamreal-verify: %s: %d bytes, not the %d its patch gives; downloading the CRL whole\n", u.url(name), asked.size, len(file))
+		return nil, nil
+	}
+	if asked.md5 != "" {
+		if got := md5.Sum(file); hex.EncodeToString(got[:]) != asked.md5 {
+			fmt.Fprintf(stderr, "iamreal-verify: %s: ETag %q, not the MD5 of what its patch gives, %x; downloading the CRL whole\n", u.url(name), asked.md5, got)
+			return nil, nil
+		}
 	}
 	return file, nil
 }
 
-// size returns the length of the file at p by a HEAD request;
-// errNotFound if there is no such file (404), an error for any other
-// status or if the answer has no Content-Length.
-func (u urlSource) size(p string) (int64, error) {
-	res, err := u.client.Head(u.url(p))
+// head asks for the original o.name with HEAD, and gives o its length and,
+// when the ETag is one (etagMD5), the MD5 of its content; o.err is
+// errNotFound if there is no such file (404), an error for any other status
+// or if the answer has no Content-Length.
+func (u urlSource) head(o *originalHead) {
+	res, err := u.client.Head(u.url(o.name))
 	if err != nil {
-		return 0, err
+		o.err = err
+		return
 	}
 	res.Body.Close()
 	switch res.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
-		return 0, errNotFound
+		o.err = errNotFound
+		return
 	default:
-		return 0, errors.New(res.Status)
+		o.err = errors.New(res.Status)
+		return
 	}
 	if res.ContentLength < 0 {
-		return 0, errors.New("no Content-Length")
+		o.err = errors.New("no Content-Length")
+		return
 	}
-	return res.ContentLength, nil
+	o.size = res.ContentLength
+	if m := etagMD5.FindStringSubmatch(res.Header.Get("ETag")); m != nil {
+		o.md5 = strings.ToLower(m[1])
+	}
 }
+
+// etagMD5 is an ETag that is the MD5 of the content: 32 hex digits in
+// quotes. R2 gives it for a file put in one part: on 2026-11-28, every CRL
+// of test-data.iamreal.tw had it, the MD5 of its content (README.md,
+// "下載"). A file R2 put in several parts has an ETag of 32 hex digits,
+// "-" and the number of parts, which is not the MD5 of the content
+// (https://developers.cloudflare.com/r2/objects/upload-objects/); that, a
+// weak ETag (W/) and a server's own say nothing of the content, and are not
+// compared.
+var etagMD5 = regexp.MustCompile(`^"([0-9a-fA-F]{32})"$`)
 
 // patched returns the file with SHA-256 sha, given by its CRL patch from
 // previous (spec/revocation-tree.md, "CRL patches"); nil, after one line
