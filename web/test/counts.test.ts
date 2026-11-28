@@ -9,6 +9,7 @@ import { DEVICE_ID_DAYS, DEVICE_ID_KEY, cardProofCounts, deviceIdOn, endVisit, f
 import type { Stop } from "../src/flow.ts";
 import { VISIT_ID_KEY, readCount } from "iamreal-protocol/counts.ts";
 import { parseDay } from "iamreal-protocol/date.ts";
+import { withoutRandomIds } from "./random-ids.ts";
 import { vectors } from "./vectors.ts";
 
 const TABLE = vectors("counts.json").table as { steps: Record<string, string[]>; reasons: Record<string, string[]>; card_proof_actions: Record<string, string[]>; browsers: string[]; oses: string[] };
@@ -81,7 +82,7 @@ describe("the reason code of a stop", () => {
 
 describe("a count as it is sent", () => {
   /** The counts with a fetch that records, a storage in memory and a clock the test moves. */
-  function page(userAgent: string): { sent: Record<string, unknown>[]; counts: ReturnType<typeof cardProofCounts>; storage: Map<string, string>; requests: { path: string; method: string | undefined }[] } {
+  function page(userAgent: string, random: (bytes: Uint8Array) => Uint8Array = (bytes) => crypto.getRandomValues(bytes as Uint8Array<ArrayBuffer>)): { sent: Record<string, unknown>[]; counts: ReturnType<typeof cardProofCounts>; storage: Map<string, string>; requests: { path: string; method: string | undefined }[] } {
     const sent: Record<string, unknown>[] = [];
     const requests: { path: string; method: string | undefined }[] = [];
     const storage = new Map<string, string>();
@@ -93,7 +94,7 @@ describe("a count as it is sent", () => {
       },
       storage: { getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => void storage.set(k, v) },
       clock: () => Date.UTC(2026, 10, 16, 4),
-      random: (bytes) => crypto.getRandomValues(bytes as Uint8Array<ArrayBuffer>),
+      random,
       userAgent,
     });
     return { sent, counts, storage, requests };
@@ -121,7 +122,9 @@ describe("a count as it is sent", () => {
   });
 
   test("each timed step's duration is one code of the table, sent as a count the table takes; the time itself is in none", async () => {
-    const p = page("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+    // Random IDs that happen to hold the times' digits (25 00 45 12 30 20 00 00 as hex): the times must still be in no field.
+    const digits = [0x25, 0x00, 0x45, 0x12, 0x30, 0x20, 0x00, 0x00];
+    const p = page("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", (bytes) => bytes.map((_, i) => digits[i % digits.length]!));
     p.counts.duration("crl", 2_500);
     p.counts.duration("tree", 45_123);
     p.counts.duration("proved", 200_000);
@@ -137,7 +140,7 @@ describe("a count as it is sent", () => {
       ],
     );
     for (const c of p.sent) assert.deepEqual(readCount(c), c);
-    for (const part of ["2500", "45123", "200000"]) assert.ok(!JSON.stringify(p.sent).includes(part), part);
+    for (const part of ["2500", "45123", "200000"]) assert.ok(!JSON.stringify(p.sent.map(withoutRandomIds)).includes(part), part);
   });
 
   test("the card reader's name: in every count of the attempt once it is known, only in its form; another attempt has none until it is told", async () => {
