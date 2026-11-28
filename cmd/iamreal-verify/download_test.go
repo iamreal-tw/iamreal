@@ -174,6 +174,29 @@ func TestHashListWithoutAProofLogFile(t *testing.T) {
 	}
 }
 
+// forward answers r with what served answers it: the same method, status,
+// Content-Length and body.
+func forward(t *testing.T, served *dataServer, w http.ResponseWriter, r *http.Request) {
+	req, err := http.NewRequest(r.Method, strings.TrimSuffix(served.URL, "/")+r.URL.Path, nil)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer res.Body.Close()
+	if l := res.Header.Get("Content-Length"); l != "" {
+		w.Header().Set("Content-Length", l)
+	}
+	w.WriteHeader(res.StatusCode)
+	var b bytes.Buffer
+	b.ReadFrom(res.Body)
+	w.Write(b.Bytes())
+}
+
 // crlTempDirs is the temporary directories of downloaded archives under dir.
 func crlTempDirs(t *testing.T, dir string) []string {
 	t.Helper()
@@ -198,16 +221,7 @@ func TestDataTempDirOnError(t *testing.T) {
 				return
 			}
 		}
-		res, err := http.Get(strings.TrimSuffix(served.URL, "/") + r.URL.Path)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		defer res.Body.Close()
-		w.WriteHeader(res.StatusCode)
-		var b bytes.Buffer
-		b.ReadFrom(res.Body)
-		w.Write(b.Bytes())
+		forward(t, served, w, r)
 	}))
 	t.Cleanup(srv.Close)
 	if code, _, errOut := runDataArchive(t, srv.URL+"/"); code != exitError {
@@ -305,7 +319,7 @@ func TestDataCRLsOneAtATime(t *testing.T) {
 	served := serveData(t, files)
 	var held []string // what the temporary directory holds at each request for a CRL
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, ".crl") || strings.HasSuffix(r.URL.Path, ".patch") {
+		if r.Method == http.MethodGet && (strings.HasSuffix(r.URL.Path, ".crl") || strings.HasSuffix(r.URL.Path, ".patch")) {
 			dirs := crlTempDirs(t, tmp)
 			if len(dirs) != 1 {
 				t.Errorf("temporary directories %v", dirs)
@@ -322,16 +336,7 @@ func TestDataCRLsOneAtATime(t *testing.T) {
 			}
 			held = append(held, strings.Join(names, " "))
 		}
-		res, err := http.Get(strings.TrimSuffix(served.URL, "/") + r.URL.Path)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		defer res.Body.Close()
-		w.WriteHeader(res.StatusCode)
-		var b bytes.Buffer
-		b.ReadFrom(res.Body)
-		w.Write(b.Bytes())
+		forward(t, served, w, r)
 	}))
 	t.Cleanup(srv.Close)
 

@@ -294,7 +294,10 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 					previous = nil // the first of another key: let the last one go
 				}
 				if usable && previous != nil {
-					b = u.patched(previous, sha, stderr)
+					var err error
+					if b, err = u.patchedOriginal(previous, sha, stderr); err != nil {
+						return nil, err
+					}
 				}
 				if b == nil {
 					var problem string
@@ -340,6 +343,55 @@ func (u urlSource) whole(sha string, stderr io.Writer) ([]byte, string, error) {
 type heldCRL struct {
 	issuer, sha256 string
 	der            []byte
+}
+
+// patchedOriginal is patched, for a CRL whose original is there: it first
+// asks for the original with HEAD, so that a CRL file missing from the
+// archive is reported as when every file is downloaded whole. The original
+// is not there (404): crl.ErrLeftOut, and the patch is not downloaded. The
+// patch gives a file of another length than the original's: nil, after one
+// line on stderr, so that the original is downloaded whole and its SHA-256
+// checked. A HEAD that fails, or gives no length: nil, after one line.
+// Only a file of the same length with other content is not seen without
+// downloading it whole (README.md, "下載").
+func (u urlSource) patchedOriginal(previous *heldCRL, sha string, stderr io.Writer) ([]byte, error) {
+	name := sha + ".crl"
+	size, err := u.size(name)
+	if errors.Is(err, errNotFound) {
+		return nil, crl.ErrLeftOut
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "iamreal-verify: %s: HEAD: %v; downloading the CRL whole\n", u.url(name), err)
+		return nil, nil
+	}
+	file := u.patched(previous, sha, stderr)
+	if file != nil && int64(len(file)) != size {
+		fmt.Fprintf(stderr, "iamreal-verify: %s: %d bytes, not the %d its patch gives; downloading the CRL whole\n", u.url(name), size, len(file))
+		return nil, nil
+	}
+	return file, nil
+}
+
+// size returns the length of the file at p by a HEAD request;
+// errNotFound if there is no such file (404), an error for any other
+// status or if the answer has no Content-Length.
+func (u urlSource) size(p string) (int64, error) {
+	res, err := u.client.Head(u.url(p))
+	if err != nil {
+		return 0, err
+	}
+	res.Body.Close()
+	switch res.StatusCode {
+	case http.StatusOK:
+	case http.StatusNotFound:
+		return 0, errNotFound
+	default:
+		return 0, errors.New(res.Status)
+	}
+	if res.ContentLength < 0 {
+		return 0, errors.New("no Content-Length")
+	}
+	return res.ContentLength, nil
 }
 
 // patched returns the file with SHA-256 sha, given by its CRL patch from
