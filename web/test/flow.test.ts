@@ -11,12 +11,13 @@ import { CardError } from "../src/card/card.ts";
 import { FakeCard } from "../src/card/fake.ts";
 import { buildWith } from "../src/crl/build.ts";
 import { DEVICE_ID_KEY, type FlowCounts, cardProofCounts, reasonOf } from "../src/counts.ts";
-import { CardProofFlow, type CardStatus, type Choice, type Consequence, FlowStop, IDLE_MS, type Progress, type Stop } from "../src/flow.ts";
+import { CardProofFlow, type CardStatus, type Choice, type Consequence, FlowStop, HELD_CHALLENGE_MS, IDLE_MS, type Progress, type Stop } from "../src/flow.ts";
 import type { IssuerName } from "../src/issuers.ts";
 import { ArtifactError, loadCircuit } from "../src/prover/artifacts.ts";
 import type { Prover } from "../src/prover/prover.ts";
 import { memoryStore } from "../src/storage.ts";
 import { readCount } from "iamreal-protocol/counts.ts";
+import { encodeBase32 } from "iamreal-protocol/base32.ts";
 import { declarationCode } from "iamreal-protocol/declaration-code.ts";
 import { pack31 } from "iamreal-protocol/field.ts";
 import { poseidon } from "./bb.ts";
@@ -70,6 +71,8 @@ interface Setup {
   counts: FlowCounts;
   /** What the page keeps in `localStorage` for the counts. */
   idStorage: Map<string, string>;
+  /** The requests the server had got (`METHOD path`) when the page first asked the data domain for a file; null before. */
+  beforeCrl: () => string[] | null;
 }
 
 /** The `User-Agent` of the page in these tests: Chrome on Windows. */
@@ -192,6 +195,7 @@ async function setup(o: {
   });
   const timers: { at: number; f: () => void; done: boolean }[] = [];
   let crlTaken = false;
+  let beforeCrl: string[] | null = null;
   const idleStops: Stop[] = [];
   const progress: Progress[] = [];
   const flow = new CardProofFlow(
@@ -201,6 +205,7 @@ async function setup(o: {
       knownPlatforms: new Set(o.knownPlatforms ?? ["test-example", "threads"]),
       fetch: gatedFetch,
       dataFetch: async (path, init) => {
+        beforeCrl ??= backend.log.map((r) => `${r.method} ${r.path}`);
         await o.crlHeld;
         const res = await data.fetch(path, init);
         // The CRL's first file: the clock moves once, while the CRL is fetched.
@@ -242,7 +247,7 @@ async function setup(o: {
       }
     }
   };
-  return { w, backend, data, card, flow, store, backgroundStop, proveCalls, advance, fireTimers, idleStops, progress, prover, hold, counted, counts, idStorage };
+  return { w, backend, data, card, flow, store, backgroundStop, proveCalls, advance, fireTimers, idleStops, progress, prover, hold, counted, counts, idStorage, beforeCrl: () => beforeCrl };
 }
 
 /** A slot of the card-state answer (docs/api/card-proof.md): empty unless the test says otherwise. */
@@ -289,6 +294,18 @@ async function toStatus(s: Setup): Promise<CardStatus> {
 /** Card read, PIN given, the card's state known, the list changed by `changes` (by default @alice on Threads). */
 async function toChosen(s: Setup, changes: Record<string, string> = { threads: "alice" }): Promise<Consequence> {
   return s.flow.choose(listOf(await toStatus(s), changes));
+}
+
+/**
+ * toChosen(), with the PIN given HELD_CHALLENGE_MS after the checks that need
+ * no signature passed: the challenge asked for while the card was read is too
+ * old by then, and proceed() asks for one of its own.
+ */
+async function toChosenAsking(s: Setup, changes: Record<string, string> = { threads: "alice" }): Promise<Consequence> {
+  await s.flow.readCard();
+  await s.flow.checksDone();
+  s.advance(HELD_CHALLENGE_MS);
+  return s.flow.choose(listOf(await s.flow.confirmCard(PIN), changes));
 }
 
 /** choose() with the card's state the flow holds, changed by `changes`. */
@@ -551,7 +568,7 @@ describe("the flow, with a server that gives values the device must not accept",
       await toChosen(t, { "test-example": "a-b" });
       assert.deepEqual(await stopOf(t.flow.proceed(other)), { code: "state" }, JSON.stringify(other));
       assert.equal(t.card.signed.length, 1, "no second signature");
-      assert.equal(requestsOn(t, "/api/v1/challenges"), 0, "no challenge requested");
+      assert.equal(requestsOn(t, "/api/v1/challenges"), 1, "no challenge requested but the reading's");
     }
     assert.equal(s.backend.log.length, n);
   });
@@ -1220,9 +1237,11 @@ describe("the PIN, the card and the windows", () => {
 // what it wipes.
 
 /** Waits until the server has seen a request on `path`. */
-async function untilRequested(s: Setup, path: string): Promise<void> {
-  for (let i = 0; i < 500 && !s.backend.log.some((r) => r.path === path); i++) await new Promise((r) => setTimeout(r, 5));
-  assert.ok(s.backend.log.some((r) => r.path === path), `no request on ${path}`);
+/** Waits until the server got `count` requests on `path`. */
+async function untilRequested(s: Setup, path: string, count = 1): Promise<void> {
+  const got = () => s.backend.log.filter((r) => r.path === path).length >= count;
+  for (let i = 0; i < 500 && !got(); i++) await new Promise((r) => setTimeout(r, 5));
+  assert.ok(got(), `fewer than ${count} requests on ${path}`);
 }
 
 type Held = { pin: unknown; cert: unknown; scopeSignature: unknown; codeSignature: unknown };
@@ -1280,10 +1299,10 @@ describe("between the two signatures, the device's own limit holds whatever the 
 
   test("the challenge does not answer: 5 minutes after the first signature, everything is dropped; the card does not sign again", async () => {
     const s = await setup({ echoPublicInputs: true });
-    const cq = await toChosen(s);
+    const cq = await toChosenAsking(s);
     const open = s.hold("/api/v1/challenges");
     const pending = stopOf(s.flow.proceed(cq.accounts));
-    await untilRequested(s, "/api/v1/challenges");
+    await untilRequested(s, "/api/v1/challenges", 2);
     s.advance(IDLE_MS);
     s.fireTimers();
     assert.deepEqual(s.idleStops, [{ code: "idle" }], "the screen is told");
@@ -1296,10 +1315,10 @@ describe("between the two signatures, the device's own limit holds whatever the 
 
   test("the challenge comes after the limit and the timer did not fire: the clock is read again before the card signs", async () => {
     const s = await setup({ echoPublicInputs: true });
-    const cq = await toChosen(s);
+    const cq = await toChosenAsking(s);
     const open = s.hold("/api/v1/challenges");
     const pending = stopOf(s.flow.proceed(cq.accounts));
-    await untilRequested(s, "/api/v1/challenges");
+    await untilRequested(s, "/api/v1/challenges", 2);
     s.advance(30 * 60_000); // a throttled tab: the timer has not run
     open();
     assert.deepEqual(await pending, { code: "idle" });
@@ -1375,10 +1394,10 @@ describe("cancel() while a step waits: nothing is written, nothing is sent", () 
 
   test("while proceed() waits for the challenge: no second signature, nothing kept", async () => {
     const s = await setup({ echoPublicInputs: true });
-    const cq = await toChosen(s);
+    const cq = await toChosenAsking(s);
     const open = s.hold("/api/v1/challenges");
     const pending = stopOf(s.flow.proceed(cq.accounts));
-    await untilRequested(s, "/api/v1/challenges");
+    await untilRequested(s, "/api/v1/challenges", 2);
     s.flow.cancel();
     assertNothingHeld(s.flow, "cancelled");
     open();
@@ -1426,6 +1445,139 @@ describe("cancel() while a step waits: nothing is written, nothing is sent", () 
   });
 });
 
+// The challenge is asked for before the CRL's index (#553): the server takes
+// the root of the second newest CRL only for a challenge issued before it
+// learned of the newest, or at most 2 minutes after
+// (spec/revocation-tree.md, "Who checks what"). proceed() signs that
+// challenge if it comes within HELD_CHALLENGE_MS and on the same date in
+// Taiwan, and asks for a new one otherwise.
+describe("the challenge, asked for before the CRL", () => {
+  /** A challenge of 2026-11-16 the fake server issues, in its one spelling. */
+  const fresh = () => `2026-11-16.${encodeBase32(crypto.getRandomValues(new Uint8Array(16)))}`;
+
+  /**
+   * A server whose newest CRL changes when the test says so. Like the
+   * Worker's, it takes the root the device has, now the second newest, only
+   * for a challenge issued before the change (the 2 minutes after it are
+   * past in these tests); otherwise `root`.
+   */
+  function changingCrl() {
+    let changed = false;
+    const before = new Set<string>();
+    const issued: string[] = [];
+    return {
+      change: () => void (changed = true),
+      issued,
+      backend: {
+        challenge: () => {
+          const c = fresh();
+          issued.push(c);
+          if (!changed) before.add(c);
+          return c;
+        },
+        submit: (body: Record<string, unknown>) => (before.has(body.challenge as string) ? null : { status: 400, body: { error: "root" } }),
+      },
+    };
+  }
+
+  test("the challenge is asked for after the server's config, before the CRL's index", async () => {
+    const s = await setup({ echoPublicInputs: true });
+    await s.flow.readCard();
+    await s.flow.checksDone();
+    // The circuit's file is fetched beside them, from the start.
+    assert.deepEqual(s.beforeCrl()?.filter((r) => r.includes("/api/")), ["GET /api/v1/config", "POST /api/v1/challenges"]);
+  });
+
+  test("the CRL changes after the device downloaded it, before the submission: the card signs the challenge of before, and the record is taken", async () => {
+    const c = changingCrl();
+    const s = await setup({ echoPublicInputs: true, backend: c.backend });
+    await s.flow.readCard();
+    await s.flow.checksDone();
+    // The mirror hands the server a newer CRL, and the cardholder takes 3 minutes over the PIN and the list.
+    c.change();
+    s.advance(3 * 60_000);
+    const cq = s.flow.choose(listOf(await s.flow.confirmCard(PIN), { threads: "alice" }));
+    const done = await s.flow.proceed(cq.accounts);
+    assert.equal(done.seq, 1);
+    assert.equal(c.issued.length, 1, "one challenge");
+    assert.equal(s.backend.submissions[0]!.challenge, c.issued[0]);
+    assert.ok(s.progress.includes("challenge"), "the challenge is checked at proceed()");
+  });
+
+  test("just under HELD_CHALLENGE_MS after it was asked for: the same challenge; at it, a new one, which is the one signed", async () => {
+    for (const [after, requests] of [
+      [HELD_CHALLENGE_MS - 1, 1],
+      [HELD_CHALLENGE_MS, 2],
+    ] as const) {
+      const issued: string[] = [];
+      const s = await setup({ echoPublicInputs: true, backend: { challenge: () => (issued.push(fresh()), issued.at(-1)) } });
+      await s.flow.readCard();
+      await s.flow.checksDone();
+      s.advance(after);
+      const cq = s.flow.choose(listOf(await s.flow.confirmCard(PIN), { threads: "alice" }));
+      const done = await s.flow.proceed(cq.accounts);
+      assert.equal(done.seq, 1, `${after}`);
+      assert.equal(requestsOn(s, "/api/v1/challenges"), requests, `${after}`);
+      assert.equal(s.backend.submissions[0]!.challenge, issued.at(-1), `${after}`);
+      const code = await declarationCode(SCOPE, cq.accounts, issued.at(-1)!);
+      assert.deepEqual(s.card.signed[1], code, `${after}: the card signed the challenge sent`);
+    }
+  });
+
+  test("a clock that went back since the challenge was asked for: a new one", async () => {
+    const s = await setup({ echoPublicInputs: true });
+    await s.flow.readCard();
+    await s.flow.checksDone();
+    s.advance(-1);
+    const cq = s.flow.choose(listOf(await s.flow.confirmCard(PIN), { threads: "alice" }));
+    assert.equal((await s.flow.proceed(cq.accounts)).seq, 1);
+    assert.equal(requestsOn(s, "/api/v1/challenges"), 2);
+  });
+
+  for (const [label, answer] of [
+    ["503 busy", { status: 503, body: { error: "busy" } }],
+    ["429 rate_limited", { status: 429, body: { error: "rate_limited" } }],
+    ["503 paused", { status: 503, body: { error: "paused" } }],
+    ["500 internal", { status: 500, body: { error: "internal" } }],
+  ] as const) {
+    test(`the reading's challenge answered ${label}: the checks go on, nothing of it is counted, and proceed() asks for one`, async () => {
+      let answers = 0;
+      const s = await setup({ echoPublicInputs: true, backend: { challenge: () => (++answers === 1 ? answer : fresh()) } });
+      const cq = await toChosen(s);
+      const done = await s.flow.proceed(cq.accounts);
+      assert.equal(done.seq, 1);
+      assert.equal(requestsOn(s, "/api/v1/challenges"), 2);
+      await new Promise((r) => setTimeout(r, 20));
+      assert.deepEqual(s.counted.filter((c) => c.event !== "step" && c.event !== "duration"), [], "no retry, no stop");
+    });
+  }
+
+  test("the reading's challenge not answered: the checks go on, and proceed() asks for one", async () => {
+    const s = await setup({ echoPublicInputs: true });
+    const fetch = s.backend.fetch;
+    let first = true;
+    s.backend.fetch = async (path, init) => {
+      if (path === "/api/v1/challenges" && first) {
+        first = false;
+        throw new TypeError("Failed to fetch");
+      }
+      return fetch(path, init);
+    };
+    const cq = await toChosen(s);
+    assert.equal((await s.flow.proceed(cq.accounts)).seq, 1);
+  });
+
+  test("the reading's challenge is used once: after a blocked window at the second signature, proceed() asks for a new one", async () => {
+    const s = await setup({ echoPublicInputs: true });
+    const cq = await toChosen(s);
+    blockWindows(s.card, "sign", 1);
+    assert.equal((await stopOf(s.flow.proceed(cq.accounts))).code, "card");
+    assert.equal(requestsOn(s, "/api/v1/challenges"), 1);
+    assert.equal((await s.flow.proceed(cq.accounts)).seq, 1);
+    assert.equal(requestsOn(s, "/api/v1/challenges"), 2);
+  });
+});
+
 describe("a card proof that crosses midnight", () => {
   // 2026-11-16 23:58 in Taiwan.
   const LATE = Date.UTC(2026, 10, 16, 15, 58, 0);
@@ -1469,21 +1621,24 @@ describe("a card proof that crosses midnight", () => {
     const done = await s.flow.proceed(cq.accounts);
     assert.equal(done.date, "2026-11-17");
     assert.equal(s.card.signed.length, 2, "the second signature");
+    // The reading's challenge was asked for on 2026-11-16: proceed() asks for one of the new day.
+    assert.equal(requestsOn(s, "/api/v1/challenges"), 2);
   });
 
   test("midnight passes while the challenge is on its way, and the list does the same on the new date: signed", async () => {
     const s = await setup({
       echoPublicInputs: true,
-      start: Date.UTC(2026, 10, 16, 15, 59, 50),
+      // proceed() at 23:59:45 in Taiwan.
+      start: Date.UTC(2026, 10, 16, 15, 54, 45),
       backend: {
         challenge: () => "2026-11-17.000G40R40M30E209185GR38E1W",
         cardState: cardState({ last_card_proof: "2026-11-16", platforms: { threads: has("alice") } }),
       },
     });
-    const cq = await toChosen(s, { threads: "alice" });
+    const cq = await toChosenAsking(s, { threads: "alice" });
     const release = s.hold("/api/v1/challenges");
     const p = s.flow.proceed(cq.accounts);
-    await untilRequested(s, "/api/v1/challenges");
+    await untilRequested(s, "/api/v1/challenges", 2);
     s.advance(20_000);
     release();
     const done = await p;
@@ -1737,10 +1892,10 @@ describe("a step called again while it is under way", () => {
   test("proceed() again, choose() and back() while proceed() waits: refused (state); one challenge, one second signature", async () => {
     // proceed() leaves "chosen" before its first await: this held already.
     const s = await setup({ echoPublicInputs: true });
-    const cq = await toChosen(s);
+    const cq = await toChosenAsking(s);
     const open = s.hold("/api/v1/challenges");
     const first = s.flow.proceed(cq.accounts);
-    await untilRequested(s, "/api/v1/challenges");
+    await untilRequested(s, "/api/v1/challenges", 2);
     const n = s.backend.log.length;
     assert.deepEqual(await settledWithin(s.flow.proceed(cq.accounts)), { code: "state" });
     assert.throws(() => s.flow.choose({ "test-example": "", threads: "bob" }), isState);
@@ -1752,7 +1907,7 @@ describe("a step called again while it is under way", () => {
     const done = await first;
     assert.deepEqual(done.accounts, [{ platform: "threads", username: "alice" }]);
     assert.equal(s.card.signed.length, 2);
-    assert.equal(requestsOn(s, "/api/v1/challenges"), 1);
+    assert.equal(requestsOn(s, "/api/v1/challenges"), 2, "the reading's and proceed()'s");
     assert.equal(s.backend.submissions.length, 1);
   });
 
@@ -2249,8 +2404,9 @@ describe("the counts the page sends (spec/counts.md; ADR-0032, ADR-0039)", () =>
 
   test("too many people to the challenge, then proceed() again: `retry` with `server_rate_limited`, and the same attempt is done", async () => {
     let answers = 0;
-    const s = await setup({ echoPublicInputs: true, backend: { challenge: () => (++answers === 1 ? { status: 429, body: { error: "rate_limited" } } : `2026-11-16.${"0".repeat(26)}`) } });
-    const cq = await toChosen(s);
+    // The first answer is the reading's challenge; proceed() asks for its own (toChosenAsking).
+    const s = await setup({ echoPublicInputs: true, backend: { challenge: () => (++answers === 2 ? { status: 429, body: { error: "rate_limited" } } : `2026-11-16.${"0".repeat(26)}`) } });
+    const cq = await toChosenAsking(s);
     assert.deepEqual(await stopOf(s.flow.proceed(cq.accounts)), { code: "server", server: "rate_limited", status: 429 });
     assert.equal(s.flow.phase, "chosen");
     const done = await s.flow.proceed(cq.accounts);
