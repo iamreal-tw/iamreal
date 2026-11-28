@@ -195,6 +195,123 @@ func (a *patchArchive) run(t *testing.T, source string) (int, string, string) {
 	return code, out.String(), errOut.String()
 }
 
+// heads is the HEAD requests for the originals of the CRLs given by
+// patches, sorted.
+func (a *patchArchive) heads() []string {
+	var out []string
+	for _, name := range a.patched {
+		out = append(out, "HEAD "+name)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// headsAsked is the HEAD requests a server was asked, sorted.
+func headsAsked(srv *dataServer) []string {
+	var out []string
+	for _, p := range srv.paths() {
+		if strings.HasPrefix(p, "HEAD ") {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// problemLines is the lines of standard error that are not progress: neither
+// "downloading …", nor "CRL …", nor a patch that was not used; with the
+// server's URL, url, written as "<data>/".
+func problemLines(errOut, url string) []string {
+	var out []string
+	for _, l := range strings.Split(strings.ReplaceAll(errOut, url, "<data>/"), "\n") {
+		if strings.HasPrefix(l, "iamreal-verify: downloading ") || strings.HasPrefix(l, "iamreal-verify: CRL ") || strings.HasSuffix(l, "downloading the CRL whole") {
+			continue
+		}
+		out = append(out, l)
+	}
+	return out
+}
+
+// The original of a CRL given by its patch is asked for with HEAD: it must
+// be there with the length of the file the patch gives. One that is not
+// there is left out of the archive and one of another length downloaded
+// whole, so that the command reports either as it does when it downloads
+// every file whole (here: the same files without patches/). A HEAD that
+// fails or gives no length: the CRL downloaded whole, with one line.
+func TestDataCRLOriginals(t *testing.T) {
+	a := newPatchArchiveT(t)
+	target := a.patched[0]
+	withoutPatches := func(files map[string][]byte) map[string][]byte {
+		out := maps.Clone(files)
+		for p := range out {
+			if strings.HasPrefix(p, "crl/patches/") {
+				delete(out, p)
+			}
+		}
+		return out
+	}
+	for _, c := range []struct {
+		name string
+		edit func(map[string][]byte)
+		exit int
+		want string
+		// noPatch: the patch is not downloaded, the HEAD having said the
+		// original is not there.
+		noPatch bool
+	}{
+		{"not there", func(f map[string][]byte) { delete(f, target) }, exitInvalid, "the index lists a file the archive does not have", true},
+		{"of another length", func(f map[string][]byte) { f[target] = append(slices.Clone(f[target]), 0) }, exitInvalid, "is not the SHA-256 of its content", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			files := maps.Clone(a.files)
+			c.edit(files)
+			srv := serveData(t, files)
+			code, out, errOut := a.run(t, srv.URL)
+			if code != c.exit || !strings.Contains(errOut, c.want) {
+				t.Errorf("exit %d\n%s", code, errOut)
+			}
+			whole := serveData(t, withoutPatches(files))
+			wholeCode, wholeOut, wholeErr := a.run(t, whole.URL)
+			if got, want := problemLines(errOut, srv.URL), problemLines(wholeErr, whole.URL); code != wholeCode || out != wholeOut || !slices.Equal(got, want) {
+				t.Errorf("with patches: exit %d\n%s\nwhole: exit %d\n%s", code, strings.Join(got, "\n"), wholeCode, strings.Join(want, "\n"))
+			}
+			if c.noPatch && slices.Contains(srv.paths(), "GET "+a.patchOf[target]) {
+				t.Errorf("asked for the patch of a CRL that is not there")
+			}
+		})
+	}
+	for _, c := range []struct {
+		name string
+		head func(w http.ResponseWriter)
+		why  string
+	}{
+		{"a HEAD that fails", func(w http.ResponseWriter) { http.Error(w, "down", http.StatusInternalServerError) }, "500"},
+		{"a HEAD without a length", func(w http.ResponseWriter) { w.Header().Set("Transfer-Encoding", "chunked"); w.(http.Flusher).Flush() }, "no Content-Length"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			served := serveData(t, a.files)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodHead && strings.TrimPrefix(r.URL.Path, "/") == target {
+					c.head(w)
+					return
+				}
+				forward(t, served, w, r)
+			}))
+			t.Cleanup(srv.Close)
+			code, _, errOut := a.run(t, srv.URL+"/")
+			var said []string
+			for _, l := range strings.Split(errOut, "\n") {
+				if strings.Contains(l, "whole") {
+					said = append(said, l)
+				}
+			}
+			if code != exitAllValid || len(said) != 1 || !strings.Contains(said[0], target) || !strings.Contains(said[0], c.why) ||
+				!strings.Contains(errOut, "downloading "+srv.URL+"/"+target+"\n") {
+				t.Errorf("exit %d, said %q\n%s", code, said, errOut)
+			}
+		})
+	}
+}
+
 // crlAsked is what a server was asked for under crl/ whose name ends in
 // suffix (".crl" for CRL files, ".patch" for patches), sorted.
 func crlAsked(srv *dataServer, suffix string) []string {
@@ -224,6 +341,10 @@ func TestDataCRLPatches(t *testing.T) {
 	}
 	if got := crlAsked(srv, ".patch"); !slices.Equal(got, a.patches) {
 		t.Errorf("patches asked for\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(a.patches, "\n"))
+	}
+	// The original of each CRL given by a patch: asked for with HEAD.
+	if got, want := headsAsked(srv), a.heads(); !slices.Equal(got, want) {
+		t.Errorf("HEAD of\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	if n := strings.Count(errOut, "iamreal-verify: CRL "); n != len(a.whole)+len(a.patches) {
 		t.Errorf("%d CRLs indexed\n%s", n, errOut)

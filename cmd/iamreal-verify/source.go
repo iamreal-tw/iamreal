@@ -279,6 +279,13 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 	// CRL: the previous CRL of the next one of its key.
 	var previous *heldCRL
 	seen := map[string]bool{}
+	// The originals of the CRLs that may be given by patches, asked for
+	// with HEAD ahead of rebuilding (askSizes): those the index says are
+	// usable, after the first usable one of their key. Rebuilding takes a
+	// patch only for one of them (previous is then of the same key); a file
+	// left out before it makes its HEAD unused, not wrong.
+	var originals []*originalSize
+	firstOfKey := map[string]bool{}
 	for _, line := range bytes.Split(index, []byte("\n")) {
 		issuer, usable := indexUsable(line)
 		for _, m := range indexSHA256.FindAllSubmatch(line, -1) {
@@ -288,13 +295,24 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 				continue
 			}
 			seen[name] = true
+			var asked *originalSize
+			if usable && firstOfKey[issuer] {
+				asked = &originalSize{name: name, done: make(chan struct{})}
+				originals = append(originals, asked)
+			}
+			if usable {
+				firstOfKey[issuer] = true
+			}
 			out.files = append(out.files, crl.ArchiveFile{Name: name, Read: func() ([]byte, error) {
 				var b []byte
 				if usable && previous != nil && previous.issuer != issuer {
 					previous = nil // the first of another key: let the last one go
 				}
-				if usable && previous != nil {
-					b = u.patched(previous, sha, stderr)
+				if usable && previous != nil && asked != nil {
+					var err error
+					if b, err = u.patchedOriginal(previous, sha, asked, stderr); err != nil {
+						return nil, err
+					}
 				}
 				if b == nil {
 					var problem string
@@ -313,7 +331,54 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func
 			}})
 		}
 	}
-	return out, cleanup, nil
+	stop := make(chan struct{})
+	u.askSizes(originals, stop)
+	var once sync.Once
+	return out, func() {
+		once.Do(func() { close(stop) })
+		cleanup()
+	}, nil
+}
+
+// headsAtOnce is how many HEAD requests askSizes keeps going at once.
+const headsAtOnce = 8
+
+// originalSize is the HEAD request for the original name and its answer:
+// u.size's, once done is closed.
+type originalSize struct {
+	name string
+	size int64
+	err  error
+	done chan struct{}
+}
+
+// askSizes asks for the length of each of originals with HEAD (u.size), in
+// that order, headsAtOnce at a time. One HEAD takes about a third of a
+// second at the data domain (README.md, "下載"); one after another, the
+// HEADs of a year's CRLs would take as long as downloading them whole. They
+// are asked ahead of rebuilding, which waits for each answer when its CRL's
+// turn comes, and holds no CRL. Closing stop asks no more: the answers
+// not asked are never given, so nothing may wait for them after.
+func (u urlSource) askSizes(originals []*originalSize, stop <-chan struct{}) {
+	work := make(chan *originalSize)
+	go func() {
+		defer close(work)
+		for _, o := range originals {
+			select {
+			case work <- o:
+			case <-stop:
+				return
+			}
+		}
+	}()
+	for range headsAtOnce {
+		go func() {
+			for o := range work {
+				o.size, o.err = u.size(o.name)
+				close(o.done)
+			}
+		}()
+	}
 }
 
 // whole downloads the CRL file with SHA-256 sha whole. A file that is not
@@ -340,6 +405,57 @@ func (u urlSource) whole(sha string, stderr io.Writer) ([]byte, string, error) {
 type heldCRL struct {
 	issuer, sha256 string
 	der            []byte
+}
+
+// patchedOriginal is patched, for a CRL whose original is there: it first
+// waits for the answer to the HEAD request for the original (asked, from
+// askSizes), so that a CRL file missing from the
+// archive is reported as when every file is downloaded whole. The original
+// is not there (404): crl.ErrLeftOut, and the patch is not downloaded. The
+// patch gives a file of another length than the original's: nil, after one
+// line on stderr, so that the original is downloaded whole and its SHA-256
+// checked. A HEAD that fails, or gives no length: nil, after one line.
+// Only a file of the same length with other content is not seen without
+// downloading it whole (README.md, "下載").
+func (u urlSource) patchedOriginal(previous *heldCRL, sha string, asked *originalSize, stderr io.Writer) ([]byte, error) {
+	name := sha + ".crl"
+	<-asked.done
+	size, err := asked.size, asked.err
+	if errors.Is(err, errNotFound) {
+		return nil, crl.ErrLeftOut
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "iamreal-verify: %s: HEAD: %v; downloading the CRL whole\n", u.url(name), err)
+		return nil, nil
+	}
+	file := u.patched(previous, sha, stderr)
+	if file != nil && int64(len(file)) != size {
+		fmt.Fprintf(stderr, "iamreal-verify: %s: %d bytes, not the %d its patch gives; downloading the CRL whole\n", u.url(name), size, len(file))
+		return nil, nil
+	}
+	return file, nil
+}
+
+// size returns the length of the file at p by a HEAD request;
+// errNotFound if there is no such file (404), an error for any other
+// status or if the answer has no Content-Length.
+func (u urlSource) size(p string) (int64, error) {
+	res, err := u.client.Head(u.url(p))
+	if err != nil {
+		return 0, err
+	}
+	res.Body.Close()
+	switch res.StatusCode {
+	case http.StatusOK:
+	case http.StatusNotFound:
+		return 0, errNotFound
+	default:
+		return 0, errors.New(res.Status)
+	}
+	if res.ContentLength < 0 {
+		return 0, errors.New("no Content-Length")
+	}
+	return res.ContentLength, nil
 }
 
 // patched returns the file with SHA-256 sha, given by its CRL patch from

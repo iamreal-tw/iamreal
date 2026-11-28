@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -23,7 +24,9 @@ import (
 )
 
 // dataServer serves files by path, "/" between directories, at the root of
-// an HTTP server: 404 for any other path. It logs every path asked for.
+// an HTTP server: 404 for any other path. It answers GET and HEAD, with
+// Content-Length, as the data domain does. It logs every request, as its
+// method and path.
 type dataServer struct {
 	URL   string
 	mu    sync.Mutex
@@ -39,11 +42,14 @@ func serveData(t *testing.T, files map[string][]byte) *dataServer {
 		d.asked = append(d.asked, r.Method+" "+p)
 		d.mu.Unlock()
 		b, ok := files[p]
-		if !ok || r.Method != http.MethodGet {
+		if !ok || r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.NotFound(w, r)
 			return
 		}
-		w.Write(b)
+		w.Header().Set("Content-Length", strconv.Itoa(len(b)))
+		if r.Method == http.MethodGet {
+			w.Write(b)
+		}
 	}))
 	t.Cleanup(srv.Close)
 	d.URL = srv.URL + "/"
@@ -294,17 +300,15 @@ func TestDataCRLArchive(t *testing.T) {
 		}
 	}
 
-	// C's file not there, its patch there: what the patch gives stands for
-	// the file, which is not asked for (README.md, "下載").
+	// A CRL the index lists that is not there: a difference; record 3 has
+	// no CRL for its root. Its patch is there, but C's original is asked for
+	// with HEAD first (README.md, "下載"), and the patch is not downloaded.
 	delete(files, pathOf(crlC))
-	if code, _, errOut := runDataArchive(t, serveData(t, files).URL); code != exitAllValid {
-		t.Errorf("C from its patch alone: exit %d\n%s", code, errOut)
+	srv = serveData(t, files)
+	code, out, errOut = runDataArchive(t, srv.URL)
+	if slices.Contains(srv.paths(), "GET "+patchBC) || !slices.Contains(srv.paths(), "HEAD "+pathOf(crlC)) {
+		t.Errorf("without C, asked for %v", srv.paths())
 	}
-
-	// A CRL the index lists that is not there, nor its patch: a difference;
-	// record 3 has no CRL for its root.
-	delete(files, patchBC)
-	code, out, errOut = runDataArchive(t, serveData(t, files).URL)
 	if code != exitInvalid || !strings.Contains(out, "  3 invalid root\n") ||
 		!strings.Contains(errOut, "the index lists a file the archive does not have") {
 		t.Errorf("without C: exit %d\n%s\n%s", code, out, errOut)
